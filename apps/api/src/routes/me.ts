@@ -1,10 +1,11 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import type { MeProfile } from '@sizzle/shared';
+import type { FeedResponse, MeProfile } from '@sizzle/shared';
 import { requireAuth } from '../middleware/auth';
-import { userClient } from '../lib/supabase';
+import { supabaseAdmin, userClient } from '../lib/supabase';
 import { badRequest, notFound } from '../lib/errors';
 import { initialsOf } from '../lib/format';
+import { buildCards, type RecipeRow } from '../mappers';
 import type { AppEnv } from '../types';
 
 export const me = new Hono<AppEnv>();
@@ -52,4 +53,22 @@ me.post('/tastes', async (c) => {
   const { error } = await db.from('profiles').update({ tastes: body.data.tastes }).eq('id', userId);
   if (error) throw badRequest(error.message);
   return c.json({ ok: true, tastes: body.data.tastes });
+});
+
+/** GET /me/saved — the viewer's saved recipes (newest first). */
+me.get('/saved', async (c) => {
+  const userId = c.get('userId')!;
+  const { data: saves } = await supabaseAdmin
+    .from('saves')
+    .select('recipe_id, created_at')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false });
+  const ids = (saves ?? []).map((s) => s.recipe_id as string);
+  if (ids.length === 0) return c.json<FeedResponse>({ items: [], nextCursor: null });
+
+  const { data: recipeRows } = await supabaseAdmin.from('recipes').select('*').in('id', ids);
+  const byId = new Map<string, RecipeRow>((recipeRows ?? []).map((r) => [r.id as string, r as RecipeRow]));
+  const ordered = ids.map((id) => byId.get(id)).filter((r): r is RecipeRow => !!r);
+  const items = await buildCards(supabaseAdmin, userId, ordered);
+  return c.json<FeedResponse>({ items, nextCursor: null });
 });

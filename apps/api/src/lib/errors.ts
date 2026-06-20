@@ -19,6 +19,7 @@ export const unauthorized = (msg = 'Authentication required') => new AppError(40
 export const forbidden = (msg = 'Not allowed') => new AppError(403, 'forbidden', msg);
 export const notFound = (msg = 'Not found') => new AppError(404, 'not_found', msg);
 export const notImplemented = (msg = 'Not implemented yet') => new AppError(501, 'not_implemented', msg);
+export const dbFail = (msg: string, details?: unknown) => new AppError(500, 'db_error', msg, details);
 
 /** Central error handler — turns any thrown value into an ApiErrorBody. */
 export function onError(err: unknown, c: Context): Response {

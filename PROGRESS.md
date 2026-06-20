@@ -33,14 +33,21 @@ Phase 1 is being built in slices. Each slice keeps the app runnable.
 - **Video pipeline abstraction**: `VideoStreamProvider` interface with `MockStream` (default, no account needed) + `CloudflareStream` (real, behind `VIDEO_PROVIDER=cloudflare`).
 - **Shared DTOs** (`@sizzle/shared`): the API contract, consumed by web + api.
 
-### ⬜ Slice B — Data + core loop  *(next)*
-- Implement `GET /feed/for-you` (recent + popular) and `GET /feed/following`.
-- `GET /recipes/:id` (ingredients/steps + viewer state); `POST /recipes`.
-- `POST /recipes/:id/{like,dislike,save}` + `POST/DELETE /cooks/:id/follow` with denormalized counter updates.
-- `GET /cooks/:id`.
-- `POST /uploads/video` (direct upload via stream provider) + Cloudflare webhook → asset ready.
-- **Seed script** from `apps/web/src/data.ts` (5 cooks, 10 recipes, ingredients/steps, seeded counts).
-- **Wire the web client** off mock `data.ts` onto these endpoints with optimistic UI; add `formatCount()`; render real poster/HLS in cards; wire Upload button + Profile to `/me`.
+### ✅ Slice B — Data endpoints + seed  *(done — verified end-to-end)*
+- `GET /feed/for-you` (recent) and `GET /feed/following` — cursor-paginated, viewer state hydrated.
+- `GET /recipes/:id` (ingredients/steps + viewer state); `POST /recipes` (+ ingredients/steps, marks cook).
+- `POST /recipes/:id/{like,dislike,save}` (reactions mutually exclusive) + `POST/DELETE /cooks/:id/follow`, with atomic denormalized counter RPCs.
+- `GET /cooks/:id`, `GET /me/saved`.
+- `POST /uploads/video` (direct upload via stream provider; mock = ready instantly) + Cloudflare webhook.
+- **Seed script** from `apps/web/src/data.ts` → 5 cooks (as auth users) + 10 recipes + ingredients/steps + ready mock video assets + seeded counts. Idempotent. Run: `npm run seed`.
+- **Verified live**: guest feed (10 items), signup→`/me`, recipe detail, like (counter +1), save, follow, following feed, `/me/saved`.
+
+### ⬜ Slice B2 — Wire the web client  *(next)*
+- Replace mock `data.ts` reads with API calls (feed, recipe detail, cook, saved, `/me`).
+- Hydrate viewer state (likes/saves/follows) from the server; optimistic mutations for like/dislike/save/follow.
+- `formatCount()` client-side; render real poster/HLS in cards.
+- Wire Upload button → `POST /uploads/video` → `POST /recipes`; Profile → `/me`; persist onboarding tastes/follows.
+- Guest vs authed gating (guest can browse For You; gated actions prompt sign-in).
 
 ---
 
@@ -48,13 +55,13 @@ Phase 1 is being built in slices. Each slice keeps the app runnable.
 
 | Area | State |
 |------|-------|
-| Auth (email/password, sessions, guest, sign-out) | **Real** (needs local Supabase running) |
+| Auth (email/password, sessions, guest, sign-out) | **Real** |
 | Apple / Google OAuth | Wired, **needs provider config** to function |
-| `/health`, `/me`, `/me/tastes` | **Real** |
-| Feeds, recipe detail, like/save/follow, upload, cook profile | **Stubbed** (501) — Slice B |
-| Web feeds/discover/saved/profile/recipe content | **Mock data** still (`data.ts`) — rewired in Slice B |
+| API: `/health`, `/me`, `/me/tastes`, `/me/saved` | **Real** |
+| API: feeds, recipe detail, `POST /recipes`, like/dislike/save, follow, cook profile, uploads | **Real** (verified against Postgres) |
+| **Web** feeds/discover/saved/profile/recipe content | **Still mock `data.ts`** — rewired in Slice B2 |
 | Video upload + playback | **Mock provider** (sample HLS); Cloudflare path implemented, off by default |
-| Onboarding taste/cook selections | Local only; persisted to backend in Slice B |
+| Onboarding taste/cook selections | Local only; persisted to backend in Slice B2 |
 
 ---
 
