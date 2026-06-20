@@ -85,6 +85,7 @@ cooks.get('/:id', optionalAuth, async (c) => {
   const summary = cookSummary(p);
   const res: CookProfile = {
     ...summary,
+    bannerUrl: p.banner_url,
     bio: p.bio ?? '',
     counts: {
       followers: p.follower_count,

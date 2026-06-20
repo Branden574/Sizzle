@@ -218,7 +218,7 @@ function FeedCard({ card }: { card: RecipeCard }) {
 
         <button onClick={gated(() => save.mutate(card.id))} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, padding: 0 }}>
           <BookmarkIcon size={30} fill={viewer.saved ? accent : 'none'} stroke={viewer.saved ? accent : '#fff'} strokeWidth={1.8} />
-          <span style={railLabel}>{viewer.saved ? 'Saved' : 'Save'}</span>
+          <span style={railLabel}>{hideCount ? (viewer.saved ? 'Saved' : 'Save') : formatCount(counts.saves)}</span>
         </button>
         <button style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, padding: 0 }}>
           <ShareIcon size={30} stroke="#fff" strokeWidth={1.8} />

@@ -32,7 +32,9 @@ export interface ProfileRow {
   display_name: string;
   bio: string | null;
   avatar_url: string | null;
+  banner_url: string | null;
   avatar_color: string;
+  phone: string | null;
   is_cook: boolean;
   follower_count: number;
   following_count: number;
@@ -54,6 +56,7 @@ export interface RecipeRow {
   like_count: number;
   dislike_count: number;
   comment_count: number;
+  save_count: number;
   share_count: number;
   created_at: string;
 }
@@ -66,12 +69,9 @@ export interface VideoRow {
   duration_seconds: number | null;
 }
 
-// Instagram-style metric privacy: like/dislike/comment counts are visible only
-// to the recipe's own creator. Everyone else (viewers + guests) can still react
-// and comment, they just don't see the totals.
-function controlsFor(isCreator: boolean): PostControls {
-  return { likesEnabled: true, commentsEnabled: true, countsVisible: isCreator };
-}
+// Counts are visible to everyone by default; a creator can still hide them on
+// their own post via the per-post "Show counts" control (client-local for now).
+const DEFAULT_CONTROLS: PostControls = { likesEnabled: true, commentsEnabled: true, countsVisible: true };
 
 export function cookSummary(p: ProfileRow): CookSummary {
   return {
@@ -141,7 +141,7 @@ function viewerState(recipeId: string, cookId: string, ctx: ViewerCtx): RecipeVi
   };
 }
 
-function toCard(r: RecipeRow, cook: ProfileRow, video: VideoRow | null, ctx: ViewerCtx, viewerId: string | undefined): RecipeCard {
+function toCard(r: RecipeRow, cook: ProfileRow, video: VideoRow | null, ctx: ViewerCtx): RecipeCard {
   return {
     id: r.id,
     title: r.title,
@@ -153,9 +153,9 @@ function toCard(r: RecipeRow, cook: ProfileRow, video: VideoRow | null, ctx: Vie
     bg: r.bg,
     cook: cookSummary(cook),
     video: videoDTO(video),
-    counts: { likes: r.like_count, dislikes: r.dislike_count, comments: r.comment_count, shares: r.share_count },
+    counts: { likes: r.like_count, dislikes: r.dislike_count, comments: r.comment_count, saves: r.save_count, shares: r.share_count },
     viewer: viewerState(r.id, r.cook_id, ctx),
-    controls: controlsFor(!!viewerId && viewerId === r.cook_id),
+    controls: DEFAULT_CONTROLS,
   };
 }
 
@@ -185,7 +185,7 @@ export async function buildCards(db: SupabaseClient, viewerId: string | undefine
   for (const r of rows) {
     const cook = cookMap.get(r.cook_id);
     if (!cook) continue;
-    cards.push(toCard(r, cook, r.video_asset_id ? videoMap.get(r.video_asset_id) ?? null : null, ctx, viewerId));
+    cards.push(toCard(r, cook, r.video_asset_id ? videoMap.get(r.video_asset_id) ?? null : null, ctx));
   }
   return cards;
 }

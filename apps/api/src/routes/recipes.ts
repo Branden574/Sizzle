@@ -178,9 +178,11 @@ recipes.post('/:id/save', requireAuth, async (c) => {
 
   if (existing) {
     await supabaseAdmin.from('saves').delete().eq('user_id', userId).eq('recipe_id', id);
+    await supabaseAdmin.rpc('adjust_save_count', { rid: id, delta: -1 });
     return c.json({ saved: false });
   }
   await supabaseAdmin.from('saves').insert({ user_id: userId, recipe_id: id });
+  await supabaseAdmin.rpc('adjust_save_count', { rid: id, delta: 1 });
   return c.json({ saved: true });
 });
 

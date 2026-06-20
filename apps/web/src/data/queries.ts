@@ -94,7 +94,8 @@ export function useMarkNotificationsRead() {
 export function useUpdateProfile() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { displayName?: string; handle?: string; bio?: string }) => apiSend('PATCH', '/me', input),
+    mutationFn: (input: { displayName?: string; handle?: string; bio?: string; phone?: string; avatarUrl?: string | null; bannerUrl?: string | null }) =>
+      apiSend('PATCH', '/me', input),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['me'] });
       void qc.invalidateQueries({ queryKey: ['feed'] });
@@ -176,7 +177,11 @@ const dislikePatch: CardPatch = (c) => {
   };
 };
 
-const savePatch: CardPatch = (c) => ({ ...c, viewer: { ...c.viewer, saved: !c.viewer.saved } });
+const savePatch: CardPatch = (c) => ({
+  ...c,
+  viewer: { ...c.viewer, saved: !c.viewer.saved },
+  counts: { ...c.counts, saves: Math.max(0, c.counts.saves + (c.viewer.saved ? -1 : 1)) },
+});
 
 /* ─────────────────────────── mutations ──────────────────────────── */
 

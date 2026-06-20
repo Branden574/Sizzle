@@ -39,6 +39,7 @@ export interface RecipeCounts {
   likes: number;
   dislikes: number;
   comments: number;
+  saves: number;
   shares: number;
 }
 
@@ -110,6 +111,7 @@ export interface CookProfile {
   init: string;
   avatarColor: string;
   avatarUrl: string | null;
+  bannerUrl: string | null;
   bio: string;
   counts: {
     followers: number;
@@ -129,6 +131,8 @@ export interface MeProfile {
   init: string;
   avatarColor: string;
   avatarUrl: string | null;
+  bannerUrl: string | null;
+  phone: string | null;
   bio: string;
   isCook: boolean;
   counts: {

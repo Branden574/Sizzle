@@ -40,11 +40,12 @@ export function Profile() {
 
   return (
     <div style={{ position: 'absolute', inset: 0, background: '#faf3ea', overflowY: 'auto', animation: 'sz-fadeIn .35s' }}>
-      <div style={{ height: 150, background: BANNER, position: 'relative' }}>
-        <div style={{ position: 'absolute', inset: 0, opacity: 0.12, background: 'repeating-linear-gradient(115deg,#000 0 2px, transparent 2px 7px)' }} />
+      <div style={{ height: 150, background: me?.bannerUrl ? `url(${me.bannerUrl}) center/cover no-repeat` : BANNER, position: 'relative' }}>
+        {!me?.bannerUrl && <div style={{ position: 'absolute', inset: 0, opacity: 0.12, background: 'repeating-linear-gradient(115deg,#000 0 2px, transparent 2px 7px)' }} />}
       </div>
-      <div style={{ padding: '0 22px 110px', marginTop: -44 }}>
-        <div style={{ width: 88, height: 88, borderRadius: 28, background: 'linear-gradient(135deg,#3a2a22,#1b1512)', border: '4px solid #faf3ea', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Instrument Serif',serif", fontSize: 34, color: '#fff' }}>{me?.init ?? '·'}</div>
+      {/* position:relative + zIndex keeps the avatar painted above the (positioned) banner */}
+      <div style={{ padding: '0 22px 110px', marginTop: -44, position: 'relative', zIndex: 1 }}>
+        <div style={{ width: 88, height: 88, borderRadius: 28, background: me?.avatarUrl ? `url(${me.avatarUrl}) center/cover` : 'linear-gradient(135deg,#3a2a22,#1b1512)', border: '4px solid #faf3ea', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Instrument Serif',serif", fontSize: 34, color: '#fff', overflow: 'hidden' }}>{me?.avatarUrl ? '' : me?.init ?? '·'}</div>
         <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 30, color: '#1b1512', marginTop: 12 }}>{me?.name ?? 'Loading…'}</div>
         <div style={{ color: '#8a7c70', fontSize: 14.5 }}>
           {me ? `@${me.handle} · ${me.bio || 'Home cook in training'}` : ''}

@@ -306,17 +306,31 @@ function StepAccount() {
   const signInOAuth = useAuth((s) => s.signInOAuth);
   const continueAsGuest = useAuth((s) => s.continueAsGuest);
 
+  const [name, setName] = useState('');
+  const [phone, setPhone] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
   const isLogin = mode === 'login';
-  const canSubmit = email.trim().length > 0 && password.length > 0 && !busy;
+
+  // Strong-password requirements (signup): 10+ chars, uppercase, number, symbol.
+  const pwChecks = {
+    length: password.length >= 10,
+    upper: /[A-Z]/.test(password),
+    number: /[0-9]/.test(password),
+    symbol: /[^A-Za-z0-9]/.test(password),
+  };
+  const pwValid = pwChecks.length && pwChecks.upper && pwChecks.number && pwChecks.symbol;
+
+  const canSubmit = isLogin
+    ? email.trim().length > 0 && password.length > 0 && !busy
+    : name.trim().length > 0 && phone.trim().length > 0 && email.trim().length > 0 && pwValid && !busy;
 
   const submit = (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSubmit) return;
     if (isLogin) void signIn(email, password);
-    else void signUp(email, password);
+    else void signUp(email, password, { name, phone });
   };
 
   return (
@@ -354,6 +368,12 @@ function StepAccount() {
           </div>
 
           <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
+            {!isLogin && (
+              <>
+                <input type="text" autoComplete="name" placeholder="Full name" value={name} onChange={(e) => setName(e.target.value)} style={inputStyle} />
+                <input type="tel" autoComplete="tel" inputMode="tel" placeholder="Phone number" value={phone} onChange={(e) => setPhone(e.target.value)} style={inputStyle} />
+              </>
+            )}
             <input
               type="email"
               autoComplete="email"
@@ -371,6 +391,14 @@ function StepAccount() {
               onChange={(e) => setPassword(e.target.value)}
               style={inputStyle}
             />
+
+            {!isLogin && password.length > 0 && !pwValid && (
+              <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px', padding: '0 2px' }}>
+                {([['10+ characters', pwChecks.length], ['Uppercase', pwChecks.upper], ['Number', pwChecks.number], ['Symbol', pwChecks.symbol]] as const).map(([label, ok]) => (
+                  <span key={label} style={{ fontSize: 12.5, fontWeight: 600, color: ok ? '#1f9d55' : '#a99c90' }}>{ok ? '✓' : '○'} {label}</span>
+                ))}
+              </div>
+            )}
 
             {error && <div style={{ color: '#d8521e', fontSize: 13.5, fontWeight: 600, padding: '0 2px' }}>{error}</div>}
 

@@ -28,7 +28,7 @@ interface AuthState {
   setMode: (mode: AuthMode) => void;
   clearError: () => void;
 
-  signUp: (email: string, password: string) => Promise<boolean>;
+  signUp: (email: string, password: string, opts?: { name?: string; phone?: string }) => Promise<boolean>;
   signIn: (email: string, password: string) => Promise<boolean>;
   signInOAuth: (provider: 'apple' | 'google') => Promise<void>;
   signOut: () => Promise<void>;
@@ -74,9 +74,18 @@ export const useAuth = create<AuthState>((set, get) => ({
   setMode: (mode) => set({ mode, error: null }),
   clearError: () => set({ error: null }),
 
-  signUp: async (email, password) => {
+  signUp: async (email, password, opts) => {
     set({ busy: true, error: null });
-    const { error } = await supabase.auth.signUp({ email: email.trim(), password });
+    const { error } = await supabase.auth.signUp({
+      email: email.trim(),
+      password,
+      options: {
+        data: {
+          display_name: opts?.name?.trim() || undefined,
+          phone: opts?.phone?.trim() || undefined,
+        },
+      },
+    });
     set({ busy: false });
     if (error) {
       set({ error: error.message });

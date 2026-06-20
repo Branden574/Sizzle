@@ -33,6 +33,8 @@ me.get('/', async (c) => {
     init: initialsOf(profile.display_name ?? profile.handle ?? '?'),
     avatarColor: profile.avatar_color,
     avatarUrl: profile.avatar_url,
+    bannerUrl: profile.banner_url,
+    phone: profile.phone,
     bio: profile.bio ?? '',
     isCook: profile.is_cook,
     counts: { following: following.count ?? 0, followers: followers.count ?? 0, saved: saved.count ?? 0 },
@@ -125,9 +127,12 @@ const patchSchema = z.object({
   displayName: z.string().trim().min(1).max(60).optional(),
   bio: z.string().max(300).optional(),
   handle: z.string().trim().min(2).max(30).optional(),
+  phone: z.string().trim().max(30).optional(),
+  avatarUrl: z.string().url().max(1000).nullable().optional(),
+  bannerUrl: z.string().url().max(1000).nullable().optional(),
 });
 
-/** PATCH /me — edit display name / handle / bio. */
+/** PATCH /me — edit display name / handle / bio / phone / avatar / banner. */
 me.patch('/', async (c) => {
   const userId = c.get('userId')!;
   const body = patchSchema.safeParse(await c.req.json().catch(() => null));
@@ -137,6 +142,9 @@ me.patch('/', async (c) => {
   if (body.data.displayName !== undefined) updates.display_name = body.data.displayName;
   if (body.data.bio !== undefined) updates.bio = body.data.bio;
   if (body.data.handle !== undefined) updates.handle = body.data.handle.replace(/^@/, '').toLowerCase();
+  if (body.data.phone !== undefined) updates.phone = body.data.phone;
+  if (body.data.avatarUrl !== undefined) updates.avatar_url = body.data.avatarUrl;
+  if (body.data.bannerUrl !== undefined) updates.banner_url = body.data.bannerUrl;
   if (Object.keys(updates).length === 0) return c.json({ ok: true });
 
   const db = userClient(c.get('accessToken')!);

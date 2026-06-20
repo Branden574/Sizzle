@@ -114,6 +114,7 @@ async function main() {
         like_count: parseCount(r.likeCount),
         dislike_count: parseCount(r.dislikeCount),
         comment_count: parseCount(r.commentCount),
+        save_count: Math.round(parseCount(r.likeCount) * 0.3),
         share_count: parseCount(r.shareCount),
         // stagger timestamps so array order = feed order (newest first)
         created_at: new Date(now - i * 3_600_000).toISOString(),
