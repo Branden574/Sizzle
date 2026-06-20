@@ -1,0 +1,94 @@
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+/* Hide scrollbars everywhere — feeds and sheets scroll, chrome stays clean. */
+* {
+  scrollbar-width: none;
+  -ms-overflow-style: none;
+}
+*::-webkit-scrollbar {
+  display: none;
+}
+
+html,
+body {
+  margin: 0;
+  padding: 0;
+}
+
+body {
+  font-family: 'Hanken Grotesk', sans-serif;
+  -webkit-font-smoothing: antialiased;
+  text-rendering: optimizeLegibility;
+}
+
+/* The stage behind the phone. */
+.sz-stage {
+  --accent: #ff5a36;
+  --saffron: #f4a52c;
+  min-height: 100vh;
+  width: 100%;
+  background: radial-gradient(120% 120% at 50% 0%, #2a221c 0%, #181410 55%, #0e0b09 100%);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 32px;
+  font-family: 'Hanken Grotesk', sans-serif;
+}
+
+button {
+  font-family: inherit;
+}
+input {
+  font-family: inherit;
+}
+
+/*
+ * Press feedback. Reproduces the prototype's `style-active` pressed states:
+ * the resting scale comes from `--s` (default 1, raised for "selected" chips),
+ * and the active/pressed scale comes from `--press`. Because the transform
+ * lives in CSS (not inline), the `:active` rule reliably wins on press.
+ */
+.sz-press {
+  transform: scale(var(--s, 1));
+}
+.sz-press:active {
+  transform: scale(var(--press, 0.96));
+}
+
+@keyframes sz-stepIn {
+  from {
+    opacity: 0;
+    transform: translateY(18px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes sz-slideUp {
+  from {
+    transform: translateY(101%);
+  }
+  to {
+    transform: translateY(0);
+  }
+}
+@keyframes sz-fadeIn {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+/* Comfortable shrink-to-fit on viewports smaller than the 393×852 device. */
+@media (max-height: 916px) {
+  .sz-stage {
+    align-items: flex-start;
+  }
+}
