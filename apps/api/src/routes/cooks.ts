@@ -3,6 +3,7 @@ import type { CookProfile, SuggestedCook } from '@sizzle/shared';
 import { optionalAuth, requireAuth } from '../middleware/auth';
 import { supabaseAdmin } from '../lib/supabase';
 import { badRequest, dbFail, notFound } from '../lib/errors';
+import { assertUuid } from '../lib/validate';
 import { buildCards, cookSummary, type ProfileRow, type RecipeRow } from '../mappers';
 import { matchTastes } from '../services/taste';
 import { notify } from '../services/notify';
@@ -53,7 +54,7 @@ cooks.get('/suggested', optionalAuth, async (c) => {
 
 /** GET /cooks/:id — public cook profile + recipe grid + viewer.following. */
 cooks.get('/:id', optionalAuth, async (c) => {
-  const id = c.req.param('id');
+  const id = assertUuid(c.req.param('id'), 'cook');
   const viewerId = c.get('userId');
 
   const { data: profile, error } = await supabaseAdmin.from('profiles').select('*').eq('id', id).maybeSingle();
@@ -99,7 +100,7 @@ cooks.get('/:id', optionalAuth, async (c) => {
 
 /** POST /cooks/:id/follow */
 cooks.post('/:id/follow', requireAuth, async (c) => {
-  const cookId = c.req.param('id');
+  const cookId = assertUuid(c.req.param('id'), 'cook');
   const userId = c.get('userId')!;
   if (cookId === userId) throw badRequest('You cannot follow yourself');
 
@@ -124,7 +125,7 @@ cooks.post('/:id/follow', requireAuth, async (c) => {
 
 /** DELETE /cooks/:id/follow */
 cooks.delete('/:id/follow', requireAuth, async (c) => {
-  const cookId = c.req.param('id');
+  const cookId = assertUuid(c.req.param('id'), 'cook');
   const userId = c.get('userId')!;
 
   const { data: existing } = await supabaseAdmin

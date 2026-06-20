@@ -9,29 +9,28 @@ export const search = new Hono<AppEnv>();
 
 /** GET /search?q=… — recipes (title/cuisine) + cooks (name/handle). */
 search.get('/', optionalAuth, async (c) => {
-  // strip characters that would break PostgREST's or() filter grammar
-  const q = (c.req.query('q') ?? '').replace(/[%,()]/g, '').trim();
+  // `%`/`_` are ilike wildcards — strip so the user can't control the pattern.
+  const q = (c.req.query('q') ?? '').replace(/[%_]/g, '').trim().slice(0, 80);
   if (q.length < 1) return c.json<SearchResults>({ recipes: [], cooks: [] });
   const like = `%${q}%`;
 
-  const [{ data: recipeRows }, { data: cookRows }] = await Promise.all([
-    supabaseAdmin
-      .from('recipes')
-      .select('*')
-      .eq('status', 'published')
-      .or(`title.ilike.${like},cuisine.ilike.${like}`)
-      .order('like_count', { ascending: false })
-      .limit(20),
-    supabaseAdmin
-      .from('profiles')
-      .select('*')
-      .eq('is_cook', true)
-      .or(`display_name.ilike.${like},handle.ilike.${like}`)
-      .order('follower_count', { ascending: false })
-      .limit(10),
+  // Parameterized .ilike() (value bound, not concatenated into a filter string).
+  const [titleHits, cuisineHits, nameHits, handleHits] = await Promise.all([
+    supabaseAdmin.from('recipes').select('*').eq('status', 'published').ilike('title', like).limit(20),
+    supabaseAdmin.from('recipes').select('*').eq('status', 'published').ilike('cuisine', like).limit(20),
+    supabaseAdmin.from('profiles').select('*').eq('is_cook', true).ilike('display_name', like).limit(10),
+    supabaseAdmin.from('profiles').select('*').eq('is_cook', true).ilike('handle', like).limit(10),
   ]);
 
-  const recipes = await buildCards(supabaseAdmin, c.get('userId'), (recipeRows ?? []) as RecipeRow[]);
-  const cooks = ((cookRows ?? []) as ProfileRow[]).map(cookSummary);
+  const recipeMap = new Map<string, RecipeRow>();
+  for (const r of [...(titleHits.data ?? []), ...(cuisineHits.data ?? [])]) recipeMap.set(r.id as string, r as RecipeRow);
+  const recipeRows = [...recipeMap.values()].sort((a, b) => b.like_count - a.like_count).slice(0, 20);
+
+  const cookMap = new Map<string, ProfileRow>();
+  for (const p of [...(nameHits.data ?? []), ...(handleHits.data ?? [])]) cookMap.set(p.id as string, p as ProfileRow);
+  const cookRows = [...cookMap.values()].sort((a, b) => b.follower_count - a.follower_count).slice(0, 10);
+
+  const recipes = await buildCards(supabaseAdmin, c.get('userId'), recipeRows);
+  const cooks = cookRows.map(cookSummary);
   return c.json<SearchResults>({ recipes, cooks });
 });

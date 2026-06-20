@@ -4,16 +4,22 @@ import type { CommentDTO, RecipeDetail } from '@sizzle/shared';
 import { optionalAuth, requireAuth } from '../middleware/auth';
 import { supabaseAdmin } from '../lib/supabase';
 import { badRequest, dbFail, notFound } from '../lib/errors';
+import { assertUuid } from '../lib/validate';
 import { buildCards, commentDTO, type CommentRow, type ProfileRow, type RecipeRow } from '../mappers';
+import { rateLimit } from '../middleware/rateLimit';
+import { moderateText } from '../services/moderation';
 import { notify } from '../services/notify';
 import type { AppEnv } from '../types';
 
 export const recipes = new Hono<AppEnv>();
 
 async function getRecipeDetail(viewerId: string | undefined, recipeId: string): Promise<RecipeDetail | null> {
+  assertUuid(recipeId, 'recipe');
   const { data: row, error } = await supabaseAdmin.from('recipes').select('*').eq('id', recipeId).maybeSingle();
   if (error) throw dbFail(error.message);
   if (!row) return null;
+  // Drafts / removed recipes are visible only to their owner.
+  if (row.status !== 'published' && row.cook_id !== viewerId) return null;
 
   const [card] = await buildCards(supabaseAdmin, viewerId, [row as RecipeRow]);
   if (!card) return null;
@@ -57,11 +63,14 @@ const POSTER_GRADIENTS = [
 ];
 
 /** POST /recipes — create recipe metadata after a video upload is registered. */
-recipes.post('/', requireAuth, async (c) => {
+recipes.post('/', requireAuth, rateLimit({ windowMs: 60_000, max: 20, name: 'recipe-create' }), async (c) => {
   const userId = c.get('userId')!;
   const parsed = createSchema.safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) throw badRequest('Invalid recipe payload', parsed.error.flatten());
   const input = parsed.data;
+
+  const mod = moderateText(input.title, input.cuisine, input.ingredients, input.steps);
+  if (!mod.ok) throw badRequest(mod.reason!);
 
   // The video asset must exist and belong to this user.
   const { data: asset } = await supabaseAdmin
@@ -109,45 +118,13 @@ recipes.post('/', requireAuth, async (c) => {
 });
 
 /**
- * Toggle a like/dislike (mutually exclusive) and keep denormalized counts in
- * sync. Returns the resulting reaction kind (or null when toggled off).
+ * Toggle a like/dislike (mutually exclusive) atomically in the DB (serialized
+ * per user+recipe). Returns the resulting reaction kind (or null when off).
  */
 async function setReaction(recipeId: string, userId: string, target: 'like' | 'dislike'): Promise<'like' | 'dislike' | null> {
-  const { data: cur } = await supabaseAdmin
-    .from('reactions')
-    .select('kind')
-    .eq('user_id', userId)
-    .eq('recipe_id', recipeId)
-    .maybeSingle();
-  const prev = (cur?.kind as 'like' | 'dislike' | undefined) ?? undefined;
-
-  let likeDelta = 0;
-  let dislikeDelta = 0;
-  let result: 'like' | 'dislike' | null;
-
-  if (prev === target) {
-    await supabaseAdmin.from('reactions').delete().eq('user_id', userId).eq('recipe_id', recipeId);
-    if (target === 'like') likeDelta = -1;
-    else dislikeDelta = -1;
-    result = null;
-  } else {
-    await supabaseAdmin
-      .from('reactions')
-      .upsert({ user_id: userId, recipe_id: recipeId, kind: target }, { onConflict: 'user_id,recipe_id' });
-    if (target === 'like') {
-      likeDelta = 1;
-      if (prev === 'dislike') dislikeDelta = -1;
-    } else {
-      dislikeDelta = 1;
-      if (prev === 'like') likeDelta = -1;
-    }
-    result = target;
-  }
-
-  if (likeDelta !== 0 || dislikeDelta !== 0) {
-    await supabaseAdmin.rpc('adjust_recipe_counters', { rid: recipeId, like_delta: likeDelta, dislike_delta: dislikeDelta });
-  }
-  return result;
+  const { data, error } = await supabaseAdmin.rpc('toggle_reaction', { p_user: userId, p_recipe: recipeId, p_kind: target });
+  if (error) throw dbFail(error.message);
+  return (data ?? null) as 'like' | 'dislike' | null;
 }
 
 async function reactionResponse(c: Context<AppEnv>, recipeId: string, userId: string) {
@@ -163,6 +140,7 @@ async function reactionResponse(c: Context<AppEnv>, recipeId: string, userId: st
 }
 
 async function recipeCookId(recipeId: string): Promise<string> {
+  assertUuid(recipeId, 'recipe');
   const { data } = await supabaseAdmin.from('recipes').select('cook_id').eq('id', recipeId).maybeSingle();
   if (!data) throw notFound('Recipe not found');
   return data.cook_id as string;
@@ -230,7 +208,7 @@ const viewSchema = z.object({
 });
 
 /** POST /recipes/:id/view — log a watch event (powers ranking). */
-recipes.post('/:id/view', requireAuth, async (c) => {
+recipes.post('/:id/view', requireAuth, rateLimit({ windowMs: 60_000, max: 90, name: 'view' }), async (c) => {
   const id = c.req.param('id');
   const userId = c.get('userId')!;
   const body = viewSchema.safeParse(await c.req.json().catch(() => null));
@@ -250,7 +228,11 @@ const commentSchema = z.object({ text: z.string().trim().min(1).max(600) });
 
 /** GET /recipes/:id/comments — newest first. */
 recipes.get('/:id/comments', optionalAuth, async (c) => {
-  const id = c.req.param('id');
+  const id = assertUuid(c.req.param('id'), 'recipe');
+  // Only expose comments on recipes the viewer can see.
+  const { data: rec } = await supabaseAdmin.from('recipes').select('status, cook_id').eq('id', id).maybeSingle();
+  if (!rec || (rec.status !== 'published' && rec.cook_id !== c.get('userId'))) throw notFound('Recipe not found');
+
   const { data: rows, error } = await supabaseAdmin
     .from('comments')
     .select('*')
@@ -268,11 +250,13 @@ recipes.get('/:id/comments', optionalAuth, async (c) => {
 });
 
 /** POST /recipes/:id/comments — add a comment, bump the count, notify the cook. */
-recipes.post('/:id/comments', requireAuth, async (c) => {
+recipes.post('/:id/comments', requireAuth, rateLimit({ windowMs: 60_000, max: 30, name: 'comment' }), async (c) => {
   const id = c.req.param('id');
   const userId = c.get('userId')!;
   const parsed = commentSchema.safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) throw badRequest('Comment text required');
+  const mod = moderateText(parsed.data.text);
+  if (!mod.ok) throw badRequest(mod.reason!);
   const cookId = await recipeCookId(id);
 
   const { data: row, error } = await supabaseAdmin

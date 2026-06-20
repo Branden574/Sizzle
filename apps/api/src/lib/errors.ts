@@ -24,6 +24,12 @@ export const dbFail = (msg: string, details?: unknown) => new AppError(500, 'db_
 /** Central error handler — turns any thrown value into an ApiErrorBody. */
 export function onError(err: unknown, c: Context): Response {
   if (err instanceof AppError) {
+    // Never leak internal (5xx) detail to clients — log it, return a generic message.
+    if (err.status >= 500) {
+      console.error(`[${err.code}]`, err.message, err.details ?? '');
+      const body: ApiErrorBody = { error: { code: err.code, message: 'Something went wrong' } };
+      return c.json(body, err.status as 500);
+    }
     const body: ApiErrorBody = { error: { code: err.code, message: err.message, details: err.details } };
     return c.json(body, err.status as 400);
   }

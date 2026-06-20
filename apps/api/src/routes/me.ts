@@ -41,7 +41,7 @@ me.get('/', async (c) => {
   return c.json(dto);
 });
 
-const tastesSchema = z.object({ tastes: z.array(z.string()).max(64) });
+const tastesSchema = z.object({ tastes: z.array(z.string().max(50)).max(64) });
 
 /** POST /me/tastes — save onboarding taste preferences. */
 me.post('/tastes', async (c) => {
@@ -51,7 +51,10 @@ me.post('/tastes', async (c) => {
 
   const db = userClient(c.get('accessToken')!);
   const { error } = await db.from('profiles').update({ tastes: body.data.tastes }).eq('id', userId);
-  if (error) throw badRequest(error.message);
+  if (error) {
+    console.error('tastes update:', error.message);
+    throw badRequest('Could not save tastes');
+  }
   return c.json({ ok: true, tastes: body.data.tastes });
 });
 
@@ -138,6 +141,10 @@ me.patch('/', async (c) => {
 
   const db = userClient(c.get('accessToken')!);
   const { error } = await db.from('profiles').update(updates).eq('id', userId);
-  if (error) throw badRequest(/duplicate|unique/i.test(error.message) ? 'That handle is taken' : error.message);
+  if (error) {
+    if (/duplicate|unique/i.test(error.message)) throw badRequest('That handle is taken');
+    console.error('profile update:', error.message);
+    throw badRequest('Could not update profile');
+  }
   return c.json({ ok: true });
 });

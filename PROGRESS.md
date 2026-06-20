@@ -14,7 +14,7 @@ Stack: **Node + TypeScript**, **Hono** API, **Supabase** (Postgres/Auth/Storage)
 | 2 | Social depth + search (profiles, comments, search/discovery, notifications) | ✅ Done |
 | 3 | Offline downloads | ✅ Done |
 | 4 | Recommendation algorithm — For You ranking modeled on X's algorithm ([design](docs/recommendation-algorithm.md)) | 🟢 Stage 1 done (heuristic); Stage 2 (learned) needs training infra |
-| 5 | Production hardening (rate limits, validation, moderation, transcoding cost, analytics, security) | ⬜ Not started |
+| 5 | Production hardening (rate limits, validation, moderation, security review) | ✅ Done (analytics/APM = noted follow-up) |
 
 > Rule: app runnable locally at every step. No later-phase work pulled forward unless trivial (and noted).
 
@@ -37,6 +37,15 @@ Stack: **Node + TypeScript**, **Hono** API, **Supabase** (Postgres/Auth/Storage)
 - **Heuristic ranker** (`services/ranking.ts`): For You is now a real scoring pipeline — candidate window → multi-signal score (recency + taste + follow + cook-affinity + popularity − seen − dislike − skip) → greedy **cook-diversity** attenuation → impression-aware. Guests/pagination stay recency.
 - **Verified**: with tastes=Japanese + follow Theo + like-a-Lila-recipe + dislike-a-Dev-recipe, the feed ordered Japanese/Theo top, Lila lifted, **Dev pushed to the bottom**, cooks interleaved; 30 impressions + 1 view logged.
 - **Stage 2 (learned)** = two-tower retrieval + multi-action model trained on the now-collected signals — needs an offline training pipeline (out of scope for the app runtime); `scoreRecipe` is the swap-in point.
+
+## Phase 5 — production hardening (done)
+- **Rate limiting** (in-memory fixed-window): global IP + tighter per-user on writes (comments, uploads, views, recipe-create).
+- **Security headers** (nosniff/frame-deny/referrer/HSTS), 1 MB body limit, CORS to `WEB_ORIGIN`.
+- **Validation:** zod everywhere (+ length caps); UUID validation on `:id` params (malformed → 404).
+- **Content moderation hook** on recipe + comment creation (placeholder blocklist + link-spam; swap in a real provider).
+- **Independent security review** (security agent) — all CRITICAL/HIGH/MEDIUM resolved: webhook HMAC + uid validation, draft/removed hidden from non-owners, generic 5xx errors (no PG leak), parameterized search, atomic advisory-locked reaction RPC, demo-key boot guard. See [docs/security.md](docs/security.md).
+- **Deploy guide** ([docs/deploy.md](docs/deploy.md)): Supabase hosted + Railway/Fly API + static web + Cloudflare Stream.
+- Follow-ups (noted): real moderation provider, trusted-proxy config for IP limiter, analytics/APM (Sentry), vite/esbuild dev-CVE bump.
 
 ---
 
