@@ -60,6 +60,11 @@ An early, heuristic slice of the Phase 4 ranking design (the cold-start front-ha
 - `GET /feed/for-you` gives an authed viewer with tastes a **taste-boosted cold-start** ordering (taste-match-first, then recency).
 - Verified: pick *Japanese + Spicy* → Step 2 surfaces Dev/Mina/Lila → follow → signup → follow persists → Following feed shows that cook; For You leads with taste-matching recipes.
 
+### ➕ Instagram-style metric privacy  *(done — verified)*
+- Like / dislike / comment / share **count numbers are visible only to the recipe's creator**. Viewers + guests see the actions (Like / No / icons) but not the totals. Driven by a per-viewer `controls.countsVisible = (viewer === cook)` on every RecipeCard (`apps/api/src/mappers.ts`).
+- Applies to: feed rail, Discover tiles, comments-sheet header. Comments themselves stay readable/postable by everyone (IG keeps the thread public — only the metrics are hidden). Cook **profile** aggregates (followers/likes) are left public, like IG follower counts.
+- Verified: viewer feed shows "Like"/"No" + bare icons; creator sees full counts on their own posts only.
+
 Deferred polish / later phases: real HLS **video playback** (cards show poster + play affordance; player is a follow-up), scroll-to-top after posting, onboarding **cook-follow** replay (follows work everywhere in-app), and **comments** (local-only until Phase 2).
 
 ---

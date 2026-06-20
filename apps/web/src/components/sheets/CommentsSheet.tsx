@@ -1,4 +1,5 @@
 import { baseComments } from '../../data';
+import { useRecipe } from '../../data/queries';
 import { useSizzle } from '../../store';
 import { theme } from '../../theme';
 import { CloseIcon, HeartIcon, ShareIcon } from '../icons';
@@ -13,10 +14,13 @@ export function CommentsSheet() {
   const setDraft = useSizzle((s) => s.setDraft);
   const sendComment = useSizzle((s) => s.sendComment);
   const setCommentsFor = useSizzle((s) => s.setCommentsFor);
+  // The comment count is creator-only (Instagram-style); viewers see "Comments".
+  const { data: recipe } = useRecipe(commentsFor);
 
   if (!commentsFor) return null;
 
   const activeComments = [...(commentMap[commentsFor] || []), ...baseComments];
+  const showCount = !!recipe?.controls.countsVisible;
   const sendBg = draft.trim() ? accent : '#d8cbbb';
 
   const close = () => {
@@ -30,7 +34,7 @@ export function CommentsSheet() {
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '74%', background: '#faf3ea', borderRadius: '26px 26px 0 0', overflow: 'hidden', animation: 'sz-slideUp .4s cubic-bezier(.16,1,.3,1)', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '14px 22px 12px', borderBottom: '1px solid #ece1d4', position: 'relative' }}>
           <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', width: 42, height: 5, borderRadius: 3, background: '#d8cbbb' }} />
-          <div style={{ textAlign: 'center', fontSize: 15, fontWeight: 700, color: '#1b1512', marginTop: 6 }}>{activeComments.length} comments</div>
+          <div style={{ textAlign: 'center', fontSize: 15, fontWeight: 700, color: '#1b1512', marginTop: 6 }}>{showCount ? `${activeComments.length} comments` : 'Comments'}</div>
           <button onClick={close} style={{ position: 'absolute', top: 14, right: 16, background: 'none', border: 'none', cursor: 'pointer' }}>
             <CloseIcon size={22} stroke="#8a7c70" strokeWidth={2.2} />
           </button>

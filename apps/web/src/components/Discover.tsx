@@ -35,10 +35,12 @@ export function Discover() {
             <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, transparent 40%, rgba(0,0,0,.7))' }} />
             <div style={{ position: 'absolute', left: 13, right: 13, bottom: 12 }}>
               <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 19, lineHeight: 1.05, color: '#fff' }}>{r.title}</div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
-                <HeartIcon width={12} height={12} fill="#fff" />
-                <span style={{ color: 'rgba(255,255,255,.85)', fontSize: 12, fontWeight: 600 }}>{formatCount(r.counts.likes)}</span>
-              </div>
+              {r.controls.countsVisible && (
+                <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
+                  <HeartIcon width={12} height={12} fill="#fff" />
+                  <span style={{ color: 'rgba(255,255,255,.85)', fontSize: 12, fontWeight: 600 }}>{formatCount(r.counts.likes)}</span>
+                </div>
+              )}
             </div>
           </button>
         ))}

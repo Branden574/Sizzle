@@ -172,7 +172,7 @@ function FeedCard({ card }: { card: RecipeCard }) {
         {showComments && (
           <button onClick={() => setCommentsFor(card.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, padding: 0 }}>
             <CommentIcon size={32} stroke="#fff" strokeWidth={1.8} />
-            <span style={railLabel}>{formatCount(counts.comments)}</span>
+            {!hideCount && <span style={railLabel}>{formatCount(counts.comments)}</span>}
           </button>
         )}
 
@@ -182,7 +182,7 @@ function FeedCard({ card }: { card: RecipeCard }) {
         </button>
         <button style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, padding: 0 }}>
           <ShareIcon size={30} stroke="#fff" strokeWidth={1.8} />
-          <span style={railLabel}>{formatCount(counts.shares)}</span>
+          {!hideCount && <span style={railLabel}>{formatCount(counts.shares)}</span>}
         </button>
       </div>
 
