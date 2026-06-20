@@ -10,7 +10,15 @@ export const feed = new Hono<AppEnv>();
 
 const PAGE = 10;
 
-/** GET /feed/for-you — recent published recipes (popularity ranking lands in Phase 4). */
+/**
+ * GET /feed/for-you — recent published recipes.
+ *
+ * Stage 0 placeholder. Phase 4 replaces the ordering with a ranking pipeline
+ * modeled on X's algorithm (in/out-of-network sources → multi-action weighted
+ * scorer → cook-diversity → impression filtering). The RecipeCard response
+ * shape below is the stable contract the ranker slots behind.
+ * See docs/recommendation-algorithm.md.
+ */
 feed.get('/for-you', optionalAuth, async (c) => {
   const cursor = c.req.query('cursor');
   let q = supabaseAdmin

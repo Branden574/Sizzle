@@ -13,7 +13,7 @@ Stack: **Node + TypeScript**, **Hono** API, **Supabase** (Postgres/Auth/Storage)
 | **1** | Foundation + core loop (scaffold, schema, auth, upload, feeds, follow/like/save, seed) | 🟡 In progress |
 | 2 | Social depth + search (profiles, comments, search/discovery, notifications scaffolding) | ⬜ Not started |
 | 3 | Offline downloads | ⬜ Not started |
-| 4 | Recommendation algorithm (real For You ranking) | ⬜ Not started |
+| 4 | Recommendation algorithm — For You ranking modeled on X's algorithm ([design](docs/recommendation-algorithm.md)) | ⬜ Not started |
 | 5 | Production hardening (rate limits, validation, moderation, transcoding cost, analytics, security) | ⬜ Not started |
 
 > Rule: one phase per session, app runnable locally at every step. No later-phase work pulled forward unless trivial (and noted).
