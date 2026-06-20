@@ -1,3 +1,5 @@
+import { useState } from 'react';
+import { useAuth } from '../auth/useAuth';
 import { cooks, tasteDefs } from '../data';
 import { useSizzle } from '../store';
 import { theme } from '../theme';
@@ -13,7 +15,14 @@ export function Onboarding() {
   const toggle = useSizzle((s) => s.toggle);
   const next = useSizzle((s) => s.next);
   const back = useSizzle((s) => s.back);
-  const finish = useSizzle((s) => s.finish);
+  const setOnbStep = useSizzle((s) => s.setOnbStep);
+  const setMode = useAuth((s) => s.setMode);
+
+  // "Log in" from the hero jumps straight to the account step in login mode.
+  const goLogin = () => {
+    setMode('login');
+    setOnbStep(3);
+  };
 
   const tasteCount = Object.values(tastes).filter(Boolean).length;
   const followCount = Object.values(followed).filter(Boolean).length;
@@ -48,7 +57,7 @@ export function Onboarding() {
         ))}
       </div>
 
-      {step === 0 && <StepHero next={next} />}
+      {step === 0 && <StepHero next={next} onLogin={goLogin} />}
       {step === 1 && (
         <StepTastes
           tastes={tastes}
@@ -58,7 +67,7 @@ export function Onboarding() {
       {step === 2 && (
         <StepCooks followed={followed} toggle={(id) => toggle('followed', id)} />
       )}
-      {step === 3 && <StepAccount finish={finish} />}
+      {step === 3 && <StepAccount />}
 
       {showBack && (
         <button
@@ -120,7 +129,7 @@ export function Onboarding() {
   );
 }
 
-function StepHero({ next }: { next: () => void }) {
+function StepHero({ next, onLogin }: { next: () => void; onLogin: () => void }) {
   return (
     <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', animation: STEP_IN }}>
       <div
@@ -170,6 +179,12 @@ function StepHero({ next }: { next: () => void }) {
           }}
         >
           Get started
+        </button>
+        <button
+          onClick={onLogin}
+          style={{ width: '100%', height: 44, marginTop: 6, border: 'none', background: 'none', color: '#6c5f56', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 600, cursor: 'pointer' }}
+        >
+          Already have an account? <span style={{ color: '#1b1512', fontWeight: 700 }}>Log in</span>
         </button>
       </div>
     </div>
@@ -273,45 +288,138 @@ function StepCooks({ followed, toggle }: { followed: Record<string, boolean>; to
   );
 }
 
-function StepAccount({ finish }: { finish: () => void }) {
+const inputStyle = {
+  height: 54,
+  border: '1.5px solid #e3d6c8',
+  borderRadius: 16,
+  background: '#fff',
+  padding: '0 18px',
+  fontFamily: "'Hanken Grotesk'",
+  fontSize: 16,
+  color: '#1b1512',
+  outline: 'none',
+  width: '100%',
+} as const;
+
+function StepAccount() {
+  const mode = useAuth((s) => s.mode);
+  const setMode = useAuth((s) => s.setMode);
+  const error = useAuth((s) => s.error);
+  const busy = useAuth((s) => s.busy);
+  const signUp = useAuth((s) => s.signUp);
+  const signIn = useAuth((s) => s.signIn);
+  const signInOAuth = useAuth((s) => s.signInOAuth);
+  const continueAsGuest = useAuth((s) => s.continueAsGuest);
+
+  const [email, setEmail] = useState('');
+  const [password, setPassword] = useState('');
+
+  const isLogin = mode === 'login';
+  const canSubmit = email.trim().length > 0 && password.length > 0 && !busy;
+
+  const submit = (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!canSubmit) return;
+    if (isLogin) void signIn(email, password);
+    else void signUp(email, password);
+  };
+
   return (
-    <div style={{ position: 'absolute', inset: 0, padding: '104px 26px 40px', display: 'flex', flexDirection: 'column', animation: STEP_IN }}>
-      <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'center' }}>
-        <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 46, lineHeight: 1, color: '#1b1512' }}>Save your taste.</div>
-        <p style={{ margin: '14px 0 30px', color: '#6c5f56', fontSize: 16, lineHeight: 1.5, maxWidth: 300 }}>
-          Create an account to keep your saves, downloads, and the cooks you follow.
+    <div style={{ position: 'absolute', inset: 0, padding: '88px 0 0', display: 'flex', flexDirection: 'column', animation: STEP_IN }}>
+      <div style={{ flex: 1, overflowY: 'auto', padding: '0 26px 16px', display: 'flex', flexDirection: 'column' }}>
+        <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 42, lineHeight: 1.02, color: '#1b1512' }}>
+          {isLogin ? 'Welcome back.' : 'Save your taste.'}
+        </div>
+        <p style={{ margin: '12px 0 22px', color: '#6c5f56', fontSize: 15.5, lineHeight: 1.5, maxWidth: 320 }}>
+          {isLogin
+            ? 'Log in to pick up your saves, downloads, and the cooks you follow.'
+            : 'Create an account to keep your saves, downloads, and the cooks you follow.'}
         </p>
-        <div style={{ display: 'flex', flexDirection: 'column', gap: 12 }}>
+
+        <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
           <button
-            onClick={finish}
+            onClick={() => void signInOAuth('apple')}
             className="sz-press"
-            style={{ ...pressVars(0.97), height: 56, border: 'none', borderRadius: 16, background: '#1b1512', color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 700, cursor: 'pointer', transition: 'transform .2s' }}
+            style={{ ...pressVars(0.97), height: 54, border: 'none', borderRadius: 16, background: '#1b1512', color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 700, cursor: 'pointer', transition: 'transform .2s' }}
           >
             Continue with Apple
           </button>
           <button
-            onClick={finish}
+            onClick={() => void signInOAuth('google')}
             className="sz-press"
-            style={{ ...pressVars(0.97), height: 56, border: '1.5px solid #e3d6c8', borderRadius: 16, background: '#fff', color: '#1b1512', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 700, cursor: 'pointer', transition: 'transform .2s' }}
+            style={{ ...pressVars(0.97), height: 54, border: '1.5px solid #e3d6c8', borderRadius: 16, background: '#fff', color: '#1b1512', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 700, cursor: 'pointer', transition: 'transform .2s' }}
           >
             Continue with Google
           </button>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '6px 0' }}>
+
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '4px 0' }}>
             <div style={{ flex: 1, height: 1, background: '#e8ddd0' }} />
             <span style={{ color: '#a99c90', fontSize: 13 }}>or</span>
             <div style={{ flex: 1, height: 1, background: '#e8ddd0' }} />
           </div>
-          <div style={{ display: 'flex', alignItems: 'center', height: 56, border: '1.5px solid #e3d6c8', borderRadius: 16, background: '#fff', padding: '0 18px', color: '#a99c90', fontSize: 16 }}>
-            Email address
-          </div>
+
+          <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
+            <input
+              type="email"
+              autoComplete="email"
+              inputMode="email"
+              placeholder="Email address"
+              value={email}
+              onChange={(e) => setEmail(e.target.value)}
+              style={inputStyle}
+            />
+            <input
+              type="password"
+              autoComplete={isLogin ? 'current-password' : 'new-password'}
+              placeholder="Password"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              style={inputStyle}
+            />
+
+            {error && <div style={{ color: '#d8521e', fontSize: 13.5, fontWeight: 600, padding: '0 2px' }}>{error}</div>}
+
+            <button
+              type="submit"
+              disabled={!canSubmit}
+              className="sz-press"
+              style={{
+                ...pressVars(0.97),
+                height: 56,
+                border: 'none',
+                borderRadius: 16,
+                background: '#1b1512',
+                color: '#fff',
+                fontFamily: "'Hanken Grotesk'",
+                fontSize: 16,
+                fontWeight: 700,
+                cursor: canSubmit ? 'pointer' : 'default',
+                opacity: canSubmit ? 1 : 0.55,
+                transition: 'transform .2s, opacity .2s',
+              }}
+            >
+              {busy ? 'One moment…' : isLogin ? 'Log in' : 'Create account'}
+            </button>
+          </form>
+
+          <button
+            onClick={() => setMode(isLogin ? 'signup' : 'login')}
+            style={{ height: 40, border: 'none', background: 'none', color: '#6c5f56', fontFamily: "'Hanken Grotesk'", fontSize: 14.5, fontWeight: 600, cursor: 'pointer' }}
+          >
+            {isLogin ? 'New here? ' : 'Already have an account? '}
+            <span style={{ color: '#1b1512', fontWeight: 700 }}>{isLogin ? 'Create an account' : 'Log in'}</span>
+          </button>
         </div>
       </div>
-      <button
-        onClick={finish}
-        style={{ height: 50, border: 'none', background: 'none', color: '#8a7c70', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 600, cursor: 'pointer' }}
-      >
-        Skip for now
-      </button>
+
+      <div style={{ padding: '6px 26px 28px' }}>
+        <button
+          onClick={continueAsGuest}
+          style={{ width: '100%', height: 48, border: 'none', background: 'none', color: '#8a7c70', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 600, cursor: 'pointer' }}
+        >
+          Skip for now
+        </button>
+      </div>
     </div>
   );
 }

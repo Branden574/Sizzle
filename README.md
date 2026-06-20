@@ -2,66 +2,49 @@
 
 > Watch it. Then cook it.
 
-A full-screen, TikTok-style video feed of real recipes from real home cooks — swipe, save, cook. This is a faithful, production-grade implementation of the **Sizzle** design prototype (`Sizzle.dc.html`), rebuilt in React + TypeScript.
+A full-screen, TikTok-style video feed of real recipes from real home cooks — swipe, save, cook. A mobile recipe app with a React front-end and a Node/Hono + Supabase backend.
 
-## Stack
+## Monorepo layout
 
-- **React 18** + **TypeScript**
-- **Vite** for dev/build
-- **Zustand** for the shared UI state machine
+```
+apps/
+  web/       Vite + React + TypeScript client (Zustand state)
+  api/       Hono + TypeScript API (auth, feeds, recipes, uploads)
+packages/
+  shared/    Shared API DTOs / contract types (@sizzle/shared)
+supabase/    Postgres schema, migrations, local config
+_handoff/    Original Sizzle.dc.html design prototype (visual source of truth)
+```
 
-The original prototype was a single-file HTML/CSS/JS mock built with Claude Design's `x-dc` template engine and a `DCLogic` class component. This repo recreates the same pixel output as a real, componentized app. The design files live under `_handoff/` for reference.
+## Quick start
 
-## Run it
+Prereqs: **Node 20+** and **Docker Desktop running** (for local Supabase).
 
 ```bash
 npm install
-npm run dev      # http://localhost:5173
+
+npm run db:start                  # start local Supabase + apply migrations
+cp apps/api/.env.example apps/api/.env
+cp apps/web/.env.example apps/web/.env
+npm run dev:all                   # web :5173  +  api :8787
 ```
 
-```bash
-npm run build    # type-check + production build to dist/
-npm run preview  # serve the production build
-npm run typecheck
-```
+The `.env` defaults already match local Supabase, so no editing is needed for local dev. To skip Docker you can still run `npm run dev:web` — the UI loads fully; only auth calls will error.
 
-## What's inside
+### Useful scripts
 
-The whole experience lives inside a 393×852 device frame.
+| Script | What |
+|--------|------|
+| `npm run dev:all` | Run web + api together |
+| `npm run dev:web` / `npm run dev:api` | Run one app |
+| `npm run build` | Build web + api |
+| `npm run typecheck` | Type-check both apps |
+| `npm run db:start` / `db:stop` / `db:reset` | Local Supabase lifecycle |
 
-**Onboarding** (4 steps) → hero, taste-chip picker, follow-some-cooks, account.
+## Status
 
-**App** with a bottom tab bar:
+Backend is being built phase-by-phase. **See [PROGRESS.md](PROGRESS.md)** for the roadmap, what's real vs. stubbed, and how to test the current slice. Right now: monorepo + API skeleton + DB schema + **real auth wired to onboarding** are in place; feeds/recipes/upload data wiring is the next slice.
 
-- **Feed** — full-screen snap-scrolling recipe cards with a For You / Following toggle, like/dislike, comments, save, share, and a per-post creator-controls menu.
-- **Discover** — search + trending chips + a masonry grid.
-- **Upload** — a "film your dish" capture sheet.
-- **Saved** — saved + offline recipes.
-- **Profile** — your stats and saved grid.
+## Stack
 
-**Sheets** — recipe detail (ingredients + method), comments (with live add), creator post-controls, and full cook profiles.
-
-## Project layout
-
-```
-src/
-  App.tsx                 # phone shell + layer/chrome orchestration
-  store.ts                # Zustand state machine (mirrors the prototype's state)
-  theme.ts                # design tokens (accent, saffron, surfaces, ink, metrics)
-  data.ts                 # cooks, recipes, comments, taste/trend definitions
-  types.ts
-  components/
-    Phone.tsx  StatusBar.tsx
-    Onboarding.tsx
-    Feed.tsx  Discover.tsx  Saved.tsx  Profile.tsx  BottomNav.tsx  AppShell.tsx
-    icons.tsx             # all SVG iconography (single source of path data)
-    ui.ts                 # pressVars() helper for the .sz-press active-scale utility
-    sheets/
-      RecipeSheet.tsx  CommentsSheet.tsx  SettingsSheet.tsx  CookSheet.tsx  UploadSheet.tsx
-```
-
-## Theming
-
-`accent` (`#ff5a36`) and `saffron` (`#f4a52c`) were configurable color props in the original design. They're defined in [`src/theme.ts`](src/theme.ts) and surfaced as the `--accent` / `--saffron` CSS custom properties on the phone root — change them in one place to retint the whole app.
-
-To boot straight into the app (skipping onboarding) during development, flip `START_IN_APP` in [`src/store.ts`](src/store.ts).
+React 18 · TypeScript · Vite · Zustand · Hono · Supabase (Postgres/Auth/Storage) · Cloudflare Stream (video, behind an interface — mock by default).

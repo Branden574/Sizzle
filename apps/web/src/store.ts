@@ -38,6 +38,10 @@ export interface SizzleState {
   next: () => void;
   back: () => void;
   finish: () => void;
+  setPhase: (phase: Phase) => void;
+  setOnbStep: (step: number) => void;
+  /** Return to the first-run flow (used on sign-out). */
+  resetToOnboarding: () => void;
 
   // generic toggles
   toggle: (map: ToggleMap, id: string) => void;
@@ -93,6 +97,9 @@ export const useSizzle = create<SizzleState>((set) => ({
     }),
   back: () => set((s) => ({ onbStep: Math.max(0, s.onbStep - 1) })),
   finish: () => set({ phase: 'app' }),
+  setPhase: (phase) => set({ phase }),
+  setOnbStep: (step) => set({ onbStep: step }),
+  resetToOnboarding: () => set({ phase: 'onboarding', onbStep: 0 }),
 
   toggle: (map, id) =>
     set((s) => ({ [map]: { ...s[map], [id]: !s[map][id] } }) as Partial<SizzleState>),

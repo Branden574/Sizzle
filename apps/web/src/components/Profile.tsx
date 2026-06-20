@@ -1,3 +1,4 @@
+import { useAuth } from '../auth/useAuth';
 import { recipes } from '../data';
 import { useSizzle } from '../store';
 import { GearIcon } from './icons';
@@ -6,6 +7,9 @@ export function Profile() {
   const saves = useSizzle((s) => s.saves);
   const followed = useSizzle((s) => s.followed);
   const setOpenRecipe = useSizzle((s) => s.setOpenRecipe);
+  // Temporary until the Profile is wired to /me (Phase 1 data slice): the gear
+  // signs out (authed) or exits guest mode, returning to onboarding/login.
+  const signOut = useAuth((s) => s.signOut);
 
   const savedRecipes = recipes.filter((r) => saves[r.id]);
   const savedCount = savedRecipes.length;
@@ -28,7 +32,11 @@ export function Profile() {
         </div>
         <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
           <button style={{ flex: 1, height: 48, border: 'none', borderRadius: 14, background: '#1b1512', color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>Edit profile</button>
-          <button style={{ width: 48, height: 48, border: '1.5px solid #e3d6c8', borderRadius: 14, background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <button
+            onClick={() => void signOut()}
+            title="Sign out"
+            style={{ width: 48, height: 48, border: '1.5px solid #e3d6c8', borderRadius: 14, background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          >
             <GearIcon size={20} stroke="#5c5048" />
           </button>
         </div>

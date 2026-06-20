@@ -1,19 +1,33 @@
-import type { CSSProperties } from 'react';
+import { useEffect, type CSSProperties } from 'react';
 import { AppShell } from './components/AppShell';
 import { Onboarding } from './components/Onboarding';
 import { HomeIndicator, Phone } from './components/Phone';
+import { Splash } from './components/Splash';
 import { StatusBar } from './components/StatusBar';
 import { CommentsSheet } from './components/sheets/CommentsSheet';
 import { CookSheet } from './components/sheets/CookSheet';
 import { RecipeSheet } from './components/sheets/RecipeSheet';
 import { SettingsSheet } from './components/sheets/SettingsSheet';
 import { UploadSheet } from './components/sheets/UploadSheet';
+import { useAuth } from './auth/useAuth';
 import { useSizzle } from './store';
 import { theme } from './theme';
 
 const stageVars = { '--accent': theme.accent, '--saffron': theme.saffron } as CSSProperties;
 
 export default function App() {
+  const authStatus = useAuth((s) => s.status);
+  const initAuth = useAuth((s) => s.init);
+  const setPhase = useSizzle((s) => s.setPhase);
+  const resetToOnboarding = useSizzle((s) => s.resetToOnboarding);
+
+  // Decide the initial session once, then keep phase in sync with auth.
+  useEffect(() => initAuth(), [initAuth]);
+  useEffect(() => {
+    if (authStatus === 'authed' || authStatus === 'guest') setPhase('app');
+    else if (authStatus === 'anon') resetToOnboarding();
+  }, [authStatus, setPhase, resetToOnboarding]);
+
   const phase = useSizzle((s) => s.phase);
   const tab = useSizzle((s) => s.tab);
   const openRecipe = useSizzle((s) => s.openRecipe);
@@ -45,8 +59,9 @@ export default function App() {
       <Phone>
         <StatusBar color={statusColor} />
         <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
-          {isOnboarding && <Onboarding />}
-          {isApp && <AppShell />}
+          {authStatus === 'loading' && <Splash />}
+          {authStatus !== 'loading' && isOnboarding && <Onboarding />}
+          {authStatus !== 'loading' && isApp && <AppShell />}
 
           {showRecipe && <RecipeSheet />}
           {showComments && <CommentsSheet />}
