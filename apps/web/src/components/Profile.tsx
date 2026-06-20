@@ -1,34 +1,53 @@
 import { useAuth } from '../auth/useAuth';
-import { recipes } from '../data';
+import { useRequireAuth } from '../auth/useRequireAuth';
+import { useMe, useSavedFeed } from '../data/queries';
 import { useSizzle } from '../store';
 import { GearIcon } from './icons';
 
-export function Profile() {
-  const saves = useSizzle((s) => s.saves);
-  const followed = useSizzle((s) => s.followed);
-  const setOpenRecipe = useSizzle((s) => s.setOpenRecipe);
-  // Temporary until the Profile is wired to /me (Phase 1 data slice): the gear
-  // signs out (authed) or exits guest mode, returning to onboarding/login.
-  const signOut = useAuth((s) => s.signOut);
+const BANNER = 'radial-gradient(120% 120% at 70% 0%, var(--saffron,#f4a52c), var(--accent,#ff5a36) 60%, #c23a1a)';
 
-  const savedRecipes = recipes.filter((r) => saves[r.id]);
-  const savedCount = savedRecipes.length;
-  const savedEmpty = savedCount === 0;
-  const followingCount = Object.values(followed).filter(Boolean).length;
+export function Profile() {
+  const authed = useAuth((s) => s.status === 'authed');
+  const signOut = useAuth((s) => s.signOut);
+  const requireAuth = useRequireAuth();
+  const setOpenRecipe = useSizzle((s) => s.setOpenRecipe);
+
+  const { data: me } = useMe();
+  const { data: saved } = useSavedFeed();
+  const savedItems = saved?.items ?? [];
+
+  if (!authed) {
+    return (
+      <div style={{ position: 'absolute', inset: 0, background: '#faf3ea', animation: 'sz-fadeIn .35s' }}>
+        <div style={{ height: 150, background: BANNER, position: 'relative' }}>
+          <div style={{ position: 'absolute', inset: 0, opacity: 0.12, background: 'repeating-linear-gradient(115deg,#000 0 2px, transparent 2px 7px)' }} />
+        </div>
+        <div style={{ padding: '60px 30px', textAlign: 'center' }}>
+          <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 30, color: '#1b1512' }}>You're browsing as a guest</div>
+          <p style={{ color: '#8a7c70', fontSize: 15, margin: '10px 0 24px' }}>Create an account to keep your saves, downloads, and the cooks you follow.</p>
+          <button onClick={() => requireAuth()} style={{ height: 52, padding: '0 28px', border: 'none', borderRadius: 16, background: '#1b1512', color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>
+            Sign in
+          </button>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div style={{ position: 'absolute', inset: 0, background: '#faf3ea', overflowY: 'auto', animation: 'sz-fadeIn .35s' }}>
-      <div style={{ height: 150, background: 'radial-gradient(120% 120% at 70% 0%, var(--saffron,#f4a52c), var(--accent,#ff5a36) 60%, #c23a1a)', position: 'relative' }}>
+      <div style={{ height: 150, background: BANNER, position: 'relative' }}>
         <div style={{ position: 'absolute', inset: 0, opacity: 0.12, background: 'repeating-linear-gradient(115deg,#000 0 2px, transparent 2px 7px)' }} />
       </div>
       <div style={{ padding: '0 22px 110px', marginTop: -44 }}>
-        <div style={{ width: 88, height: 88, borderRadius: 28, background: 'linear-gradient(135deg,#3a2a22,#1b1512)', border: '4px solid #faf3ea', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Instrument Serif',serif", fontSize: 34, color: '#fff' }}>A</div>
-        <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 30, color: '#1b1512', marginTop: 12 }}>Alex Rivera</div>
-        <div style={{ color: '#8a7c70', fontSize: 14.5 }}>@alexcooks · Home cook in training</div>
+        <div style={{ width: 88, height: 88, borderRadius: 28, background: 'linear-gradient(135deg,#3a2a22,#1b1512)', border: '4px solid #faf3ea', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Instrument Serif',serif", fontSize: 34, color: '#fff' }}>{me?.init ?? '·'}</div>
+        <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 30, color: '#1b1512', marginTop: 12 }}>{me?.name ?? 'Loading…'}</div>
+        <div style={{ color: '#8a7c70', fontSize: 14.5 }}>
+          {me ? `@${me.handle} · ${me.bio || 'Home cook in training'}` : ''}
+        </div>
         <div style={{ display: 'flex', gap: 22, marginTop: 18 }}>
-          <Stat value={String(followingCount)} label="Following" />
-          <Stat value="128" label="Followers" />
-          <Stat value={String(savedCount)} label="Saved" />
+          <Stat value={String(me?.counts.following ?? 0)} label="Following" />
+          <Stat value={String(me?.counts.followers ?? 0)} label="Followers" />
+          <Stat value={String(me?.counts.saved ?? 0)} label="Saved" />
         </div>
         <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
           <button style={{ flex: 1, height: 48, border: 'none', borderRadius: 14, background: '#1b1512', color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>Edit profile</button>
@@ -41,11 +60,11 @@ export function Profile() {
           </button>
         </div>
         <div style={{ fontSize: 14, fontWeight: 700, color: '#1b1512', margin: '26px 0 12px' }}>Your saved recipes</div>
-        {savedEmpty && (
+        {savedItems.length === 0 && (
           <div style={{ padding: 30, textAlign: 'center', background: '#fff', border: '1px dashed #e3d6c8', borderRadius: 20, color: '#a99c90', fontSize: 14 }}>Recipes you save will collect here.</div>
         )}
         <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-          {savedRecipes.map((r) => (
+          {savedItems.map((r) => (
             <button
               key={r.id}
               onClick={() => setOpenRecipe(r.id)}

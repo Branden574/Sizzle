@@ -1,10 +1,11 @@
-import { baseComments, recipeById } from '../../data';
+import { baseComments } from '../../data';
 import { useSizzle } from '../../store';
 import { theme } from '../../theme';
 import { CloseIcon, HeartIcon, ShareIcon } from '../icons';
 
 const accent = theme.accent;
 
+// NOTE: comments are local-only until Phase 2 (server-backed comments).
 export function CommentsSheet() {
   const commentsFor = useSizzle((s) => s.commentsFor);
   const commentMap = useSizzle((s) => s.comments);
@@ -14,10 +15,8 @@ export function CommentsSheet() {
   const setCommentsFor = useSizzle((s) => s.setCommentsFor);
 
   if (!commentsFor) return null;
-  const r = recipeById(commentsFor);
-  if (!r) return null;
 
-  const activeComments = [...(commentMap[r.id] || []), ...baseComments];
+  const activeComments = [...(commentMap[commentsFor] || []), ...baseComments];
   const sendBg = draft.trim() ? accent : '#d8cbbb';
 
   const close = () => {
@@ -31,7 +30,7 @@ export function CommentsSheet() {
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '74%', background: '#faf3ea', borderRadius: '26px 26px 0 0', overflow: 'hidden', animation: 'sz-slideUp .4s cubic-bezier(.16,1,.3,1)', display: 'flex', flexDirection: 'column' }}>
         <div style={{ padding: '14px 22px 12px', borderBottom: '1px solid #ece1d4', position: 'relative' }}>
           <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', width: 42, height: 5, borderRadius: 3, background: '#d8cbbb' }} />
-          <div style={{ textAlign: 'center', fontSize: 15, fontWeight: 700, color: '#1b1512', marginTop: 6 }}>{r.commentCount} comments</div>
+          <div style={{ textAlign: 'center', fontSize: 15, fontWeight: 700, color: '#1b1512', marginTop: 6 }}>{activeComments.length} comments</div>
           <button onClick={close} style={{ position: 'absolute', top: 14, right: 16, background: 'none', border: 'none', cursor: 'pointer' }}>
             <CloseIcon size={22} stroke="#8a7c70" strokeWidth={2.2} />
           </button>

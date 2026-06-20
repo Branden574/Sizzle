@@ -10,7 +10,7 @@ Stack: **Node + TypeScript**, **Hono** API, **Supabase** (Postgres/Auth/Storage)
 
 | Phase | Scope | Status |
 |-------|-------|--------|
-| **1** | Foundation + core loop (scaffold, schema, auth, upload, feeds, follow/like/save, seed) | 🟡 In progress |
+| **1** | Foundation + core loop (scaffold, schema, auth, upload, feeds, follow/like/save, seed, **UI wired**) | ✅ Core complete |
 | 2 | Social depth + search (profiles, comments, search/discovery, notifications scaffolding) | ⬜ Not started |
 | 3 | Offline downloads | ⬜ Not started |
 | 4 | Recommendation algorithm — For You ranking modeled on X's algorithm ([design](docs/recommendation-algorithm.md)) | ⬜ Not started |
@@ -42,12 +42,18 @@ Phase 1 is being built in slices. Each slice keeps the app runnable.
 - **Seed script** from `apps/web/src/data.ts` → 5 cooks (as auth users) + 10 recipes + ingredients/steps + ready mock video assets + seeded counts. Idempotent. Run: `npm run seed`.
 - **Verified live**: guest feed (10 items), signup→`/me`, recipe detail, like (counter +1), save, follow, following feed, `/me/saved`.
 
-### ⬜ Slice B2 — Wire the web client  *(next)*
-- Replace mock `data.ts` reads with API calls (feed, recipe detail, cook, saved, `/me`).
-- Hydrate viewer state (likes/saves/follows) from the server; optimistic mutations for like/dislike/save/follow.
-- `formatCount()` client-side; render real poster/HLS in cards.
-- Wire Upload button → `POST /uploads/video` → `POST /recipes`; Profile → `/me`; persist onboarding tastes/follows.
-- Guest vs authed gating (guest can browse For You; gated actions prompt sign-in).
+### ✅ Slice B2 — Web wired to the API  *(done — verified end-to-end in-browser)*
+- **TanStack Query** for server state (`apps/web/src/data/queries.ts`); `QueryClientProvider` in main.
+- Feed (For You + Following), Discover, Saved, Profile, Recipe sheet, Cook sheet all read the API (no more mock `data.ts` for app content). `formatCount()` client-side.
+- **Optimistic mutations** for like / dislike / save / follow (patch every cache the item appears in; rollback on error; invalidate on settle).
+- **Upload button → real recipe**: a create form → `POST /uploads/video` → `POST /recipes`, then the feed refetches and shows it.
+- Profile → `/me`; onboarding taste picks persisted via `POST /me/tastes` on first auth.
+- **Guest gating**: guests browse For You; gated actions (like/save/follow/upload) route to sign-in.
+- Verified in-browser: signup → live feed → like (persists across reload) → upload (lands in feed, ordered newest) → real profile.
+
+**Phase 1 goal achieved:** create an account → upload a recipe → see it in a feed → like/save/follow, end-to-end locally.
+
+Deferred polish / later phases: real HLS **video playback** (cards show poster + play affordance; player is a follow-up), scroll-to-top after posting, onboarding **cook-follow** replay (follows work everywhere in-app), and **comments** (local-only until Phase 2).
 
 ---
 
@@ -59,9 +65,10 @@ Phase 1 is being built in slices. Each slice keeps the app runnable.
 | Apple / Google OAuth | Wired, **needs provider config** to function |
 | API: `/health`, `/me`, `/me/tastes`, `/me/saved` | **Real** |
 | API: feeds, recipe detail, `POST /recipes`, like/dislike/save, follow, cook profile, uploads | **Real** (verified against Postgres) |
-| **Web** feeds/discover/saved/profile/recipe content | **Still mock `data.ts`** — rewired in Slice B2 |
-| Video upload + playback | **Mock provider** (sample HLS); Cloudflare path implemented, off by default |
-| Onboarding taste/cook selections | Local only; persisted to backend in Slice B2 |
+| **Web** feeds/discover/saved/profile/recipe/cook | **Real** (TanStack Query + optimistic mutations) |
+| Video upload (metadata + asset) | **Real**; playback is poster-only (HLS player is a follow-up) |
+| Onboarding tastes | Persisted via `/me/tastes` on first auth; cook-follow replay deferred |
+| Comments | Local-only (Phase 2) |
 
 ---
 

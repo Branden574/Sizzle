@@ -10,6 +10,7 @@ import { RecipeSheet } from './components/sheets/RecipeSheet';
 import { SettingsSheet } from './components/sheets/SettingsSheet';
 import { UploadSheet } from './components/sheets/UploadSheet';
 import { useAuth } from './auth/useAuth';
+import { apiSend } from './lib/api';
 import { useSizzle } from './store';
 import { theme } from './theme';
 
@@ -27,6 +28,14 @@ export default function App() {
     if (authStatus === 'authed' || authStatus === 'guest') setPhase('app');
     else if (authStatus === 'anon') resetToOnboarding();
   }, [authStatus, setPhase, resetToOnboarding]);
+
+  // Persist onboarding taste picks once an account exists.
+  // (Cook follows chosen in onboarding are followed in-app for now — see PROGRESS.)
+  useEffect(() => {
+    if (authStatus !== 'authed') return;
+    const tastes = Object.entries(useSizzle.getState().tastes).filter(([, v]) => v).map(([k]) => k);
+    if (tastes.length) void apiSend('POST', '/me/tastes', { tastes }).catch(() => {});
+  }, [authStatus]);
 
   const phase = useSizzle((s) => s.phase);
   const tab = useSizzle((s) => s.tab);

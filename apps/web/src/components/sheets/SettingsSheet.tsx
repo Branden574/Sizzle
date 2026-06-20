@@ -1,5 +1,4 @@
 import type { ReactNode } from 'react';
-import { recipeById } from '../../data';
 import { useSizzle } from '../../store';
 import { theme } from '../../theme';
 import type { PostSettings } from '../../types';
@@ -27,10 +26,9 @@ export function SettingsSheet() {
   const setSettingsFor = useSizzle((s) => s.setSettingsFor);
 
   if (!settingsFor) return null;
-  const r = recipeById(settingsFor);
-  if (!r) return null;
 
-  const flags = postSettings[r.id] || {};
+  // Creator controls are local-only for now (not yet persisted server-side).
+  const flags = postSettings[settingsFor] || {};
   const close = () => setSettingsFor(null);
 
   return (
@@ -40,7 +38,7 @@ export function SettingsSheet() {
         <div style={{ textAlign: 'center', padding: '16px 0 6px', position: 'relative' }}>
           <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', width: 42, height: 5, borderRadius: 3, background: '#d8cbbb' }} />
           <div style={{ fontSize: 16, fontWeight: 700, color: '#1b1512', marginTop: 6 }}>Post controls</div>
-          <div style={{ fontSize: 13, color: '#8a7c70', marginTop: 2 }}>{`“${r.title}”`}</div>
+          <div style={{ fontSize: 13, color: '#8a7c70', marginTop: 2 }}>Who can react &amp; comment</div>
         </div>
 
         <div style={{ padding: '12px 22px 0', display: 'flex', flexDirection: 'column', gap: 4 }}>
@@ -49,7 +47,7 @@ export function SettingsSheet() {
             return (
               <button
                 key={row.key}
-                onClick={() => togglePostSetting(r.id, row.key)}
+                onClick={() => togglePostSetting(settingsFor, row.key)}
                 style={{ display: 'flex', alignItems: 'center', gap: 14, background: '#fff', border: '1px solid #ece1d4', borderRadius: 18, padding: 16, cursor: 'pointer', textAlign: 'left', marginBottom: 10 }}
               >
                 <div style={{ width: 42, height: 42, flex: 'none', borderRadius: 13, background: '#f5ede2', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{row.icon}</div>

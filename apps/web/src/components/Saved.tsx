@@ -1,15 +1,16 @@
-import { recipes } from '../data';
+import { useSavedFeed } from '../data/queries';
 import { useSizzle } from '../store';
 import { CheckIcon, DownloadIcon } from './icons';
 
 export function Saved() {
-  const saves = useSizzle((s) => s.saves);
-  const downloads = useSizzle((s) => s.downloads);
   const setOpenRecipe = useSizzle((s) => s.setOpenRecipe);
+  const downloads = useSizzle((s) => s.downloads);
+  const { data } = useSavedFeed();
 
-  const savedRecipes = recipes.filter((r) => saves[r.id]);
-  const savedCount = savedRecipes.length;
-  const downloadCount = savedRecipes.filter((r) => downloads[r.id]).length;
+  const items = data?.items ?? [];
+  const savedCount = items.length;
+  // Offline/download is a Phase 3 feature; tracked locally for now.
+  const downloadCount = items.filter((r) => downloads[r.id]).length;
   const savedEmpty = savedCount === 0;
 
   return (
@@ -33,7 +34,7 @@ export function Saved() {
       )}
 
       <div style={{ padding: '16px 18px 110px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-        {savedRecipes.map((r) => {
+        {items.map((r) => {
           const downloaded = !!downloads[r.id];
           return (
             <button

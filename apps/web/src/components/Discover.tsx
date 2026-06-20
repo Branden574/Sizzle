@@ -1,9 +1,13 @@
-import { discoverHeights, recipes, trendChips } from '../data';
+import { discoverHeights, trendChips } from '../data';
+import { useForYouFeed } from '../data/queries';
 import { useSizzle } from '../store';
+import { formatCount } from '../lib/format';
 import { HeartIcon, SearchIcon } from './icons';
 
 export function Discover() {
   const setOpenRecipe = useSizzle((s) => s.setOpenRecipe);
+  const { data } = useForYouFeed();
+  const tiles = data?.items ?? [];
 
   return (
     <div style={{ position: 'absolute', inset: 0, background: '#faf3ea', overflowY: 'auto', animation: 'sz-fadeIn .35s' }}>
@@ -22,7 +26,7 @@ export function Discover() {
         </div>
       </div>
       <div style={{ padding: '6px 18px 110px', columns: 2, columnGap: 14 }}>
-        {recipes.map((r, i) => (
+        {tiles.map((r, i) => (
           <button
             key={r.id}
             onClick={() => setOpenRecipe(r.id)}
@@ -33,7 +37,7 @@ export function Discover() {
               <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 19, lineHeight: 1.05, color: '#fff' }}>{r.title}</div>
               <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
                 <HeartIcon width={12} height={12} fill="#fff" />
-                <span style={{ color: 'rgba(255,255,255,.85)', fontSize: 12, fontWeight: 600 }}>{r.likeCount}</span>
+                <span style={{ color: 'rgba(255,255,255,.85)', fontSize: 12, fontWeight: 600 }}>{formatCount(r.counts.likes)}</span>
               </div>
             </div>
           </button>
