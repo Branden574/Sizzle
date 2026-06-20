@@ -121,6 +121,8 @@ async function loadViewerCtx(
     for (const r of reactions ?? []) (r.kind === 'like' ? ctx.likes : ctx.dislikes).add(r.recipe_id as string);
     const { data: saves } = await db.from('saves').select('recipe_id').eq('user_id', viewerId).in('recipe_id', recipeIds);
     for (const s of saves ?? []) ctx.saves.add(s.recipe_id as string);
+    const { data: downloads } = await db.from('downloads').select('recipe_id').eq('user_id', viewerId).in('recipe_id', recipeIds);
+    for (const d of downloads ?? []) ctx.downloads.add(d.recipe_id as string);
   }
   if (cookIds.length) {
     const { data: follows } = await db.from('follows').select('cook_id').eq('follower_id', viewerId).in('cook_id', cookIds);

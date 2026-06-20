@@ -206,6 +206,23 @@ recipes.post('/:id/save', requireAuth, async (c) => {
   return c.json({ saved: true });
 });
 
+/** POST /recipes/:id/download — mark for offline. */
+recipes.post('/:id/download', requireAuth, async (c) => {
+  const id = c.req.param('id');
+  const userId = c.get('userId')!;
+  await recipeCookId(id);
+  await supabaseAdmin.from('downloads').upsert({ user_id: userId, recipe_id: id }, { onConflict: 'user_id,recipe_id' });
+  return c.json({ downloaded: true });
+});
+
+/** DELETE /recipes/:id/download — remove offline copy. */
+recipes.delete('/:id/download', requireAuth, async (c) => {
+  const id = c.req.param('id');
+  const userId = c.get('userId')!;
+  await supabaseAdmin.from('downloads').delete().eq('user_id', userId).eq('recipe_id', id);
+  return c.json({ downloaded: false });
+});
+
 const commentSchema = z.object({ text: z.string().trim().min(1).max(600) });
 
 /** GET /recipes/:id/comments — newest first. */

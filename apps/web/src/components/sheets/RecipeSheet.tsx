@@ -1,5 +1,6 @@
 import { useRequireAuth } from '../../auth/useRequireAuth';
-import { useRecipe, useToggleSave } from '../../data/queries';
+import { useRecipe, useToggleDownload, useToggleSave } from '../../data/queries';
+import { getOffline } from '../../lib/offline';
 import { useSizzle } from '../../store';
 import { theme } from '../../theme';
 import { BookmarkIcon, CloseIcon, DownloadIcon } from '../icons';
@@ -11,12 +12,13 @@ export function RecipeSheet() {
   const openRecipe = useSizzle((s) => s.openRecipe);
   const setOpenRecipe = useSizzle((s) => s.setOpenRecipe);
   const setOpenCook = useSizzle((s) => s.setOpenCook);
-  const downloads = useSizzle((s) => s.downloads);
-  const toggle = useSizzle((s) => s.toggle);
   const requireAuth = useRequireAuth();
   const save = useToggleSave();
+  const download = useToggleDownload();
 
-  const { data: r, isLoading } = useRecipe(openRecipe);
+  const { data, isLoading } = useRecipe(openRecipe);
+  // Offline fallback: if the fetch hasn't landed, use the locally cached copy.
+  const r = data ?? getOffline(openRecipe);
 
   if (!openRecipe) return null;
   const close = () => setOpenRecipe(null);
@@ -96,12 +98,15 @@ export function RecipeSheet() {
                 {r.viewer.saved ? 'Saved' : 'Save recipe'}
               </button>
               <button
-                onClick={() => toggle('downloads', r.id)}
+                onClick={() => {
+                  if (!requireAuth()) return;
+                  download.mutate({ recipeId: r.id, downloaded: r.viewer.downloaded });
+                }}
                 className="sz-press"
-                title="Offline download (coming in Phase 3)"
-                style={{ ...pressVars(0.93), width: 56, height: 56, flex: 'none', border: `1.5px solid ${downloads[r.id] ? accent : '#e3d6c8'}`, borderRadius: 17, background: downloads[r.id] ? accent : '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform .2s' }}
+                title={r.viewer.downloaded ? 'Downloaded for offline' : 'Save for offline'}
+                style={{ ...pressVars(0.93), width: 56, height: 56, flex: 'none', border: `1.5px solid ${r.viewer.downloaded ? accent : '#e3d6c8'}`, borderRadius: 17, background: r.viewer.downloaded ? accent : '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform .2s' }}
               >
-                <DownloadIcon size={22} stroke={downloads[r.id] ? '#fff' : '#5c5048'} strokeWidth={2.2} />
+                <DownloadIcon size={22} stroke={r.viewer.downloaded ? '#fff' : '#5c5048'} strokeWidth={2.2} />
               </button>
             </div>
           </>

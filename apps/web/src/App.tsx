@@ -14,6 +14,7 @@ import { UploadSheet } from './components/sheets/UploadSheet';
 import { useAuth } from './auth/useAuth';
 import { queryClient } from './data/queries';
 import { apiSend } from './lib/api';
+import { useOnlineStatus } from './lib/useOnlineStatus';
 import { useSizzle } from './store';
 import { theme } from './theme';
 
@@ -58,6 +59,7 @@ export default function App() {
   const showUpload = useSizzle((s) => s.showUpload);
   const showNotifications = useSizzle((s) => s.showNotifications);
   const showEditProfile = useSizzle((s) => s.showEditProfile);
+  const online = useOnlineStatus();
 
   const isOnboarding = phase === 'onboarding';
   const isApp = phase === 'app';
@@ -82,6 +84,11 @@ export default function App() {
       <Phone>
         <StatusBar color={statusColor} />
         <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
+          {!online && (
+            <div style={{ position: 'absolute', top: 54, left: '50%', transform: 'translateX(-50%)', zIndex: 55, background: 'rgba(27,21,18,.92)', color: '#fff', fontSize: 12.5, fontWeight: 600, padding: '7px 14px', borderRadius: 20, backdropFilter: 'blur(8px)', pointerEvents: 'none', whiteSpace: 'nowrap' }}>
+              You're offline · showing downloads
+            </div>
+          )}
           {authStatus === 'loading' && <Splash />}
           {authStatus !== 'loading' && isOnboarding && <Onboarding />}
           {authStatus !== 'loading' && isApp && <AppShell />}

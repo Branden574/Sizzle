@@ -12,7 +12,7 @@ Stack: **Node + TypeScript**, **Hono** API, **Supabase** (Postgres/Auth/Storage)
 |-------|-------|--------|
 | **1** | Foundation + core loop (scaffold, schema, auth, upload, feeds, follow/like/save, seed, **UI wired**) | ✅ Core complete |
 | 2 | Social depth + search (profiles, comments, search/discovery, notifications) | ✅ Done |
-| 3 | Offline downloads | ⬜ Not started |
+| 3 | Offline downloads | ✅ Done |
 | 4 | Recommendation algorithm — For You ranking modeled on X's algorithm ([design](docs/recommendation-algorithm.md)) | ⬜ Not started |
 | 5 | Production hardening (rate limits, validation, moderation, transcoding cost, analytics, security) | ⬜ Not started |
 
@@ -24,6 +24,13 @@ Stack: **Node + TypeScript**, **Hono** API, **Supabase** (Postgres/Auth/Storage)
 - **Notifications:** `notifications` table; generated on follow/like/comment; `GET /me/notifications` + mark-read; bell on Profile with unread dot + a notifications sheet (all 3 types, tap-through).
 - **Full profiles:** `PATCH /me` (name/handle/bio) + an Edit-profile sheet; Profile reads `/me`.
 - Screens tested: feed (For You/Following), recipe sheet, cook sheet, discover+search, saved, profile, comments, notifications, edit-profile, settings, upload, onboarding.
+
+## Phase 3 — done
+- **`downloads` table** + `POST/DELETE /recipes/:id/download`; `viewer.downloaded` now server-driven (mapper reads the table).
+- Recipe sheet download button wired to the real toggle (optimistic). Saved tab: real Offline badge + a working **All / Offline filter**.
+- **Local offline cache** (`lib/offline.ts`, localStorage): downloading stores the full recipe (metadata + ingredients/steps + poster) so it's readable with no network. Saved + recipe sheet fall back to the cache when offline; an **offline banner** shows.
+- Fixed: reaction/save/download mutations now also invalidate the recipe-detail query (was causing stale optimistic state). Vite dev `watch.ignored` for tsbuildinfo/dist (stop HMR reload flaps during testing).
+- Note: true offline *video playback* needs the real Cloudflare MP4 + Cache API (poster is cached) — a follow-up.
 
 ---
 

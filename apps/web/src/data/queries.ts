@@ -2,6 +2,7 @@ import { QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/re
 import type { CommentDTO, CookProfile, CreateRecipeInput, DirectUploadTicket, FeedResponse, MeProfile, NotificationDTO, RecipeCard, RecipeDetail, SearchResults, SuggestedCook } from '@sizzle/shared';
 import { useAuth } from '../auth/useAuth';
 import { apiGet, apiSend } from '../lib/api';
+import { removeOffline, saveOffline } from '../lib/offline';
 
 export const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30_000, retry: 1, refetchOnWindowFocus: false } },
@@ -190,10 +191,11 @@ function useRecipeAction(action: 'like' | 'dislike' | 'save', patch: CardPatch) 
       return { snap };
     },
     onError: (_e, _v, ctx) => ctx && restore(qc, ctx.snap),
-    onSettled: () => {
+    onSettled: (_data, _err, recipeId) => {
       void qc.invalidateQueries({ queryKey: ['feed'] });
       void qc.invalidateQueries({ queryKey: keys.saved });
       void qc.invalidateQueries({ queryKey: keys.me });
+      void qc.invalidateQueries({ queryKey: keys.recipe(recipeId) });
     },
   });
 }
@@ -201,6 +203,30 @@ function useRecipeAction(action: 'like' | 'dislike' | 'save', patch: CardPatch) 
 export const useToggleLike = () => useRecipeAction('like', likePatch);
 export const useToggleDislike = () => useRecipeAction('dislike', dislikePatch);
 export const useToggleSave = () => useRecipeAction('save', savePatch);
+
+/** Toggle offline download. Pass the *current* downloaded state to pick the verb. */
+export function useToggleDownload() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ recipeId, downloaded }: { recipeId: string; downloaded: boolean }) =>
+      apiSend(downloaded ? 'DELETE' : 'POST', `/recipes/${recipeId}/download`),
+    onMutate: async ({ recipeId, downloaded }) => {
+      await qc.cancelQueries();
+      const snap = snapshot(qc);
+      patchRecipeEverywhere(qc, recipeId, (card) => ({ ...card, viewer: { ...card.viewer, downloaded: !downloaded } }));
+      const detail = qc.getQueryData<RecipeDetail>(keys.recipe(recipeId));
+      if (!downloaded && detail) saveOffline(detail);
+      else if (downloaded) removeOffline(recipeId);
+      return { snap };
+    },
+    onError: (_e, _v, ctx) => ctx && restore(qc, ctx.snap),
+    onSettled: (_data, _err, { recipeId }) => {
+      void qc.invalidateQueries({ queryKey: ['feed'] });
+      void qc.invalidateQueries({ queryKey: keys.saved });
+      void qc.invalidateQueries({ queryKey: keys.recipe(recipeId) });
+    },
+  });
+}
 
 /**
  * Upload a recipe: request a direct upload ticket, then create the recipe.
