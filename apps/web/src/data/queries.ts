@@ -1,5 +1,5 @@
 import { QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { CookProfile, CreateRecipeInput, DirectUploadTicket, FeedResponse, MeProfile, RecipeCard, RecipeDetail } from '@sizzle/shared';
+import type { CookProfile, CreateRecipeInput, DirectUploadTicket, FeedResponse, MeProfile, RecipeCard, RecipeDetail, SuggestedCook } from '@sizzle/shared';
 import { useAuth } from '../auth/useAuth';
 import { apiGet, apiSend } from '../lib/api';
 
@@ -43,6 +43,15 @@ export function useRecipe(id: string | null) {
 
 export function useCook(id: string | null) {
   return useQuery({ queryKey: keys.cook(id ?? ''), queryFn: () => apiGet<CookProfile>(`/cooks/${id}`), enabled: !!id });
+}
+
+/** Onboarding creator recommendations ranked by the selected tastes. */
+export function useSuggestedCooks(tastes: string[]) {
+  const sorted = [...tastes].sort();
+  return useQuery({
+    queryKey: ['cooks', 'suggested', sorted],
+    queryFn: () => apiGet<SuggestedCook[]>(`/cooks/suggested?tastes=${encodeURIComponent(sorted.join(','))}&limit=8`),
+  });
 }
 
 /* ───────────────────── optimistic cache helpers ─────────────────── */

@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useAuth } from '../auth/useAuth';
-import { cooks, tasteDefs } from '../data';
+import { tasteDefs } from '../data';
+import { useSuggestedCooks } from '../data/queries';
 import { useSizzle } from '../store';
 import { theme } from '../theme';
 import { ChevronLeftIcon } from './icons';
@@ -228,37 +229,31 @@ function StepTastes({ tastes, toggle }: { tastes: Record<string, boolean>; toggl
 }
 
 function StepCooks({ followed, toggle }: { followed: Record<string, boolean>; toggle: (id: string) => void }) {
+  const tastes = useSizzle((s) => s.tastes);
+  const selected = Object.entries(tastes).filter(([, v]) => v).map(([k]) => k);
+  const { data: suggested, isLoading } = useSuggestedCooks(selected);
+
   return (
     <div style={{ position: 'absolute', inset: 0, padding: '104px 0 0', display: 'flex', flexDirection: 'column', animation: STEP_IN }}>
       <div style={{ padding: '0 26px' }}>
         <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 40, lineHeight: 1.02, color: '#1b1512' }}>Follow a few cooks</div>
-        <p style={{ margin: '12px 0 18px', color: '#6c5f56', fontSize: 15 }}>Their newest recipes land in Following.</p>
+        <p style={{ margin: '12px 0 18px', color: '#6c5f56', fontSize: 15 }}>Picked for your taste — their newest recipes land in Following.</p>
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: '4px 26px 130px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-        {cooks.map((c) => {
+        {isLoading && <div style={{ color: '#a99c90', fontSize: 14, padding: '8px 2px' }}>Finding cooks for your taste…</div>}
+        {(suggested ?? []).map((c) => {
           const f = !!followed[c.id];
+          const subtitle = c.matched.length ? c.matched.join(' · ') : c.bio;
           return (
             <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 14, background: '#fff', border: '1px solid #ece1d4', borderRadius: 22, padding: 14 }}>
               <div
-                style={{
-                  width: 56,
-                  height: 56,
-                  borderRadius: 18,
-                  flex: 'none',
-                  background: c.bg,
-                  display: 'flex',
-                  alignItems: 'center',
-                  justifyContent: 'center',
-                  fontFamily: "'Instrument Serif',serif",
-                  fontSize: 22,
-                  color: '#fff',
-                }}
+                style={{ width: 56, height: 56, borderRadius: 18, flex: 'none', background: c.avatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Instrument Serif',serif", fontSize: 22, color: '#fff' }}
               >
                 {c.init}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 16, fontWeight: 700, color: '#1b1512' }}>{c.name}</div>
-                <div style={{ fontSize: 13, color: '#8a7c70', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.blurb}</div>
+                <div style={{ fontSize: 13, color: c.matched.length ? '#c0531f' : '#8a7c70', fontWeight: c.matched.length ? 600 : 400, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{subtitle}</div>
               </div>
               <button
                 onClick={() => toggle(c.id)}

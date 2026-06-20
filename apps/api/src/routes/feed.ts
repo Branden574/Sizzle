@@ -4,11 +4,14 @@ import { optionalAuth, requireAuth } from '../middleware/auth';
 import { supabaseAdmin } from '../lib/supabase';
 import { dbFail } from '../lib/errors';
 import { buildCards, type RecipeRow } from '../mappers';
+import { tasteScore } from '../services/taste';
 import type { AppEnv } from '../types';
 
 export const feed = new Hono<AppEnv>();
 
 const PAGE = 10;
+/** How far a taste match outranks recency in the cold-start feed. */
+const TASTE_WEIGHT = 10;
 
 /**
  * GET /feed/for-you — recent published recipes.
@@ -21,6 +24,33 @@ const PAGE = 10;
  */
 feed.get('/for-you', optionalAuth, async (c) => {
   const cursor = c.req.query('cursor');
+  const userId = c.get('userId');
+
+  // Cold-start personalization: the first page for an authed viewer who has
+  // onboarding tastes is ordered taste-match-first, then recency.
+  if (userId && !cursor) {
+    const { data: profile } = await supabaseAdmin.from('profiles').select('tastes').eq('id', userId).maybeSingle();
+    const tastes = ((profile?.tastes ?? []) as string[]).filter(Boolean);
+    if (tastes.length) {
+      const { data, error } = await supabaseAdmin
+        .from('recipes')
+        .select('*')
+        .eq('status', 'published')
+        .order('created_at', { ascending: false })
+        .limit(40);
+      if (error) throw dbFail(error.message);
+      const rows = (data ?? []) as RecipeRow[];
+      const scored = rows
+        .map((r, idx) => ({ r, s: tasteScore(`${r.cuisine} ${r.title}`, tastes) * TASTE_WEIGHT + (rows.length - idx) * 0.1 }))
+        .sort((a, b) => b.s - a.s)
+        .slice(0, PAGE)
+        .map((x) => x.r);
+      const items = await buildCards(supabaseAdmin, userId, scored);
+      return c.json<FeedResponse>({ items, nextCursor: null });
+    }
+  }
+
+  // Default: recency, cursor-paginated.
   let q = supabaseAdmin
     .from('recipes')
     .select('*')
@@ -35,7 +65,7 @@ feed.get('/for-you', optionalAuth, async (c) => {
   const rows = (data ?? []) as RecipeRow[];
   const hasMore = rows.length > PAGE;
   const page = rows.slice(0, PAGE);
-  const items = await buildCards(supabaseAdmin, c.get('userId'), page);
+  const items = await buildCards(supabaseAdmin, userId, page);
   const res: FeedResponse = { items, nextCursor: hasMore ? page[page.length - 1]!.created_at : null };
   return c.json(res);
 });

@@ -10,6 +10,7 @@ import { RecipeSheet } from './components/sheets/RecipeSheet';
 import { SettingsSheet } from './components/sheets/SettingsSheet';
 import { UploadSheet } from './components/sheets/UploadSheet';
 import { useAuth } from './auth/useAuth';
+import { queryClient } from './data/queries';
 import { apiSend } from './lib/api';
 import { useSizzle } from './store';
 import { theme } from './theme';
@@ -29,12 +30,21 @@ export default function App() {
     else if (authStatus === 'anon') resetToOnboarding();
   }, [authStatus, setPhase, resetToOnboarding]);
 
-  // Persist onboarding taste picks once an account exists.
-  // (Cook follows chosen in onboarding are followed in-app for now — see PROGRESS.)
+  // On first auth, replay onboarding choices: persist taste picks and follow
+  // the cooks selected during onboarding (real cook ids from /cooks/suggested).
   useEffect(() => {
     if (authStatus !== 'authed') return;
-    const tastes = Object.entries(useSizzle.getState().tastes).filter(([, v]) => v).map(([k]) => k);
-    if (tastes.length) void apiSend('POST', '/me/tastes', { tastes }).catch(() => {});
+    const { tastes, followed } = useSizzle.getState();
+    const picked = Object.entries(tastes).filter(([, v]) => v).map(([k]) => k);
+    const cookIds = Object.entries(followed).filter(([, v]) => v).map(([k]) => k);
+    if (!picked.length && !cookIds.length) return;
+    void (async () => {
+      if (picked.length) await apiSend('POST', '/me/tastes', { tastes: picked }).catch(() => {});
+      await Promise.all(cookIds.map((id) => apiSend('POST', `/cooks/${id}/follow`).catch(() => {})));
+      // reflect the new taste boost + follows in the feed/profile
+      void queryClient.invalidateQueries({ queryKey: ['feed'] });
+      void queryClient.invalidateQueries({ queryKey: ['me'] });
+    })();
   }, [authStatus]);
 
   const phase = useSizzle((s) => s.phase);

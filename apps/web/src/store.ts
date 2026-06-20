@@ -74,7 +74,7 @@ export const useSizzle = create<SizzleState>((set) => ({
   phase: START_IN_APP ? 'app' : 'onboarding',
   onbStep: 0,
   tastes: {},
-  followed: { mina: true, theo: true },
+  followed: {},
   tab: 'feed',
   feed: 'foryou',
   openRecipe: null,

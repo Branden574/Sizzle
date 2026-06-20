@@ -96,6 +96,13 @@ export interface CommentDTO {
   likes: number;
 }
 
+/** A cook recommended during onboarding, ranked by taste overlap. */
+export interface SuggestedCook extends CookSummary {
+  bio: string;
+  /** Which of the viewer's selected tastes this cook matched. */
+  matched: string[];
+}
+
 export interface CookProfile {
   id: string;
   name: string;

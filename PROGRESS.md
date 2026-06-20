@@ -53,6 +53,13 @@ Phase 1 is being built in slices. Each slice keeps the app runnable.
 
 **Phase 1 goal achieved:** create an account → upload a recipe → see it in a feed → like/save/follow, end-to-end locally.
 
+### ➕ Onboarding personalization (taste → creators)  *(done — verified in-browser)*
+An early, heuristic slice of the Phase 4 ranking design (the cold-start front-half; learned model still Phase 4):
+- `GET /cooks/suggested?tastes=…` ranks creators by taste overlap (keyword signals in `apps/api/src/services/taste.ts`); **Step 2 "Follow a few cooks" now shows real, taste-ranked cooks** with the matched taste shown as the "why".
+- Cooks followed in onboarding are **replayed to the account on first auth**; tastes persist via `/me/tastes`.
+- `GET /feed/for-you` gives an authed viewer with tastes a **taste-boosted cold-start** ordering (taste-match-first, then recency).
+- Verified: pick *Japanese + Spicy* → Step 2 surfaces Dev/Mina/Lila → follow → signup → follow persists → Following feed shows that cook; For You leads with taste-matching recipes.
+
 Deferred polish / later phases: real HLS **video playback** (cards show poster + play affordance; player is a follow-up), scroll-to-top after posting, onboarding **cook-follow** replay (follows work everywhere in-app), and **comments** (local-only until Phase 2).
 
 ---

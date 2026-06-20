@@ -1,12 +1,54 @@
 import { Hono } from 'hono';
-import type { CookProfile } from '@sizzle/shared';
+import type { CookProfile, SuggestedCook } from '@sizzle/shared';
 import { optionalAuth, requireAuth } from '../middleware/auth';
 import { supabaseAdmin } from '../lib/supabase';
 import { badRequest, dbFail, notFound } from '../lib/errors';
 import { buildCards, cookSummary, type ProfileRow, type RecipeRow } from '../mappers';
+import { matchTastes } from '../services/taste';
 import type { AppEnv } from '../types';
 
 export const cooks = new Hono<AppEnv>();
+
+/**
+ * GET /cooks/suggested?tastes=Japanese,Spicy&limit=8
+ * Onboarding creator recommendations ranked by taste overlap (then popularity).
+ * Public; excludes the viewer and cooks they already follow when authed.
+ */
+cooks.get('/suggested', optionalAuth, async (c) => {
+  const viewerId = c.get('userId');
+  const tastes = (c.req.query('tastes') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
+  const limit = Math.min(Number(c.req.query('limit')) || 8, 20);
+
+  const [{ data: profiles, error }, { data: recipeRows }] = await Promise.all([
+    supabaseAdmin.from('profiles').select('*').eq('is_cook', true),
+    supabaseAdmin.from('recipes').select('cook_id, cuisine, title').eq('status', 'published'),
+  ]);
+  if (error) throw dbFail(error.message);
+
+  // Build a searchable text blob per cook from bio + their recipe cuisines/titles.
+  const blobs = new Map<string, string>();
+  for (const r of recipeRows ?? []) {
+    blobs.set(r.cook_id as string, `${blobs.get(r.cook_id as string) ?? ''} ${r.cuisine} ${r.title}`);
+  }
+
+  let following = new Set<string>();
+  if (viewerId) {
+    const { data: f } = await supabaseAdmin.from('follows').select('cook_id').eq('follower_id', viewerId);
+    following = new Set((f ?? []).map((x) => x.cook_id as string));
+  }
+
+  const ranked = (profiles as ProfileRow[])
+    .filter((p) => p.id !== viewerId && !following.has(p.id))
+    .map((p) => {
+      const matched = matchTastes(`${p.bio ?? ''} ${blobs.get(p.id) ?? ''}`, tastes);
+      return { p, matched, score: matched.length };
+    })
+    .sort((a, b) => b.score - a.score || b.p.follower_count - a.p.follower_count)
+    .slice(0, limit)
+    .map(({ p, matched }): SuggestedCook => ({ ...cookSummary(p), bio: p.bio ?? '', matched }));
+
+  return c.json(ranked);
+});
 
 /** GET /cooks/:id — public cook profile + recipe grid + viewer.following. */
 cooks.get('/:id', optionalAuth, async (c) => {
