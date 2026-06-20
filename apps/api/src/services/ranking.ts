@@ -1,0 +1,82 @@
+import type { RecipeRow } from '../mappers';
+import { tasteScore } from './taste';
+
+/**
+ * Stage 1 heuristic For You ranker — the explainable front-half of the
+ * X-algorithm design (docs/recommendation-algorithm.md). Scores each candidate
+ * by a weighted blend of signals, then attenuates repeated cooks for diversity.
+ * A learned model replaces `scoreRecipe` in Stage 2; the pipeline stays.
+ */
+export interface ViewerSignals {
+  tastes: string[];
+  followedCooks: Set<string>;
+  /** cook id -> positive engagement count (likes + saves + completed watches). */
+  affinity: Map<string, number>;
+  /** cooks whose recipes the viewer disliked. */
+  dislikedCooks: Set<string>;
+  /** recipes already served recently (served history). */
+  impressed: Set<string>;
+  /** cook id -> number of fast-skips. */
+  skips: Map<string, number>;
+}
+
+export const RANK_WEIGHTS = {
+  recency: 1.0,
+  taste: 6.0,
+  follow: 5.0,
+  affinity: 2.0,
+  popular: 1.5,
+  seenPenalty: 4.0,
+  dislikePenalty: 8.0,
+  skipPenalty: 1.0,
+  diversityPenalty: 3.0,
+};
+
+function recencyScore(createdAt: string, now: number): number {
+  const ageDays = (now - new Date(createdAt).getTime()) / 86_400_000;
+  return Math.max(0, 1 - ageDays / 14); // decays to 0 over ~2 weeks
+}
+
+function popularityScore(likeCount: number): number {
+  return Math.min(1, Math.log10(likeCount + 1) / 6); // ~1.0 around 1M likes
+}
+
+export function scoreRecipe(r: RecipeRow, s: ViewerSignals, now: number): number {
+  const W = RANK_WEIGHTS;
+  let score = W.recency * recencyScore(r.created_at, now);
+  if (tasteScore(`${r.cuisine} ${r.title}`, s.tastes) > 0) score += W.taste;
+  if (s.followedCooks.has(r.cook_id)) score += W.follow;
+  score += W.affinity * Math.min(1, (s.affinity.get(r.cook_id) ?? 0) / 5);
+  score += W.popular * popularityScore(r.like_count);
+  if (s.impressed.has(r.id)) score -= W.seenPenalty;
+  if (s.dislikedCooks.has(r.cook_id)) score -= W.dislikePenalty;
+  score -= W.skipPenalty * Math.min(3, s.skips.get(r.cook_id) ?? 0);
+  return score;
+}
+
+/**
+ * Greedy ranking with cook-diversity attenuation: each already-picked recipe
+ * from the same cook lowers that cook's remaining recipes' effective score.
+ */
+export function rankRecipes(rows: RecipeRow[], s: ViewerSignals, now: number): RecipeRow[] {
+  const pool = rows.map((r) => ({ r, base: scoreRecipe(r, s, now) }));
+  const out: RecipeRow[] = [];
+  const cookCount = new Map<string, number>();
+
+  while (pool.length) {
+    let bestIdx = 0;
+    let bestScore = -Infinity;
+    for (let i = 0; i < pool.length; i++) {
+      const { r, base } = pool[i]!;
+      const effective = base - (cookCount.get(r.cook_id) ?? 0) * RANK_WEIGHTS.diversityPenalty;
+      if (effective > bestScore) {
+        bestScore = effective;
+        bestIdx = i;
+      }
+    }
+    const picked = pool.splice(bestIdx, 1)[0]!;
+    cookCount.set(picked.r.cook_id, (cookCount.get(picked.r.cook_id) ?? 0) + 1);
+    out.push(picked.r);
+  }
+  return out;
+}

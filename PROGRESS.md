@@ -13,7 +13,7 @@ Stack: **Node + TypeScript**, **Hono** API, **Supabase** (Postgres/Auth/Storage)
 | **1** | Foundation + core loop (scaffold, schema, auth, upload, feeds, follow/like/save, seed, **UI wired**) | ✅ Core complete |
 | 2 | Social depth + search (profiles, comments, search/discovery, notifications) | ✅ Done |
 | 3 | Offline downloads | ✅ Done |
-| 4 | Recommendation algorithm — For You ranking modeled on X's algorithm ([design](docs/recommendation-algorithm.md)) | ⬜ Not started |
+| 4 | Recommendation algorithm — For You ranking modeled on X's algorithm ([design](docs/recommendation-algorithm.md)) | 🟢 Stage 1 done (heuristic); Stage 2 (learned) needs training infra |
 | 5 | Production hardening (rate limits, validation, moderation, transcoding cost, analytics, security) | ⬜ Not started |
 
 > Rule: app runnable locally at every step. No later-phase work pulled forward unless trivial (and noted).
@@ -31,6 +31,12 @@ Stack: **Node + TypeScript**, **Hono** API, **Supabase** (Postgres/Auth/Storage)
 - **Local offline cache** (`lib/offline.ts`, localStorage): downloading stores the full recipe (metadata + ingredients/steps + poster) so it's readable with no network. Saved + recipe sheet fall back to the cache when offline; an **offline banner** shows.
 - Fixed: reaction/save/download mutations now also invalidate the recipe-detail query (was causing stale optimistic state). Vite dev `watch.ignored` for tsbuildinfo/dist (stop HMR reload flaps during testing).
 - Note: true offline *video playback* needs the real Cloudflare MP4 + Cache API (poster is cached) — a follow-up.
+
+## Phase 4 — Stage 1 ranking (done); Stage 2 learned model = future
+- **Instrumentation:** `recipe_impressions` (logged server-side when the feed serves items) + `recipe_views` (`POST /recipes/:id/view` with dwell/completed/skipped; web logs via IntersectionObserver on feed cards).
+- **Heuristic ranker** (`services/ranking.ts`): For You is now a real scoring pipeline — candidate window → multi-signal score (recency + taste + follow + cook-affinity + popularity − seen − dislike − skip) → greedy **cook-diversity** attenuation → impression-aware. Guests/pagination stay recency.
+- **Verified**: with tastes=Japanese + follow Theo + like-a-Lila-recipe + dislike-a-Dev-recipe, the feed ordered Japanese/Theo top, Lila lifted, **Dev pushed to the bottom**, cooks interleaved; 30 impressions + 1 view logged.
+- **Stage 2 (learned)** = two-tower retrieval + multi-action model trained on the now-collected signals — needs an offline training pipeline (out of scope for the app runtime); `scoreRecipe` is the swap-in point.
 
 ---
 

@@ -223,6 +223,29 @@ recipes.delete('/:id/download', requireAuth, async (c) => {
   return c.json({ downloaded: false });
 });
 
+const viewSchema = z.object({
+  dwellMs: z.number().int().min(0).max(3_600_000).default(0),
+  completed: z.boolean().default(false),
+  skipped: z.boolean().default(false),
+});
+
+/** POST /recipes/:id/view — log a watch event (powers ranking). */
+recipes.post('/:id/view', requireAuth, async (c) => {
+  const id = c.req.param('id');
+  const userId = c.get('userId')!;
+  const body = viewSchema.safeParse(await c.req.json().catch(() => null));
+  if (!body.success) throw badRequest('Invalid view payload', body.error.flatten());
+  await recipeCookId(id);
+  await supabaseAdmin.from('recipe_views').insert({
+    user_id: userId,
+    recipe_id: id,
+    dwell_ms: body.data.dwellMs,
+    completed: body.data.completed,
+    skipped: body.data.skipped,
+  });
+  return c.json({ ok: true });
+});
+
 const commentSchema = z.object({ text: z.string().trim().min(1).max(600) });
 
 /** GET /recipes/:id/comments — newest first. */

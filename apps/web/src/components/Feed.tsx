@@ -1,6 +1,9 @@
+import { useEffect, useRef } from 'react';
 import type { RecipeCard } from '@sizzle/shared';
+import { useAuth } from '../auth/useAuth';
 import { useRequireAuth } from '../auth/useRequireAuth';
 import { useForYouFeed, useFollowingFeed, useToggleDislike, useToggleFollow, useToggleLike, useToggleSave } from '../data/queries';
+import { apiSend } from '../lib/api';
 import { useSizzle } from '../store';
 import { theme } from '../theme';
 import { formatCount } from '../lib/format';
@@ -93,12 +96,49 @@ function FollowingEmpty({ onExplore }: { onExplore: () => void }) {
 
 const railLabel = { color: '#fff', fontSize: 12.5, fontWeight: 700, textShadow: '0 1px 3px rgba(0,0,0,.4)' } as const;
 
+function logView(recipeId: string, dwellMs: number) {
+  if (dwellMs < 300) return; // ignore flicker
+  void apiSend('POST', `/recipes/${recipeId}/view`, {
+    dwellMs,
+    completed: dwellMs > 3000,
+    skipped: dwellMs < 1500,
+  }).catch(() => {});
+}
+
 function FeedCard({ card }: { card: RecipeCard }) {
   const requireAuth = useRequireAuth();
+  const authed = useAuth((s) => s.status === 'authed');
+  const cardRef = useRef<HTMLDivElement>(null);
   const like = useToggleLike();
   const dislike = useToggleDislike();
   const save = useToggleSave();
   const follow = useToggleFollow();
+
+  // Log a watch event (dwell → completed/skipped) when this card is scrolled past.
+  useEffect(() => {
+    if (!authed) return;
+    const el = cardRef.current;
+    if (!el) return;
+    let start = 0;
+    const obs = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting && e.intersectionRatio >= 0.6) {
+            start = Date.now();
+          } else if (start) {
+            logView(card.id, Date.now() - start);
+            start = 0;
+          }
+        }
+      },
+      { threshold: [0, 0.6, 1] },
+    );
+    obs.observe(el);
+    return () => {
+      if (start) logView(card.id, Date.now() - start);
+      obs.disconnect();
+    };
+  }, [authed, card.id]);
 
   const setOpenRecipe = useSizzle((s) => s.setOpenRecipe);
   const setOpenCook = useSizzle((s) => s.setOpenCook);
@@ -117,7 +157,7 @@ function FeedCard({ card }: { card: RecipeCard }) {
   };
 
   return (
-    <div style={{ position: 'relative', height: 852, scrollSnapAlign: 'start', overflow: 'hidden', background: card.bg }}>
+    <div ref={cardRef} style={{ position: 'relative', height: 852, scrollSnapAlign: 'start', overflow: 'hidden', background: card.bg }}>
       {card.video?.posterUrl && (
         <img src={card.video.posterUrl} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
       )}
