@@ -1,14 +1,28 @@
-import { useEffect, type CSSProperties } from 'react';
+import { useEffect, useState } from 'react';
+import { AdminDashboard } from './components/AdminDashboard';
 import { AppShell } from './components/AppShell';
+import { BannedScreen } from './components/BannedScreen';
+import { ErrorBoundary } from './components/ErrorBoundary';
 import { Onboarding } from './components/Onboarding';
 import { HomeIndicator, Phone } from './components/Phone';
+import { ResetPasswordScreen } from './components/ResetPasswordScreen';
 import { Splash } from './components/Splash';
 import { StatusBar } from './components/StatusBar';
+import { AppSettingsSheet } from './components/sheets/AppSettingsSheet';
+import { CollectionPickerSheet } from './components/sheets/CollectionPickerSheet';
+import { CollectionSheet } from './components/sheets/CollectionSheet';
 import { CommentsSheet } from './components/sheets/CommentsSheet';
+import { CookModeSheet } from './components/sheets/CookModeSheet';
 import { CookSheet } from './components/sheets/CookSheet';
 import { EditProfileSheet } from './components/sheets/EditProfileSheet';
+import { FollowListSheet } from './components/sheets/FollowListSheet';
+import { HashtagSheet } from './components/sheets/HashtagSheet';
+import { MoreSheet } from './components/sheets/MoreSheet';
 import { NotificationsSheet } from './components/sheets/NotificationsSheet';
 import { RecipeSheet } from './components/sheets/RecipeSheet';
+import { ReportSheet } from './components/sheets/ReportSheet';
+import { RepostSheet } from './components/sheets/RepostSheet';
+import { ShoppingListSheet } from './components/sheets/ShoppingListSheet';
 import { SettingsSheet } from './components/sheets/SettingsSheet';
 import { UploadSheet } from './components/sheets/UploadSheet';
 import { useAuth } from './auth/useAuth';
@@ -16,12 +30,28 @@ import { queryClient } from './data/queries';
 import { apiSend } from './lib/api';
 import { useOnlineStatus } from './lib/useOnlineStatus';
 import { useSizzle } from './store';
-import { theme } from './theme';
 
-const stageVars = { '--accent': theme.accent, '--saffron': theme.saffron } as CSSProperties;
+/** Resolve the System/Light/Dark preference to a concrete scheme, tracking the
+ *  OS setting live when on 'system'. */
+function useResolvedScheme(): 'light' | 'dark' {
+  const pref = useSizzle((s) => s.theme);
+  const [systemDark, setSystemDark] = useState(
+    () => typeof window !== 'undefined' && window.matchMedia?.('(prefers-color-scheme: dark)').matches,
+  );
+  useEffect(() => {
+    const mq = window.matchMedia?.('(prefers-color-scheme: dark)');
+    if (!mq) return;
+    const onChange = (e: MediaQueryListEvent) => setSystemDark(e.matches);
+    mq.addEventListener('change', onChange);
+    return () => mq.removeEventListener('change', onChange);
+  }, []);
+  return pref === 'dark' || (pref === 'system' && systemDark) ? 'dark' : 'light';
+}
 
 export default function App() {
   const authStatus = useAuth((s) => s.status);
+  const recovery = useAuth((s) => s.recovery);
+  const banned = useAuth((s) => !!s.profile?.banned);
   const initAuth = useAuth((s) => s.init);
   const setPhase = useSizzle((s) => s.setPhase);
   const resetToOnboarding = useSizzle((s) => s.resetToOnboarding);
@@ -59,7 +89,26 @@ export default function App() {
   const showUpload = useSizzle((s) => s.showUpload);
   const showNotifications = useSizzle((s) => s.showNotifications);
   const showEditProfile = useSizzle((s) => s.showEditProfile);
+  const showAppSettings = useSizzle((s) => s.showAppSettings);
+  const showAdmin = useSizzle((s) => s.showAdmin);
+  const moreFor = useSizzle((s) => s.moreFor);
+  const reportFor = useSizzle((s) => s.reportFor);
+  const repostFor = useSizzle((s) => s.repostFor);
+  const cookFor = useSizzle((s) => s.cookFor);
+  const showShopping = useSizzle((s) => s.showShopping);
+  const collectionPickerFor = useSizzle((s) => s.collectionPickerFor);
+  const openCollection = useSizzle((s) => s.openCollection);
+  const openTag = useSizzle((s) => s.openTag);
+  const followList = useSizzle((s) => s.followList);
+  const reduceMotion = useSizzle((s) => s.reduceMotion);
+  const scheme = useResolvedScheme();
+  const isDark = scheme === 'dark';
   const online = useOnlineStatus();
+
+  // Keep the mobile browser chrome in step with the resolved scheme.
+  useEffect(() => {
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', isDark ? '#0c0a09' : '#0e0b09');
+  }, [isDark]);
 
   const isOnboarding = phase === 'onboarding';
   const isApp = phase === 'app';
@@ -71,16 +120,19 @@ export default function App() {
   // Status-bar tint + home-indicator color depend on what's frontmost.
   const overlay = showRecipe || showCook;
   let lightStatus: boolean;
-  if (showUpload) lightStatus = false;
-  else if (overlay || showComments || showSettings || showNotifications || showEditProfile) lightStatus = true;
+  if (showUpload || cookFor) lightStatus = false;
+  else if (recovery || overlay || showComments || showSettings || showNotifications || showEditProfile || showAppSettings || showAdmin || showShopping || !!collectionPickerFor || !!openCollection || !!moreFor || !!reportFor || !!repostFor || !!openTag || !!followList) lightStatus = true;
   else if (isOnboarding) lightStatus = true;
   else lightStatus = tab !== 'feed';
 
-  const statusColor = lightStatus ? '#1b1512' : '#fff';
-  const homeIndicator = lightStatus ? 'rgba(27,21,18,.22)' : 'rgba(255,255,255,.5)';
+  // On a light surface in light mode the status glyphs are dark ink; on the
+  // (always-dark) feed, or anywhere in dark mode, they're light.
+  const darkGlyphs = lightStatus && !isDark;
+  const statusColor = darkGlyphs ? '#1b1512' : '#fff';
+  const homeIndicator = darkGlyphs ? 'rgba(27,21,18,.22)' : 'rgba(255,255,255,.5)';
 
   return (
-    <div className="sz-stage" style={stageVars}>
+    <div className={`sz-stage${reduceMotion ? ' sz-reduce-motion' : ''}`} data-theme={scheme}>
       <Phone>
         <StatusBar color={statusColor} />
         <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
@@ -90,8 +142,16 @@ export default function App() {
             </div>
           )}
           {authStatus === 'loading' && <Splash />}
-          {authStatus !== 'loading' && isOnboarding && <Onboarding />}
-          {authStatus !== 'loading' && isApp && <AppShell />}
+          {authStatus !== 'loading' && isOnboarding && (
+            <ErrorBoundary fallback={<CrashFallback />}>
+              <Onboarding />
+            </ErrorBoundary>
+          )}
+          {authStatus !== 'loading' && isApp && (
+            <ErrorBoundary fallback={<CrashFallback />}>
+              <AppShell />
+            </ErrorBoundary>
+          )}
 
           {showRecipe && <RecipeSheet />}
           {showComments && <CommentsSheet />}
@@ -100,10 +160,34 @@ export default function App() {
           {showUpload && <UploadSheet />}
           {showNotifications && <NotificationsSheet />}
           {showEditProfile && <EditProfileSheet />}
+          {showAppSettings && <AppSettingsSheet />}
+          {moreFor && <MoreSheet />}
+          {reportFor && <ReportSheet />}
+          {repostFor && <RepostSheet />}
+          {followList && <FollowListSheet />}
+          {openTag && <HashtagSheet />}
+          {cookFor && <CookModeSheet />}
+          {showShopping && <ShoppingListSheet />}
+          {openCollection && <CollectionSheet />}
+          {collectionPickerFor && <CollectionPickerSheet />}
+          {showAdmin && <AdminDashboard />}
+
+          {recovery && <ResetPasswordScreen />}
+          {banned && authStatus === 'authed' && <BannedScreen />}
 
           <HomeIndicator color={homeIndicator} />
         </div>
       </Phone>
+    </div>
+  );
+}
+
+function CrashFallback() {
+  return (
+    <div style={{ position: 'absolute', inset: 0, background: '#faf3ea', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 30, textAlign: 'center' }}>
+      <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 30, color: '#1b1512' }}>Something went wrong</div>
+      <p style={{ color: '#8a7c70', fontSize: 15, margin: '10px 0 22px' }}>Give it a refresh and you'll be right back.</p>
+      <button onClick={() => location.reload()} style={{ height: 50, padding: '0 26px', border: 'none', borderRadius: 16, background: '#1b1512', color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>Reload</button>
     </div>
   );
 }

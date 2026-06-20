@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
 import { useMe, useUpdateProfile } from '../../data/queries';
 import { uploadProfileImage } from '../../lib/storage';
@@ -8,16 +8,16 @@ import { CameraIcon } from '../icons';
 const field: CSSProperties = {
   width: '100%',
   height: 50,
-  border: '1.5px solid #e3d6c8',
+  border: '1.5px solid var(--line-2)',
   borderRadius: 14,
-  background: '#fff',
+  background: 'var(--surface)',
   padding: '0 16px',
   fontFamily: "'Hanken Grotesk'",
   fontSize: 16,
-  color: '#1b1512',
+  color: 'var(--text)',
   outline: 'none',
 };
-const labelStyle: CSSProperties = { display: 'block', fontSize: 12, fontWeight: 700, letterSpacing: '.4px', textTransform: 'uppercase', color: '#8a7c70', margin: '0 0 7px 2px' };
+const labelStyle: CSSProperties = { display: 'block', fontSize: 12, fontWeight: 700, letterSpacing: '.4px', textTransform: 'uppercase', color: 'var(--text-faint)', margin: '0 0 7px 2px' };
 const BANNER = 'radial-gradient(120% 120% at 70% 0%, var(--saffron,#f4a52c), var(--accent,#ff5a36) 60%, #c23a1a)';
 
 export function EditProfileSheet() {
@@ -37,6 +37,22 @@ export function EditProfileSheet() {
   const avatarInput = useRef<HTMLInputElement>(null);
   const bannerInput = useRef<HTMLInputElement>(null);
 
+  // If the sheet mounted before `me` loaded (cold cache), the fields seeded to
+  // '' — re-seed them once `me` arrives so Save can't PATCH empty values that
+  // would wipe the profile.
+  const seeded = useRef(false);
+  useEffect(() => {
+    if (me && !seeded.current) {
+      seeded.current = true;
+      setName(me.name ?? '');
+      setHandle(me.handle ?? '');
+      setPhone(me.phone ?? '');
+      setBio(me.bio ?? '');
+      setAvatarUrl(me.avatarUrl ?? null);
+      setBannerUrl(me.bannerUrl ?? null);
+    }
+  }, [me]);
+
   const close = () => setShowEditProfile(false);
 
   const pick = async (bucket: 'avatars' | 'banners', file: File | undefined) => {
@@ -54,8 +70,13 @@ export function EditProfileSheet() {
     }
   };
 
+  const canSave = name.trim().length > 0 && handle.trim().length >= 2;
   const save = () => {
     if (update.isPending || uploading) return;
+    if (!canSave) {
+      setErr(handle.trim().length < 2 ? 'Handle needs at least 2 characters.' : 'Name can’t be empty.');
+      return;
+    }
     update.mutate(
       { displayName: name.trim(), handle: handle.trim(), bio: bio.trim(), phone: phone.trim(), avatarUrl, bannerUrl },
       { onSuccess: () => close() },
@@ -65,12 +86,12 @@ export function EditProfileSheet() {
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 93 }}>
       <div onClick={close} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.5)', animation: 'sz-fadeIn .3s' }} />
-      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, top: 60, background: '#faf3ea', borderRadius: '26px 26px 0 0', overflow: 'hidden', animation: 'sz-slideUp .4s cubic-bezier(.16,1,.3,1)', display: 'flex', flexDirection: 'column' }}>
+      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, top: 60, background: 'var(--bg)', borderRadius: '26px 26px 0 0', overflow: 'hidden', animation: 'sz-slideUp .4s cubic-bezier(.16,1,.3,1)', display: 'flex', flexDirection: 'column' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 22px 10px', flex: 'none', position: 'relative' }}>
-          <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', width: 42, height: 5, borderRadius: 3, background: '#d8cbbb' }} />
-          <button onClick={close} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#8a7c70', fontSize: 15, fontWeight: 600 }}>Cancel</button>
-          <div style={{ fontSize: 16, fontWeight: 700, color: '#1b1512' }}>Edit profile</div>
-          <button onClick={save} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--accent,#ff5a36)', fontSize: 15, fontWeight: 700 }}>{update.isPending ? 'Saving…' : 'Save'}</button>
+          <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', width: 42, height: 5, borderRadius: 3, background: 'var(--track)' }} />
+          <button onClick={close} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-faint)', fontSize: 15, fontWeight: 600 }}>Cancel</button>
+          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>Edit profile</div>
+          <button onClick={save} disabled={!canSave || update.isPending} style={{ background: 'none', border: 'none', cursor: canSave ? 'pointer' : 'default', color: 'var(--accent,#ff5a36)', fontSize: 15, fontWeight: 700, opacity: canSave ? 1 : 0.45 }}>{update.isPending ? 'Saving…' : 'Save'}</button>
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto' }}>
@@ -87,7 +108,7 @@ export function EditProfileSheet() {
           <div style={{ padding: '0 22px', marginTop: -36, position: 'relative', zIndex: 1 }}>
             <button
               onClick={() => avatarInput.current?.click()}
-              style={{ position: 'relative', width: 80, height: 80, borderRadius: 24, border: '4px solid #faf3ea', cursor: 'pointer', overflow: 'hidden', background: avatarUrl ? `url(${avatarUrl}) center/cover` : 'linear-gradient(135deg,#3a2a22,#1b1512)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Instrument Serif',serif", fontSize: 30, color: '#fff', padding: 0 }}
+              style={{ position: 'relative', width: 80, height: 80, borderRadius: 24, border: '4px solid var(--bg)', cursor: 'pointer', overflow: 'hidden', background: avatarUrl ? `url(${avatarUrl}) center/cover` : 'linear-gradient(135deg,#3a2a22,#1b1512)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Instrument Serif',serif", fontSize: 30, color: '#fff', padding: 0 }}
             >
               {!avatarUrl && (me?.init ?? '·')}
               <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>

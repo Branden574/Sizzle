@@ -53,3 +53,13 @@ export function listOffline(): RecipeDetail[] {
     .map((id) => getOffline(id))
     .filter((r): r is RecipeDetail => !!r);
 }
+
+/** Drop every cached recipe (Settings → Clear downloaded recipes). */
+export function clearOffline() {
+  try {
+    for (const id of readIndex()) localStorage.removeItem(KEY(id));
+    localStorage.removeItem(INDEX);
+  } catch {
+    /* ignore */
+  }
+}

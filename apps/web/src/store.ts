@@ -14,6 +14,49 @@ type ToggleMap = 'tastes' | 'followed' | 'saves' | 'downloads';
  */
 const START_IN_APP = false;
 
+/** Client-only preferences, persisted to localStorage. */
+const PREFS_KEY = 'sz-prefs';
+export type ThemePref = 'system' | 'light' | 'dark';
+export type FeedKindPref = 'foryou' | 'following';
+interface Prefs {
+  muted: boolean;
+  autoplay: boolean;
+  theme: ThemePref;
+  reduceMotion: boolean;
+  defaultFeed: FeedKindPref;
+}
+const PREFS_DEFAULT: Prefs = { muted: true, autoplay: true, theme: 'system', reduceMotion: false, defaultFeed: 'foryou' };
+function loadPrefs(): Prefs {
+  try {
+    const raw = localStorage.getItem(PREFS_KEY);
+    if (raw) {
+      const p = JSON.parse(raw) as Partial<Prefs>;
+      return {
+        muted: p.muted ?? PREFS_DEFAULT.muted,
+        autoplay: p.autoplay ?? PREFS_DEFAULT.autoplay,
+        theme: p.theme ?? PREFS_DEFAULT.theme,
+        reduceMotion: p.reduceMotion ?? PREFS_DEFAULT.reduceMotion,
+        defaultFeed: p.defaultFeed ?? PREFS_DEFAULT.defaultFeed,
+      };
+    }
+  } catch {
+    /* ignore */
+  }
+  return { ...PREFS_DEFAULT };
+}
+function savePrefs(p: Prefs) {
+  try {
+    localStorage.setItem(PREFS_KEY, JSON.stringify(p));
+  } catch {
+    /* ignore */
+  }
+}
+const prefs0 = loadPrefs();
+/** Snapshot the persisted prefs from current state, applying a partial change. */
+function prefsFrom(s: Prefs, patch: Partial<Prefs>): Prefs {
+  return { muted: s.muted, autoplay: s.autoplay, theme: s.theme, reduceMotion: s.reduceMotion, defaultFeed: s.defaultFeed, ...patch };
+}
+
 export interface SizzleState {
   phase: Phase;
   onbStep: number;
@@ -21,13 +64,43 @@ export interface SizzleState {
   followed: BoolMap;
   tab: Tab;
   feed: FeedKind;
+  /** Hold-to-hide immersive mode: hides all feed overlays + the bottom nav. */
+  immersive: boolean;
   openRecipe: string | null;
   openCook: string | null;
   showUpload: boolean;
   showNotifications: boolean;
   showEditProfile: boolean;
+  showAppSettings: boolean;
+  showAdmin: boolean;
   commentsFor: string | null;
   settingsFor: string | null;
+  /** Post "…" overflow menu (recipe id) + whether the viewer owns it. */
+  moreFor: string | null;
+  moreIsOwn: boolean;
+  /** Report sheet target (recipe id). */
+  reportFor: string | null;
+  /** Repost sheet target (recipe id). */
+  repostFor: string | null;
+  /** Cook Mode overlay — the recipe being cooked + the chosen serving scale. */
+  cookFor: { id: string; scale: number } | null;
+  /** Shopping-list overlay. */
+  showShopping: boolean;
+  /** "Save to collection" picker for a recipe id. */
+  collectionPickerFor: string | null;
+  /** Viewing a collection's recipes. */
+  openCollection: { id: string; name: string } | null;
+  /** Hashtag feed overlay (the tag being browsed). */
+  openTag: string | null;
+  /** Followers/following list overlay. */
+  followList: { id: string; mode: 'followers' | 'following'; name: string } | null;
+  /** Global video playback prefs (persisted). */
+  muted: boolean;
+  autoplay: boolean;
+  /** Appearance + behaviour prefs (persisted). */
+  theme: ThemePref;
+  reduceMotion: boolean;
+  defaultFeed: FeedKindPref;
   likes: BoolMap;
   dislikes: BoolMap;
   saves: BoolMap;
@@ -55,6 +128,7 @@ export interface SizzleState {
   // navigation
   setTab: (tab: Tab) => void;
   setFeed: (feed: FeedKind) => void;
+  setImmersive: (on: boolean) => void;
 
   // sheets
   setOpenRecipe: (id: string | null) => void;
@@ -62,9 +136,30 @@ export interface SizzleState {
   openCookFromSheet: () => void;
   setCommentsFor: (id: string | null) => void;
   setSettingsFor: (id: string | null) => void;
+  openMore: (recipeId: string, isOwn: boolean) => void;
+  setMoreFor: (id: string | null) => void;
+  setReportFor: (id: string | null) => void;
+  setRepostFor: (id: string | null) => void;
+  setCookFor: (v: { id: string; scale: number } | null) => void;
+  setShowShopping: (v: boolean) => void;
+  setCollectionPickerFor: (id: string | null) => void;
+  setOpenCollection: (v: { id: string; name: string } | null) => void;
+  setOpenTag: (tag: string | null) => void;
+  setFollowList: (v: { id: string; mode: 'followers' | 'following'; name: string } | null) => void;
   setShowUpload: (v: boolean) => void;
   setShowNotifications: (v: boolean) => void;
   setShowEditProfile: (v: boolean) => void;
+  setShowAppSettings: (v: boolean) => void;
+  setShowAdmin: (v: boolean) => void;
+
+  // playback + appearance prefs
+  toggleMuted: () => void;
+  setMuted: (v: boolean) => void;
+  toggleAutoplay: () => void;
+  setAutoplay: (v: boolean) => void;
+  setTheme: (v: ThemePref) => void;
+  setReduceMotion: (v: boolean) => void;
+  setDefaultFeed: (v: FeedKindPref) => void;
 
   // creator post controls
   togglePostSetting: (recipeId: string, key: keyof PostSettings) => void;
@@ -80,14 +175,32 @@ export const useSizzle = create<SizzleState>((set) => ({
   tastes: {},
   followed: {},
   tab: 'feed',
-  feed: 'foryou',
+  feed: prefs0.defaultFeed,
+  immersive: false,
   openRecipe: null,
   openCook: null,
   showUpload: false,
   showNotifications: false,
   showEditProfile: false,
+  showAppSettings: false,
+  showAdmin: false,
   commentsFor: null,
   settingsFor: null,
+  moreFor: null,
+  moreIsOwn: false,
+  reportFor: null,
+  repostFor: null,
+  cookFor: null,
+  showShopping: false,
+  collectionPickerFor: null,
+  openCollection: null,
+  openTag: null,
+  followList: null,
+  muted: prefs0.muted,
+  autoplay: prefs0.autoplay,
+  theme: prefs0.theme,
+  reduceMotion: prefs0.reduceMotion,
+  defaultFeed: prefs0.defaultFeed,
   likes: {},
   dislikes: {},
   saves: { r2: true, r4: true, r6: true },
@@ -121,8 +234,9 @@ export const useSizzle = create<SizzleState>((set) => ({
       likes: { ...s.likes, [id]: false },
     })),
 
-  setTab: (tab) => set({ tab }),
-  setFeed: (feed) => set({ feed }),
+  setTab: (tab) => set({ tab, immersive: false }),
+  setFeed: (feed) => set({ feed, immersive: false }),
+  setImmersive: (on) => set({ immersive: on }),
 
   setOpenRecipe: (id) => set({ openRecipe: id }),
   setOpenCook: (id) => set({ openCook: id }),
@@ -131,9 +245,29 @@ export const useSizzle = create<SizzleState>((set) => ({
     set((s) => ({ openCook: s.openRecipe ? (recipeById(s.openRecipe)?.cook ?? null) : null, openRecipe: null })),
   setCommentsFor: (id) => set({ commentsFor: id }),
   setSettingsFor: (id) => set({ settingsFor: id }),
+  openMore: (recipeId, isOwn) => set({ moreFor: recipeId, moreIsOwn: isOwn }),
+  setMoreFor: (id) => set({ moreFor: id }),
+  setReportFor: (id) => set({ reportFor: id }),
+  setRepostFor: (id) => set({ repostFor: id }),
+  setCookFor: (v) => set({ cookFor: v }),
+  setShowShopping: (v) => set({ showShopping: v }),
+  setCollectionPickerFor: (id) => set({ collectionPickerFor: id }),
+  setOpenCollection: (v) => set({ openCollection: v }),
+  setOpenTag: (tag) => set({ openTag: tag }),
+  setFollowList: (v) => set({ followList: v }),
   setShowUpload: (v) => set({ showUpload: v }),
   setShowNotifications: (v) => set({ showNotifications: v }),
   setShowEditProfile: (v) => set({ showEditProfile: v }),
+  setShowAppSettings: (v) => set({ showAppSettings: v }),
+  setShowAdmin: (v) => set({ showAdmin: v }),
+
+  toggleMuted: () => set((s) => { const muted = !s.muted; savePrefs(prefsFrom(s, { muted })); return { muted }; }),
+  setMuted: (v) => set((s) => { savePrefs(prefsFrom(s, { muted: v })); return { muted: v }; }),
+  toggleAutoplay: () => set((s) => { const autoplay = !s.autoplay; savePrefs(prefsFrom(s, { autoplay })); return { autoplay }; }),
+  setAutoplay: (v) => set((s) => { savePrefs(prefsFrom(s, { autoplay: v })); return { autoplay: v }; }),
+  setTheme: (v) => set((s) => { savePrefs(prefsFrom(s, { theme: v })); return { theme: v }; }),
+  setReduceMotion: (v) => set((s) => { savePrefs(prefsFrom(s, { reduceMotion: v })); return { reduceMotion: v }; }),
+  setDefaultFeed: (v) => set((s) => { savePrefs(prefsFrom(s, { defaultFeed: v })); return { defaultFeed: v }; }),
 
   togglePostSetting: (recipeId, key) =>
     set((s) => {

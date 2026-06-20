@@ -67,8 +67,20 @@ score = Σ ( w_action · P(action) )
 
 `P(action)` is estimated per (viewer, recipe). In the **heuristic stage** these come from cheap
 priors: the recipe's historical engagement *rates* (likes/saves per impression), recency decay,
-**taste match** (onboarding `profiles.tastes` ∩ recipe cuisine/tags), and **cook affinity** (your
-past engagement with this cook / similar cooks). In the **learned stage** they come from the model.
+**taste match** (onboarding `profiles.tastes` ∩ recipe cuisine/tags), **cook affinity** (your
+past engagement with this cook / similar cooks), and **hashtag affinity** (see below). In the
+**learned stage** they come from the model.
+
+### Hashtag affinity (the topic/hashtag signal — X's "SimClusters"/topic analogue)
+
+Recipes carry normalized `tags text[]` parsed from the caption + title (`services/hashtags.ts`;
+the **same** normalization is used on the write path and on search/feed read paths). `loadViewerSignals`
+builds a per-viewer `tagAffinity: Map<tag, count>` by summing the tags of every recipe the viewer
+**liked / saved / watched-to-completion**. `scoreRecipe` then adds `w_hashtag · min(1, Σ tagAffinity[t] / 5)`
+over the candidate's tags (weight `4.0`, between follow and popularity). Net effect: engaging with a
+hashtag boosts other posts carrying it (clickable `#tags` → `GET /feed/tag/:tag`; trending via
+`GET /feed/trending-tags`), giving tagged posts extra reach — the same topic-affinity loop X runs over
+its topic/community embeddings, at our scale and explainable.
 
 ## Our pipeline (same shape as X, our scale)
 

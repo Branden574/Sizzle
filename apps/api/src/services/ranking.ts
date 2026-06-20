@@ -12,6 +12,8 @@ export interface ViewerSignals {
   followedCooks: Set<string>;
   /** cook id -> positive engagement count (likes + saves + completed watches). */
   affinity: Map<string, number>;
+  /** hashtag -> positive engagement count (the X-style topic/hashtag signal). */
+  tagAffinity: Map<string, number>;
   /** cooks whose recipes the viewer disliked. */
   dislikedCooks: Set<string>;
   /** recipes already served recently (served history). */
@@ -25,6 +27,7 @@ export const RANK_WEIGHTS = {
   taste: 6.0,
   follow: 5.0,
   affinity: 2.0,
+  hashtag: 4.0,
   popular: 1.5,
   seenPenalty: 4.0,
   dislikePenalty: 8.0,
@@ -47,6 +50,10 @@ export function scoreRecipe(r: RecipeRow, s: ViewerSignals, now: number): number
   if (tasteScore(`${r.cuisine} ${r.title}`, s.tastes) > 0) score += W.taste;
   if (s.followedCooks.has(r.cook_id)) score += W.follow;
   score += W.affinity * Math.min(1, (s.affinity.get(r.cook_id) ?? 0) / 5);
+  // Hashtag affinity: sum the viewer's engagement with this recipe's tags.
+  let tagPull = 0;
+  for (const t of r.tags ?? []) tagPull += s.tagAffinity.get(t) ?? 0;
+  if (tagPull > 0) score += W.hashtag * Math.min(1, tagPull / 5);
   score += W.popular * popularityScore(r.like_count);
   if (s.impressed.has(r.id)) score -= W.seenPenalty;
   if (s.dislikedCooks.has(r.cook_id)) score -= W.dislikePenalty;

@@ -23,6 +23,8 @@ interface AuthState {
   error: string | null;
   busy: boolean;
   initialized: boolean;
+  /** True after a PASSWORD_RECOVERY deep-link — show the set-new-password screen. */
+  recovery: boolean;
 
   init: () => void;
   setMode: (mode: AuthMode) => void;
@@ -34,6 +36,10 @@ interface AuthState {
   signOut: () => Promise<void>;
   continueAsGuest: () => void;
   loadProfile: () => Promise<void>;
+  /** Email a password-reset link. */
+  resetPassword: (email: string) => Promise<boolean>;
+  /** Set a new password (during recovery or while authed). */
+  updatePassword: (password: string) => Promise<boolean>;
 }
 
 export const useAuth = create<AuthState>((set, get) => ({
@@ -45,6 +51,7 @@ export const useAuth = create<AuthState>((set, get) => ({
   error: null,
   busy: false,
   initialized: false,
+  recovery: false,
 
   init: () => {
     if (get().initialized) return;
@@ -60,11 +67,14 @@ export const useAuth = create<AuthState>((set, get) => ({
       if (session) void get().loadProfile();
     });
 
-    supabase.auth.onAuthStateChange((_event, session) => {
+    supabase.auth.onAuthStateChange((event, session) => {
       set({
         session,
         user: session?.user ?? null,
         status: session ? 'authed' : get().status === 'guest' ? 'guest' : 'anon',
+        // A recovery deep-link logs the user in; flag it so the app shows the
+        // set-new-password screen instead of dropping them into the feed.
+        recovery: event === 'PASSWORD_RECOVERY' ? true : get().recovery,
       });
       if (session) void get().loadProfile();
       else set({ profile: null });
@@ -133,5 +143,28 @@ export const useAuth = create<AuthState>((set, get) => ({
     } catch {
       // API may be offline during early local dev; non-fatal.
     }
+  },
+
+  resetPassword: async (email) => {
+    set({ busy: true, error: null });
+    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: window.location.origin });
+    set({ busy: false });
+    if (error) {
+      set({ error: error.message });
+      return false;
+    }
+    return true;
+  },
+
+  updatePassword: async (password) => {
+    set({ busy: true, error: null });
+    const { error } = await supabase.auth.updateUser({ password });
+    set({ busy: false });
+    if (error) {
+      set({ error: error.message });
+      return false;
+    }
+    set({ recovery: false });
+    return true;
   },
 }));

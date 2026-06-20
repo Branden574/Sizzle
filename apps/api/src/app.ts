@@ -14,6 +14,7 @@ import { recipes } from './routes/recipes';
 import { cooks } from './routes/cooks';
 import { search } from './routes/search';
 import { uploads } from './routes/uploads';
+import { admin } from './routes/admin';
 
 export function createApp() {
   const app = new Hono<AppEnv>();
@@ -43,6 +44,7 @@ export function createApp() {
   app.route('/cooks', cooks);
   app.route('/search', search);
   app.route('/uploads', uploads);
+  app.route('/admin', admin);
 
   return app;
 }

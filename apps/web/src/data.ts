@@ -344,6 +344,9 @@ export const tasteDefs: string[] = [
   'Street food',
   'Low effort',
   'Indian',
+  'Halal',
+  'Kosher',
+  'Soul food',
 ];
 
 export const trendChips: string[] = ['🔥 Trending', '15-min dinners', 'High protein', 'One pan', 'Sweet', 'Spicy'];

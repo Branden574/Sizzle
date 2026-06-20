@@ -9,9 +9,10 @@ export function BottomNav() {
   const tab = useSizzle((s) => s.tab);
   const setTab = useSizzle((s) => s.setTab);
   const setShowUpload = useSizzle((s) => s.setShowUpload);
+  const immersive = useSizzle((s) => s.immersive);
 
   const navDark = tab === 'feed';
-  const navIdle = navDark ? 'rgba(255,255,255,.5)' : '#b3a698';
+  const navIdle = navDark ? 'rgba(255,255,255,.5)' : 'var(--text-faint-2)';
   const col = (active: boolean) => (active ? accent : navIdle);
 
   const go = (t: Tab) => () => setTab(t);
@@ -29,9 +30,14 @@ export function BottomNav() {
         alignItems: 'flex-start',
         justifyContent: 'space-around',
         padding: '12px 16px 0',
-        background: navDark ? 'rgba(12,10,9,.82)' : 'rgba(250,243,234,.92)',
-        borderTop: `1px solid ${navDark ? 'rgba(255,255,255,.08)' : '#ece1d4'}`,
+        background: navDark ? 'rgba(12,10,9,.82)' : 'var(--nav-bg)',
+        borderTop: `1px solid ${navDark ? 'rgba(255,255,255,.08)' : 'var(--line)'}`,
         backdropFilter: 'blur(20px)',
+        // Hold-to-hide: slide the nav off-screen in immersive mode.
+        transform: immersive ? 'translateY(100%)' : 'translateY(0)',
+        opacity: immersive ? 0 : 1,
+        pointerEvents: immersive ? 'none' : 'auto',
+        transition: 'transform .3s cubic-bezier(.16,1,.3,1), opacity .25s ease',
       }}
     >
       <NavButton label="Home" color={col(tab === 'feed')} onClick={go('feed')}>

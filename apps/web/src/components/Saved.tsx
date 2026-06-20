@@ -1,12 +1,17 @@
 import { useState } from 'react';
-import { useSavedFeed } from '../data/queries';
+import { useCollections, useSavedFeed } from '../data/queries';
 import { listOffline } from '../lib/offline';
+import { useShopping } from '../lib/shopping';
 import { useOnlineStatus } from '../lib/useOnlineStatus';
 import { useSizzle } from '../store';
 import { CheckIcon, DownloadIcon } from './icons';
 
 export function Saved() {
   const setOpenRecipe = useSizzle((s) => s.setOpenRecipe);
+  const setShowShopping = useSizzle((s) => s.setShowShopping);
+  const setOpenCollection = useSizzle((s) => s.setOpenCollection);
+  const shoppingCount = useShopping((s) => s.items.length);
+  const { data: collections } = useCollections();
   const { data } = useSavedFeed();
   const online = useOnlineStatus();
   const [filter, setFilter] = useState<'all' | 'offline'>('all');
@@ -19,34 +24,63 @@ export function Saved() {
   const savedEmpty = savedCount === 0;
 
   return (
-    <div style={{ position: 'absolute', inset: 0, background: '#faf3ea', overflowY: 'auto', animation: 'sz-fadeIn .35s' }}>
+    <div style={{ position: 'absolute', inset: 0, background: 'var(--bg)', overflowY: 'auto', animation: 'sz-fadeIn .35s' }}>
       <div style={{ padding: '62px 22px 8px' }}>
-        <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 38, color: '#1b1512' }}>Saved</div>
+        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+          <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 38, color: 'var(--text)' }}>Saved</div>
+          <button
+            onClick={() => setShowShopping(true)}
+            style={{ display: 'flex', alignItems: 'center', gap: 7, height: 40, padding: '0 14px', borderRadius: 20, border: '1px solid var(--line-2)', background: 'var(--surface)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 14, fontWeight: 700, cursor: 'pointer' }}
+          >
+            🛒 List{shoppingCount > 0 ? ` · ${shoppingCount}` : ''}
+          </button>
+        </div>
         <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
           <button
             onClick={() => setFilter('all')}
-            style={{ padding: '9px 15px', borderRadius: 13, border: filter === 'all' ? 'none' : '1px solid #ece1d4', background: filter === 'all' ? '#1b1512' : '#fff', color: filter === 'all' ? '#fff' : '#5c5048', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}
+            style={{ padding: '9px 15px', borderRadius: 13, border: filter === 'all' ? 'none' : '1px solid var(--line)', background: filter === 'all' ? 'var(--invert-bg)' : 'var(--surface)', color: filter === 'all' ? 'var(--invert-fg)' : 'var(--text-muted)', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}
           >
             All {savedCount}
           </button>
           <button
             onClick={() => setFilter('offline')}
-            style={{ padding: '9px 15px', borderRadius: 13, border: filter === 'offline' ? 'none' : '1px solid #ece1d4', background: filter === 'offline' ? '#1b1512' : '#fff', color: filter === 'offline' ? '#fff' : '#5c5048', fontSize: 14, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+            style={{ padding: '9px 15px', borderRadius: 13, border: filter === 'offline' ? 'none' : '1px solid var(--line)', background: filter === 'offline' ? 'var(--invert-bg)' : 'var(--surface)', color: filter === 'offline' ? 'var(--invert-fg)' : 'var(--text-muted)', fontSize: 14, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
           >
-            <DownloadIcon size={14} stroke={filter === 'offline' ? '#fff' : '#5c5048'} strokeWidth={2.2} />
+            <DownloadIcon size={14} stroke={filter === 'offline' ? 'var(--invert-fg)' : 'var(--text-muted)'} strokeWidth={2.2} />
             Offline {downloadCount}
           </button>
         </div>
       </div>
 
+      {(collections ?? []).length > 0 && (
+        <div style={{ padding: '4px 0 4px' }}>
+          <div style={{ fontSize: 12.5, fontWeight: 700, letterSpacing: '.3px', textTransform: 'uppercase', color: 'var(--text-faint-2)', padding: '0 22px 8px' }}>Collections</div>
+          <div style={{ display: 'flex', gap: 12, overflowX: 'auto', padding: '0 22px 4px' }}>
+            {(collections ?? []).map((col) => (
+              <button
+                key={col.id}
+                onClick={() => setOpenCollection({ id: col.id, name: col.name })}
+                style={{ flex: 'none', width: 124, border: 'none', background: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}
+              >
+                <div style={{ width: 124, height: 92, borderRadius: 16, background: col.coverBg ?? 'var(--surface-2)', border: '1px solid var(--line)', position: 'relative', overflow: 'hidden' }}>
+                  <div style={{ position: 'absolute', inset: 0, background: col.coverBg ? 'linear-gradient(180deg, transparent 50%, rgba(0,0,0,.4))' : 'none' }} />
+                </div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', marginTop: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{col.name}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-faint)' }}>{col.count} recipe{col.count === 1 ? '' : 's'}</div>
+              </button>
+            ))}
+          </div>
+        </div>
+      )}
+
       {savedEmpty && (
         <div style={{ padding: '80px 40px', textAlign: 'center' }}>
-          <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 26, color: '#1b1512' }}>Nothing saved yet</div>
-          <p style={{ color: '#8a7c70', fontSize: 15, marginTop: 8 }}>Tap the bookmark on any recipe to keep it here.</p>
+          <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 26, color: 'var(--text)' }}>Nothing saved yet</div>
+          <p style={{ color: 'var(--text-faint)', fontSize: 15, marginTop: 8 }}>Tap the bookmark on any recipe to keep it here.</p>
         </div>
       )}
       {!savedEmpty && shown.length === 0 && (
-        <div style={{ padding: '60px 40px', textAlign: 'center', color: '#8a7c70', fontSize: 15 }}>No offline recipes yet — tap the download icon on a recipe.</div>
+        <div style={{ padding: '60px 40px', textAlign: 'center', color: 'var(--text-faint)', fontSize: 15 }}>No offline recipes yet — tap the download icon on a recipe.</div>
       )}
 
       <div style={{ padding: '16px 18px 110px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>

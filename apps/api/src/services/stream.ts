@@ -61,7 +61,7 @@ class CloudflareStream implements VideoStreamProvider {
     const res = await fetch(`${this.base}/direct_upload`, {
       method: 'POST',
       headers: this.headers,
-      body: JSON.stringify({ maxDurationSeconds: opts.maxDurationSeconds ?? 120, requireSignedURLs: false }),
+      body: JSON.stringify({ maxDurationSeconds: opts.maxDurationSeconds ?? 1800, requireSignedURLs: false }),
     });
     const json = (await res.json()) as { success: boolean; result?: { uid: string; uploadURL: string } };
     if (!json.success || !json.result) throw new Error('Cloudflare direct_upload failed');

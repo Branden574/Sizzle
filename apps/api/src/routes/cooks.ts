@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import type { CookProfile, SuggestedCook } from '@sizzle/shared';
-import { optionalAuth, requireAuth } from '../middleware/auth';
+import { optionalAuth, requireAuth, requireNotBanned } from '../middleware/auth';
 import { supabaseAdmin } from '../lib/supabase';
 import { badRequest, dbFail, notFound } from '../lib/errors';
 import { assertUuid } from '../lib/validate';
@@ -12,14 +12,16 @@ import type { AppEnv } from '../types';
 export const cooks = new Hono<AppEnv>();
 
 /**
- * GET /cooks/suggested?tastes=Japanese,Spicy&limit=8
- * Onboarding creator recommendations ranked by taste overlap (then popularity).
+ * GET /cooks/suggested?tastes=Japanese,Spicy&limit=5
+ * Onboarding creator recommendations: the platform's top cooks by follower
+ * count (taste overlap is surfaced as `matched` chips but no longer reorders —
+ * following is optional, so we lead with the most-followed creators).
  * Public; excludes the viewer and cooks they already follow when authed.
  */
 cooks.get('/suggested', optionalAuth, async (c) => {
   const viewerId = c.get('userId');
   const tastes = (c.req.query('tastes') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
-  const limit = Math.min(Number(c.req.query('limit')) || 8, 20);
+  const limit = Math.min(Number(c.req.query('limit')) || 5, 20);
 
   const [{ data: profiles, error }, { data: recipeRows }] = await Promise.all([
     supabaseAdmin.from('profiles').select('*').eq('is_cook', true),
@@ -43,11 +45,12 @@ cooks.get('/suggested', optionalAuth, async (c) => {
     .filter((p) => p.id !== viewerId && !following.has(p.id))
     .map((p) => {
       const matched = matchTastes(`${p.bio ?? ''} ${blobs.get(p.id) ?? ''}`, tastes);
-      return { p, matched, score: matched.length };
+      return { p, matched };
     })
-    .sort((a, b) => b.score - a.score || b.p.follower_count - a.p.follower_count)
+    // Top cooks by follower count; taste overlap is a tiebreaker only.
+    .sort((a, b) => b.p.follower_count - a.p.follower_count || b.matched.length - a.matched.length)
     .slice(0, limit)
-    .map(({ p, matched }): SuggestedCook => ({ ...cookSummary(p), bio: p.bio ?? '', matched }));
+    .map(({ p, matched }): SuggestedCook => ({ ...cookSummary(p), bio: p.bio ?? '', matched, followers: p.follower_count }));
 
   return c.json(ranked);
 });
@@ -62,12 +65,12 @@ cooks.get('/:id', optionalAuth, async (c) => {
   if (!profile) throw notFound('Cook not found');
   const p = profile as ProfileRow;
 
-  const { data: recipeRows } = await supabaseAdmin
-    .from('recipes')
-    .select('*')
-    .eq('cook_id', id)
-    .eq('status', 'published')
-    .order('created_at', { ascending: false });
+  // The owner also sees their own removed posts (with the "video removed" state);
+  // everyone else sees only published.
+  const isOwner = viewerId === id;
+  let recipeQuery = supabaseAdmin.from('recipes').select('*').eq('cook_id', id);
+  recipeQuery = isOwner ? recipeQuery.in('status', ['published', 'removed']) : recipeQuery.eq('status', 'published');
+  const { data: recipeRows } = await recipeQuery.order('created_at', { ascending: false });
   const rows = (recipeRows ?? []) as RecipeRow[];
   const cards = await buildCards(supabaseAdmin, viewerId, rows);
 
@@ -99,8 +102,28 @@ cooks.get('/:id', optionalAuth, async (c) => {
   return c.json(res);
 });
 
+/** GET /cooks/:id/followers — the people who follow this cook. */
+cooks.get('/:id/followers', optionalAuth, async (c) => {
+  const id = assertUuid(c.req.param('id'), 'cook');
+  const { data: rows } = await supabaseAdmin.from('follows').select('follower_id').eq('cook_id', id).limit(200);
+  const ids = (rows ?? []).map((r) => r.follower_id as string);
+  if (ids.length === 0) return c.json([]);
+  const { data: profiles } = await supabaseAdmin.from('profiles').select('*').in('id', ids);
+  return c.json((profiles ?? []).map((p) => cookSummary(p as ProfileRow)));
+});
+
+/** GET /cooks/:id/following — the cooks this user follows. */
+cooks.get('/:id/following', optionalAuth, async (c) => {
+  const id = assertUuid(c.req.param('id'), 'cook');
+  const { data: rows } = await supabaseAdmin.from('follows').select('cook_id').eq('follower_id', id).limit(200);
+  const ids = (rows ?? []).map((r) => r.cook_id as string);
+  if (ids.length === 0) return c.json([]);
+  const { data: profiles } = await supabaseAdmin.from('profiles').select('*').in('id', ids);
+  return c.json((profiles ?? []).map((p) => cookSummary(p as ProfileRow)));
+});
+
 /** POST /cooks/:id/follow */
-cooks.post('/:id/follow', requireAuth, async (c) => {
+cooks.post('/:id/follow', requireAuth, requireNotBanned, async (c) => {
   const cookId = assertUuid(c.req.param('id'), 'cook');
   const userId = c.get('userId')!;
   if (cookId === userId) throw badRequest('You cannot follow yourself');
@@ -125,7 +148,7 @@ cooks.post('/:id/follow', requireAuth, async (c) => {
 });
 
 /** DELETE /cooks/:id/follow */
-cooks.delete('/:id/follow', requireAuth, async (c) => {
+cooks.delete('/:id/follow', requireAuth, requireNotBanned, async (c) => {
   const cookId = assertUuid(c.req.param('id'), 'cook');
   const userId = c.get('userId')!;
 

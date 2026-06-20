@@ -8,10 +8,12 @@ export interface CommentRow {
   author_id: string;
   text: string;
   like_count: number;
+  parent_id: string | null;
+  reply_count: number;
   created_at: string;
 }
 
-export function commentDTO(row: CommentRow, author: ProfileRow | undefined): CommentDTO {
+export function commentDTO(row: CommentRow, author: ProfileRow | undefined, likedSet?: Set<string>): CommentDTO {
   const name = author?.display_name ?? 'cook';
   return {
     id: row.id,
@@ -23,6 +25,9 @@ export function commentDTO(row: CommentRow, author: ProfileRow | undefined): Com
     time: relativeTime(new Date(row.created_at)),
     createdAt: row.created_at,
     likes: row.like_count,
+    likedByMe: likedSet ? likedSet.has(row.id) : false,
+    parentId: row.parent_id ?? null,
+    replyCount: row.reply_count ?? 0,
   };
 }
 
@@ -40,6 +45,13 @@ export interface ProfileRow {
   following_count: number;
   total_likes: number;
   tastes: string[] | null;
+  verified_tier: 'blue' | 'gold' | null;
+  role: 'user' | 'admin';
+  banned: boolean;
+  banned_reason: string | null;
+  delete_at: string | null;
+  ban_appeal_status: 'none' | 'pending' | 'denied';
+  ban_appeal_text: string | null;
 }
 
 export interface RecipeRow {
@@ -58,6 +70,13 @@ export interface RecipeRow {
   comment_count: number;
   save_count: number;
   share_count: number;
+  caption: string | null;
+  tags: string[] | null;
+  post_type: string | null;
+  rating: number | null;
+  removal_reason: string | null;
+  appeal_status: string | null;
+  auto_hidden: boolean;
   created_at: string;
 }
 
@@ -65,6 +84,7 @@ export interface VideoRow {
   id: string;
   status: string;
   hls_url: string | null;
+  mp4_url: string | null;
   poster_url: string | null;
   duration_seconds: number | null;
 }
@@ -81,6 +101,7 @@ export function cookSummary(p: ProfileRow): CookSummary {
     init: initialsOf(p.display_name || p.handle),
     avatarColor: p.avatar_color,
     avatarUrl: p.avatar_url,
+    verifiedTier: p.verified_tier,
   };
 }
 
@@ -89,6 +110,7 @@ export function videoDTO(v: VideoRow | null | undefined): VideoAssetDTO | null {
   return {
     status: v.status as VideoAssetDTO['status'],
     hlsUrl: v.hls_url,
+    mp4Url: v.mp4_url,
     posterUrl: v.poster_url,
     duration: v.duration_seconds,
   };
@@ -100,10 +122,11 @@ interface ViewerCtx {
   saves: Set<string>;
   downloads: Set<string>;
   follows: Set<string>;
+  reposts: Set<string>;
 }
 
 function emptyViewer(): ViewerCtx {
-  return { likes: new Set(), dislikes: new Set(), saves: new Set(), downloads: new Set(), follows: new Set() };
+  return { likes: new Set(), dislikes: new Set(), saves: new Set(), downloads: new Set(), follows: new Set(), reposts: new Set() };
 }
 
 /** Batch-load the viewer's like/dislike/save/follow state for a page of recipes. */
@@ -123,6 +146,8 @@ async function loadViewerCtx(
     for (const s of saves ?? []) ctx.saves.add(s.recipe_id as string);
     const { data: downloads } = await db.from('downloads').select('recipe_id').eq('user_id', viewerId).in('recipe_id', recipeIds);
     for (const d of downloads ?? []) ctx.downloads.add(d.recipe_id as string);
+    const { data: reposts } = await db.from('reposts').select('recipe_id').eq('user_id', viewerId).in('recipe_id', recipeIds);
+    for (const rp of reposts ?? []) ctx.reposts.add(rp.recipe_id as string);
   }
   if (cookIds.length) {
     const { data: follows } = await db.from('follows').select('cook_id').eq('follower_id', viewerId).in('cook_id', cookIds);
@@ -138,6 +163,7 @@ function viewerState(recipeId: string, cookId: string, ctx: ViewerCtx): RecipeVi
     saved: ctx.saves.has(recipeId),
     downloaded: ctx.downloads.has(recipeId),
     following: ctx.follows.has(cookId),
+    reposted: ctx.reposts.has(recipeId),
   };
 }
 
@@ -156,6 +182,15 @@ function toCard(r: RecipeRow, cook: ProfileRow, video: VideoRow | null, ctx: Vie
     counts: { likes: r.like_count, dislikes: r.dislike_count, comments: r.comment_count, saves: r.save_count, shares: r.share_count },
     viewer: viewerState(r.id, r.cook_id, ctx),
     controls: DEFAULT_CONTROLS,
+    hashtags: r.tags ?? [],
+    postType: (r.post_type as RecipeCard['postType']) ?? 'recipe',
+    rating: r.rating ?? null,
+    // Moderation fields only ever reach the owner (removed posts are hidden from others).
+    removed: r.status === 'removed',
+    removalReason: r.removal_reason ?? null,
+    appealStatus: (r.appeal_status as RecipeCard['appealStatus']) ?? 'none',
+    autoHidden: r.auto_hidden ?? false,
+    repost: null,
   };
 }
 
@@ -175,7 +210,7 @@ export async function buildCards(db: SupabaseClient, viewerId: string | undefine
 
   const videoMap = new Map<string, VideoRow>();
   if (videoIds.length) {
-    const { data: vids } = await db.from('video_assets').select('id,status,hls_url,poster_url,duration_seconds').in('id', videoIds);
+    const { data: vids } = await db.from('video_assets').select('id,status,hls_url,mp4_url,poster_url,duration_seconds').in('id', videoIds);
     for (const v of vids ?? []) videoMap.set(v.id as string, v as VideoRow);
   }
 
@@ -184,7 +219,9 @@ export async function buildCards(db: SupabaseClient, viewerId: string | undefine
   const cards: RecipeCard[] = [];
   for (const r of rows) {
     const cook = cookMap.get(r.cook_id);
-    if (!cook) continue;
+    if (!cook || cook.banned) continue; // banned creators' content is hidden everywhere
+    // Auto-hidden (pending review) and removed posts are visible only to their owner.
+    if ((r.auto_hidden || r.status === 'removed') && r.cook_id !== viewerId) continue;
     cards.push(toCard(r, cook, r.video_asset_id ? videoMap.get(r.video_asset_id) ?? null : null, ctx));
   }
   return cards;

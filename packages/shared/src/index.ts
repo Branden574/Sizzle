@@ -13,6 +13,20 @@ export type ReactionKind = 'like' | 'dislike';
 
 export type VideoStatus = 'pending' | 'uploading' | 'processing' | 'ready' | 'error';
 
+/**
+ * Upload limits. The web client enforces these before upload; the API mirrors
+ * the duration cap as a literal (it imports only types from this package, so it
+ * can't read these at runtime). Supabase storage `file_size_limit` in
+ * config.toml must be >= MAX_UPLOAD_BYTES.
+ */
+export const MAX_DURATION_SECONDS = 1800; // 30 minutes
+export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024 * 1024; // 5 GiB — headroom for 4K/30-min
+/** Longest supported side for a 4K upload (UHD 3840×2160 / DCI 4096). */
+export const MAX_VIDEO_LONG_SIDE = 4096;
+
+/** Verification badge: blue at 100k followers, animated gold at 1M. */
+export type VerificationTier = 'blue' | 'gold';
+
 /** Minimal cook info embedded in feed/recipe cards. */
 export interface CookSummary {
   id: string;
@@ -23,12 +37,16 @@ export interface CookSummary {
   /** CSS gradient used as the avatar fallback when there's no image. */
   avatarColor: string;
   avatarUrl: string | null;
+  /** Verification badge tier, or null if unverified. */
+  verifiedTier: VerificationTier | null;
 }
 
 export interface VideoAssetDTO {
   status: VideoStatus;
   /** Adaptive HLS manifest (null until `ready`). */
   hlsUrl: string | null;
+  /** Direct MP4 url (user uploads); plays natively. */
+  mp4Url: string | null;
   /** Poster/thumbnail still (null until `ready`). */
   posterUrl: string | null;
   /** Seconds (null until known). */
@@ -50,6 +68,8 @@ export interface RecipeViewerState {
   saved: boolean;
   downloaded: boolean;
   following: boolean;
+  /** Whether the viewer has reposted this recipe (so the action can toggle off). */
+  reposted: boolean;
 }
 
 /** Creator post controls. `*Enabled`/`*Visible` so the UI reads them positively. */
@@ -58,6 +78,19 @@ export interface PostControls {
   commentsEnabled: boolean;
   countsVisible: boolean;
 }
+
+/** Who reposted a card into your feed (mutual-follow only). */
+export interface RepostInfo {
+  byId: string;
+  byName: string;
+  byHandle: string;
+  byVerifiedTier: VerificationTier | null;
+  comment: string | null;
+  /** Relative label, e.g. "2h". */
+  time: string;
+}
+
+export type AppealStatus = 'none' | 'pending' | 'denied';
 
 /** A recipe as shown in a feed / grid card. */
 export interface RecipeCard {
@@ -76,12 +109,49 @@ export interface RecipeCard {
   counts: RecipeCounts;
   viewer: RecipeViewerState;
   controls: PostControls;
+  /** Normalized hashtags (no leading '#'), parsed from the caption + title. */
+  hashtags: string[];
+  /** 'recipe' = tutorial with ingredients/method; 'review' = a foodie review. */
+  postType: PostType;
+  /** 1–5 star rating, only on reviews. */
+  rating: number | null;
+  /** Moderation state — only meaningful to the owner (hidden/removed posts aren't shown to others). */
+  removed: boolean;
+  removalReason: string | null;
+  appealStatus: AppealStatus;
+  /** Auto-hidden pending admin review (crossed the high report threshold). */
+  autoHidden: boolean;
+  /** Set when this card appears in your feed because a mutual-follow friend reposted it. */
+  repost: RepostInfo | null;
 }
 
-/** Full recipe detail (card + ingredients + ordered method). */
+/** A post is either a recipe/tutorial or a foodie review. */
+export type PostType = 'recipe' | 'review';
+
+/** Full recipe detail (card + caption + ingredients + ordered method). */
 export interface RecipeDetail extends RecipeCard {
+  caption: string | null;
   ingredients: string[];
   steps: string[];
+}
+
+/** A saved collection ("cookbook") summary. */
+export interface CollectionDTO {
+  id: string;
+  name: string;
+  /** Number of recipes in the collection. */
+  count: number;
+  /** A member recipe's gradient, used as the folder cover (null when empty). */
+  coverBg: string | null;
+  createdAt: string;
+  /** Whether a specific recipe is in this collection (only set by the picker query). */
+  hasRecipe?: boolean;
+}
+
+/** A trending hashtag with its post count. */
+export interface TrendingTag {
+  tag: string;
+  count: number;
 }
 
 export interface CommentDTO {
@@ -95,13 +165,23 @@ export interface CommentDTO {
   time: string;
   createdAt: string;
   likes: number;
+  /** Whether the requesting viewer has liked this comment. */
+  likedByMe: boolean;
+  /** Null for a top-level comment; the parent's id for a reply. */
+  parentId: string | null;
+  /** Number of replies (top-level comments only). */
+  replyCount: number;
+  /** Nested replies, present on top-level comments. */
+  replies?: CommentDTO[];
 }
 
-/** A cook recommended during onboarding, ranked by taste overlap. */
+/** A cook recommended during onboarding — the platform's top cooks by following. */
 export interface SuggestedCook extends CookSummary {
   bio: string;
   /** Which of the viewer's selected tastes this cook matched. */
   matched: string[];
+  /** The cook's follower count (shown on the onboarding card). */
+  followers: number;
 }
 
 export interface CookProfile {
@@ -112,6 +192,7 @@ export interface CookProfile {
   avatarColor: string;
   avatarUrl: string | null;
   bannerUrl: string | null;
+  verifiedTier: VerificationTier | null;
   bio: string;
   counts: {
     followers: number;
@@ -135,6 +216,13 @@ export interface MeProfile {
   phone: string | null;
   bio: string;
   isCook: boolean;
+  verifiedTier: VerificationTier | null;
+  role: 'user' | 'admin';
+  banned: boolean;
+  bannedReason: string | null;
+  /** When a banned account is permanently wiped (ISO); drives the appeal window. */
+  deleteAt: string | null;
+  banAppealStatus: AppealStatus;
   counts: {
     following: number;
     followers: number;
@@ -143,7 +231,7 @@ export interface MeProfile {
   tastes: string[];
 }
 
-export type NotificationKind = 'follow' | 'like' | 'comment';
+export type NotificationKind = 'follow' | 'like' | 'comment' | 'verified' | 'repost' | 'removed' | 'restored' | 'banned';
 
 export interface NotificationDTO {
   id: string;
@@ -160,6 +248,95 @@ export interface NotificationDTO {
 export interface SearchResults {
   recipes: RecipeCard[];
   cooks: CookSummary[];
+}
+
+export type ReportCategory = 'nudity' | 'harassment' | 'violence' | 'spam' | 'other';
+
+/** Body for reporting a recipe. */
+export interface ReportInput {
+  category: ReportCategory;
+  reason?: string;
+}
+
+/** Body for reposting a recipe (optional quote comment). */
+export interface RepostInput {
+  comment?: string;
+}
+
+/* ─────────────────────────── admin dashboard ─────────────────────────── */
+
+export interface AdminStats {
+  /** Recipes that have crossed the report threshold (≥5 distinct reporters). */
+  flaggedPosts: number;
+  pendingAppeals: number;
+  bannedUsers: number;
+  flaggedUsers: number;
+  verifiedUsers: number;
+  totalUsers: number;
+}
+
+/** A post in the moderation queue — reports aggregated per recipe (≥ threshold). */
+export interface AdminReportGroupDTO {
+  recipeId: string;
+  recipeTitle: string;
+  recipeStatus: string;
+  cookId: string;
+  cookName: string;
+  reportCount: number;
+  /** category → count. */
+  categories: Partial<Record<ReportCategory, number>>;
+  lastReportedAt: string;
+  time: string;
+}
+
+/** An appeal of a removed video, shown in the admin appeals queue. */
+export interface AdminAppealDTO {
+  recipeId: string;
+  recipeTitle: string;
+  cookId: string;
+  cookName: string;
+  removalReason: string | null;
+  appealText: string | null;
+  appealedAt: string;
+  time: string;
+}
+
+export interface AdminUserDTO {
+  id: string;
+  name: string;
+  handle: string;
+  init: string;
+  avatarColor: string;
+  avatarUrl: string | null;
+  followerCount: number;
+  verifiedTier: VerificationTier | null;
+  role: 'user' | 'admin';
+  banned: boolean;
+  /** Total reports across this user's posts. */
+  reportCount: number;
+  /** Auto-flagged for review (> 100 reports). */
+  flagged: boolean;
+  /** Videos this user has had removed. */
+  removedCount: number;
+  /** Repeat offender — multiple removed videos (stronger ban signal). */
+  repeatOffender: boolean;
+  /** When a banned account is wiped (ISO) — drives the admin countdown. */
+  deleteAt: string | null;
+  banReason: string | null;
+  banAppealStatus: AppealStatus;
+  banAppealText: string | null;
+}
+
+/** An entry in the admin moderation audit log. */
+export interface AdminLogDTO {
+  id: string;
+  action: string;
+  actorName: string;
+  targetName: string | null;
+  targetRecipeTitle: string | null;
+  detail: string | null;
+  createdAt: string;
+  time: string;
 }
 
 export interface Paginated<T> {
@@ -179,6 +356,12 @@ export interface CreateRecipeInput {
   level: string;
   ingredients: string[];
   steps: string[];
+  /** Free-text caption; hashtags in it become the recipe's tags. */
+  caption?: string;
+  /** 'recipe' (default) or 'review'. */
+  postType?: PostType;
+  /** 1–5 star rating; only valid when postType is 'review'. */
+  rating?: number;
 }
 
 /** Response from requesting a direct (client-side) video upload. */

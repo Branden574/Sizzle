@@ -9,6 +9,9 @@
  */
 import { baseComments, cooks as mockCooks, recipes as mockRecipes } from '../../../web/src/data';
 import { supabaseAdmin } from '../lib/supabase';
+import { parseHashtags } from '../services/hashtags';
+
+const TAG_POOL = ['quickdinner', 'weeknight', 'comfortfood', 'mealprep', 'spicy', 'vegetarian', 'dessert', 'highprotein', 'easyrecipe', 'dinnerideas'];
 
 const SEED_DOMAIN = '@sizzle.dev';
 const SEED_PASSWORD = 'sizzle-demo-1234';
@@ -73,6 +76,18 @@ async function main() {
   }
   console.log(`• ${mockCooks.length} cooks`);
 
+  // Demo moderation/verification state: one admin + verified creators so the
+  // admin dashboard and badges have data locally. (The real admin —
+  // branden574@gmail.com — is granted admin automatically on signup.)
+  const grant = async (mockId: string, patch: Record<string, unknown>) => {
+    const id = cookId.get(mockId);
+    if (id) await supabaseAdmin.from('profiles').update(patch).eq('id', id);
+  };
+  await grant('mina', { role: 'admin' });
+  await grant('theo', { verified_tier: 'blue' });
+  await grant('lila', { verified_tier: 'gold' });
+  console.log('• 1 admin (mina) · 2 verified creators (theo=blue, lila=gold)');
+
   // 2) Recipes → video asset (ready/mock) + recipe + ordered ingredients/steps.
   let recipeCount = 0;
   const now = Date.now();
@@ -99,17 +114,34 @@ async function main() {
       .single();
     if (vErr || !asset) throw vErr ?? new Error('video asset insert failed');
 
+    // Synthesize a caption with hashtags so search / hashtag-feeds / trending /
+    // ranking-affinity have realistic, overlapping tags in dev.
+    const cuisineTag = r.cuisine.toLowerCase().replace(/[^a-z0-9]/g, '');
+    const poolA = TAG_POOL[i % TAG_POOL.length]!;
+    const poolB = TAG_POOL[(i * 3 + 1) % TAG_POOL.length]!;
+    // Make ~1 in 5 posts a foodie review so the Review badge / rating UI has data.
+    const isReview = i % 5 === 4;
+    const rating = isReview ? (3 + (i % 3)) : null; // 3–5 stars
+    const caption = isReview
+      ? `${r.title} — honestly some of the best ${r.cuisine} I've had. Worth the trip. #${cuisineTag} #foodie #review`
+      : `${r.title} — making this on repeat 🔥 #${cuisineTag} #homecooking #${poolA} #${poolB}`;
+    const tags = parseHashtags(caption, r.title);
+
     const { data: recipe, error: rErr } = await supabaseAdmin
       .from('recipes')
       .insert({
         cook_id: owner,
         title: r.title,
         cuisine: r.cuisine,
-        time_minutes: parseMinutes(r.time),
-        servings: r.servings,
+        time_minutes: isReview ? 0 : parseMinutes(r.time),
+        servings: isReview ? 1 : r.servings,
         level: r.level,
         bg: r.bg,
         video_asset_id: asset.id,
+        caption,
+        tags,
+        post_type: isReview ? 'review' : 'recipe',
+        rating,
         status: 'published',
         like_count: parseCount(r.likeCount),
         dislike_count: parseCount(r.dislikeCount),
@@ -123,12 +155,12 @@ async function main() {
       .single();
     if (rErr || !recipe) throw rErr ?? new Error('recipe insert failed');
 
-    if (r.ingredients.length) {
+    if (!isReview && r.ingredients.length) {
       await supabaseAdmin
         .from('recipe_ingredients')
         .insert(r.ingredients.map((text, pos) => ({ recipe_id: recipe.id, position: pos, text })));
     }
-    if (r.steps.length) {
+    if (!isReview && r.steps.length) {
       await supabaseAdmin
         .from('recipe_steps')
         .insert(r.steps.map((text, pos) => ({ recipe_id: recipe.id, position: pos, text })));
@@ -147,6 +179,31 @@ async function main() {
     recipeCount++;
   }
   console.log(`• ${recipeCount} recipes`);
+
+  // Cross-follows so the followers/following lists have real content. The graph
+  // is ASYMMETRIC on purpose: each cook follows the next 3 cooks (mod n), so a
+  // cook's "following" set ({i+1,i+2,i+3}) differs from its "followers" set
+  // ({i+2,i+3,i+4}) — the two lists are no longer identical — while the overlap
+  // ({i+2,i+3}) still yields mutual-follow pairs for the repost feature to demo.
+  // Recompute the live counters afterwards (total_likes from recipe likes;
+  // following_count from real follows — follower_count stays the seeded "vanity"
+  // total used for badges). Insert directly so we don't double-count via the RPC.
+  const ids = [...cookId.values()];
+  const n = ids.length;
+  const followRows = ids.flatMap((a, i) =>
+    [1, 2, 3]
+      .map((step) => ids[(i + step) % n]!)
+      .filter((b) => b !== a)
+      .map((b) => ({ follower_id: a, cook_id: b })),
+  );
+  if (followRows.length) await supabaseAdmin.from('follows').upsert(followRows, { onConflict: 'follower_id,cook_id', ignoreDuplicates: true });
+  for (const id of ids) {
+    const { count: followingCount } = await supabaseAdmin.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', id);
+    const { data: recs } = await supabaseAdmin.from('recipes').select('like_count').eq('cook_id', id);
+    const totalLikes = (recs ?? []).reduce((n, r) => n + (r.like_count as number), 0);
+    await supabaseAdmin.from('profiles').update({ following_count: followingCount ?? 0, total_likes: totalLikes }).eq('id', id);
+  }
+  console.log('• cross-follows + counters');
   console.log('✓ Seed complete.');
 }
 

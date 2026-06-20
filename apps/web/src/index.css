@@ -25,10 +25,86 @@ body {
   text-rendering: optimizeLegibility;
 }
 
+/*
+ * Design tokens. Light is the default (values are byte-identical to the
+ * prototype's hardcoded colors, so light mode is unchanged); dark overrides
+ * them. App.tsx resolves the user's System/Light/Dark choice to a concrete
+ * data-theme="light|dark" on .sz-stage. The feed/video stage and its white
+ * overlays stay dark in BOTH themes (see --feed-*), so those are not tokenized.
+ */
+.sz-stage,
+.sz-stage[data-theme='light'] {
+  /* brand */
+  --accent: #ff5a36;
+  --accent-press: #e23a18;
+  --saffron: #f4a52c;
+  /* surfaces */
+  --bg: #faf3ea;
+  --bg-soft: #faf6f0;
+  --surface: #ffffff;
+  --surface-2: #f5ede2;
+  --surface-3: #f1e8dc;
+  /* text */
+  --text: #1b1512;
+  --text-2: #3a322c;
+  --text-muted: #5c5048;
+  --text-soft: #6c5f56;
+  --text-faint: #8a7c70;
+  --text-faint-2: #a99c90;
+  /* lines + controls */
+  --line: #ece1d4;
+  --line-2: #e3d6c8;
+  --line-3: #e0d4c6;
+  --track: #d8cbbb;
+  /* inverted primary button (dark ink in light mode, light in dark mode) */
+  --invert-bg: #1b1512;
+  --invert-fg: #ffffff;
+  /* status tints + their text */
+  --warn-bg: #fcf4e2;
+  --warn-fg: #c98a1e;
+  --danger-bg: #fbe6df;
+  --danger-fg: #d8521e;
+  /* translucent bottom-nav surface (non-feed tabs) */
+  --nav-bg: rgba(250, 243, 234, 0.92);
+  /* feed (always dark) */
+  --feed-bg: #0c0a09;
+  --scrim: rgba(0, 0, 0, 0.5);
+  color-scheme: light;
+}
+
+.sz-stage[data-theme='dark'] {
+  --accent: #ff6a48;
+  --accent-press: #e8462a;
+  --saffron: #f4a52c;
+  --bg: #15110d;
+  --bg-soft: #1b1611;
+  --surface: #221b15;
+  --surface-2: #2b2219;
+  --surface-3: #322820;
+  --text: #f7efe4;
+  --text-2: #e7ddcf;
+  --text-muted: #c4b6a7;
+  --text-soft: #b0a294;
+  --text-faint: #9a8d7f;
+  --text-faint-2: #837567;
+  --line: #332a21;
+  --line-2: #3d3228;
+  --line-3: #443930;
+  --track: #3a3128;
+  --invert-bg: #f3ebe0;
+  --invert-fg: #1b1512;
+  --warn-bg: #3a3016;
+  --warn-fg: #e0a93a;
+  --danger-bg: #3a201a;
+  --danger-fg: #ff7a52;
+  --nav-bg: rgba(22, 18, 14, 0.92);
+  --feed-bg: #0c0a09;
+  --scrim: rgba(0, 0, 0, 0.62);
+  color-scheme: dark;
+}
+
 /* The stage behind the phone. */
 .sz-stage {
-  --accent: #ff5a36;
-  --saffron: #f4a52c;
   min-height: 100vh;
   width: 100%;
   background: radial-gradient(120% 120% at 50% 0%, #2a221c 0%, #181410 55%, #0e0b09 100%);
@@ -84,6 +160,30 @@ input {
   to {
     opacity: 1;
   }
+}
+
+/* Animated gold verification badge — a soft pulsing glow. */
+@keyframes sz-gold-shine {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 0 rgba(245, 200, 66, 0));
+  }
+  50% {
+    filter: drop-shadow(0 0 3px rgba(245, 200, 66, 0.95));
+  }
+}
+.sz-gold-badge {
+  animation: sz-gold-shine 2.2s ease-in-out infinite;
+}
+
+/* Reduce-motion preference (Settings → Appearance): neutralize the entrance
+ * animations and the gold-badge pulse. */
+.sz-reduce-motion *,
+.sz-reduce-motion *::before,
+.sz-reduce-motion *::after {
+  animation-duration: 0.001ms !important;
+  animation-delay: 0ms !important;
+  animation-iteration-count: 1 !important;
 }
 
 /* Comfortable shrink-to-fit on viewports smaller than the 393×852 device. */

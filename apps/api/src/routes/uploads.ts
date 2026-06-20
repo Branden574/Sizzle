@@ -1,9 +1,10 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { Hono } from 'hono';
+import { z } from 'zod';
 import type { DirectUploadTicket } from '@sizzle/shared';
 import { requireAuth } from '../middleware/auth';
 import { supabaseAdmin } from '../lib/supabase';
-import { dbFail } from '../lib/errors';
+import { badRequest, dbFail } from '../lib/errors';
 import { cloudflareConfigured, env } from '../env';
 import { getStreamProvider } from '../services/stream';
 import { rateLimit } from '../middleware/rateLimit';
@@ -11,16 +12,51 @@ import type { AppEnv } from '../types';
 
 export const uploads = new Hono<AppEnv>();
 
+// Keep in sync with MAX_DURATION_SECONDS in @sizzle/shared (API imports only types).
+const MAX_DURATION_SECONDS = 1800; // 30 minutes
+
+const registerSchema = z.object({
+  uploadedUrl: z.string().url().max(1000).optional(),
+  posterUrl: z.string().url().max(1000).optional(),
+  durationSeconds: z.number().int().min(0).max(MAX_DURATION_SECONDS).optional(),
+});
+
 /**
- * POST /uploads/video — register a pending video asset and return a direct
- * upload ticket. The client uploads bytes straight to the provider; the asset
- * becomes "ready" via webhook (Cloudflare) or immediately (mock).
+ * POST /uploads/video — register a video asset.
+ *  - If the client already uploaded an MP4 to storage and passes `uploadedUrl`,
+ *    the asset is created "ready" pointing at it (real upload path).
+ *  - Otherwise it falls back to the stream provider (mock = instant sample HLS;
+ *    Cloudflare = pending until the webhook fires) and returns a direct-upload ticket.
  */
 uploads.post('/video', requireAuth, rateLimit({ windowMs: 60_000, max: 20, name: 'upload' }), async (c) => {
   const userId = c.get('userId')!;
-  const provider = getStreamProvider();
-  const { providerUid, uploadUrl } = await provider.createDirectUpload({ maxDurationSeconds: 120 });
+  const body = registerSchema.safeParse(await c.req.json().catch(() => ({})));
+  // The no-arg provider path sends an empty body (all fields optional → parses ok).
+  // A populated-but-invalid body (e.g. duration over the 30-min cap) is rejected.
+  if (!body.success) throw badRequest('Video exceeds the upload limits', body.error.flatten());
+  const provided = body.data;
 
+  // Real upload: client put the file in storage and gave us the public URL.
+  if (provided.uploadedUrl) {
+    const { data: asset, error } = await supabaseAdmin
+      .from('video_assets')
+      .insert({
+        owner_id: userId,
+        provider: 'storage',
+        status: 'ready',
+        mp4_url: provided.uploadedUrl,
+        poster_url: provided.posterUrl ?? null,
+        duration_seconds: provided.durationSeconds ?? null,
+      })
+      .select('id')
+      .single();
+    if (error || !asset) throw dbFail(error?.message ?? 'Failed to register video');
+    return c.json<DirectUploadTicket>({ videoAssetId: asset.id, uploadUrl: '', provider: 'storage' }, 201);
+  }
+
+  // Provider path (mock / Cloudflare).
+  const provider = getStreamProvider();
+  const { providerUid, uploadUrl } = await provider.createDirectUpload({ maxDurationSeconds: MAX_DURATION_SECONDS });
   const { data: asset, error } = await supabaseAdmin
     .from('video_assets')
     .insert({ owner_id: userId, provider: provider.name, provider_uid: providerUid, status: 'pending' })
@@ -28,8 +64,6 @@ uploads.post('/video', requireAuth, rateLimit({ windowMs: 60_000, max: 20, name:
     .single();
   if (error || !asset) throw dbFail(error?.message ?? 'Failed to create video asset');
 
-  // The mock provider is "ready" instantly — reflect that so an uploaded recipe
-  // is immediately playable in the feed.
   if (provider.name === 'mock') {
     const a = await provider.getAsset(providerUid);
     await supabaseAdmin
@@ -38,8 +72,7 @@ uploads.post('/video', requireAuth, rateLimit({ windowMs: 60_000, max: 20, name:
       .eq('id', asset.id);
   }
 
-  const ticket: DirectUploadTicket = { videoAssetId: asset.id, uploadUrl, provider: provider.name };
-  return c.json(ticket, 201);
+  return c.json<DirectUploadTicket>({ videoAssetId: asset.id, uploadUrl, provider: provider.name }, 201);
 });
 
 /** Cloudflare Stream webhook → mark the asset ready with hls/poster. */

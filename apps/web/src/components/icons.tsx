@@ -241,11 +241,46 @@ export function BellIcon({ size = 20, stroke = '#5c5048', strokeWidth = 2 }: Ico
   );
 }
 
+export function RepostIcon({ size = 20, stroke = '#5c5048', strokeWidth = 1.9 }: IconBase) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <path d="M4 9V8a3 3 0 0 1 3-3h9l-2.2-2.2M20 15v1a3 3 0 0 1-3 3H8l2.2 2.2" stroke={stroke} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M16 5l2.5 0M8 19l-2.5 0" stroke={stroke} strokeWidth={strokeWidth} strokeLinecap="round" />
+    </svg>
+  );
+}
+
+export function FlagIcon({ size = 20, stroke = '#5c5048', strokeWidth = 1.9 }: IconBase) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <path d="M5 21V4m0 1.5c4-2 7 2 11 0V14c-4 2-7-2-11 0" stroke={stroke} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+const SPEAKER_BODY = 'M11 5 6 9H3v6h3l5 4V5Z';
+export function SpeakerIcon({ size = 20, stroke = '#fff', strokeWidth = 1.9 }: IconBase) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <path d={SPEAKER_BODY} stroke={stroke} strokeWidth={strokeWidth} strokeLinejoin="round" />
+      <path d="M15.5 8.5a5 5 0 0 1 0 7M18 6a8.5 8.5 0 0 1 0 12" stroke={stroke} strokeWidth={strokeWidth} strokeLinecap="round" />
+    </svg>
+  );
+}
+export function SpeakerOffIcon({ size = 20, stroke = '#fff', strokeWidth = 1.9 }: IconBase) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <path d={SPEAKER_BODY} stroke={stroke} strokeWidth={strokeWidth} strokeLinejoin="round" />
+      <path d="m16 9 5 5m0-5-5 5" stroke={stroke} strokeWidth={strokeWidth} strokeLinecap="round" />
+    </svg>
+  );
+}
+
 /* Settings-row glyphs (rendered at 21px, muted ink). */
 export function SettingHeartIcon() {
   return (
     <svg width="21" height="21" viewBox="0 0 24 24" fill="none">
-      <path d={HEART_D} stroke="#7a6c5f" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+      <path d={HEART_D} stroke="var(--text-soft)" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }
@@ -254,7 +289,7 @@ export function SettingCommentIcon() {
     <svg width="21" height="21" viewBox="0 0 24 24" fill="none">
       <path
         d="M21 12a8 8 0 0 1-11.5 7.2L3 21l1.8-6.5A8 8 0 1 1 21 12Z"
-        stroke="#7a6c5f"
+        stroke="var(--text-soft)"
         strokeWidth="1.9"
         strokeLinecap="round"
         strokeLinejoin="round"
@@ -265,7 +300,7 @@ export function SettingCommentIcon() {
 export function SettingCountsIcon() {
   return (
     <svg width="21" height="21" viewBox="0 0 24 24" fill="none">
-      <path d="M3 12h4l3 8 4-16 3 8h4" stroke="#7a6c5f" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
+      <path d="M3 12h4l3 8 4-16 3 8h4" stroke="var(--text-soft)" strokeWidth="1.9" strokeLinecap="round" strokeLinejoin="round" />
     </svg>
   );
 }

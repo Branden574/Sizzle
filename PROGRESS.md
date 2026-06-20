@@ -1,6 +1,6 @@
 # Sizzle — Build Progress
 
-Running log so any session can pick up cleanly. **Last updated:** 2026-06-19.
+Running log so any session can pick up cleanly. **Last updated:** 2026-06-20.
 
 Stack: **Node + TypeScript**, **Hono** API, **Supabase** (Postgres/Auth/Storage), **Cloudflare Stream** (video, behind an interface — mock by default), Vite/React web client. Monorepo via npm workspaces.
 
@@ -49,6 +49,116 @@ Stack: **Node + TypeScript**, **Hono** API, **Supabase** (Postgres/Auth/Storage)
 
 ---
 
+## Big feature batch — 2026-06-20 (all verified in-browser + API + DB)
+
+- **Comment likes + threaded replies + counts** — `comment_likes` table + `toggle_comment_like` advisory-lock RPC; `comments.parent_id` (single-level) + `reply_count`; `POST /recipes/:id/comments/:commentId/like`; replies via `parentId`. CommentsSheet: tappable hearts (likedByMe), reply composer, nested rendering; counts public. (migration `…210000_comment_social.sql`)
+- **Video sound + autoplay setting** — VideoPlayer reads global `muted`/`autoplay` (zustand + localStorage); unmute button on the video; new app **Settings sheet** (gear → Autoplay / Start-with-sound toggles + Log out). Autoplay-off ⇒ active card waits for a tap.
+- **Forgot password** — `useAuth.resetPassword`/`updatePassword`; "Forgot password?" → reset-request view; `PASSWORD_RECOVERY` deep-link → `ResetPasswordScreen` (strong-password rules). Verified via Mailpit → recovery link → new password → login.
+- **Editable phone** — confirmed round-trips (EditProfileSheet → `PATCH /me` → `profiles.phone`).
+- **Post reporting** — `reports` table (one per user/recipe) + RLS; `POST /recipes/:id/report` (category nudity/harassment/violence/spam/other, idempotent). Post "…" → **MoreSheet** (Report always; **Post controls only for the owner**) → ReportSheet reason picker.
+- **Admin dashboard + verification + bans** (`…230000_admin.sql`) — `profiles.role/verified_tier/banned`; **guard trigger** blocks authenticated JWTs from changing privileged columns (service-role/admin only); `branden574@gmail.com` auto-admin on signup. Follower **milestone trigger**: 100k → blue, 1M → animated gold (sticky, notifies admins). `requireAdmin`/`requireNotBanned` middleware; banned users' writes 403 + content hidden from feeds (buildCards drops banned cooks). Admin API (`/admin/*`): stats, report queue (dismiss / remove-post), user mgmt (verify None/Blue/Gold, ban/unban, admin-protected). Web `AdminDashboard` gated to `me.role==='admin'`.
+- **Verification badges** — `VerifiedBadge` (blue seal / animated gold via `sz-gold-shine` keyframe) on feed cards, cook profile, own profile, recipe detail, admin list.
+- **Hashtags + algorithm** (`…240000_hashtags.sql`) — `recipes.tags text[]` (GIN) + `caption`, parsed via `services/hashtags.ts` (shared normalization write+read). Clickable `#tags` on cards + recipe detail → **HashtagSheet** feed; `GET /feed/tag/:tag`, `GET /feed/trending-tags`; Discover trending chips; `#tag` (and plain-text→tag) search. **Ranker**: new `tagAffinity` signal (engagement with a tag boosts same-tagged posts; weight 4.0) — verified a liked tag lifted a same-tagged post to #1. Upload caption field for hashtags.
+- **4K / 30-min uploads** — provider `maxDurationSeconds` 120 → 1800; server rejects >30-min (400); storage `file_size_limit` 150MiB → **5GiB**; shared `MAX_DURATION_SECONDS`/`MAX_UPLOAD_BYTES`/`MAX_VIDEO_LONG_SIDE`; client size/duration guards; copy "Up to 30 min · 4K".
+
+---
+
+## Moderation, ban lifecycle, reposts, scrubber — 2026-06-20 (verified API + DB + in-browser)
+
+**Security fixes (from an adversarial review of the prior batch):**
+- **Profile column-lock** (`…250000_profile_column_lock.sql`) — `REVOKE UPDATE ON profiles FROM authenticated` + `GRANT UPDATE (display_name, handle, bio, avatar_url, banner_url, phone, tastes)`. Closes a real hole: a user could `PATCH /rest/v1/profiles` their own `follower_count` directly and the milestone trigger (which fires *after* the guard trigger, alphabetically) would self-grant them a gold badge. Verified the exploit now returns `permission denied`; legit edits still 204.
+- **Ban enforcement** — added `requireNotBanned` to report / like / dislike / save / view / comment-like and DELETE follow (were ungated).
+- **Admin bootstrap** (`branden574@gmail.com` auto-admin) kept per request; **flagged**: enable email confirmation in production so the email is verified before admin is granted (or seed admin by `auth.users.id`).
+
+**Moderation queue + appeals (`…260000_moderation_repost.sql`):**
+- Reports only surface to the admin once a post has **≥5 distinct reporters** (queue aggregates per-recipe with a category breakdown). Each entry: **View video**, **Mark false**, **Remove** (with reason).
+- Removed posts (`status='removed'` + `removal_reason`) stay on the **owner's** profile with a "Video removed: reason" overlay; the recipe detail shows the reason + an **appeal** composer. Admin **Appeals** tab → **Restore** (republish) or **Deny**. Owner notified in-app on remove/restore.
+- Accounts auto-**flagged** at >100 total reports (admin filter + ⚑ indicator).
+
+**Ban → 45-day delete lifecycle:**
+- Ban is immediate (`banned=true`) and sets `delete_at = now + 45 days`; the admin user card shows a live **"wipes in N days"** countdown + reason. Banned user gets a full-screen suspension screen with reason + countdown + **appeal**; admin sees ban appeals. Unban clears everything.
+- **Auto-wipe**: `purge_expired_accounts()` deletes `auth.users` past `delete_at` (cascades all data), scheduled **daily via pg_cron** (`sizzle-purge-expired`); admin also has a "Run purge" button. Verified a past-due ban is fully wiped. *(Real email-on-ban needs an email provider — flagged.)*
+
+**Reposts (TikTok-style, `reposts` table):**
+- Post "…" → **Repost** → optional quote comment. Reposts surface **only to mutual-follow friends** (you follow them and they follow you), merged into the **Following** feed with a "↻ Reposted by X · comment" header. Verified: a mutual sees it, a one-way follower does not.
+
+**Video scrubber** — `VideoPlayer` draws a progress bar just above the nav; pointer-drag seeks (smooth + accurate, time label while scrubbing), `stopPropagation` so it doesn't toggle play/pause. Verified a drag to 50% jumps to the midpoint.
+
+**Admin extras (`…270000_admin_extras.sql`):**
+- **Auto-hide** at **20 distinct reporters** (`recipes.auto_hidden`) — hidden from public feeds (one report per person is enforced by `unique(recipe_id, reporter_id)`, so 20 = 20 people); owner sees an "Under review" overlay; admin queue chips it; Mark-false / Remove clear it. Verified end-to-end.
+- **Audit log** (`moderation_log`) — every admin action (remove/restore/mark-false/deny/ban/unban/verify) + system auto-hide recorded; **Log** tab in the dashboard. `GET /admin/log`.
+- **Repeat-offender** — accounts with ≥3 removed videos surfaced (chip + flagged filter). **Reporter-abuse throttle** — a user with ≥5 dismissed-as-false reports is blocked from new reports (403). Verified.
+
+**Second adversarial review — all confirmed findings fixed + verified:**
+- HIGH: a **banned admin kept full admin powers** (admin gate never checked `banned`) → added `requireNotBanned` to the admin chain.
+- HIGH: `/me/saved` **leaked a removed post's moderation reason** to a non-owner who'd saved it → `buildCards` now drops removed/auto-hidden posts for non-owners (closes the whole class).
+- MEDIUM: **PostgREST filter injection** in `/admin/users` search → strip `, . ( ) * : \` too.
+- HIGH: **Following-feed pagination gap** (reposts displaced recipes, then the cursor skipped them) → reposts are now additive, never sliced against the recipe page.
+
+**Follow lists, repost discoverability, count consistency + a 3rd review:**
+- **Repost button** added to the feed rail (was only in the "…" menu).
+- **Followers / Following are tappable** → a list sheet of the actual accounts (badge + tap-through). New `GET /cooks/:id/{followers,following}`; seed now creates cross-follows so the lists have content.
+- **Count consistency** — `/me` now reads the denormalized `follower_count`/`following_count` (matching the cook profile + badge) instead of live follows-table counts, so a verified cook no longer shows "0 followers".
+- Whole-codebase audit (rate-limited mid-run) confirmed + fixed: **reporter-abuse throttle was permanent** (a single admin bulk-dismiss penalized every honest reporter) → now a rolling 30-day window; **`profiles.total_likes` was never updated** on the live like path → `toggle_reaction` now maintains it + backfilled.
+- **Error boundary** added (per-feed-card + app-level) so one bad component can't white-screen the app.
+
+---
+
+## Onboarding, foodie reviews, immersive UI, landscape video — 2026-06-20 (verified API + DB + in-browser)
+
+- **Onboarding rework** — following cooks is now **optional** (step 2 always continues; CTA reads "Skip for now"). Suggested cooks are the platform's **top 5 by follower count** (`/cooks/suggested` sorts by `follower_count`, taste overlap is a tiebreaker only) and each card shows the cook's **follower count**. `SuggestedCook` DTO gained `followers`. Verified via curl (Dev Anand 401k → Theo 308k → …). Added **Halal / Kosher / Soul food** to the "what makes you hungry" taste grid.
+- **Foodie reviews** (`…290000_post_type.sql`) — `recipes.post_type ('recipe'|'review')` + optional `rating smallint (1–5)` with CHECKs (rating only on a review). Upload composer has a **Recipe / Food review** segmented toggle: reviews swap ingredients/method for a **★ star picker** + review text, and drop time/serves. Feed card + RecipeSheet show a **★ Review** badge with the rating; "View review" CTA. Create endpoint validates (`rating` on a recipe → 400). Seed marks ~1 in 5 posts a review. Verified all three create paths + DB constraints via curl.
+- **Hold-to-hide immersive UI** — a **long-press** on a feed card toggles `immersive` (zustand): all overlays (rail, cook info, more/mute/rotate buttons, scrubber, gradient, For-You/Following tabs) fade out and the **bottom nav slides off-screen** for distraction-free full-screen viewing; long-press again restores. Resets on tab/feed switch. Verified in-browser (overlays → opacity 0, nav → translateY(100%)).
+- **Landscape video** — `VideoPlayer` detects intrinsic aspect; landscape clips are **letterboxed** (`contain`, no crop) and get a **rotate-to-full-screen** button that rotates the video 90° to fill the portrait viewport (the "turn your phone" experience), un-rotating when the card scrolls away. Upload preview adapts its aspect/fit to the picked clip; copy now reads "Portrait or landscape · up to 30 min · 4K". Verified in-browser with a real landscape clip.
+- **Asymmetric follow seed** — the seed previously made every cook follow every other (complete graph) so a cook's *followers* list equalled their *following* list. Now each cook follows the **next 3 cooks (mod n)**, so the two lists differ (e.g. theocooks follows {devheat, lilamoreno, sorabakes} but is followed by {devheat, minapark, sorabakes}) while keeping mutual pairs for reposts. Verified via the `/cooks/:id/{followers,following}` endpoints.
+
+> Note: the shared preview browser is currently signed into a seeded **theo** account (leftover from earlier test sign-ins). To use the real admin, sign in as **branden574@gmail.com** (confirmed `role='admin'` in the DB).
+
+---
+
+## Bug fixes, dark mode, expanded settings — 2026-06-20 (verified in-browser + adversarial review)
+
+**Bug fixes (reported + found via a 5-agent diagnosis workflow):**
+- **Sheet "opens behind"** — tapping a recipe inside the Hashtag feed (and Cook profile, and Admin "View video") opened RecipeSheet *behind* the opaque launcher. Root cause: RecipeSheet zIndex 80 < those sheets. Fixed by raising RecipeSheet to **97** and CommentsSheet to **98** (so comments open above a recipe). Verified hashtag→recipe→comments stacks correctly.
+- **RecipeSheet action bar overlap** — the scroll content (zIndex 2) painted over the un-z-indexed bottom bar, and its gradient was half-transparent, so Save/Download bled behind the ingredients. Fixed: bar `zIndex 4` + solid `var(--bg)` + a 24px top feather.
+- **Video "not playing in background"** — my landscape `objectFit:contain` letterboxed every (landscape sample) feed clip into a black band, and a play()/src race left the active card paused. Fixed: feed uses `cover` (full-bleed; rotate button still reveals the full landscape frame), and the autoplay effect now keys on `[active,autoplay,src]` with a `canplay` retry.
+- **Other QA fixes**: dead **Share** button → native share / clipboard; **Comments** entry added to RecipeSheet; **repost is now toggleable** (`viewer.reposted` added to the DTO + mapper reads the reposts table; feed button shows active state + un-reposts); **Edit profile** re-seeds state when `me` loads (no more wiping the profile from a cold cache) and blocks empty/<2-char handle; **notifications** mark-read only when there's something unread.
+
+**Dynamic Light / Dark / System theme:**
+- A semantic **CSS-variable token system** in `index.css` (`--bg/--surface/--surface-2,3/--text/--text-2/-muted/-soft/-faint/-faint-2/--line*/--track/--invert-bg,-fg/--warn-bg/--danger-bg/--nav-bg/--accent/--feed-bg/--scrim`), light defaults byte-identical to the prototype, dark overrides under `.sz-stage[data-theme="dark"]`. `theme.ts` tokens now resolve to `var(--…)`.
+- Store gains a persisted **`theme: 'system'|'light'|'dark'`** pref; `App.tsx` resolves it (a `prefers-color-scheme` matchMedia listener tracks the OS live for "System"), sets `data-theme` on the stage, makes the status-bar/home-indicator glyphs theme-aware, and updates the `<meta name=theme-color>`.
+- ~360 inline hex colors across **31 files** migrated to tokens via a 16-agent workflow (feed/video/upload stay intentionally dark). An adversarial review found 13 residual issues (cream gradient fades over dark bg, a few admin chips, low-contrast moderation text, a video mute/pause regression, etc.) — **all fixed**. Verified both modes in-browser; light mode unchanged.
+
+**Expanded profile settings** (`AppSettingsSheet`): Appearance (System/Light/Dark) · Reduce motion (wired to a `.sz-reduce-motion` class) · Autoplay · Start with sound · Default feed (For You/Following) · Clear downloaded recipes · Log out · version.
+
+---
+
+## Cook Mode · serving scaler · collections · shopping list — 2026-06-20 (verified in-browser + curl)
+
+A user-requested batch of four recipe-utility features. Ingredient amounts are parsed **client-side** from the existing free-text lines (`lib/ingredients.ts`: leading qty + unit + name, handles fractions/unicode/units; `scaleIngredient`/`formatQuantity`) — no schema change needed.
+
+- **Serving scaler** — a **½× / 1× / 2×** control on the RecipeSheet Ingredients header recomputes every ingredient's quantity (lines with no number are left alone) and the "Serves" stat. Verified: 1× → 2× doubled "1 nest wheat noodles" → "2", "2 tbsp chili crisp" → "4", etc.
+- **Cook Mode** (`CookModeSheet`, launched by "▶ Start cooking") — full-screen, one step at a time with progress dots, a **Steps ⇄ Items** toggle (checkable ingredient list), per-step **countdown timers** parsed from step text ("simmer 10 min"), and the **Screen Wake Lock API** so the phone won't sleep mid-cook (re-acquired on tab refocus).
+- **Saved Collections** (cookbooks) — `…300000_collections.sql` (`collections` + `collection_recipes`, RLS owner-only). API on `/me/collections` (list with counts + cover + `hasRecipe`, create, delete, add/remove recipe, list recipes). A **"📁 Save to…"** picker (create + multi-toggle membership) on RecipeSheet; a **Collections** row in the Saved tab → `CollectionSheet` grid → recipe; delete. Full CRUD curl-verified.
+- **Shopping list** (`lib/shopping.ts`, zustand+localStorage) — **"🛒 Shopping list"** on RecipeSheet adds the (scaled) ingredients, deduped per recipe; a **🛒 List** entry in the Saved tab opens `ShoppingListSheet` — items grouped by recipe, checkable, remove, Clear checked / Clear all.
+
+Bug found + fixed during testing: the collection picker (z95) opened *behind* RecipeSheet (z97) — raised to z100. All four verified in dark mode.
+
+A follow-up adversarial review (15 agents) found 7 real issues in the new code — all fixed: ingredient ranges ("2-3 sprigs") no longer mangled by the scaler; `formatQuantity` fraction-snap tightened (0.1 no longer shows ⅛); shopping-list ids made unique + re-adding a recipe replaces its prior lines (no dup/collision); Cook Mode timer side-effects moved out of the state updater; moderation-banner text given `--danger-fg`/`--warn-fg` tokens for dark-mode contrast. Also fixed: `useVerifyUser` now invalidates `me` so an admin granting *themselves* a check sees their badge update live.
+
+---
+
+## In-app camera recorder + permissions — 2026-06-20
+
+- **Record straight from the app** (`CameraRecorder.tsx`, launched from the Upload sheet's "Record a video"). Requests **camera + microphone** via `getUserMedia` (the browser's native permission prompt) with a privacy-respectful rationale card for the prompt/denied/unsupported states and a "Use library" fallback. **No tracking** — copy states nothing is recorded or stored until you post; the camera is released on close/unmount.
+- **TikTok-style capture**: **hold** the button to record while held, or **tap** for hands-free and tap again to stop — either way you can **stop and keep going**; segments accumulate into one continuous clip via `MediaRecorder` pause/resume. Segmented progress bar, elapsed/60s cap, flip front/back camera, Retake, Done. The recorded `File` flows into the existing probe → upload pipeline (so duration/4K limits + landscape handling all apply). Library upload remains as the alternative.
+- **Permission UX hardened** (after the user hit a dead "Allow camera"): request is now on a **user gesture** (not on mount — iOS Safari only prompts from a gesture and re-prompts only after a tap), opens to a "Record your dish" rationale first, and on failure shows the **specific** `getUserMedia` error with steps (blocked → "tap the address-bar camera/lock icon → Allow → Try again"; no camera; camera-in-use; insecure context) instead of silently re-denying.
+- **Demo camera fallback**: the embedded preview pane (and any blocked context) returns `NotAllowedError`, so a "Demo camera" button feeds a **synthetic animated canvas + quiet tone** through the *identical* MediaRecorder pipeline. This makes the whole record → segment → finalize → upload flow testable anywhere; real recording still uses the real camera when granted.
+- **Verified end-to-end via the demo camera**: tapped record (hands-free), recorded, hit Done → produced a `File` → it showed as the composer's video preview → posted → uploaded to Supabase storage (`mp4_url`, 60s, status `ready`) → recipe created. (Test artifact deleted afterward.)
+- **For a future native build** (Capacitor/wrapper): add the OS permission strings — iOS `NSCameraUsageDescription`, `NSMicrophoneUsageDescription`, `NSPhotoLibraryUsageDescription`; Android `CAMERA`, `RECORD_AUDIO`, media permissions. On the web these are handled by the browser at `getUserMedia`/file-input time.
+
+---
+
 ## Phase 1 — slice tracker
 
 Phase 1 is being built in slices. Each slice keeps the app runnable.
@@ -89,12 +199,19 @@ An early, heuristic slice of the Phase 4 ranking design (the cold-start front-ha
 - `GET /feed/for-you` gives an authed viewer with tastes a **taste-boosted cold-start** ordering (taste-match-first, then recency).
 - Verified: pick *Japanese + Spicy* → Step 2 surfaces Dev/Mina/Lila → follow → signup → follow persists → Following feed shows that cook; For You leads with taste-matching recipes.
 
-### ➕ Instagram-style metric privacy  *(done — verified)*
-- Like / dislike / comment / share **count numbers are visible only to the recipe's creator**. Viewers + guests see the actions (Like / No / icons) but not the totals. Driven by a per-viewer `controls.countsVisible = (viewer === cook)` on every RecipeCard (`apps/api/src/mappers.ts`).
-- Applies to: feed rail, Discover tiles, comments-sheet header. Comments themselves stay readable/postable by everyone (IG keeps the thread public — only the metrics are hidden). Cook **profile** aggregates (followers/likes) are left public, like IG follower counts.
-- Verified: viewer feed shows "Like"/"No" + bare icons; creator sees full counts on their own posts only.
+### ➕ Public engagement counts + per-post hide toggle  *(done — verified)*
+- Like / dislike / comment / **save** / share **count numbers are visible to everyone** (incl. guests) on posts — per the product decision to surface engagement publicly. `DEFAULT_CONTROLS.countsVisible = true` for all viewers (`apps/api/src/mappers.ts`).
+- A creator can still hide counts on an individual post via the per-post **"Show counts"** control (client-local `postSettings[id].hideCount`); the rail then shows action labels (Like / No / Save) instead of totals.
+- Save totals are denormalized (`recipes.save_count` + `adjust_save_count` RPC) and seeded, so cards show realistic save numbers.
+- (Earlier this was creator-only "Instagram-style"; reversed on request so all metrics are public.)
 
-Deferred polish / later phases: real HLS **video playback** (cards show poster + play affordance; player is a follow-up), scroll-to-top after posting, onboarding **cook-follow** replay (follows work everywhere in-app), and **comments** (local-only until Phase 2).
+### ➕ Video playback + real upload  *(done — verified in-browser)*
+- **Playback:** new `VideoPlayer` (`apps/web/src/components/VideoPlayer.tsx`) plays the active feed card. HLS (`.m3u8`, seeded mock-provider clips) uses **hls.js** (lazy-loaded, code-split) where the browser lacks native HLS; **MP4** (user uploads) plays natively. Active card (≥60% on screen, via the card's IntersectionObserver) autoplays muted+looped; off-screen cards pause; **tap toggles** play/pause with a play overlay. Source selection prefers `mp4Url` then `hlsUrl`.
+- **Real upload:** Upload sheet now picks a clip (`<input type=file accept=video/*>`), shows a live preview, captures a poster frame + duration client-side (`probeVideo`), uploads the clip + poster to a public, owner-scoped **`videos`** Storage bucket (`uploadVideo`/`uploadPoster`), then registers it via `POST /uploads/video {uploadedUrl,posterUrl,durationSeconds}` → a `provider:'storage'`, `status:'ready'` `video_asset` with `mp4_url`. The mock provider still supplies sample HLS for seeded recipes.
+- Schema: migration `20260620200000_video_storage.sql` adds `video_assets.mp4_url` + the `videos` bucket/RLS; `VideoAssetDTO.mp4Url` carries it to the client.
+- Verified: seeded cards stream HLS via hls.js (exactly one playing at a time, handoff on scroll, tap pause/resume); an uploaded recipe plays its MP4 natively; production build clean (hls.js split into its own chunk).
+
+Deferred polish / later phases: scroll-to-top after posting, onboarding **cook-follow** replay (follows work everywhere in-app).
 
 ---
 
@@ -107,9 +224,15 @@ Deferred polish / later phases: real HLS **video playback** (cards show poster +
 | API: `/health`, `/me`, `/me/tastes`, `/me/saved` | **Real** |
 | API: feeds, recipe detail, `POST /recipes`, like/dislike/save, follow, cook profile, uploads | **Real** (verified against Postgres) |
 | **Web** feeds/discover/saved/profile/recipe/cook | **Real** (TanStack Query + optimistic mutations) |
-| Video upload (metadata + asset) | **Real**; playback is poster-only (HLS player is a follow-up) |
+| Video playback (feed) | **Real** — HLS via hls.js + native MP4; active card autoplays, tap to pause |
+| Video upload (pick clip → Storage → recipe) | **Real** — `videos` bucket + poster capture; mock HLS still backs seeded recipes |
 | Onboarding tastes | Persisted via `/me/tastes` on first auth; cook-follow replay deferred |
-| Comments | Local-only (Phase 2) |
+| Comments (likes, threaded replies, counts) | **Real** — server-backed; tappable hearts + reply composer |
+| Hashtags (parse, clickable feed, search, trending, ranking signal) | **Real** — `tags text[]` + GIN; X-style tag affinity in the ranker |
+| Reporting + Admin dashboard (verify / ban / report queue) | **Real** — admin-gated; RLS-hardened privileged columns; milestone badges |
+| Verification badges (blue 100k / animated gold 1M) | **Real** — auto via follower trigger + manual admin override |
+| Forgot password + app Settings (autoplay / sound) | **Real** — Supabase recovery flow; client-persisted playback prefs |
+| Upload limits | 4K · up to 30 min (storage 5GiB; provider cap 1800s) |
 
 ---
 

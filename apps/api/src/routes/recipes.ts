@@ -1,13 +1,15 @@
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import type { CommentDTO, RecipeDetail } from '@sizzle/shared';
-import { optionalAuth, requireAuth } from '../middleware/auth';
+import { optionalAuth, requireAuth, requireNotBanned } from '../middleware/auth';
 import { supabaseAdmin } from '../lib/supabase';
-import { badRequest, dbFail, notFound } from '../lib/errors';
+import { badRequest, dbFail, forbidden, notFound } from '../lib/errors';
 import { assertUuid } from '../lib/validate';
 import { buildCards, commentDTO, type CommentRow, type ProfileRow, type RecipeRow } from '../mappers';
 import { rateLimit } from '../middleware/rateLimit';
 import { moderateText } from '../services/moderation';
+import { parseHashtags } from '../services/hashtags';
+import { logModeration } from '../services/audit';
 import { notify } from '../services/notify';
 import type { AppEnv } from '../types';
 
@@ -18,8 +20,13 @@ async function getRecipeDetail(viewerId: string | undefined, recipeId: string): 
   const { data: row, error } = await supabaseAdmin.from('recipes').select('*').eq('id', recipeId).maybeSingle();
   if (error) throw dbFail(error.message);
   if (!row) return null;
-  // Drafts / removed recipes are visible only to their owner.
-  if (row.status !== 'published' && row.cook_id !== viewerId) return null;
+  // Drafts / removed recipes are visible only to their owner — and to admins
+  // (so the moderation "view video" action works).
+  if (row.status !== 'published' && row.cook_id !== viewerId) {
+    if (!viewerId) return null;
+    const { data: viewer } = await supabaseAdmin.from('profiles').select('role').eq('id', viewerId).maybeSingle();
+    if (viewer?.role !== 'admin') return null;
+  }
 
   const [card] = await buildCards(supabaseAdmin, viewerId, [row as RecipeRow]);
   if (!card) return null;
@@ -31,6 +38,7 @@ async function getRecipeDetail(viewerId: string | undefined, recipeId: string): 
 
   return {
     ...card,
+    caption: (row.caption as string | null) ?? null,
     ingredients: (ings ?? []).map((i) => i.text as string),
     steps: (steps ?? []).map((s) => s.text as string),
   };
@@ -52,6 +60,12 @@ const createSchema = z.object({
   level: z.string().max(20).default('Easy'),
   ingredients: z.array(z.string().min(1)).max(40).default([]),
   steps: z.array(z.string().min(1)).max(40).default([]),
+  caption: z.string().max(600).optional(),
+  postType: z.enum(['recipe', 'review']).default('recipe'),
+  rating: z.number().int().min(1).max(5).optional(),
+}).refine((v) => v.postType === 'review' || v.rating === undefined, {
+  message: 'rating is only allowed on a review',
+  path: ['rating'],
 });
 
 const POSTER_GRADIENTS = [
@@ -63,13 +77,13 @@ const POSTER_GRADIENTS = [
 ];
 
 /** POST /recipes — create recipe metadata after a video upload is registered. */
-recipes.post('/', requireAuth, rateLimit({ windowMs: 60_000, max: 20, name: 'recipe-create' }), async (c) => {
+recipes.post('/', requireAuth, requireNotBanned, rateLimit({ windowMs: 60_000, max: 20, name: 'recipe-create' }), async (c) => {
   const userId = c.get('userId')!;
   const parsed = createSchema.safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) throw badRequest('Invalid recipe payload', parsed.error.flatten());
   const input = parsed.data;
 
-  const mod = moderateText(input.title, input.cuisine, input.ingredients, input.steps);
+  const mod = moderateText(input.title, input.cuisine, input.ingredients, input.steps, input.caption ?? '');
   if (!mod.ok) throw badRequest(mod.reason!);
 
   // The video asset must exist and belong to this user.
@@ -81,6 +95,7 @@ recipes.post('/', requireAuth, rateLimit({ windowMs: 60_000, max: 20, name: 'rec
   if (!asset || asset.owner_id !== userId) throw badRequest('Unknown or unowned video asset');
 
   const bg = POSTER_GRADIENTS[Math.abs(hash(input.title)) % POSTER_GRADIENTS.length]!;
+  const tags = parseHashtags(input.caption, input.title);
 
   const { data: recipe, error } = await supabaseAdmin
     .from('recipes')
@@ -93,6 +108,10 @@ recipes.post('/', requireAuth, rateLimit({ windowMs: 60_000, max: 20, name: 'rec
       level: input.level,
       bg,
       video_asset_id: input.videoAssetId,
+      caption: input.caption ?? null,
+      tags,
+      post_type: input.postType,
+      rating: input.postType === 'review' ? (input.rating ?? null) : null,
       status: 'published',
     })
     .select('id')
@@ -146,7 +165,7 @@ async function recipeCookId(recipeId: string): Promise<string> {
   return data.cook_id as string;
 }
 
-recipes.post('/:id/like', requireAuth, async (c) => {
+recipes.post('/:id/like', requireAuth, requireNotBanned, async (c) => {
   const id = c.req.param('id');
   const userId = c.get('userId')!;
   const cookId = await recipeCookId(id);
@@ -155,7 +174,7 @@ recipes.post('/:id/like', requireAuth, async (c) => {
   return reactionResponse(c, id, userId);
 });
 
-recipes.post('/:id/dislike', requireAuth, async (c) => {
+recipes.post('/:id/dislike', requireAuth, requireNotBanned, async (c) => {
   const id = c.req.param('id');
   const userId = c.get('userId')!;
   await recipeCookId(id);
@@ -164,7 +183,7 @@ recipes.post('/:id/dislike', requireAuth, async (c) => {
 });
 
 /** POST /recipes/:id/save — toggle saved. */
-recipes.post('/:id/save', requireAuth, async (c) => {
+recipes.post('/:id/save', requireAuth, requireNotBanned, async (c) => {
   const id = c.req.param('id');
   const userId = c.get('userId')!;
   await recipeCookId(id);
@@ -210,7 +229,7 @@ const viewSchema = z.object({
 });
 
 /** POST /recipes/:id/view — log a watch event (powers ranking). */
-recipes.post('/:id/view', requireAuth, rateLimit({ windowMs: 60_000, max: 90, name: 'view' }), async (c) => {
+recipes.post('/:id/view', requireAuth, requireNotBanned, rateLimit({ windowMs: 60_000, max: 90, name: 'view' }), async (c) => {
   const id = c.req.param('id');
   const userId = c.get('userId')!;
   const body = viewSchema.safeParse(await c.req.json().catch(() => null));
@@ -226,21 +245,25 @@ recipes.post('/:id/view', requireAuth, rateLimit({ windowMs: 60_000, max: 90, na
   return c.json({ ok: true });
 });
 
-const commentSchema = z.object({ text: z.string().trim().min(1).max(600) });
+const commentSchema = z.object({
+  text: z.string().trim().min(1).max(600),
+  parentId: z.string().uuid().optional(),
+});
 
-/** GET /recipes/:id/comments — newest first. */
+/** GET /recipes/:id/comments — top-level comments (newest first) with nested replies. */
 recipes.get('/:id/comments', optionalAuth, async (c) => {
   const id = assertUuid(c.req.param('id'), 'recipe');
+  const viewerId = c.get('userId');
   // Only expose comments on recipes the viewer can see.
   const { data: rec } = await supabaseAdmin.from('recipes').select('status, cook_id').eq('id', id).maybeSingle();
-  if (!rec || (rec.status !== 'published' && rec.cook_id !== c.get('userId'))) throw notFound('Recipe not found');
+  if (!rec || (rec.status !== 'published' && rec.cook_id !== viewerId)) throw notFound('Recipe not found');
 
   const { data: rows, error } = await supabaseAdmin
     .from('comments')
     .select('*')
     .eq('recipe_id', id)
     .order('created_at', { ascending: false })
-    .limit(100);
+    .limit(400);
   if (error) throw dbFail(error.message);
   const list = (rows ?? []) as CommentRow[];
   if (list.length === 0) return c.json<CommentDTO[]>([]);
@@ -248,11 +271,38 @@ recipes.get('/:id/comments', optionalAuth, async (c) => {
   const authorIds = [...new Set(list.map((r) => r.author_id))];
   const { data: authors } = await supabaseAdmin.from('profiles').select('*').in('id', authorIds);
   const authorMap = new Map<string, ProfileRow>((authors ?? []).map((a) => [a.id as string, a as ProfileRow]));
-  return c.json<CommentDTO[]>(list.map((r) => commentDTO(r, authorMap.get(r.author_id))));
+
+  // Which of these comments has the viewer liked?
+  const likedSet = new Set<string>();
+  if (viewerId) {
+    const { data: likes } = await supabaseAdmin
+      .from('comment_likes')
+      .select('comment_id')
+      .eq('user_id', viewerId)
+      .in('comment_id', list.map((r) => r.id));
+    for (const l of likes ?? []) likedSet.add(l.comment_id as string);
+  }
+
+  const dto = (r: CommentRow) => commentDTO(r, authorMap.get(r.author_id), likedSet);
+  // Group replies under their parent. `list` is newest-first; reverse each
+  // group so replies read oldest-first under the parent (top-level stays newest).
+  const repliesByParent = new Map<string, CommentDTO[]>();
+  for (const r of list) {
+    if (!r.parent_id) continue;
+    const arr = repliesByParent.get(r.parent_id);
+    if (arr) arr.push(dto(r));
+    else repliesByParent.set(r.parent_id, [dto(r)]);
+  }
+  for (const arr of repliesByParent.values()) arr.reverse();
+
+  const top = list
+    .filter((r) => !r.parent_id)
+    .map((r) => ({ ...dto(r), replies: repliesByParent.get(r.id) ?? [] }));
+  return c.json<CommentDTO[]>(top);
 });
 
-/** POST /recipes/:id/comments — add a comment, bump the count, notify the cook. */
-recipes.post('/:id/comments', requireAuth, rateLimit({ windowMs: 60_000, max: 30, name: 'comment' }), async (c) => {
+/** POST /recipes/:id/comments — add a comment or a reply, bump counts, notify. */
+recipes.post('/:id/comments', requireAuth, requireNotBanned, rateLimit({ windowMs: 60_000, max: 30, name: 'comment' }), async (c) => {
   const id = c.req.param('id');
   const userId = c.get('userId')!;
   const parsed = commentSchema.safeParse(await c.req.json().catch(() => null));
@@ -261,17 +311,153 @@ recipes.post('/:id/comments', requireAuth, rateLimit({ windowMs: 60_000, max: 30
   if (!mod.ok) throw badRequest(mod.reason!);
   const cookId = await recipeCookId(id);
 
+  // A reply must target a top-level comment on the same recipe.
+  let parentId: string | null = null;
+  let parentAuthor: string | null = null;
+  if (parsed.data.parentId) {
+    const { data: parent } = await supabaseAdmin
+      .from('comments')
+      .select('id, recipe_id, parent_id, author_id')
+      .eq('id', parsed.data.parentId)
+      .maybeSingle();
+    if (!parent || parent.recipe_id !== id || parent.parent_id) throw badRequest('Invalid parent comment');
+    parentId = parent.id as string;
+    parentAuthor = parent.author_id as string;
+  }
+
   const { data: row, error } = await supabaseAdmin
     .from('comments')
-    .insert({ recipe_id: id, author_id: userId, text: parsed.data.text })
+    .insert({ recipe_id: id, author_id: userId, text: parsed.data.text, parent_id: parentId })
     .select('*')
     .single();
   if (error || !row) throw dbFail(error?.message ?? 'Failed to add comment');
+
   await supabaseAdmin.rpc('adjust_comment_count', { rid: id, delta: 1 });
-  await notify({ userId: cookId, type: 'comment', actorId: userId, recipeId: id });
+  if (parentId) {
+    await supabaseAdmin.rpc('adjust_comment_reply_count', { cid: parentId, delta: 1 });
+    // Notify the comment author of the reply (fall back to the cook for top-level).
+    if (parentAuthor) await notify({ userId: parentAuthor, type: 'comment', actorId: userId, recipeId: id });
+  } else {
+    await notify({ userId: cookId, type: 'comment', actorId: userId, recipeId: id });
+  }
 
   const { data: author } = await supabaseAdmin.from('profiles').select('*').eq('id', userId).single();
   return c.json<CommentDTO>(commentDTO(row as CommentRow, (author ?? undefined) as ProfileRow | undefined), 201);
+});
+
+/** POST /recipes/:id/comments/:commentId/like — toggle a like on a comment. */
+recipes.post('/:id/comments/:commentId/like', requireAuth, requireNotBanned, rateLimit({ windowMs: 60_000, max: 90, name: 'comment-like' }), async (c) => {
+  const userId = c.get('userId')!;
+  const commentId = assertUuid(c.req.param('commentId'), 'comment');
+
+  const { data: liked, error } = await supabaseAdmin.rpc('toggle_comment_like', { p_user: userId, p_comment: commentId });
+  if (error) throw dbFail(error.message);
+  const { data: row } = await supabaseAdmin.from('comments').select('like_count').eq('id', commentId).maybeSingle();
+  return c.json({ liked: !!liked, likes: row?.like_count ?? 0 });
+});
+
+const reportSchema = z.object({
+  category: z.enum(['nudity', 'harassment', 'violence', 'spam', 'other']),
+  reason: z.string().trim().max(500).optional(),
+});
+
+/** Distinct reporters before a post is auto-hidden pending admin review. */
+const AUTOHIDE_THRESHOLD = 20;
+/** Dismissed-as-false reports before a user's reporting is throttled. */
+const REPORTER_ABUSE_THRESHOLD = 5;
+
+/** POST /recipes/:id/report — flag a recipe for moderation (one per user). */
+recipes.post('/:id/report', requireAuth, requireNotBanned, rateLimit({ windowMs: 60_000, max: 15, name: 'report' }), async (c) => {
+  const id = c.req.param('id');
+  const userId = c.get('userId')!;
+  const parsed = reportSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) throw badRequest('Invalid report');
+  await recipeCookId(id); // 404s on a non-existent recipe + validates the id
+
+  // Reporter-abuse throttle: too many of this user's RECENT reports were
+  // dismissed as false. A 30-day rolling window keeps this genuinely temporary
+  // and lets old dismissals (incl. mass post-clears that weren't the reporter's
+  // fault) age out, rather than permanently barring good-faith reporters.
+  const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
+  const { count: falseCount } = await supabaseAdmin
+    .from('reports')
+    .select('*', { count: 'exact', head: true })
+    .eq('reporter_id', userId)
+    .eq('status', 'dismissed')
+    .gte('resolved_at', since);
+  if ((falseCount ?? 0) >= REPORTER_ABUSE_THRESHOLD) throw forbidden('Reporting is temporarily disabled for your account');
+
+  // Idempotent: a repeat report by the same user is a no-op (unique constraint).
+  const { error } = await supabaseAdmin
+    .from('reports')
+    .upsert(
+      { recipe_id: id, reporter_id: userId, category: parsed.data.category, reason: parsed.data.reason ?? null },
+      { onConflict: 'recipe_id,reporter_id', ignoreDuplicates: true },
+    );
+  if (error) throw dbFail(error.message);
+
+  // Auto-hide once a post crosses the high report threshold (pending review).
+  const { count: distinct } = await supabaseAdmin
+    .from('reports')
+    .select('*', { count: 'exact', head: true })
+    .eq('recipe_id', id)
+    .eq('status', 'open');
+  if ((distinct ?? 0) >= AUTOHIDE_THRESHOLD) {
+    const { data: hid } = await supabaseAdmin.from('recipes').update({ auto_hidden: true }).eq('id', id).eq('auto_hidden', false).select('id');
+    if (hid && hid.length) await logModeration({ action: 'auto_hide', targetRecipeId: id, detail: `${distinct} reports` });
+  }
+  return c.json({ ok: true });
+});
+
+const appealSchema = z.object({ text: z.string().trim().min(1).max(600) });
+
+/** POST /recipes/:id/appeal — the owner appeals a removed video. */
+recipes.post('/:id/appeal', requireAuth, rateLimit({ windowMs: 60_000, max: 10, name: 'appeal' }), async (c) => {
+  const id = assertUuid(c.req.param('id'), 'recipe');
+  const userId = c.get('userId')!;
+  const parsed = appealSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) throw badRequest('Appeal text required');
+
+  const { data: rec } = await supabaseAdmin.from('recipes').select('cook_id, status').eq('id', id).maybeSingle();
+  if (!rec || rec.cook_id !== userId) throw notFound('Recipe not found');
+  if (rec.status !== 'removed') throw badRequest('This recipe has not been removed');
+
+  const { error } = await supabaseAdmin
+    .from('recipes')
+    .update({ appeal_status: 'pending', appeal_text: parsed.data.text, appealed_at: new Date().toISOString() })
+    .eq('id', id);
+  if (error) throw dbFail(error.message);
+  return c.json({ ok: true });
+});
+
+const repostSchema = z.object({ comment: z.string().trim().max(600).optional() });
+
+/** POST /recipes/:id/repost — repost a recipe (optional quote comment). */
+recipes.post('/:id/repost', requireAuth, requireNotBanned, rateLimit({ windowMs: 60_000, max: 30, name: 'repost' }), async (c) => {
+  const id = c.req.param('id');
+  const userId = c.get('userId')!;
+  const parsed = repostSchema.safeParse(await c.req.json().catch(() => ({})));
+  const comment = parsed.success ? parsed.data.comment ?? null : null;
+  if (comment) {
+    const mod = moderateText(comment);
+    if (!mod.ok) throw badRequest(mod.reason!);
+  }
+  const cookId = await recipeCookId(id); // 404s / validates id
+
+  const { error } = await supabaseAdmin
+    .from('reposts')
+    .upsert({ user_id: userId, recipe_id: id, comment }, { onConflict: 'user_id,recipe_id' });
+  if (error) throw dbFail(error.message);
+  if (cookId !== userId) await notify({ userId: cookId, type: 'repost', actorId: userId, recipeId: id });
+  return c.json({ reposted: true });
+});
+
+/** DELETE /recipes/:id/repost — undo a repost. */
+recipes.delete('/:id/repost', requireAuth, async (c) => {
+  const id = assertUuid(c.req.param('id'), 'recipe');
+  const userId = c.get('userId')!;
+  await supabaseAdmin.from('reposts').delete().eq('user_id', userId).eq('recipe_id', id);
+  return c.json({ reposted: false });
 });
 
 function hash(s: string): number {
