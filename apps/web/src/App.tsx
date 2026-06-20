@@ -6,6 +6,8 @@ import { Splash } from './components/Splash';
 import { StatusBar } from './components/StatusBar';
 import { CommentsSheet } from './components/sheets/CommentsSheet';
 import { CookSheet } from './components/sheets/CookSheet';
+import { EditProfileSheet } from './components/sheets/EditProfileSheet';
+import { NotificationsSheet } from './components/sheets/NotificationsSheet';
 import { RecipeSheet } from './components/sheets/RecipeSheet';
 import { SettingsSheet } from './components/sheets/SettingsSheet';
 import { UploadSheet } from './components/sheets/UploadSheet';
@@ -54,6 +56,8 @@ export default function App() {
   const commentsFor = useSizzle((s) => s.commentsFor);
   const settingsFor = useSizzle((s) => s.settingsFor);
   const showUpload = useSizzle((s) => s.showUpload);
+  const showNotifications = useSizzle((s) => s.showNotifications);
+  const showEditProfile = useSizzle((s) => s.showEditProfile);
 
   const isOnboarding = phase === 'onboarding';
   const isApp = phase === 'app';
@@ -66,7 +70,7 @@ export default function App() {
   const overlay = showRecipe || showCook;
   let lightStatus: boolean;
   if (showUpload) lightStatus = false;
-  else if (overlay || showComments || showSettings) lightStatus = true;
+  else if (overlay || showComments || showSettings || showNotifications || showEditProfile) lightStatus = true;
   else if (isOnboarding) lightStatus = true;
   else lightStatus = tab !== 'feed';
 
@@ -87,6 +91,8 @@ export default function App() {
           {showSettings && <SettingsSheet />}
           {showCook && <CookSheet />}
           {showUpload && <UploadSheet />}
+          {showNotifications && <NotificationsSheet />}
+          {showEditProfile && <EditProfileSheet />}
 
           <HomeIndicator color={homeIndicator} />
         </div>

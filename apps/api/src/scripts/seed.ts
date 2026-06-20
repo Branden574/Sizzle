@@ -7,7 +7,7 @@
  *
  * Run: `npm run seed` (from repo root) or `npm run seed -w @sizzle/api`.
  */
-import { cooks as mockCooks, recipes as mockRecipes } from '../../../web/src/data';
+import { baseComments, cooks as mockCooks, recipes as mockRecipes } from '../../../web/src/data';
 import { supabaseAdmin } from '../lib/supabase';
 
 const SEED_DOMAIN = '@sizzle.dev';
@@ -132,6 +132,17 @@ async function main() {
         .from('recipe_steps')
         .insert(r.steps.map((text, pos) => ({ recipe_id: recipe.id, position: pos, text })));
     }
+
+    // A few comments per recipe, authored by other cooks (so authors are real).
+    const others = mockCooks.filter((c) => c.id !== r.cook);
+    const comments = baseComments.slice(0, 3).map((b, j) => ({
+      recipe_id: recipe.id,
+      author_id: cookId.get(others[j % others.length]!.id)!,
+      text: b.text,
+      created_at: new Date(now - i * 3_600_000 - (j + 1) * 600_000).toISOString(),
+    }));
+    if (comments.length) await supabaseAdmin.from('comments').insert(comments);
+
     recipeCount++;
   }
   console.log(`• ${recipeCount} recipes`);

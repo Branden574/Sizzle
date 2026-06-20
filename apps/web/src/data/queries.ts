@@ -1,5 +1,5 @@
 import { QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { CookProfile, CreateRecipeInput, DirectUploadTicket, FeedResponse, MeProfile, RecipeCard, RecipeDetail, SuggestedCook } from '@sizzle/shared';
+import type { CommentDTO, CookProfile, CreateRecipeInput, DirectUploadTicket, FeedResponse, MeProfile, NotificationDTO, RecipeCard, RecipeDetail, SearchResults, SuggestedCook } from '@sizzle/shared';
 import { useAuth } from '../auth/useAuth';
 import { apiGet, apiSend } from '../lib/api';
 
@@ -43,6 +43,63 @@ export function useRecipe(id: string | null) {
 
 export function useCook(id: string | null) {
   return useQuery({ queryKey: keys.cook(id ?? ''), queryFn: () => apiGet<CookProfile>(`/cooks/${id}`), enabled: !!id });
+}
+
+export function useComments(recipeId: string | null) {
+  return useQuery({
+    queryKey: ['comments', recipeId],
+    queryFn: () => apiGet<CommentDTO[]>(`/recipes/${recipeId}/comments`),
+    enabled: !!recipeId,
+  });
+}
+
+export function useAddComment(recipeId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (text: string) => apiSend<CommentDTO>('POST', `/recipes/${recipeId}/comments`, { text }),
+    onSuccess: (created) => {
+      qc.setQueryData<CommentDTO[]>(['comments', recipeId], (old) => (old ? [created, ...old] : [created]));
+      void qc.invalidateQueries({ queryKey: ['feed'] }); // comment_count
+    },
+  });
+}
+
+export function useSearch(q: string) {
+  return useQuery({
+    queryKey: ['search', q.trim()],
+    queryFn: () => apiGet<SearchResults>(`/search?q=${encodeURIComponent(q.trim())}`),
+    enabled: q.trim().length > 0,
+  });
+}
+
+export function useNotifications() {
+  const authed = useAuth((s) => s.status === 'authed');
+  return useQuery({
+    queryKey: ['notifications'],
+    queryFn: () => apiGet<NotificationDTO[]>('/me/notifications'),
+    enabled: authed,
+    refetchInterval: 30_000,
+  });
+}
+
+export function useMarkNotificationsRead() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiSend('POST', '/me/notifications/read'),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['notifications'] }),
+  });
+}
+
+export function useUpdateProfile() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (input: { displayName?: string; handle?: string; bio?: string }) => apiSend('PATCH', '/me', input),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['me'] });
+      void qc.invalidateQueries({ queryKey: ['feed'] });
+      void qc.invalidateQueries({ queryKey: ['cook'] });
+    },
+  });
 }
 
 /** Onboarding creator recommendations ranked by the selected tastes. */

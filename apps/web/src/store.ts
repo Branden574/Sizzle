@@ -24,6 +24,8 @@ export interface SizzleState {
   openRecipe: string | null;
   openCook: string | null;
   showUpload: boolean;
+  showNotifications: boolean;
+  showEditProfile: boolean;
   commentsFor: string | null;
   settingsFor: string | null;
   likes: BoolMap;
@@ -61,6 +63,8 @@ export interface SizzleState {
   setCommentsFor: (id: string | null) => void;
   setSettingsFor: (id: string | null) => void;
   setShowUpload: (v: boolean) => void;
+  setShowNotifications: (v: boolean) => void;
+  setShowEditProfile: (v: boolean) => void;
 
   // creator post controls
   togglePostSetting: (recipeId: string, key: keyof PostSettings) => void;
@@ -80,6 +84,8 @@ export const useSizzle = create<SizzleState>((set) => ({
   openRecipe: null,
   openCook: null,
   showUpload: false,
+  showNotifications: false,
+  showEditProfile: false,
   commentsFor: null,
   settingsFor: null,
   likes: {},
@@ -126,6 +132,8 @@ export const useSizzle = create<SizzleState>((set) => ({
   setCommentsFor: (id) => set({ commentsFor: id }),
   setSettingsFor: (id) => set({ settingsFor: id }),
   setShowUpload: (v) => set({ showUpload: v }),
+  setShowNotifications: (v) => set({ showNotifications: v }),
+  setShowEditProfile: (v) => set({ showEditProfile: v }),
 
   togglePostSetting: (recipeId, key) =>
     set((s) => {

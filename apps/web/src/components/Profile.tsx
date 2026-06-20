@@ -1,8 +1,8 @@
 import { useAuth } from '../auth/useAuth';
 import { useRequireAuth } from '../auth/useRequireAuth';
-import { useMe, useSavedFeed } from '../data/queries';
+import { useMe, useNotifications, useSavedFeed } from '../data/queries';
 import { useSizzle } from '../store';
-import { GearIcon } from './icons';
+import { BellIcon, GearIcon } from './icons';
 
 const BANNER = 'radial-gradient(120% 120% at 70% 0%, var(--saffron,#f4a52c), var(--accent,#ff5a36) 60%, #c23a1a)';
 
@@ -12,9 +12,14 @@ export function Profile() {
   const requireAuth = useRequireAuth();
   const setOpenRecipe = useSizzle((s) => s.setOpenRecipe);
 
+  const setShowEditProfile = useSizzle((s) => s.setShowEditProfile);
+  const setShowNotifications = useSizzle((s) => s.setShowNotifications);
+
   const { data: me } = useMe();
   const { data: saved } = useSavedFeed();
+  const { data: notifications } = useNotifications();
   const savedItems = saved?.items ?? [];
+  const unread = (notifications ?? []).filter((n) => !n.read).length;
 
   if (!authed) {
     return (
@@ -50,7 +55,15 @@ export function Profile() {
           <Stat value={String(me?.counts.saved ?? 0)} label="Saved" />
         </div>
         <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
-          <button style={{ flex: 1, height: 48, border: 'none', borderRadius: 14, background: '#1b1512', color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>Edit profile</button>
+          <button onClick={() => setShowEditProfile(true)} style={{ flex: 1, height: 48, border: 'none', borderRadius: 14, background: '#1b1512', color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>Edit profile</button>
+          <button
+            onClick={() => setShowNotifications(true)}
+            title="Notifications"
+            style={{ position: 'relative', width: 48, height: 48, border: '1.5px solid #e3d6c8', borderRadius: 14, background: '#fff', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          >
+            <BellIcon size={20} stroke="#5c5048" />
+            {unread > 0 && <div style={{ position: 'absolute', top: 9, right: 9, width: 9, height: 9, borderRadius: '50%', background: 'var(--accent,#ff5a36)', border: '2px solid #fff' }} />}
+          </button>
           <button
             onClick={() => void signOut()}
             title="Sign out"

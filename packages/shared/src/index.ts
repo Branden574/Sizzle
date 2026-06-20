@@ -139,6 +139,25 @@ export interface MeProfile {
   tastes: string[];
 }
 
+export type NotificationKind = 'follow' | 'like' | 'comment';
+
+export interface NotificationDTO {
+  id: string;
+  type: NotificationKind;
+  actor: CookSummary;
+  recipeId: string | null;
+  recipeTitle: string | null;
+  read: boolean;
+  createdAt: string;
+  /** Relative label, e.g. "2h". */
+  time: string;
+}
+
+export interface SearchResults {
+  recipes: RecipeCard[];
+  cooks: CookSummary[];
+}
+
 export interface Paginated<T> {
   items: T[];
   nextCursor: string | null;

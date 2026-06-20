@@ -1,6 +1,30 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { CookSummary, PostControls, RecipeCard, RecipeViewerState, VideoAssetDTO } from '@sizzle/shared';
-import { formatTimeLabel, initialsOf } from './lib/format';
+import type { CommentDTO, CookSummary, PostControls, RecipeCard, RecipeViewerState, VideoAssetDTO } from '@sizzle/shared';
+import { formatTimeLabel, initialsOf, relativeTime } from './lib/format';
+
+export interface CommentRow {
+  id: string;
+  recipe_id: string;
+  author_id: string;
+  text: string;
+  like_count: number;
+  created_at: string;
+}
+
+export function commentDTO(row: CommentRow, author: ProfileRow | undefined): CommentDTO {
+  const name = author?.display_name ?? 'cook';
+  return {
+    id: row.id,
+    authorName: name,
+    authorInit: initialsOf(name),
+    authorColor: author?.avatar_color ?? 'linear-gradient(135deg,#3a2a22,#1b1512)',
+    authorAvatarUrl: author?.avatar_url ?? null,
+    text: row.text,
+    time: relativeTime(new Date(row.created_at)),
+    createdAt: row.created_at,
+    likes: row.like_count,
+  };
+}
 
 export interface ProfileRow {
   id: string;

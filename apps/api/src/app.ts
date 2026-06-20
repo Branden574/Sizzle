@@ -9,6 +9,7 @@ import { me } from './routes/me';
 import { feed } from './routes/feed';
 import { recipes } from './routes/recipes';
 import { cooks } from './routes/cooks';
+import { search } from './routes/search';
 import { uploads } from './routes/uploads';
 
 export function createApp() {
@@ -33,6 +34,7 @@ export function createApp() {
   app.route('/feed', feed);
   app.route('/recipes', recipes);
   app.route('/cooks', cooks);
+  app.route('/search', search);
   app.route('/uploads', uploads);
 
   return app;

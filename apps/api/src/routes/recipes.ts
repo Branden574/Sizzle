@@ -1,10 +1,11 @@
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
-import type { RecipeDetail } from '@sizzle/shared';
+import type { CommentDTO, RecipeDetail } from '@sizzle/shared';
 import { optionalAuth, requireAuth } from '../middleware/auth';
 import { supabaseAdmin } from '../lib/supabase';
 import { badRequest, dbFail, notFound } from '../lib/errors';
-import { buildCards, type RecipeRow } from '../mappers';
+import { buildCards, commentDTO, type CommentRow, type ProfileRow, type RecipeRow } from '../mappers';
+import { notify } from '../services/notify';
 import type { AppEnv } from '../types';
 
 export const recipes = new Hono<AppEnv>();
@@ -107,8 +108,11 @@ recipes.post('/', requireAuth, async (c) => {
   return c.json(detail, 201);
 });
 
-/** Toggle a like/dislike (mutually exclusive) and keep denormalized counts in sync. */
-async function setReaction(recipeId: string, userId: string, target: 'like' | 'dislike') {
+/**
+ * Toggle a like/dislike (mutually exclusive) and keep denormalized counts in
+ * sync. Returns the resulting reaction kind (or null when toggled off).
+ */
+async function setReaction(recipeId: string, userId: string, target: 'like' | 'dislike'): Promise<'like' | 'dislike' | null> {
   const { data: cur } = await supabaseAdmin
     .from('reactions')
     .select('kind')
@@ -119,11 +123,13 @@ async function setReaction(recipeId: string, userId: string, target: 'like' | 'd
 
   let likeDelta = 0;
   let dislikeDelta = 0;
+  let result: 'like' | 'dislike' | null;
 
   if (prev === target) {
     await supabaseAdmin.from('reactions').delete().eq('user_id', userId).eq('recipe_id', recipeId);
     if (target === 'like') likeDelta = -1;
     else dislikeDelta = -1;
+    result = null;
   } else {
     await supabaseAdmin
       .from('reactions')
@@ -135,11 +141,13 @@ async function setReaction(recipeId: string, userId: string, target: 'like' | 'd
       dislikeDelta = 1;
       if (prev === 'like') likeDelta = -1;
     }
+    result = target;
   }
 
   if (likeDelta !== 0 || dislikeDelta !== 0) {
     await supabaseAdmin.rpc('adjust_recipe_counters', { rid: recipeId, like_delta: likeDelta, dislike_delta: dislikeDelta });
   }
+  return result;
 }
 
 async function reactionResponse(c: Context<AppEnv>, recipeId: string, userId: string) {
@@ -154,23 +162,25 @@ async function reactionResponse(c: Context<AppEnv>, recipeId: string, userId: st
   });
 }
 
-async function ensureRecipeExists(recipeId: string) {
-  const { data } = await supabaseAdmin.from('recipes').select('id').eq('id', recipeId).maybeSingle();
+async function recipeCookId(recipeId: string): Promise<string> {
+  const { data } = await supabaseAdmin.from('recipes').select('cook_id').eq('id', recipeId).maybeSingle();
   if (!data) throw notFound('Recipe not found');
+  return data.cook_id as string;
 }
 
 recipes.post('/:id/like', requireAuth, async (c) => {
   const id = c.req.param('id');
   const userId = c.get('userId')!;
-  await ensureRecipeExists(id);
-  await setReaction(id, userId, 'like');
+  const cookId = await recipeCookId(id);
+  const result = await setReaction(id, userId, 'like');
+  if (result === 'like') await notify({ userId: cookId, type: 'like', actorId: userId, recipeId: id });
   return reactionResponse(c, id, userId);
 });
 
 recipes.post('/:id/dislike', requireAuth, async (c) => {
   const id = c.req.param('id');
   const userId = c.get('userId')!;
-  await ensureRecipeExists(id);
+  await recipeCookId(id);
   await setReaction(id, userId, 'dislike');
   return reactionResponse(c, id, userId);
 });
@@ -179,7 +189,7 @@ recipes.post('/:id/dislike', requireAuth, async (c) => {
 recipes.post('/:id/save', requireAuth, async (c) => {
   const id = c.req.param('id');
   const userId = c.get('userId')!;
-  await ensureRecipeExists(id);
+  await recipeCookId(id);
 
   const { data: existing } = await supabaseAdmin
     .from('saves')
@@ -194,6 +204,48 @@ recipes.post('/:id/save', requireAuth, async (c) => {
   }
   await supabaseAdmin.from('saves').insert({ user_id: userId, recipe_id: id });
   return c.json({ saved: true });
+});
+
+const commentSchema = z.object({ text: z.string().trim().min(1).max(600) });
+
+/** GET /recipes/:id/comments — newest first. */
+recipes.get('/:id/comments', optionalAuth, async (c) => {
+  const id = c.req.param('id');
+  const { data: rows, error } = await supabaseAdmin
+    .from('comments')
+    .select('*')
+    .eq('recipe_id', id)
+    .order('created_at', { ascending: false })
+    .limit(100);
+  if (error) throw dbFail(error.message);
+  const list = (rows ?? []) as CommentRow[];
+  if (list.length === 0) return c.json<CommentDTO[]>([]);
+
+  const authorIds = [...new Set(list.map((r) => r.author_id))];
+  const { data: authors } = await supabaseAdmin.from('profiles').select('*').in('id', authorIds);
+  const authorMap = new Map<string, ProfileRow>((authors ?? []).map((a) => [a.id as string, a as ProfileRow]));
+  return c.json<CommentDTO[]>(list.map((r) => commentDTO(r, authorMap.get(r.author_id))));
+});
+
+/** POST /recipes/:id/comments — add a comment, bump the count, notify the cook. */
+recipes.post('/:id/comments', requireAuth, async (c) => {
+  const id = c.req.param('id');
+  const userId = c.get('userId')!;
+  const parsed = commentSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) throw badRequest('Comment text required');
+  const cookId = await recipeCookId(id);
+
+  const { data: row, error } = await supabaseAdmin
+    .from('comments')
+    .insert({ recipe_id: id, author_id: userId, text: parsed.data.text })
+    .select('*')
+    .single();
+  if (error || !row) throw dbFail(error?.message ?? 'Failed to add comment');
+  await supabaseAdmin.rpc('adjust_comment_count', { rid: id, delta: 1 });
+  await notify({ userId: cookId, type: 'comment', actorId: userId, recipeId: id });
+
+  const { data: author } = await supabaseAdmin.from('profiles').select('*').eq('id', userId).single();
+  return c.json<CommentDTO>(commentDTO(row as CommentRow, (author ?? undefined) as ProfileRow | undefined), 201);
 });
 
 function hash(s: string): number {

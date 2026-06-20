@@ -5,6 +5,7 @@ import { supabaseAdmin } from '../lib/supabase';
 import { badRequest, dbFail, notFound } from '../lib/errors';
 import { buildCards, cookSummary, type ProfileRow, type RecipeRow } from '../mappers';
 import { matchTastes } from '../services/taste';
+import { notify } from '../services/notify';
 import type { AppEnv } from '../types';
 
 export const cooks = new Hono<AppEnv>();
@@ -116,6 +117,7 @@ cooks.post('/:id/follow', requireAuth, async (c) => {
     const { error } = await supabaseAdmin.from('follows').insert({ follower_id: userId, cook_id: cookId });
     if (error) throw dbFail(error.message);
     await supabaseAdmin.rpc('adjust_follow_counters', { p_follower: userId, p_cook: cookId, delta: 1 });
+    await notify({ userId: cookId, type: 'follow', actorId: userId });
   }
   return c.json({ following: true });
 });

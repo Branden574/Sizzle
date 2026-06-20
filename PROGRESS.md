@@ -11,12 +11,19 @@ Stack: **Node + TypeScript**, **Hono** API, **Supabase** (Postgres/Auth/Storage)
 | Phase | Scope | Status |
 |-------|-------|--------|
 | **1** | Foundation + core loop (scaffold, schema, auth, upload, feeds, follow/like/save, seed, **UI wired**) | ✅ Core complete |
-| 2 | Social depth + search (profiles, comments, search/discovery, notifications scaffolding) | ⬜ Not started |
+| 2 | Social depth + search (profiles, comments, search/discovery, notifications) | ✅ Done |
 | 3 | Offline downloads | ⬜ Not started |
 | 4 | Recommendation algorithm — For You ranking modeled on X's algorithm ([design](docs/recommendation-algorithm.md)) | ⬜ Not started |
 | 5 | Production hardening (rate limits, validation, moderation, transcoding cost, analytics, security) | ⬜ Not started |
 
-> Rule: one phase per session, app runnable locally at every step. No later-phase work pulled forward unless trivial (and noted).
+> Rule: app runnable locally at every step. No later-phase work pulled forward unless trivial (and noted).
+
+## Phase 2 — done (verified in-browser, all screens)
+- **Comments (server-backed):** `comments` table; `GET/POST /recipes/:id/comments`; denormalized count via RPC; comments sheet wired with real authors/avatars/times + optimistic add; a few seeded per recipe.
+- **Search:** `GET /search?q=` (recipes by title/cuisine, cooks by name/handle); Discover search box live with recipe tiles + cook results + clear button + trend-chip shortcuts.
+- **Notifications:** `notifications` table; generated on follow/like/comment; `GET /me/notifications` + mark-read; bell on Profile with unread dot + a notifications sheet (all 3 types, tap-through).
+- **Full profiles:** `PATCH /me` (name/handle/bio) + an Edit-profile sheet; Profile reads `/me`.
+- Screens tested: feed (For You/Following), recipe sheet, cook sheet, discover+search, saved, profile, comments, notifications, edit-profile, settings, upload, onboarding.
 
 ---
 
