@@ -163,6 +163,10 @@ function FeedCard({ card }: { card: RecipeCard }) {
   };
   const cardRef = useRef<HTMLDivElement>(null);
   const [active, setActive] = useState(false);
+  // `near` = within ~1 screen of the viewport. Only near cards mount a video
+  // element (+ hls.js); far cards render just a poster. This keeps a handful of
+  // decoders alive instead of one per feed item — the big Android perf win.
+  const [near, setNear] = useState(false);
   const like = useToggleLike();
   const dislike = useToggleDislike();
   const save = useToggleSave();
@@ -191,9 +195,17 @@ function FeedCard({ card }: { card: RecipeCard }) {
       { threshold: [0, 0.6, 1] },
     );
     obs.observe(el);
+    // Preload window: mount the video while the card is within ~1 screen so
+    // there's no black flash when it becomes active.
+    const nearObs = new IntersectionObserver(
+      (entries) => { for (const e of entries) setNear(e.isIntersecting); },
+      { rootMargin: '120% 0px 120% 0px', threshold: 0 },
+    );
+    nearObs.observe(el);
     return () => {
       if (start && authed) logView(card.id, Date.now() - start);
       obs.disconnect();
+      nearObs.disconnect();
     };
   }, [authed, card.id]);
 
@@ -236,9 +248,9 @@ function FeedCard({ card }: { card: RecipeCard }) {
       onPointerCancel={clearPress}
       onPointerLeave={clearPress}
       onClickCapture={onClickCapture}
-      style={{ position: 'relative', height: 852, scrollSnapAlign: 'start', overflow: 'hidden', background: card.bg }}
+      style={{ position: 'relative', height: 'var(--app-h)', scrollSnapAlign: 'start', overflow: 'hidden', background: card.bg }}
     >
-      {videoSrc ? (
+      {videoSrc && near ? (
         <VideoPlayer src={videoSrc} poster={card.video?.posterUrl} active={active} immersive={immersive} />
       ) : (
         card.video?.posterUrl && (

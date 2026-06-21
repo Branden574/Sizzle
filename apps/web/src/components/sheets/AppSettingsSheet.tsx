@@ -1,10 +1,13 @@
-import type { ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { useAuth } from '../../auth/useAuth';
-import { useSizzle, type FeedKindPref, type ThemePref } from '../../store';
+import { useSizzle, type FeedKindPref, type ThemePref, type UnitPref } from '../../store';
 import { clearOffline } from '../../lib/offline';
+import { apiSend } from '../../lib/api';
+import { queryClient } from '../../data/queries';
 import { PlayIcon, SpeakerIcon } from '../icons';
 
 const APP_VERSION = '1.0.0';
+const SUPPORT_EMAIL = 'support@sizzle.app';
 
 function SectionLabel({ children }: { children: ReactNode }) {
   return <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.4px', textTransform: 'uppercase', color: 'var(--text-faint-2)', margin: '16px 2px 10px' }}>{children}</div>;
@@ -24,6 +27,18 @@ function ToggleRow({ title, sub, icon, on, onToggle }: { title: string; sub: str
       <div style={{ width: 50, height: 30, flex: 'none', borderRadius: 16, background: on ? 'var(--accent)' : 'var(--track)', position: 'relative', transition: 'background .25s' }}>
         <div style={{ position: 'absolute', top: 3, width: 24, height: 24, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.25)', transition: 'left .25s cubic-bezier(.34,1.56,.64,1)', left: on ? 23 : 3 }} />
       </div>
+    </button>
+  );
+}
+
+function RowButton({ label, hint, danger, onClick }: { label: string; hint?: string; danger?: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 16, border: '1px solid var(--line)', borderRadius: 18, background: 'var(--surface)', cursor: 'pointer', marginBottom: 10 }}
+    >
+      <span style={{ fontSize: 15.5, fontWeight: 700, color: danger ? '#d8521e' : 'var(--text)' }}>{label}</span>
+      {hint && <span style={{ fontSize: 13, color: 'var(--text-faint)' }}>{hint}</span>}
     </button>
   );
 }
@@ -60,6 +75,17 @@ function Segmented<T extends string>({ value, options, onChange }: { value: T; o
   );
 }
 
+const LEGAL_COPY: Record<'terms' | 'privacy', { title: string; body: string }> = {
+  terms: {
+    title: 'Terms of Service',
+    body: 'Welcome to Sizzle. By using the app you agree to post only content you have the rights to share, to follow our community guidelines, and to use Sizzle lawfully. Recipes and videos you upload remain yours; you grant Sizzle a licence to display them in the app. We may remove content or suspend accounts that violate these terms. Sizzle is provided "as is" without warranties. These demo terms are a placeholder for a full legal agreement.',
+  },
+  privacy: {
+    title: 'Privacy Policy',
+    body: 'Your privacy matters. Sizzle stores the account details you provide (name, handle, email, optional phone and links) and the content you create. We use this to operate the app — showing your recipes, ranking your feed, and powering follows and notifications. We do not sell your personal data. You can edit your profile or permanently delete your account and all its content at any time from Settings. This demo policy is a placeholder for a full privacy statement.',
+  },
+};
+
 export function AppSettingsSheet() {
   const open = useSizzle((s) => s.showAppSettings);
   const setOpen = useSizzle((s) => s.setShowAppSettings);
@@ -73,10 +99,47 @@ export function AppSettingsSheet() {
   const setReduceMotion = useSizzle((s) => s.setReduceMotion);
   const defaultFeed = useSizzle((s) => s.defaultFeed);
   const setDefaultFeed = useSizzle((s) => s.setDefaultFeed);
+  const units = useSizzle((s) => s.units);
+  const setUnits = useSizzle((s) => s.setUnits);
+  const dataSaver = useSizzle((s) => s.dataSaver);
+  const setDataSaver = useSizzle((s) => s.setDataSaver);
   const signOut = useAuth((s) => s.signOut);
+  const updatePassword = useAuth((s) => s.updatePassword);
+  const setShowRoadmap = useSizzle((s) => s.setShowRoadmap);
+
+  const [pwOpen, setPwOpen] = useState(false);
+  const [pw, setPw] = useState('');
+  const [pwBusy, setPwBusy] = useState(false);
+  const [pwMsg, setPwMsg] = useState<string | null>(null);
+  const [delStep, setDelStep] = useState(false);
+  const [delBusy, setDelBusy] = useState(false);
+  const [cacheCleared, setCacheCleared] = useState(false);
+  const [legal, setLegal] = useState<'terms' | 'privacy' | null>(null);
 
   if (!open) return null;
   const close = () => setOpen(false);
+
+  const changePassword = async () => {
+    if (pw.length < 10 || pwBusy) return;
+    setPwBusy(true);
+    setPwMsg(null);
+    const ok = await updatePassword(pw);
+    setPwBusy(false);
+    if (ok) { setPwMsg('Password updated.'); setPw(''); setPwOpen(false); }
+    else setPwMsg('Could not update password — try again.');
+  };
+
+  const deleteAccount = async () => {
+    if (delBusy) return;
+    setDelBusy(true);
+    try {
+      await apiSend('DELETE', '/me');
+      await signOut();
+      close();
+    } catch {
+      setDelBusy(false);
+    }
+  };
 
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 93 }}>
@@ -84,10 +147,16 @@ export function AppSettingsSheet() {
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, top: 70, background: 'var(--bg)', borderRadius: '26px 26px 0 0', overflow: 'hidden', animation: 'sz-slideUp .4s cubic-bezier(.16,1,.3,1)', display: 'flex', flexDirection: 'column' }}>
         <div style={{ textAlign: 'center', padding: '16px 0 6px', position: 'relative', flex: 'none' }}>
           <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', width: 42, height: 5, borderRadius: 3, background: 'var(--track)' }} />
-          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginTop: 6 }}>Settings</div>
-          <div style={{ fontSize: 13, color: 'var(--text-faint)', marginTop: 2 }}>Appearance, playback &amp; account</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginTop: 6 }}>{legal ? LEGAL_COPY[legal].title : 'Settings'}</div>
+          <div style={{ fontSize: 13, color: 'var(--text-faint)', marginTop: 2 }}>{legal ? 'Sizzle' : 'Appearance, recipes, playback & account'}</div>
         </div>
 
+        {legal ? (
+          <div style={{ flex: 1, overflowY: 'auto', padding: '8px 22px 30px' }}>
+            <p style={{ fontSize: 15, lineHeight: 1.6, color: 'var(--text-2)' }}>{LEGAL_COPY[legal].body}</p>
+            <button onClick={() => setLegal(null)} style={{ width: '100%', height: 50, marginTop: 18, border: '1px solid var(--line-2)', borderRadius: 16, background: 'var(--surface)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>Back to settings</button>
+          </div>
+        ) : (
         <div style={{ flex: 1, overflowY: 'auto', padding: '4px 22px 30px' }}>
           <SectionLabel>Appearance</SectionLabel>
           <div style={{ fontSize: 13, color: 'var(--text-faint)', margin: '0 2px 8px' }}>Theme · System follows your device</div>
@@ -108,6 +177,18 @@ export function AppSettingsSheet() {
             onToggle={() => setReduceMotion(!reduceMotion)}
           />
 
+          <SectionLabel>Recipes</SectionLabel>
+          <div style={{ fontSize: 13, color: 'var(--text-faint)', margin: '0 2px 8px' }}>Measurement units · converts ingredient amounts</div>
+          <Segmented<UnitPref>
+            value={units}
+            onChange={setUnits}
+            options={[
+              { value: 'original', label: 'Original' },
+              { value: 'metric', label: 'Metric' },
+              { value: 'imperial', label: 'Imperial' },
+            ]}
+          />
+
           <SectionLabel>Playback</SectionLabel>
           <ToggleRow
             title="Autoplay videos"
@@ -123,6 +204,13 @@ export function AppSettingsSheet() {
             on={!muted}
             onToggle={toggleMuted}
           />
+          <ToggleRow
+            title="Data saver"
+            sub="Don't autoplay — tap a video to play and save data"
+            icon={<span style={{ fontSize: 19 }}>📶</span>}
+            on={dataSaver}
+            onToggle={() => setDataSaver(!dataSaver)}
+          />
 
           <SectionLabel>Feed</SectionLabel>
           <div style={{ fontSize: 13, color: 'var(--text-faint)', margin: '0 2px 8px' }}>Which feed opens first</div>
@@ -136,26 +224,60 @@ export function AppSettingsSheet() {
           />
 
           <SectionLabel>Storage</SectionLabel>
-          <button
-            onClick={() => { clearOffline(); }}
-            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 16, border: '1px solid var(--line)', borderRadius: 18, background: 'var(--surface)', cursor: 'pointer', marginBottom: 10 }}
-          >
-            <span style={{ fontSize: 15.5, fontWeight: 700, color: 'var(--text)' }}>Clear downloaded recipes</span>
-            <span style={{ fontSize: 13, color: 'var(--text-faint)' }}>Free up space</span>
-          </button>
+          <RowButton label="Clear downloaded recipes" hint="Free up space" onClick={() => clearOffline()} />
+          <RowButton label="Clear cache" hint={cacheCleared ? '✓ Cleared' : 'Reload fresh data'} onClick={() => { queryClient.clear(); setCacheCleared(true); window.setTimeout(() => setCacheCleared(false), 1800); }} />
 
           <SectionLabel>Account</SectionLabel>
+          {pwOpen ? (
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 18, padding: 14, marginBottom: 10 }}>
+              <input
+                type="password"
+                value={pw}
+                onChange={(e) => setPw(e.target.value)}
+                placeholder="New password (10+ characters)"
+                style={{ width: '100%', height: 46, border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--surface-2)', padding: '0 14px', fontFamily: "'Hanken Grotesk'", fontSize: 15, color: 'var(--text)', outline: 'none' }}
+              />
+              <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                <button onClick={() => { setPwOpen(false); setPw(''); setPwMsg(null); }} style={{ flex: 1, height: 44, border: '1px solid var(--line-2)', borderRadius: 12, background: 'transparent', color: 'var(--text-faint)', fontWeight: 700, fontFamily: "'Hanken Grotesk'", fontSize: 14, cursor: 'pointer' }}>Cancel</button>
+                <button onClick={() => void changePassword()} disabled={pw.length < 10 || pwBusy} style={{ flex: 1, height: 44, border: 'none', borderRadius: 12, background: 'var(--accent)', color: '#fff', fontWeight: 700, fontFamily: "'Hanken Grotesk'", fontSize: 14, cursor: pw.length >= 10 ? 'pointer' : 'default', opacity: pw.length >= 10 && !pwBusy ? 1 : 0.5 }}>{pwBusy ? 'Saving…' : 'Update'}</button>
+              </div>
+            </div>
+          ) : (
+            <RowButton label="Change password" hint="" onClick={() => { setPwMsg(null); setPwOpen(true); }} />
+          )}
+          {pwMsg && <div style={{ fontSize: 13, color: pwMsg.includes('updated') ? '#2c8a4a' : '#d8521e', fontWeight: 600, margin: '-4px 2px 10px' }}>{pwMsg}</div>}
+
           <button
             onClick={() => { void signOut(); close(); }}
-            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', height: 52, border: '1px solid var(--line-2)', borderRadius: 16, background: 'var(--surface)', color: 'var(--accent)', fontFamily: "'Hanken Grotesk'", fontSize: 15.5, fontWeight: 700, cursor: 'pointer', marginBottom: 12 }}
+            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', height: 52, border: '1px solid var(--line-2)', borderRadius: 16, background: 'var(--surface)', color: 'var(--accent)', fontFamily: "'Hanken Grotesk'", fontSize: 15.5, fontWeight: 700, cursor: 'pointer', marginBottom: 10 }}
           >
             Log out
           </button>
+
+          {delStep ? (
+            <div style={{ background: 'var(--surface)', border: '1px solid #f2c8bb', borderRadius: 18, padding: 16, marginBottom: 12 }}>
+              <div style={{ fontSize: 14.5, fontWeight: 800, color: '#d8521e' }}>Delete your account?</div>
+              <div style={{ fontSize: 13, color: 'var(--text-faint)', margin: '4px 0 12px' }}>This permanently removes your profile, recipes, and all your data. This can't be undone.</div>
+              <div style={{ display: 'flex', gap: 8 }}>
+                <button onClick={() => setDelStep(false)} style={{ flex: 1, height: 46, border: '1px solid var(--line-2)', borderRadius: 12, background: 'transparent', color: 'var(--text)', fontWeight: 700, fontFamily: "'Hanken Grotesk'", fontSize: 14.5, cursor: 'pointer' }}>Cancel</button>
+                <button onClick={() => void deleteAccount()} disabled={delBusy} style={{ flex: 1, height: 46, border: 'none', borderRadius: 12, background: '#d8521e', color: '#fff', fontWeight: 700, fontFamily: "'Hanken Grotesk'", fontSize: 14.5, cursor: 'pointer', opacity: delBusy ? 0.6 : 1 }}>{delBusy ? 'Deleting…' : 'Delete everything'}</button>
+              </div>
+            </div>
+          ) : (
+            <RowButton label="Delete account" danger hint="Permanent" onClick={() => setDelStep(true)} />
+          )}
+
+          <SectionLabel>About &amp; Legal</SectionLabel>
+          <RowButton label="🚀 Roadmap" hint="What's next →" onClick={() => { setShowRoadmap(true); close(); }} />
+          <RowButton label="Terms of Service" onClick={() => setLegal('terms')} />
+          <RowButton label="Privacy Policy" onClick={() => setLegal('privacy')} />
+          <RowButton label="Contact support" hint={SUPPORT_EMAIL} onClick={() => { window.location.href = `mailto:${SUPPORT_EMAIL}`; }} />
 
           <div style={{ textAlign: 'center', color: 'var(--text-faint-2)', fontSize: 12.5, margin: '6px 0 14px' }}>Sizzle v{APP_VERSION}</div>
 
           <button onClick={close} style={{ width: '100%', height: 52, border: 'none', borderRadius: 16, background: 'var(--text)', color: 'var(--bg)', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>Done</button>
         </div>
+        )}
       </div>
     </div>
   );

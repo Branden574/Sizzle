@@ -21,10 +21,18 @@ export function createApp() {
 
   app.use('*', logger());
   app.use('*', securityHeaders);
+  // Allow the configured web origin plus the origins native (Capacitor) shells and
+  // local/LAN dev hosts use, so the iOS/Android apps and emulators can call the API.
+  const nativeOrigins = new Set(['capacitor://localhost', 'http://localhost', 'https://localhost', 'ionic://localhost']);
+  const lanOrigin = /^https?:\/\/(localhost|127\.0\.0\.1|10\.0\.2\.2|(?:10|192\.168|172\.(?:1[6-9]|2\d|3[01]))\.[\d.]+)(?::\d+)?$/;
   app.use(
     '*',
     cors({
-      origin: env.WEB_ORIGIN,
+      origin: (origin) => {
+        if (!origin) return env.WEB_ORIGIN;
+        if (origin === env.WEB_ORIGIN || nativeOrigins.has(origin) || lanOrigin.test(origin)) return origin;
+        return env.WEB_ORIGIN;
+      },
       allowHeaders: ['Authorization', 'Content-Type'],
       allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
       credentials: true,

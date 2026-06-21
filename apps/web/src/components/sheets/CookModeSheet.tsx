@@ -38,6 +38,7 @@ export function CookModeSheet() {
   const tick = useRef<number | null>(null);
 
   const scale = cookFor?.scale ?? 1;
+  const units = useSizzle((s) => s.units);
   const steps = r?.steps ?? [];
   const current = steps[step] ?? '';
   const timerSeconds = useMemo(() => stepSeconds(current), [current]);
@@ -129,7 +130,7 @@ export function CookModeSheet() {
                 <div style={{ width: 24, height: 24, flex: 'none', borderRadius: 7, border: `2px solid ${on ? 'var(--accent)' : 'rgba(255,255,255,.3)'}`, background: on ? 'var(--accent)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   {on && <span style={{ color: '#fff', fontSize: 14, fontWeight: 800 }}>✓</span>}
                 </div>
-                <span style={{ fontSize: 16, color: on ? 'rgba(255,255,255,.45)' : '#fff', textDecoration: on ? 'line-through' : 'none' }}>{scale === 1 ? ing : scaleIngredient(ing, scale)}</span>
+                <span style={{ fontSize: 16, color: on ? 'rgba(255,255,255,.45)' : '#fff', textDecoration: on ? 'line-through' : 'none' }}>{scale === 1 && units === 'original' ? ing : scaleIngredient(ing, scale, units)}</span>
               </button>
             );
           })}

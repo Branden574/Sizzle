@@ -267,7 +267,7 @@ export function useMarkNotificationsRead() {
 export function useUpdateProfile() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { displayName?: string; handle?: string; bio?: string; phone?: string; avatarUrl?: string | null; bannerUrl?: string | null }) =>
+    mutationFn: (input: { displayName?: string; handle?: string; bio?: string; phone?: string; avatarUrl?: string | null; bannerUrl?: string | null; links?: Record<string, string | null> }) =>
       apiSend('PATCH', '/me', input),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['me'] });

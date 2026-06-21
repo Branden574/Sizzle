@@ -1,17 +1,20 @@
 import type { ReactNode } from 'react';
-import { theme } from '../theme';
 
-/** The 393×852 device frame with bezel, inset highlight and drop shadow. */
-export function Phone({ children }: { children: ReactNode }) {
+/**
+ * The device surface. On web it's the 393×852 mockup with bezel/shadow; on native
+ * (`bare`) it fills the screen with no fake frame (the real device IS the frame).
+ * Sized via the --app-w/--app-h CSS vars set on .sz-stage.
+ */
+export function Phone({ children, bare = false }: { children: ReactNode; bare?: boolean }) {
   return (
     <div
       style={{
         position: 'relative',
-        width: theme.phoneW,
-        height: theme.phoneH,
-        borderRadius: 54,
+        width: 'var(--app-w)',
+        height: 'var(--app-h)',
+        borderRadius: bare ? 0 : 54,
         background: '#0c0a09',
-        boxShadow: '0 2px 0 2px #2c2521 inset, 0 40px 90px -20px rgba(0,0,0,.7), 0 0 0 12px #1c1714',
+        boxShadow: bare ? 'none' : '0 2px 0 2px #2c2521 inset, 0 40px 90px -20px rgba(0,0,0,.7), 0 0 0 12px #1c1714',
         overflow: 'hidden',
         flex: 'none',
       }}

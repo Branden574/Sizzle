@@ -307,7 +307,6 @@ function StepAccount() {
   const signUp = useAuth((s) => s.signUp);
   const signIn = useAuth((s) => s.signIn);
   const signInOAuth = useAuth((s) => s.signInOAuth);
-  const continueAsGuest = useAuth((s) => s.continueAsGuest);
   const resetPassword = useAuth((s) => s.resetPassword);
   const clearError = useAuth((s) => s.clearError);
 
@@ -485,15 +484,6 @@ function StepAccount() {
             <span style={{ color: 'var(--text)', fontWeight: 700 }}>{isLogin ? 'Create an account' : 'Log in'}</span>
           </button>
         </div>
-      </div>
-
-      <div style={{ padding: '6px 26px 28px' }}>
-        <button
-          onClick={continueAsGuest}
-          style={{ width: '100%', height: 48, border: 'none', background: 'none', color: 'var(--text-faint)', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 600, cursor: 'pointer' }}
-        >
-          Skip for now
-        </button>
       </div>
     </div>
   );

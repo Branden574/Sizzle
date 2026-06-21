@@ -4,7 +4,8 @@ import { env } from './env';
 
 const app = createApp();
 
-serve({ fetch: app.fetch, port: env.PORT }, (info) => {
+// Bind all interfaces so native apps / emulators / devices on the LAN can reach it.
+serve({ fetch: app.fetch, port: env.PORT, hostname: '0.0.0.0' }, (info) => {
   // eslint-disable-next-line no-console
-  console.log(`✓ Sizzle API listening on http://localhost:${info.port}  (video: ${env.VIDEO_PROVIDER})`);
+  console.log(`✓ Sizzle API listening on http://0.0.0.0:${info.port}  (video: ${env.VIDEO_PROVIDER})`);
 });

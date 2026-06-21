@@ -184,6 +184,21 @@ export interface SuggestedCook extends CookSummary {
   followers: number;
 }
 
+/** Optional social/profile links. Each is a full normalized URL, or null. */
+export interface ProfileLinks {
+  instagram: string | null;
+  tiktok: string | null;
+  x: string | null; // X (formerly Twitter)
+  facebook: string | null;
+  discord: string | null;
+  youtube: string | null;
+  website: string | null;
+}
+
+/** The platforms in display order, with labels for inputs/placeholders. */
+export type ProfileLinkKey = keyof ProfileLinks;
+export const PROFILE_LINK_KEYS: ProfileLinkKey[] = ['instagram', 'tiktok', 'x', 'youtube', 'facebook', 'discord', 'website'];
+
 export interface CookProfile {
   id: string;
   name: string;
@@ -194,6 +209,7 @@ export interface CookProfile {
   bannerUrl: string | null;
   verifiedTier: VerificationTier | null;
   bio: string;
+  links: ProfileLinks;
   counts: {
     followers: number;
     following: number;
@@ -215,6 +231,7 @@ export interface MeProfile {
   bannerUrl: string | null;
   phone: string | null;
   bio: string;
+  links: ProfileLinks;
   isCook: boolean;
   verifiedTier: VerificationTier | null;
   role: 'user' | 'admin';

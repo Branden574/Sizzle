@@ -103,8 +103,12 @@ body {
   color-scheme: dark;
 }
 
-/* The stage behind the phone. */
+/* The stage behind the phone. On web it centers the 393×852 mockup; on native
+   (.native) it fills the device and drops the desktop chrome. --app-w/--app-h
+   are the logical app size the phone frame + full-screen surfaces are sized to. */
 .sz-stage {
+  --app-w: 393px;
+  --app-h: 852px;
   min-height: 100vh;
   width: 100%;
   background: radial-gradient(120% 120% at 50% 0%, #2a221c 0%, #181410 55%, #0e0b09 100%);
@@ -113,6 +117,15 @@ body {
   justify-content: center;
   padding: 32px;
   font-family: 'Hanken Grotesk', sans-serif;
+}
+.sz-stage.native {
+  --app-w: 100vw;
+  --app-h: 100dvh;
+  min-height: 100dvh;
+  padding: 0;
+  background: var(--feed-bg);
+  align-items: stretch;
+  justify-content: stretch;
 }
 
 button {

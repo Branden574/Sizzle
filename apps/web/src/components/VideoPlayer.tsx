@@ -27,7 +27,8 @@ export function VideoPlayer({ src, poster, active, immersive = false }: { src: s
   const [rotated, setRotated] = useState(false);
   const [box, setBox] = useState<{ w: number; h: number } | null>(null);
   const muted = useSizzle((s) => s.muted);
-  const autoplay = useSizzle((s) => s.autoplay);
+  // Data saver suppresses autoplay (tap to play) to spare mobile bandwidth.
+  const autoplay = useSizzle((s) => s.autoplay && !s.dataSaver);
   const toggleMuted = useSizzle((s) => s.toggleMuted);
 
   useEffect(() => {
@@ -40,7 +41,16 @@ export function VideoPlayer({ src, poster, active, immersive = false }: { src: s
       void import('hls.js').then(({ default: Hls }) => {
         if (destroyed) return;
         if (Hls.isSupported()) {
-          const h = new Hls({ enableWorker: true });
+          // Mobile-friendly tuning: cap decode resolution to the player size
+          // (don't software-decode 4K on a phone) and keep buffers small so a
+          // feed of clips doesn't pile up memory — smoother on Android WebView.
+          const h = new Hls({
+            enableWorker: true,
+            capLevelToPlayerSize: true,
+            maxBufferLength: 10,
+            maxMaxBufferLength: 20,
+            backBufferLength: 10,
+          });
           h.loadSource(src);
           h.attachMedia(v);
           hls = h;

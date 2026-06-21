@@ -2,6 +2,7 @@ import { useRequireAuth } from '../../auth/useRequireAuth';
 import { useCook, useToggleFollow } from '../../data/queries';
 import { useSizzle } from '../../store';
 import { VerifiedBadge } from '../VerifiedBadge';
+import { SocialLinks } from '../SocialLinks';
 import { theme } from '../../theme';
 import { formatCount } from '../../lib/format';
 import { ChevronLeftIcon } from '../icons';
@@ -56,6 +57,7 @@ export function CookSheet() {
             </button>
           </div>
           <p style={{ color: 'var(--text-muted)', fontSize: 15, lineHeight: 1.5, margin: '14px 0 0' }}>{ck.bio}</p>
+          <SocialLinks links={ck.links} size={34} />
 
           <div style={{ display: 'flex', marginTop: 18, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 18, overflow: 'hidden' }}>
             <CookStat value={formatCount(ck.counts.followers)} label="Followers" border onClick={() => setFollowList({ id: ck.id, mode: 'followers', name: ck.name })} />

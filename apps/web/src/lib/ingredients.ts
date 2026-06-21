@@ -101,10 +101,75 @@ export function formatQuantity(n: number): string {
   return String(Math.round(n * 100) / 100);
 }
 
-/** Re-render an ingredient line at a scale factor (no-op when it has no quantity). */
-export function scaleIngredient(raw: string, factor: number): string {
+/* ── Unit conversion (Original / Metric / Imperial) ─────────────────────── */
+
+export type UnitSystem = 'original' | 'metric' | 'imperial';
+
+type Dim = 'mass' | 'vol' | 'len';
+interface UnitDef { dim: Dim; base: number; system: 'metric' | 'imperial' }
+
+// Each known unit spelling → its dimension, value in a base unit (g / ml / cm),
+// and which system it belongs to.
+const UNIT_DEFS: Record<string, UnitDef> = {
+  mg: { dim: 'mass', base: 0.001, system: 'metric' },
+  g: { dim: 'mass', base: 1, system: 'metric' }, gram: { dim: 'mass', base: 1, system: 'metric' }, grams: { dim: 'mass', base: 1, system: 'metric' },
+  kg: { dim: 'mass', base: 1000, system: 'metric' },
+  oz: { dim: 'mass', base: 28.3495, system: 'imperial' }, ounce: { dim: 'mass', base: 28.3495, system: 'imperial' }, ounces: { dim: 'mass', base: 28.3495, system: 'imperial' },
+  lb: { dim: 'mass', base: 453.592, system: 'imperial' }, lbs: { dim: 'mass', base: 453.592, system: 'imperial' }, pound: { dim: 'mass', base: 453.592, system: 'imperial' }, pounds: { dim: 'mass', base: 453.592, system: 'imperial' },
+  ml: { dim: 'vol', base: 1, system: 'metric' },
+  l: { dim: 'vol', base: 1000, system: 'metric' }, litre: { dim: 'vol', base: 1000, system: 'metric' }, litres: { dim: 'vol', base: 1000, system: 'metric' }, liter: { dim: 'vol', base: 1000, system: 'metric' }, liters: { dim: 'vol', base: 1000, system: 'metric' },
+  tsp: { dim: 'vol', base: 4.92892, system: 'imperial' }, teaspoon: { dim: 'vol', base: 4.92892, system: 'imperial' }, teaspoons: { dim: 'vol', base: 4.92892, system: 'imperial' },
+  tbsp: { dim: 'vol', base: 14.7868, system: 'imperial' }, tbs: { dim: 'vol', base: 14.7868, system: 'imperial' }, tablespoon: { dim: 'vol', base: 14.7868, system: 'imperial' }, tablespoons: { dim: 'vol', base: 14.7868, system: 'imperial' },
+  cup: { dim: 'vol', base: 236.588, system: 'imperial' }, cups: { dim: 'vol', base: 236.588, system: 'imperial' },
+  cm: { dim: 'len', base: 1, system: 'metric' },
+  inch: { dim: 'len', base: 2.54, system: 'imperial' }, inches: { dim: 'len', base: 2.54, system: 'imperial' },
+};
+
+/** Pick the output unit + quantity for a base amount in the target system. */
+function pickUnit(dim: Dim, base: number, system: 'metric' | 'imperial'): { quantity: number; unit: string } {
+  if (dim === 'mass') {
+    if (system === 'metric') return base >= 1000 ? { quantity: base / 1000, unit: 'kg' } : { quantity: base, unit: 'g' };
+    return base >= 453.592 ? { quantity: base / 453.592, unit: 'lb' } : { quantity: base / 28.3495, unit: 'oz' };
+  }
+  if (dim === 'vol') {
+    if (system === 'metric') return base >= 1000 ? { quantity: base / 1000, unit: 'l' } : { quantity: base, unit: 'ml' };
+    if (base >= 236.588) return { quantity: base / 236.588, unit: 'cup' };
+    if (base >= 14.7868) return { quantity: base / 14.7868, unit: 'tbsp' };
+    return { quantity: base / 4.92892, unit: 'tsp' };
+  }
+  return system === 'metric' ? { quantity: base, unit: 'cm' } : { quantity: base / 2.54, unit: 'inch' };
+}
+
+/** Convert a quantity+unit into the target system, or null if not convertible / already native. */
+export function convertUnit(quantity: number, unit: string | null, system: 'metric' | 'imperial'): { quantity: number; unit: string } | null {
+  if (!unit) return null;
+  const def = UNIT_DEFS[unit.toLowerCase()];
+  if (!def || def.system === system) return null; // unknown or already in target system
+  return pickUnit(def.dim, quantity * def.base, system);
+}
+
+/** Format a converted amount: metric units round to whole/nice numbers, imperial uses fractions. */
+function formatAmount(n: number, unit: string): string {
+  if (unit === 'kg' || unit === 'l') return String(Math.round(n * 10) / 10);
+  if (['ml', 'g', 'mg', 'cm'].includes(unit)) {
+    if (n >= 20) return String(Math.round(n / 5) * 5);
+    if (n >= 1) return String(Math.round(n));
+    return String(Math.round(n * 10) / 10);
+  }
+  return formatQuantity(n); // imperial → friendly fractions (½, ¼…)
+}
+
+/**
+ * Re-render an ingredient line at a scale factor, optionally converting units to
+ * the metric/imperial system. No-op for lines without a parseable quantity.
+ */
+export function scaleIngredient(raw: string, factor: number, units: UnitSystem = 'original'): string {
   const p = parseIngredient(raw);
   if (p.quantity == null) return raw;
-  const qty = formatQuantity(p.quantity * factor);
-  return [qty, p.unit, p.name].filter(Boolean).join(' ');
+  const scaled = p.quantity * factor;
+  if (units !== 'original' && p.unit) {
+    const conv = convertUnit(scaled, p.unit, units);
+    if (conv) return [formatAmount(conv.quantity, conv.unit), conv.unit, p.name].filter(Boolean).join(' ');
+  }
+  return [formatQuantity(scaled), p.unit, p.name].filter(Boolean).join(' ');
 }

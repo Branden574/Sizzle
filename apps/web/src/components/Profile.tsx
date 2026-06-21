@@ -4,6 +4,7 @@ import { useMe, useNotifications, useSavedFeed } from '../data/queries';
 import { useSizzle } from '../store';
 import { formatCount } from '../lib/format';
 import { VerifiedBadge } from './VerifiedBadge';
+import { SocialLinks } from './SocialLinks';
 import { BellIcon, GearIcon } from './icons';
 
 const BANNER = 'radial-gradient(120% 120% at 70% 0%, var(--saffron,#f4a52c), var(--accent,#ff5a36) 60%, #c23a1a)';
@@ -57,6 +58,7 @@ export function Profile() {
         <div style={{ color: 'var(--text-faint)', fontSize: 14.5 }}>
           {me ? `@${me.handle} · ${me.bio || 'Home cook in training'}` : ''}
         </div>
+        {me && <SocialLinks links={me.links} />}
         <div style={{ display: 'flex', gap: 22, marginTop: 18 }}>
           <Stat value={formatCount(me?.counts.following ?? 0)} label="Following" onClick={me ? () => setFollowList({ id: me.id, mode: 'following', name: me.name }) : undefined} />
           <Stat value={formatCount(me?.counts.followers ?? 0)} label="Followers" onClick={me ? () => setFollowList({ id: me.id, mode: 'followers', name: me.name }) : undefined} />

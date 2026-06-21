@@ -4,7 +4,7 @@ import { optionalAuth, requireAuth, requireNotBanned } from '../middleware/auth'
 import { supabaseAdmin } from '../lib/supabase';
 import { badRequest, dbFail, notFound } from '../lib/errors';
 import { assertUuid } from '../lib/validate';
-import { buildCards, cookSummary, type ProfileRow, type RecipeRow } from '../mappers';
+import { buildCards, cookSummary, profileLinks, type ProfileRow, type RecipeRow } from '../mappers';
 import { matchTastes } from '../services/taste';
 import { notify } from '../services/notify';
 import type { AppEnv } from '../types';
@@ -90,6 +90,7 @@ cooks.get('/:id', optionalAuth, async (c) => {
     ...summary,
     bannerUrl: p.banner_url,
     bio: p.bio ?? '',
+    links: profileLinks(p),
     counts: {
       followers: p.follower_count,
       following: p.following_count,

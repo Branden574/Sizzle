@@ -1,6 +1,19 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { CommentDTO, CookSummary, PostControls, RecipeCard, RecipeViewerState, VideoAssetDTO } from '@sizzle/shared';
+import type { CommentDTO, CookSummary, PostControls, ProfileLinks, RecipeCard, RecipeViewerState, VideoAssetDTO } from '@sizzle/shared';
 import { formatTimeLabel, initialsOf, relativeTime } from './lib/format';
+
+/** Map a profile row's social-link columns to the ProfileLinks DTO. */
+export function profileLinks(p: ProfileRow): ProfileLinks {
+  return {
+    instagram: p.instagram_url ?? null,
+    tiktok: p.tiktok_url ?? null,
+    x: p.x_url ?? null,
+    facebook: p.facebook_url ?? null,
+    discord: p.discord_url ?? null,
+    youtube: p.youtube_url ?? null,
+    website: p.website_url ?? null,
+  };
+}
 
 export interface CommentRow {
   id: string;
@@ -52,6 +65,13 @@ export interface ProfileRow {
   delete_at: string | null;
   ban_appeal_status: 'none' | 'pending' | 'denied';
   ban_appeal_text: string | null;
+  instagram_url: string | null;
+  tiktok_url: string | null;
+  x_url: string | null;
+  facebook_url: string | null;
+  discord_url: string | null;
+  youtube_url: string | null;
+  website_url: string | null;
 }
 
 export interface RecipeRow {

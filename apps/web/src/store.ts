@@ -18,14 +18,17 @@ const START_IN_APP = false;
 const PREFS_KEY = 'sz-prefs';
 export type ThemePref = 'system' | 'light' | 'dark';
 export type FeedKindPref = 'foryou' | 'following';
+export type UnitPref = 'original' | 'metric' | 'imperial';
 interface Prefs {
   muted: boolean;
   autoplay: boolean;
   theme: ThemePref;
   reduceMotion: boolean;
   defaultFeed: FeedKindPref;
+  units: UnitPref;
+  dataSaver: boolean;
 }
-const PREFS_DEFAULT: Prefs = { muted: true, autoplay: true, theme: 'system', reduceMotion: false, defaultFeed: 'foryou' };
+const PREFS_DEFAULT: Prefs = { muted: true, autoplay: true, theme: 'system', reduceMotion: false, defaultFeed: 'foryou', units: 'original', dataSaver: false };
 function loadPrefs(): Prefs {
   try {
     const raw = localStorage.getItem(PREFS_KEY);
@@ -37,6 +40,8 @@ function loadPrefs(): Prefs {
         theme: p.theme ?? PREFS_DEFAULT.theme,
         reduceMotion: p.reduceMotion ?? PREFS_DEFAULT.reduceMotion,
         defaultFeed: p.defaultFeed ?? PREFS_DEFAULT.defaultFeed,
+        units: p.units ?? PREFS_DEFAULT.units,
+        dataSaver: p.dataSaver ?? PREFS_DEFAULT.dataSaver,
       };
     }
   } catch {
@@ -54,7 +59,7 @@ function savePrefs(p: Prefs) {
 const prefs0 = loadPrefs();
 /** Snapshot the persisted prefs from current state, applying a partial change. */
 function prefsFrom(s: Prefs, patch: Partial<Prefs>): Prefs {
-  return { muted: s.muted, autoplay: s.autoplay, theme: s.theme, reduceMotion: s.reduceMotion, defaultFeed: s.defaultFeed, ...patch };
+  return { muted: s.muted, autoplay: s.autoplay, theme: s.theme, reduceMotion: s.reduceMotion, defaultFeed: s.defaultFeed, units: s.units, dataSaver: s.dataSaver, ...patch };
 }
 
 export interface SizzleState {
@@ -72,6 +77,7 @@ export interface SizzleState {
   showNotifications: boolean;
   showEditProfile: boolean;
   showAppSettings: boolean;
+  showRoadmap: boolean;
   showAdmin: boolean;
   commentsFor: string | null;
   settingsFor: string | null;
@@ -101,6 +107,8 @@ export interface SizzleState {
   theme: ThemePref;
   reduceMotion: boolean;
   defaultFeed: FeedKindPref;
+  units: UnitPref;
+  dataSaver: boolean;
   likes: BoolMap;
   dislikes: BoolMap;
   saves: BoolMap;
@@ -150,6 +158,7 @@ export interface SizzleState {
   setShowNotifications: (v: boolean) => void;
   setShowEditProfile: (v: boolean) => void;
   setShowAppSettings: (v: boolean) => void;
+  setShowRoadmap: (v: boolean) => void;
   setShowAdmin: (v: boolean) => void;
 
   // playback + appearance prefs
@@ -160,6 +169,8 @@ export interface SizzleState {
   setTheme: (v: ThemePref) => void;
   setReduceMotion: (v: boolean) => void;
   setDefaultFeed: (v: FeedKindPref) => void;
+  setUnits: (v: UnitPref) => void;
+  setDataSaver: (v: boolean) => void;
 
   // creator post controls
   togglePostSetting: (recipeId: string, key: keyof PostSettings) => void;
@@ -183,6 +194,7 @@ export const useSizzle = create<SizzleState>((set) => ({
   showNotifications: false,
   showEditProfile: false,
   showAppSettings: false,
+  showRoadmap: false,
   showAdmin: false,
   commentsFor: null,
   settingsFor: null,
@@ -201,6 +213,8 @@ export const useSizzle = create<SizzleState>((set) => ({
   theme: prefs0.theme,
   reduceMotion: prefs0.reduceMotion,
   defaultFeed: prefs0.defaultFeed,
+  units: prefs0.units,
+  dataSaver: prefs0.dataSaver,
   likes: {},
   dislikes: {},
   saves: { r2: true, r4: true, r6: true },
@@ -259,6 +273,7 @@ export const useSizzle = create<SizzleState>((set) => ({
   setShowNotifications: (v) => set({ showNotifications: v }),
   setShowEditProfile: (v) => set({ showEditProfile: v }),
   setShowAppSettings: (v) => set({ showAppSettings: v }),
+  setShowRoadmap: (v) => set({ showRoadmap: v }),
   setShowAdmin: (v) => set({ showAdmin: v }),
 
   toggleMuted: () => set((s) => { const muted = !s.muted; savePrefs(prefsFrom(s, { muted })); return { muted }; }),
@@ -268,6 +283,8 @@ export const useSizzle = create<SizzleState>((set) => ({
   setTheme: (v) => set((s) => { savePrefs(prefsFrom(s, { theme: v })); return { theme: v }; }),
   setReduceMotion: (v) => set((s) => { savePrefs(prefsFrom(s, { reduceMotion: v })); return { reduceMotion: v }; }),
   setDefaultFeed: (v) => set((s) => { savePrefs(prefsFrom(s, { defaultFeed: v })); return { defaultFeed: v }; }),
+  setUnits: (v) => set((s) => { savePrefs(prefsFrom(s, { units: v })); return { units: v }; }),
+  setDataSaver: (v) => set((s) => { savePrefs(prefsFrom(s, { dataSaver: v })); return { dataSaver: v }; }),
 
   togglePostSetting: (recipeId, key) =>
     set((s) => {

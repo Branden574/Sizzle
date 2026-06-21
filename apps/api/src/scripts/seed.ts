@@ -86,7 +86,11 @@ async function main() {
   await grant('mina', { role: 'admin' });
   await grant('theo', { verified_tier: 'blue' });
   await grant('lila', { verified_tier: 'gold' });
-  console.log('• 1 admin (mina) · 2 verified creators (theo=blue, lila=gold)');
+  // Demo social links so the profile/cook link-chips have content.
+  await grant('theo', { instagram_url: 'https://instagram.com/theocooks', tiktok_url: 'https://tiktok.com/@theocooks', x_url: 'https://x.com/theocooks', youtube_url: 'https://youtube.com/@theocooks', website_url: 'https://theocooks.com' });
+  await grant('lila', { instagram_url: 'https://instagram.com/lilamoreno', tiktok_url: 'https://tiktok.com/@lilamoreno', website_url: 'https://lilamoreno.kitchen' });
+  await grant('mina', { instagram_url: 'https://instagram.com/minapark', youtube_url: 'https://youtube.com/@minapark', discord_url: 'https://discord.gg/minacooks' });
+  console.log('• 1 admin (mina) · 2 verified creators (theo=blue, lila=gold) · demo social links');
 
   // 2) Recipes → video asset (ready/mock) + recipe + ordered ingredients/steps.
   let recipeCount = 0;

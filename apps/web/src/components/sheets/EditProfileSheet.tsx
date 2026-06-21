@@ -1,9 +1,21 @@
 import { useEffect, useRef, useState } from 'react';
 import type { CSSProperties } from 'react';
+import { PROFILE_LINK_KEYS, type ProfileLinkKey } from '@sizzle/shared';
 import { useMe, useUpdateProfile } from '../../data/queries';
 import { uploadProfileImage } from '../../lib/storage';
 import { useSizzle } from '../../store';
 import { CameraIcon } from '../icons';
+import { InstagramIcon, TikTokIcon, XIcon, YouTubeIcon, FacebookIcon, DiscordIcon, WebsiteIcon } from '../SocialLinks';
+
+const LINK_META: Record<ProfileLinkKey, { label: string; placeholder: string; Icon: (p: { size?: number }) => JSX.Element }> = {
+  instagram: { label: 'Instagram', placeholder: '@handle or instagram.com/…', Icon: InstagramIcon },
+  tiktok: { label: 'TikTok', placeholder: '@handle or tiktok.com/@…', Icon: TikTokIcon },
+  x: { label: 'X', placeholder: '@handle or x.com/…', Icon: XIcon },
+  youtube: { label: 'YouTube', placeholder: '@handle or youtube.com/@…', Icon: YouTubeIcon },
+  facebook: { label: 'Facebook', placeholder: 'facebook.com/…', Icon: FacebookIcon },
+  discord: { label: 'Discord', placeholder: 'discord.gg/invite', Icon: DiscordIcon },
+  website: { label: 'Website', placeholder: 'yoursite.com', Icon: WebsiteIcon },
+};
 
 const field: CSSProperties = {
   width: '100%',
@@ -33,6 +45,8 @@ export function EditProfileSheet() {
   const [bannerUrl, setBannerUrl] = useState<string | null>(me?.bannerUrl ?? null);
   const [uploading, setUploading] = useState<'avatar' | 'banner' | null>(null);
   const [err, setErr] = useState<string | null>(null);
+  const [handleErr, setHandleErr] = useState<string | null>(null);
+  const [links, setLinks] = useState<Record<string, string>>({});
 
   const avatarInput = useRef<HTMLInputElement>(null);
   const bannerInput = useRef<HTMLInputElement>(null);
@@ -50,6 +64,7 @@ export function EditProfileSheet() {
       setBio(me.bio ?? '');
       setAvatarUrl(me.avatarUrl ?? null);
       setBannerUrl(me.bannerUrl ?? null);
+      setLinks(Object.fromEntries(PROFILE_LINK_KEYS.map((k) => [k, me.links[k] ?? ''])));
     }
   }, [me]);
 
@@ -77,9 +92,17 @@ export function EditProfileSheet() {
       setErr(handle.trim().length < 2 ? 'Handle needs at least 2 characters.' : 'Name can’t be empty.');
       return;
     }
+    const linkPayload = Object.fromEntries(PROFILE_LINK_KEYS.map((k) => [k, links[k]?.trim() || null]));
     update.mutate(
-      { displayName: name.trim(), handle: handle.trim(), bio: bio.trim(), phone: phone.trim(), avatarUrl, bannerUrl },
-      { onSuccess: () => close() },
+      { displayName: name.trim(), handle: handle.trim(), bio: bio.trim(), phone: phone.trim(), avatarUrl, bannerUrl, links: linkPayload },
+      {
+        onSuccess: () => close(),
+        onError: (e) => {
+          const msg = (e as Error)?.message ?? '';
+          if (/taken/i.test(msg)) setHandleErr('That username is taken — try another.');
+          else setErr(msg || 'Could not save.');
+        },
+      },
     );
   };
 
@@ -126,7 +149,12 @@ export function EditProfileSheet() {
             </div>
             <div>
               <label style={labelStyle}>Handle</label>
-              <input value={handle} onChange={(e) => setHandle(e.target.value)} style={field} />
+              <input
+                value={handle}
+                onChange={(e) => { setHandle(e.target.value); if (handleErr) setHandleErr(null); }}
+                style={{ ...field, borderColor: handleErr ? '#d8521e' : (field.border as string) }}
+              />
+              {handleErr && <div style={{ color: '#d8521e', fontSize: 12.5, fontWeight: 600, marginTop: 6, marginLeft: 2 }}>{handleErr}</div>}
             </div>
             <div>
               <label style={labelStyle}>Phone</label>
@@ -136,7 +164,32 @@ export function EditProfileSheet() {
               <label style={labelStyle}>Bio</label>
               <textarea value={bio} onChange={(e) => setBio(e.target.value)} rows={3} style={{ ...field, height: 'auto', padding: '12px 16px', resize: 'vertical', lineHeight: 1.5 }} />
             </div>
-            {(err || update.isError) && <div style={{ color: '#d8521e', fontSize: 13.5, fontWeight: 600 }}>{err ?? (update.error as Error)?.message ?? 'Could not save.'}</div>}
+
+            {/* Social links */}
+            <div style={{ marginTop: 4 }}>
+              <label style={labelStyle}>Social links</label>
+              <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+                {PROFILE_LINK_KEYS.map((k) => {
+                  const { label, placeholder, Icon } = LINK_META[k];
+                  return (
+                    <div key={k} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--surface)', border: '1.5px solid var(--line-2)', borderRadius: 14, padding: '0 14px', height: 50 }}>
+                      <span style={{ color: 'var(--text-faint)', display: 'flex', flex: 'none' }} aria-hidden><Icon size={18} /></span>
+                      <input
+                        value={links[k] ?? ''}
+                        onChange={(e) => setLinks((s) => ({ ...s, [k]: e.target.value }))}
+                        placeholder={`${label} · ${placeholder}`}
+                        inputMode="url"
+                        autoCapitalize="none"
+                        autoCorrect="off"
+                        style={{ flex: 1, minWidth: 0, height: '100%', border: 'none', background: 'transparent', fontFamily: "'Hanken Grotesk'", fontSize: 15, color: 'var(--text)', outline: 'none' }}
+                      />
+                    </div>
+                  );
+                })}
+              </div>
+            </div>
+
+            {(err || (update.isError && !handleErr)) && <div style={{ color: '#d8521e', fontSize: 13.5, fontWeight: 600 }}>{err ?? (update.error as Error)?.message ?? 'Could not save.'}</div>}
           </div>
         </div>
       </div>

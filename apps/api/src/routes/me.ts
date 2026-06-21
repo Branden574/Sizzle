@@ -6,7 +6,9 @@ import { supabaseAdmin, userClient } from '../lib/supabase';
 import { badRequest, notFound } from '../lib/errors';
 import { assertUuid } from '../lib/validate';
 import { initialsOf, relativeTime } from '../lib/format';
-import { buildCards, cookSummary, type ProfileRow, type RecipeRow } from '../mappers';
+import { buildCards, cookSummary, profileLinks, type ProfileRow, type RecipeRow } from '../mappers';
+import { normalizeLink } from '../services/links';
+import { PROFILE_LINK_KEYS } from '@sizzle/shared';
 import type { AppEnv } from '../types';
 
 export const me = new Hono<AppEnv>();
@@ -35,6 +37,7 @@ me.get('/', async (c) => {
     bannerUrl: profile.banner_url,
     phone: profile.phone,
     bio: profile.bio ?? '',
+    links: profileLinks(profile as ProfileRow),
     isCook: profile.is_cook,
     verifiedTier: profile.verified_tier ?? null,
     role: profile.role ?? 'user',
@@ -258,6 +261,7 @@ me.post('/notifications/read', async (c) => {
   return c.json({ ok: true });
 });
 
+const linkOrNull = z.string().trim().max(300).nullable().optional();
 const patchSchema = z.object({
   displayName: z.string().trim().min(1).max(60).optional(),
   bio: z.string().max(300).optional(),
@@ -265,6 +269,13 @@ const patchSchema = z.object({
   phone: z.string().trim().max(30).optional(),
   avatarUrl: z.string().url().max(1000).nullable().optional(),
   bannerUrl: z.string().url().max(1000).nullable().optional(),
+  links: z
+    .object({
+      instagram: linkOrNull, tiktok: linkOrNull, x: linkOrNull,
+      facebook: linkOrNull, discord: linkOrNull, youtube: linkOrNull, website: linkOrNull,
+    })
+    .partial()
+    .optional(),
 });
 
 /** PATCH /me — edit display name / handle / bio / phone / avatar / banner. */
@@ -280,6 +291,12 @@ me.patch('/', async (c) => {
   if (body.data.phone !== undefined) updates.phone = body.data.phone;
   if (body.data.avatarUrl !== undefined) updates.avatar_url = body.data.avatarUrl;
   if (body.data.bannerUrl !== undefined) updates.banner_url = body.data.bannerUrl;
+  if (body.data.links) {
+    for (const key of PROFILE_LINK_KEYS) {
+      const raw = body.data.links[key];
+      if (raw !== undefined) updates[`${key}_url`] = normalizeLink(key, raw);
+    }
+  }
   if (Object.keys(updates).length === 0) return c.json({ ok: true });
 
   const db = userClient(c.get('accessToken')!);
@@ -288,6 +305,21 @@ me.patch('/', async (c) => {
     if (/duplicate|unique/i.test(error.message)) throw badRequest('That handle is taken');
     console.error('profile update:', error.message);
     throw badRequest('Could not update profile');
+  }
+  return c.json({ ok: true });
+});
+
+/**
+ * DELETE /me — permanently delete the signed-in user's account. Removes the
+ * auth user, which cascades to their profile and all content (recipes, follows,
+ * comments, etc.) via ON DELETE CASCADE. Irreversible; the client confirms first.
+ */
+me.delete('/', async (c) => {
+  const userId = c.get('userId')!;
+  const { error } = await supabaseAdmin.auth.admin.deleteUser(userId);
+  if (error) {
+    console.error('account delete:', error.message);
+    throw badRequest('Could not delete account');
   }
   return c.json({ ok: true });
 });

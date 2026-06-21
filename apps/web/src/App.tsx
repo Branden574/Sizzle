@@ -9,6 +9,7 @@ import { ResetPasswordScreen } from './components/ResetPasswordScreen';
 import { Splash } from './components/Splash';
 import { StatusBar } from './components/StatusBar';
 import { AppSettingsSheet } from './components/sheets/AppSettingsSheet';
+import { RoadmapSheet } from './components/sheets/RoadmapSheet';
 import { CollectionPickerSheet } from './components/sheets/CollectionPickerSheet';
 import { CollectionSheet } from './components/sheets/CollectionSheet';
 import { CommentsSheet } from './components/sheets/CommentsSheet';
@@ -29,6 +30,7 @@ import { useAuth } from './auth/useAuth';
 import { queryClient } from './data/queries';
 import { apiSend } from './lib/api';
 import { useOnlineStatus } from './lib/useOnlineStatus';
+import { isNative } from './lib/native';
 import { useSizzle } from './store';
 
 /** Resolve the System/Light/Dark preference to a concrete scheme, tracking the
@@ -59,8 +61,9 @@ export default function App() {
   // Decide the initial session once, then keep phase in sync with auth.
   useEffect(() => initAuth(), [initAuth]);
   useEffect(() => {
-    if (authStatus === 'authed' || authStatus === 'guest') setPhase('app');
-    else if (authStatus === 'anon') resetToOnboarding();
+    // An account is required to use the app — only authed users reach the app shell.
+    if (authStatus === 'authed') setPhase('app');
+    else if (authStatus === 'anon' || authStatus === 'guest') resetToOnboarding();
   }, [authStatus, setPhase, resetToOnboarding]);
 
   // On first auth, replay onboarding choices: persist taste picks and follow
@@ -90,6 +93,7 @@ export default function App() {
   const showNotifications = useSizzle((s) => s.showNotifications);
   const showEditProfile = useSizzle((s) => s.showEditProfile);
   const showAppSettings = useSizzle((s) => s.showAppSettings);
+  const showRoadmap = useSizzle((s) => s.showRoadmap);
   const showAdmin = useSizzle((s) => s.showAdmin);
   const moreFor = useSizzle((s) => s.moreFor);
   const reportFor = useSizzle((s) => s.reportFor);
@@ -121,7 +125,7 @@ export default function App() {
   const overlay = showRecipe || showCook;
   let lightStatus: boolean;
   if (showUpload || cookFor) lightStatus = false;
-  else if (recovery || overlay || showComments || showSettings || showNotifications || showEditProfile || showAppSettings || showAdmin || showShopping || !!collectionPickerFor || !!openCollection || !!moreFor || !!reportFor || !!repostFor || !!openTag || !!followList) lightStatus = true;
+  else if (recovery || overlay || showComments || showSettings || showNotifications || showEditProfile || showAppSettings || showRoadmap || showAdmin || showShopping || !!collectionPickerFor || !!openCollection || !!moreFor || !!reportFor || !!repostFor || !!openTag || !!followList) lightStatus = true;
   else if (isOnboarding) lightStatus = true;
   else lightStatus = tab !== 'feed';
 
@@ -132,9 +136,11 @@ export default function App() {
   const homeIndicator = darkGlyphs ? 'rgba(27,21,18,.22)' : 'rgba(255,255,255,.5)';
 
   return (
-    <div className={`sz-stage${reduceMotion ? ' sz-reduce-motion' : ''}`} data-theme={scheme}>
-      <Phone>
-        <StatusBar color={statusColor} />
+    <div className={`sz-stage${isNative ? ' native' : ''}${reduceMotion ? ' sz-reduce-motion' : ''}`} data-theme={scheme}>
+      <Phone bare={isNative}>
+        {/* The fake iOS status bar + home indicator are web-mockup chrome only —
+            on native the real OS draws them, so omit ours to avoid a double bar. */}
+        {!isNative && <StatusBar color={statusColor} />}
         <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
           {!online && (
             <div style={{ position: 'absolute', top: 54, left: '50%', transform: 'translateX(-50%)', zIndex: 55, background: 'rgba(27,21,18,.92)', color: '#fff', fontSize: 12.5, fontWeight: 600, padding: '7px 14px', borderRadius: 20, backdropFilter: 'blur(8px)', pointerEvents: 'none', whiteSpace: 'nowrap' }}>
@@ -161,6 +167,7 @@ export default function App() {
           {showNotifications && <NotificationsSheet />}
           {showEditProfile && <EditProfileSheet />}
           {showAppSettings && <AppSettingsSheet />}
+          {showRoadmap && <RoadmapSheet />}
           {moreFor && <MoreSheet />}
           {reportFor && <ReportSheet />}
           {repostFor && <RepostSheet />}
@@ -175,7 +182,7 @@ export default function App() {
           {recovery && <ResetPasswordScreen />}
           {banned && authStatus === 'authed' && <BannedScreen />}
 
-          <HomeIndicator color={homeIndicator} />
+          {!isNative && <HomeIndicator color={homeIndicator} />}
         </div>
       </Phone>
     </div>

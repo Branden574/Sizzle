@@ -31,6 +31,7 @@ export function RecipeSheet() {
   const appeal = useAppealRecipe();
   const [appealText, setAppealText] = useState('');
   const [scale, setScale] = useState(1);
+  const units = useSizzle((s) => s.units);
   const [addedToList, setAddedToList] = useState(false);
   const addToShopping = useShopping((s) => s.add);
   // Offline fallback: if the fetch hasn't landed, use the locally cached copy.
@@ -160,7 +161,7 @@ export function RecipeSheet() {
                     {r.ingredients.map((ing, i) => (
                       <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '14px 16px', borderBottom: '1px solid var(--line)' }}>
                         <div style={{ width: 8, height: 8, borderRadius: '50%', background: accent, flex: 'none' }} />
-                        <span style={{ fontSize: 15.5, color: 'var(--text-2)' }}>{scale === 1 ? ing : scaleIngredient(ing, scale)}</span>
+                        <span style={{ fontSize: 15.5, color: 'var(--text-2)' }}>{scale === 1 && units === 'original' ? ing : scaleIngredient(ing, scale, units)}</span>
                       </div>
                     ))}
                   </div>
@@ -168,7 +169,7 @@ export function RecipeSheet() {
                   <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
                     <button
                       onClick={() => {
-                        const lines = scale === 1 ? r.ingredients : r.ingredients.map((ing) => scaleIngredient(ing, scale));
+                        const lines = scale === 1 && units === 'original' ? r.ingredients : r.ingredients.map((ing) => scaleIngredient(ing, scale, units));
                         addToShopping(lines, { id: r.id, title: r.title });
                         setAddedToList(true);
                         window.setTimeout(() => setAddedToList(false), 1800);
