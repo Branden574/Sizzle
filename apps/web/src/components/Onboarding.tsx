@@ -327,8 +327,8 @@ function StepAccount() {
 
   const isLogin = mode === 'login';
 
-  // Normalized username + debounced availability check (signup only).
-  const cleanHandle = username.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+  // Normalized username (case preserved) + debounced availability check (signup only).
+  const cleanHandle = username.trim().replace(/[^A-Za-z0-9_]/g, '');
   useEffect(() => {
     if (isLogin) return;
     if (cleanHandle.length < 3) {

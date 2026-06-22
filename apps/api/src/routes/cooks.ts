@@ -61,13 +61,13 @@ cooks.get('/suggested', optionalAuth, async (c) => {
  * underscore is escaped so ilike treats it literally, not as a wildcard).
  */
 cooks.get('/handle-available', async (c) => {
-  const handle = (c.req.query('handle') ?? '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+  const handle = (c.req.query('handle') ?? '').trim().replace(/[^A-Za-z0-9_]/g, '');
   if (handle.length < 3) return c.json({ available: false, reason: 'At least 3 characters.' });
   if (handle.length > 30) return c.json({ available: false, reason: 'Too long (max 30).' });
-  const pattern = handle.replace(/_/g, '\\_');
-  const { data, error } = await supabaseAdmin.from('profiles').select('id').ilike('handle', pattern).limit(1);
+  // RPC does `lower(handle) = lower(h)` → uses the profiles_handle_lower_key index.
+  const { data, error } = await supabaseAdmin.rpc('handle_available', { h: handle });
   if (error) throw dbFail(error.message);
-  return c.json({ available: !(data && data.length > 0) });
+  return c.json({ available: !!data });
 });
 
 /** GET /cooks/:id — public cook profile + recipe grid + viewer.following. */

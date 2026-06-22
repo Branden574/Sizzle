@@ -286,7 +286,9 @@ me.patch('/', async (c) => {
   const updates: Record<string, unknown> = {};
   if (body.data.displayName !== undefined) updates.display_name = body.data.displayName;
   if (body.data.bio !== undefined) updates.bio = body.data.bio;
-  if (body.data.handle !== undefined) updates.handle = body.data.handle.replace(/^@/, '').toLowerCase();
+  // Keep the case the user typed (strip @ + invalid chars); uniqueness is enforced
+  // case-insensitively by the lower(handle) unique index.
+  if (body.data.handle !== undefined) updates.handle = body.data.handle.replace(/^@/, '').replace(/[^A-Za-z0-9_]/g, '');
   if (body.data.phone !== undefined) updates.phone = body.data.phone;
   if (body.data.avatarUrl !== undefined) updates.avatar_url = body.data.avatarUrl;
   if (body.data.bannerUrl !== undefined) updates.banner_url = body.data.bannerUrl;
