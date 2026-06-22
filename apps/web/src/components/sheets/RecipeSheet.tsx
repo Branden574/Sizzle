@@ -18,7 +18,7 @@ const accent = theme.accent;
 export function RecipeSheet() {
   const openRecipe = useSizzle((s) => s.openRecipe);
   const setOpenRecipe = useSizzle((s) => s.setOpenRecipe);
-  const setViewerCard = useSizzle((s) => s.setViewerCard);
+  const setViewer = useSizzle((s) => s.setViewer);
   const setEditPostFor = useSizzle((s) => s.setEditPostFor);
   const setOpenCook = useSizzle((s) => s.setOpenCook);
   const setCommentsFor = useSizzle((s) => s.setCommentsFor);
@@ -62,7 +62,7 @@ export function RecipeSheet() {
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, top: 44, background: 'var(--bg)', borderRadius: '30px 30px 0 0', overflow: 'hidden', animation: 'sz-slideUp .42s cubic-bezier(.16,1,.3,1)', display: 'flex', flexDirection: 'column' }}>
         <div style={{ position: 'relative', height: headerVideo ? 300 : 230, flex: 'none', background: r?.bg ?? 'linear-gradient(165deg,#2a160e,#b5471f)' }}>
           {headerVideo ? (
-            <RecipeHeaderVideo src={headerVideo} poster={r?.video?.posterUrl} onExpand={() => { if (r) { setViewerCard(r); setOpenRecipe(null); } }} />
+            <RecipeHeaderVideo src={headerVideo} poster={r?.video?.posterUrl} onExpand={() => { if (r) { setViewer({ items: [r], index: 0 }); setOpenRecipe(null); } }} />
           ) : (
             <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(70% 60% at 70% 20%, rgba(244,165,44,.5), transparent 70%)' }} />
           )}

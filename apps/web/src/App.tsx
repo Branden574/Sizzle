@@ -102,7 +102,7 @@ export default function App() {
   const phase = useSizzle((s) => s.phase);
   const tab = useSizzle((s) => s.tab);
   const openRecipe = useSizzle((s) => s.openRecipe);
-  const viewerCard = useSizzle((s) => s.viewerCard);
+  const viewer = useSizzle((s) => s.viewer);
   const openCook = useSizzle((s) => s.openCook);
   const commentsFor = useSizzle((s) => s.commentsFor);
   const settingsFor = useSizzle((s) => s.settingsFor);
@@ -186,7 +186,7 @@ export default function App() {
             </ErrorBoundary>
           )}
 
-          {viewerCard && <VideoViewer />}
+          {viewer && <VideoViewer />}
           {showRecipe && <RecipeSheet />}
           {showComments && <CommentsSheet />}
           {showSettings && <SettingsSheet />}

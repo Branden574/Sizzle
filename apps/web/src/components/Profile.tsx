@@ -24,7 +24,7 @@ function GridIcon({ size = 22, stroke = 'currentColor' }: { size?: number; strok
 export function Profile() {
   const authed = useAuth((s) => s.status === 'authed');
   const requireAuth = useRequireAuth();
-  const setOpenRecipe = useSizzle((s) => s.setOpenRecipe);
+  const setViewer = useSizzle((s) => s.setViewer);
 
   const setShowEditProfile = useSizzle((s) => s.setShowEditProfile);
   const setShowNotifications = useSizzle((s) => s.setShowNotifications);
@@ -42,6 +42,7 @@ export function Profile() {
   const postItems = myCook?.recipes ?? [];
   const unread = (notifications ?? []).filter((n) => !n.read).length;
   const [tab, setTab] = useState<'posts' | 'liked' | 'saved'>('posts');
+  const gridItems = tab === 'posts' ? postItems : tab === 'liked' ? likedItems : savedItems;
 
   if (!authed) {
     return (
@@ -124,26 +125,26 @@ export function Profile() {
           })}
         </div>
         <RecipeGrid
-          items={tab === 'posts' ? postItems : tab === 'liked' ? likedItems : savedItems}
+          items={gridItems}
           empty={tab === 'posts' ? 'Videos you post will show up here.' : tab === 'liked' ? 'Videos you like will show up here.' : 'Recipes you save will collect here.'}
-          onOpen={setOpenRecipe}
+          onOpenAt={(i) => setViewer({ items: gridItems, index: i })}
         />
       </div>
     </div>
   );
 }
 
-/** A 3-column thumbnail grid of recipes; tap a tile to open the video. */
-function RecipeGrid({ items, empty, onOpen }: { items: RecipeCard[]; empty: string; onOpen: (id: string) => void }) {
+/** A 3-column thumbnail grid of recipes; tap a tile to open the swipeable viewer. */
+function RecipeGrid({ items, empty, onOpenAt }: { items: RecipeCard[]; empty: string; onOpenAt: (index: number) => void }) {
   if (items.length === 0) {
     return <div style={{ padding: 30, textAlign: 'center', background: 'var(--surface)', border: '1px dashed var(--line-2)', borderRadius: 20, color: 'var(--text-faint-2)', fontSize: 14 }}>{empty}</div>;
   }
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-      {items.map((r) => (
+      {items.map((r, i) => (
         <button
           key={r.id}
-          onClick={() => onOpen(r.id)}
+          onClick={() => onOpenAt(i)}
           style={{ border: 'none', padding: 0, cursor: 'pointer', borderRadius: 14, overflow: 'hidden', position: 'relative', aspectRatio: '3 / 4', background: r.bg }}
         >
           {r.video?.posterUrl && <img src={r.video.posterUrl} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}

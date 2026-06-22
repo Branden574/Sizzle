@@ -73,8 +73,8 @@ export interface SizzleState {
   /** Hold-to-hide immersive mode: hides all feed overlays + the bottom nav. */
   immersive: boolean;
   openRecipe: string | null;
-  /** Full-screen feed-style video viewer (the recipe being watched), or null. */
-  viewerCard: RecipeCard | null;
+  /** Full-screen, swipeable feed-style video viewer: the list + the card in view. */
+  viewer: { items: RecipeCard[]; index: number } | null;
   openCook: string | null;
   showUpload: boolean;
   showNotifications: boolean;
@@ -145,7 +145,7 @@ export interface SizzleState {
 
   // sheets
   setOpenRecipe: (id: string | null) => void;
-  setViewerCard: (card: RecipeCard | null) => void;
+  setViewer: (v: { items: RecipeCard[]; index: number } | null) => void;
   setOpenCook: (id: string | null) => void;
   openCookFromSheet: () => void;
   setCommentsFor: (id: string | null) => void;
@@ -196,7 +196,7 @@ export const useSizzle = create<SizzleState>((set) => ({
   feed: prefs0.defaultFeed,
   immersive: false,
   openRecipe: null,
-  viewerCard: null,
+  viewer: null,
   openCook: null,
   showUpload: false,
   showNotifications: false,
@@ -262,7 +262,7 @@ export const useSizzle = create<SizzleState>((set) => ({
   setImmersive: (on) => set({ immersive: on }),
 
   setOpenRecipe: (id) => set({ openRecipe: id }),
-  setViewerCard: (card) => set({ viewerCard: card }),
+  setViewer: (v) => set({ viewer: v }),
   setOpenCook: (id) => set({ openCook: id }),
   // Jump from the recipe sheet to the recipe's cook profile.
   openCookFromSheet: () =>
