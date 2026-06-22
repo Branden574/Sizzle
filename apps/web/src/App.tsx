@@ -3,6 +3,7 @@ import { AdminDashboard } from './components/AdminDashboard';
 import { AppShell } from './components/AppShell';
 import { BannedScreen } from './components/BannedScreen';
 import { ErrorBoundary } from './components/ErrorBoundary';
+import { Marketing } from './components/Marketing';
 import { Onboarding } from './components/Onboarding';
 import { HomeIndicator, Phone } from './components/Phone';
 import { ResetPasswordScreen } from './components/ResetPasswordScreen';
@@ -54,16 +55,30 @@ export default function App() {
   const recovery = useAuth((s) => s.recovery);
   const banned = useAuth((s) => !!s.profile?.banned);
   const initAuth = useAuth((s) => s.init);
+  const setMode = useAuth((s) => s.setMode);
   const setPhase = useSizzle((s) => s.setPhase);
+  const setOnbStep = useSizzle((s) => s.setOnbStep);
   const resetToOnboarding = useSizzle((s) => s.resetToOnboarding);
+  // Web only: show the marketing landing until a visitor enters the app (Get
+  // started / Log in). Native users go straight into the app.
+  const [webEntered, setWebEntered] = useState(false);
 
   // Decide the initial session once, then keep phase in sync with auth.
   useEffect(() => initAuth(), [initAuth]);
   useEffect(() => {
     // An account is required to use the app — only authed users reach the app shell.
     if (authStatus === 'authed') setPhase('app');
-    else if (authStatus === 'anon' || authStatus === 'guest') resetToOnboarding();
+    else if (authStatus === 'anon' || authStatus === 'guest') {
+      resetToOnboarding();
+      setWebEntered(false); // back to the marketing site on sign-out
+    }
   }, [authStatus, setPhase, resetToOnboarding]);
+
+  const enterApp = (mode: 'signup' | 'login') => {
+    setMode(mode);
+    setOnbStep(mode === 'login' ? 3 : 1); // login → account step; signup → tastes
+    setWebEntered(true);
+  };
 
   // On first auth, replay onboarding choices: persist taste picks and follow
   // the cooks selected during onboarding (real cook ids from /cooks/suggested).
@@ -132,6 +147,17 @@ export default function App() {
   // (always-dark) feed, or anywhere in dark mode, they're light.
   const darkGlyphs = lightStatus && !isDark;
   const homeIndicator = darkGlyphs ? 'rgba(27,21,18,.22)' : 'rgba(255,255,255,.5)';
+
+  // Web front door: show the marketing site to logged-out visitors until they
+  // choose Get started / Log in. Native + authed + password-recovery skip it.
+  const showMarketing = !isNative && (authStatus === 'anon' || authStatus === 'guest') && !recovery && !webEntered;
+  if (showMarketing) {
+    return (
+      <div className="sz-stage marketing" data-theme={scheme}>
+        <Marketing onGetStarted={() => enterApp('signup')} onLogin={() => enterApp('login')} />
+      </div>
+    );
+  }
 
   return (
     <div className={`sz-stage${isNative ? ' native' : ''}${reduceMotion ? ' sz-reduce-motion' : ''}`} data-theme={scheme}>
