@@ -7,8 +7,7 @@ import { badRequest, notFound } from '../lib/errors';
 import { assertUuid } from '../lib/validate';
 import { initialsOf, relativeTime } from '../lib/format';
 import { buildCards, cookSummary, profileLinks, type ProfileRow, type RecipeRow } from '../mappers';
-import { normalizeLink } from '../services/links';
-import { PROFILE_LINK_KEYS } from '@sizzle/shared';
+import { normalizeLink, PROFILE_LINK_KEYS } from '../services/links';
 import type { AppEnv } from '../types';
 
 export const me = new Hono<AppEnv>();

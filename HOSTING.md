@@ -29,28 +29,35 @@ Stack: **Supabase** (database / auth / storage) · **Vercel** (web app + API).
 
 ---
 
-## Stage 2 — API on Vercel  *(Claude scaffolds the config)*
+> New API keys: Supabase now issues **`sb_publishable_…`** (public, replaces `anon`)
+> and **`sb_secret_…`** (private, replaces `service_role`). Use those — supabase-js
+> 2.108 supports them natively. The publishable key goes everywhere the old anon
+> key did; the secret key is the one you paste into the API only.
 
-New Vercel project, root directory **`apps/api`**. Environment variables:
+## Stage 2 — API on Vercel  ✅ *config scaffolded (`apps/api/api/index.ts` + `apps/api/vercel.json`)*
+
+New Vercel project → **Import `Branden574/Sizzle`** → **Root Directory = `apps/api`** → Framework Preset **Other**. Environment variables:
 
 | Variable | Value | |
 |---|---|---|
-| `SUPABASE_URL` | `https://<ref>.supabase.co` | 🌐 |
-| `SUPABASE_ANON_KEY` | the anon key | 🌐 |
-| `SUPABASE_SERVICE_ROLE_KEY` | the service_role key | 🔒 **you paste** |
+| `SUPABASE_URL` | `https://gsxoaurmsgqascxukony.supabase.co` | 🌐 |
+| `SUPABASE_ANON_KEY` | your `sb_publishable_…` key | 🌐 |
+| `SUPABASE_SERVICE_ROLE_KEY` | your `sb_secret_…` key | 🔒 **you paste** |
 | `WEB_ORIGIN` | the web app's URL (set after Stage 3) | 🌐 |
 | `VIDEO_PROVIDER` | `mock` (switch to `cloudflare` later for real video) | 🌐 |
 
+The Hono app runs as one serverless function; `vercel.json` routes every path to it, so the API answers at the project's root URL (`https://<api>.vercel.app/me`, `/recipes`, …).
+
 ---
 
-## Stage 3 — Web app on Vercel  *(Claude scaffolds the config)*
+## Stage 3 — Web app on Vercel
 
-New Vercel project, root directory **`apps/web`**, framework **Vite**. Build-time env:
+New Vercel project → **Import the same repo** → **Root Directory = `apps/web`** → Framework Preset **Vite** (auto-detected; output `dist`). Build-time env:
 
 | Variable | Value | |
 |---|---|---|
-| `VITE_SUPABASE_URL` | `https://<ref>.supabase.co` | 🌐 |
-| `VITE_SUPABASE_ANON_KEY` | the anon key | 🌐 (public client key by design) |
+| `VITE_SUPABASE_URL` | `https://gsxoaurmsgqascxukony.supabase.co` | 🌐 |
+| `VITE_SUPABASE_ANON_KEY` | your `sb_publishable_…` key | 🌐 (public client key by design) |
 | `VITE_API_URL` | the API project's URL from Stage 2 | 🌐 |
 
 ---

@@ -1,4 +1,11 @@
+import type { ProfileLinkKey } from '@sizzle/shared';
 import { badRequest } from '../lib/errors';
+
+/** The social platforms a profile can link, in display order. Defined here (not
+ *  imported as a runtime value from @sizzle/shared) so the API has no workspace
+ *  runtime dependency — keeps it self-contained for serverless deploys. The type
+ *  ref to ProfileLinkKey keeps it in sync with the shared contract at compile time. */
+export const PROFILE_LINK_KEYS: ProfileLinkKey[] = ['instagram', 'tiktok', 'x', 'youtube', 'facebook', 'discord', 'website'];
 
 /** Allowed hostnames per platform (without leading www.). */
 const DOMAINS: Record<string, string[]> = {
