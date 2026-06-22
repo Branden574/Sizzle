@@ -7,7 +7,6 @@ import { Onboarding } from './components/Onboarding';
 import { HomeIndicator, Phone } from './components/Phone';
 import { ResetPasswordScreen } from './components/ResetPasswordScreen';
 import { Splash } from './components/Splash';
-import { StatusBar } from './components/StatusBar';
 import { AppSettingsSheet } from './components/sheets/AppSettingsSheet';
 import { RoadmapSheet } from './components/sheets/RoadmapSheet';
 import { CollectionPickerSheet } from './components/sheets/CollectionPickerSheet';
@@ -132,15 +131,13 @@ export default function App() {
   // On a light surface in light mode the status glyphs are dark ink; on the
   // (always-dark) feed, or anywhere in dark mode, they're light.
   const darkGlyphs = lightStatus && !isDark;
-  const statusColor = darkGlyphs ? '#1b1512' : '#fff';
   const homeIndicator = darkGlyphs ? 'rgba(27,21,18,.22)' : 'rgba(255,255,255,.5)';
 
   return (
     <div className={`sz-stage${isNative ? ' native' : ''}${reduceMotion ? ' sz-reduce-motion' : ''}`} data-theme={scheme}>
       <Phone bare={isNative}>
-        {/* The fake iOS status bar + home indicator are web-mockup chrome only —
-            on native the real OS draws them, so omit ours to avoid a double bar. */}
-        {!isNative && <StatusBar color={statusColor} />}
+        {/* The fake "9:41" iOS status bar was web-mockup chrome — removed so the
+            real app (web + native) doesn't show a fake clock/battery. */}
         <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
           {!online && (
             <div style={{ position: 'absolute', top: 54, left: '50%', transform: 'translateX(-50%)', zIndex: 55, background: 'rgba(27,21,18,.92)', color: '#fff', fontSize: 12.5, fontWeight: 600, padding: '7px 14px', borderRadius: 20, backdropFilter: 'blur(8px)', pointerEvents: 'none', whiteSpace: 'nowrap' }}>
