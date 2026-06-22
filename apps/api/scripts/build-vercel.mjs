@@ -15,7 +15,7 @@ await build({
   bundle: true,
   platform: 'node',
   format: 'esm',
-  target: 'node20',
+  target: 'node22',
   outfile: `${OUT}/functions/api.func/index.mjs`,
   // Some bundled CJS deps call require() at runtime; provide it under ESM.
   banner: { js: "import{createRequire as ___cr}from'module';const require=___cr(import.meta.url);" },
@@ -24,7 +24,9 @@ await build({
 
 writeFileSync(
   `${OUT}/functions/api.func/.vc-config.json`,
-  JSON.stringify({ runtime: 'nodejs20.x', handler: 'index.mjs', launcherType: 'Nodejs', shouldAddHelpers: false }),
+  // Node 22 (not 20) — supabase-js's realtime client needs a native WebSocket,
+  // which Node 20 lacks. maxDuration caps a hung request at 30s (was 300s).
+  JSON.stringify({ runtime: 'nodejs22.x', handler: 'index.mjs', launcherType: 'Nodejs', shouldAddHelpers: false, maxDuration: 30 }),
 );
 
 writeFileSync(`${OUT}/static/index.html`, '<!doctype html><meta charset="utf-8"><title>Sizzle API</title>Sizzle API');
