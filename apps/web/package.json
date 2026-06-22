@@ -7,11 +7,15 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc -b && vite build",
+    "build:lan": "tsc -b && vite build --mode lan",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
     "cap:sync": "npm run build && cap sync",
     "ios": "npm run build && cap run ios",
     "android": "npm run build && cap run android",
+    "cap:sync:lan": "npm run build:lan && cap sync",
+    "ios:lan": "npm run build:lan && cap run ios",
+    "android:lan": "npm run build:lan && cap run android",
     "cap:open:ios": "cap open ios",
     "cap:open:android": "cap open android"
   },
