@@ -37,6 +37,8 @@ pnpm-debug.log*
 .env
 .env.*
 !.env.example
+# Holds a Supabase personal access token — never commit.
+.mcp.json
 
 # supabase local
 supabase/.temp

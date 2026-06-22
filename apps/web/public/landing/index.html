@@ -1,0 +1,558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Sizzle — Watch it. Scale it. Cook it.</title>
+<meta name="description" content="TikTok for recipes. A full-screen video feed of real recipes from real home cooks — tap once for a clean, scalable recipe and cook along. No ads, no tracking." />
+<meta property="og:title" content="Sizzle — Watch it. Scale it. Cook it." />
+<meta property="og:description" content="A full-screen video feed of real recipes you can actually make. No ads, no tracking." />
+<meta property="og:type" content="website" />
+<meta property="og:url" content="https://getsizzle.app" />
+<meta name="theme-color" content="#0e0b09" />
+<link rel="icon" href="/favicon.ico" />
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Hanken+Grotesk:wght@400;500;600;700;800&display=swap" rel="stylesheet" />
+<style>
+  :root{
+    --bg:#0e0b09; --bg-2:#16100c; --cream:#f6ece2; --cream-2:#efe3d6;
+    --accent:#ff5a36; --saffron:#f4a52c;
+    --ink:#1c140f; --on-dark:#f4ece5; --on-dark-soft:#c3b3a6; --on-dark-faint:#8b7a6c;
+    --on-cream:#2a211b; --on-cream-soft:#6f5e52;
+    --line:rgba(255,255,255,.10); --line-cream:rgba(0,0,0,.10);
+    --serif:'Instrument Serif',Georgia,serif; --sans:'Hanken Grotesk',-apple-system,BlinkMacSystemFont,sans-serif;
+    --maxw:1180px;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html{scroll-behavior:smooth}
+  body{background:var(--bg);color:var(--on-dark);font-family:var(--sans);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+  a{color:inherit;text-decoration:none}
+  img{max-width:100%}
+  .wrap{max-width:var(--maxw);margin:0 auto;padding:0 24px}
+  .eyebrow{font-size:12px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--accent)}
+  .serif{font-family:var(--serif);font-weight:400;line-height:1.02;letter-spacing:-.01em}
+  .grad{background:linear-gradient(105deg,var(--accent),var(--saffron));-webkit-background-clip:text;background-clip:text;color:transparent}
+  .btn{display:inline-flex;align-items:center;gap:10px;height:52px;padding:0 22px;border-radius:14px;font-weight:700;font-size:15px;cursor:pointer;border:none;transition:transform .15s ease,opacity .15s ease}
+  .btn:hover{transform:translateY(-2px)}
+  .btn-accent{background:linear-gradient(180deg,#ff6a44,#ed4f2c);color:#fff;box-shadow:0 8px 24px rgba(237,79,44,.35)}
+  .store{display:inline-flex;align-items:center;gap:11px;height:56px;padding:0 22px;border-radius:14px;background:#1b1410;border:1px solid var(--line);color:#fff;cursor:pointer;transition:transform .15s ease}
+  .store:hover{transform:translateY(-2px)}
+  .store .ico{font-size:24px;line-height:1}
+  .store .l1{font-size:10.5px;color:var(--on-dark-soft);letter-spacing:.02em}
+  .store .l2{font-size:16.5px;font-weight:700;margin-top:-2px}
+  .store.on-cream{background:#171008;border:none;color:#fff}
+
+  /* ───────── nav ───────── */
+  .nav{position:fixed;top:0;left:0;right:0;z-index:100;transition:background .3s ease,backdrop-filter .3s ease,border-color .3s}
+  .nav.scrolled{background:rgba(14,11,9,.72);backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
+  .nav .row{display:flex;align-items:center;justify-content:space-between;height:72px}
+  .brand{font-family:var(--serif);font-size:30px;letter-spacing:-.01em}
+  .navlinks{display:flex;gap:30px;align-items:center}
+  .navlinks a{font-size:14.5px;color:var(--on-dark-soft);font-weight:500;transition:color .15s}
+  .navlinks a:hover{color:var(--on-dark)}
+  .nav .cta{height:42px;padding:0 18px;border-radius:11px}
+  @media(max-width:820px){.navlinks a:not(.cta){display:none}}
+
+  /* ───────── hero ───────── */
+  .hero{position:relative;padding:140px 0 90px;overflow:hidden}
+  .hero::before{content:"";position:absolute;top:-10%;right:-5%;width:680px;height:680px;background:radial-gradient(circle,rgba(255,90,54,.20),transparent 62%);filter:blur(20px);pointer-events:none}
+  .hero .grid{display:grid;grid-template-columns:1.05fr .95fr;gap:40px;align-items:center;position:relative}
+  .hero h1{font-size:clamp(56px,8vw,104px);margin:20px 0 0}
+  .hero .pill{display:inline-flex;align-items:center;gap:8px;height:34px;padding:0 14px;border:1px solid rgba(255,90,54,.4);border-radius:99px;color:var(--accent);font-size:12px;font-weight:700;letter-spacing:.14em;text-transform:uppercase}
+  .hero .pill .dot{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 10px var(--accent)}
+  .hero p.sub{margin:26px 0 30px;max-width:480px;font-size:17px;line-height:1.6;color:var(--on-dark-soft)}
+  .hero .ctas{display:flex;gap:14px;flex-wrap:wrap;align-items:center}
+  .weblink{display:inline-flex;align-items:center;gap:7px;font-weight:700;font-size:15px;margin-top:18px;color:var(--on-dark)}
+  .weblink .arr{color:var(--accent);transition:transform .15s}
+  .weblink:hover .arr{transform:translateX(4px)}
+  .trust{display:flex;gap:18px;margin-top:22px;font-size:13.5px;color:var(--on-dark-faint)}
+  .trust span{display:inline-flex;align-items:center;gap:7px}
+  .trust .d{width:6px;height:6px;border-radius:50%;background:var(--accent)}
+  @media(max-width:900px){.hero .grid{grid-template-columns:1fr}.hero{padding:120px 0 60px}.phone-stage{margin:10px auto 0}}
+
+  /* ───────── phone mockup ───────── */
+  .phone-stage{position:relative;justify-self:center}
+  .phone{position:relative;width:300px;height:632px;border-radius:42px;background:#0a0706;border:1px solid rgba(255,255,255,.12);box-shadow:0 40px 90px rgba(0,0,0,.55),inset 0 0 0 6px #000;overflow:hidden}
+  .phone .screen{position:absolute;inset:8px;border-radius:34px;overflow:hidden;background:#120c09}
+  .pstatus{position:absolute;top:0;left:0;right:0;height:34px;display:flex;align-items:center;justify-content:space-between;padding:0 18px;font-size:12px;font-weight:700;color:#fff;z-index:5}
+  .feedbg{position:absolute;inset:0;background:radial-gradient(120% 80% at 70% 28%,#7a3a1e 0%,#3a1d12 45%,#160d09 100%)}
+  .feedbg::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(135deg,rgba(255,255,255,.03) 0 2px,transparent 2px 7px)}
+  .ftabs{position:absolute;top:42px;left:0;right:0;display:flex;gap:18px;justify-content:center;font-size:14px;font-weight:700;color:rgba(255,255,255,.55);z-index:4}
+  .ftabs .on{color:#fff;position:relative}
+  .ftabs .on::after{content:"";position:absolute;left:0;right:0;bottom:-7px;height:2px;border-radius:2px;background:var(--accent)}
+  .play{position:absolute;top:50%;left:50%;width:54px;height:54px;margin:-27px 0 0 -27px;border-radius:50%;background:rgba(0,0,0,.32);backdrop-filter:blur(4px);display:flex;align-items:center;justify-content:center;border:1px solid rgba(255,255,255,.25);z-index:4}
+  .play svg{margin-left:3px}
+  .rail{position:absolute;right:14px;bottom:118px;display:flex;flex-direction:column;gap:18px;align-items:center;z-index:4}
+  .rail .av{width:40px;height:40px;border-radius:50%;background:linear-gradient(135deg,var(--accent),var(--saffron));display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:800;color:#fff;position:relative;border:2px solid #fff}
+  .rail .av .plus{position:absolute;bottom:-8px;left:50%;transform:translateX(-50%);width:18px;height:18px;border-radius:50%;background:var(--accent);color:#fff;font-size:13px;display:flex;align-items:center;justify-content:center;border:2px solid #160d09}
+  .rail .act{display:flex;flex-direction:column;align-items:center;gap:3px;color:#fff;font-size:11px;font-weight:700}
+  .rail .act svg{filter:drop-shadow(0 2px 6px rgba(0,0,0,.4))}
+  .caption{position:absolute;left:16px;right:70px;bottom:74px;z-index:4}
+  .caption .who{font-size:13.5px;font-weight:700;color:#fff}
+  .caption .who span{color:rgba(255,255,255,.6);font-weight:500}
+  .chip{display:inline-block;margin:8px 0 6px;padding:4px 9px;border-radius:7px;background:rgba(255,255,255,.16);font-size:10.5px;font-weight:700;letter-spacing:.05em;color:#fff}
+  .caption .title{font-family:var(--serif);font-size:22px;color:#fff;line-height:1.05}
+  .viewrec{position:absolute;left:14px;right:14px;bottom:18px;height:44px;border-radius:13px;background:rgba(255,255,255,.95);color:#1a1209;display:flex;align-items:center;justify-content:center;gap:8px;font-weight:700;font-size:13.5px;z-index:4}
+  .progress{position:absolute;left:16px;right:16px;bottom:66px;height:3px;border-radius:3px;background:rgba(255,255,255,.25);z-index:4}
+  .progress::after{content:"";position:absolute;left:0;top:0;bottom:0;width:42%;border-radius:3px;background:#fff}
+  /* floating cards near hero phone */
+  .float{position:absolute;background:rgba(20,14,10,.92);backdrop-filter:blur(8px);border:1px solid var(--line);border-radius:16px;padding:12px 14px;box-shadow:0 20px 50px rgba(0,0,0,.5);z-index:6}
+  .float.saved{top:54px;left:-46px;display:flex;gap:10px;align-items:center}
+  .float.saved .mp{width:30px;height:30px;border-radius:8px;background:linear-gradient(135deg,var(--accent),var(--saffron));display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800}
+  .float.saved .t1{font-size:11px;color:var(--on-dark-faint);font-weight:600}
+  .float.saved .t2{font-family:var(--serif);font-size:16px}
+  .float.saved .t3{font-size:10.5px;color:var(--on-dark-faint)}
+  .float.cook{bottom:96px;right:-40px;min-width:150px}
+  .float.cook .lab{font-size:10px;letter-spacing:.12em;color:var(--on-dark-faint);font-weight:700}
+  .float.cook .tm{font-family:var(--serif);font-size:30px;margin-top:2px}
+  .float.cook .bar{height:4px;border-radius:4px;background:rgba(255,255,255,.14);margin-top:8px;overflow:hidden}
+  .float.cook .bar::after{content:"";display:block;height:100%;width:64%;background:linear-gradient(90deg,var(--accent),var(--saffron))}
+  @media(max-width:520px){.float.saved{left:-12px}.float.cook{right:-8px}}
+
+  /* ───────── section heads ───────── */
+  .sec{padding:110px 0}
+  .sec-head{text-align:center;max-width:760px;margin:0 auto}
+  .sec-head h2{font-size:clamp(34px,5vw,58px);margin-top:14px}
+  .sec-head .hint{margin-top:18px;font-size:12.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--on-dark-faint);display:inline-flex;gap:8px;align-items:center}
+
+  /* ───────── PROCESS 3D ───────── */
+  .process{position:relative}
+  .process .intro{padding:110px 0 40px;text-align:center}
+  /* default (no-JS / mobile): cards flow normally, fully readable */
+  .deck{max-width:1060px;margin:0 auto;padding:0 24px}
+  .step-card{position:relative;border-radius:28px;padding:48px;margin-bottom:34px;overflow:hidden;border:1px solid var(--line)}
+  .step-card.dark{background:radial-gradient(120% 120% at 88% 0%,#23150d,#140d09);color:var(--on-dark)}
+  .step-card.cream{background:linear-gradient(180deg,#f7ede2,#efe2d3);color:var(--on-cream);border-color:var(--line-cream)}
+  .step-inner{display:grid;grid-template-columns:1fr 300px;gap:36px;align-items:center;position:relative;z-index:2}
+  .step-num{position:absolute;top:18px;right:34px;font-family:var(--serif);font-size:160px;line-height:1;opacity:.10;z-index:1}
+  .step-card.cream .step-num{color:var(--accent);opacity:.16}
+  .step-lab{font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--accent)}
+  .step-card h3{font-family:var(--serif);font-size:clamp(30px,4vw,46px);margin:12px 0 16px;line-height:1.02}
+  .step-card p{font-size:16px;line-height:1.6;max-width:420px}
+  .step-card.dark p{color:var(--on-dark-soft)}
+  .step-card.cream p{color:var(--on-cream-soft)}
+  .step-card .phone-stage{transform:scale(.92)}
+  @media(min-width:901px){
+    .process.is3d .deck{max-width:none;margin:0;padding:0}
+    .process.is3d .stage{position:relative;height:100vh;display:grid;place-items:center;perspective:1400px}
+    .process.is3d .step-card{grid-area:1/1;align-self:center;justify-self:center;width:min(1020px,92vw);max-height:86vh;margin:0;transform-style:preserve-3d;backface-visibility:hidden;will-change:transform,opacity,filter;box-shadow:0 50px 110px rgba(0,0,0,.6)}
+  }
+  @media(max-width:900px){.step-inner{grid-template-columns:1fr;gap:24px}.step-card{padding:30px}.step-num{font-size:96px;top:10px;right:18px}.step-card .phone-stage{transform:scale(.82);justify-self:center}}
+
+  /* recipe / scaler / cook mockups (inside step phones) */
+  .scr{position:absolute;inset:0;background:#fff;color:#1a1209;padding:0}
+  .scr.dark{background:#120c08;color:#f4ece5}
+  .scr .vid{height:150px;background:radial-gradient(120% 90% at 70% 20%,#7a3a1e,#2c160d)}
+  .scr .body{padding:16px 16px}
+  .mchip{display:inline-block;background:var(--accent);color:#fff;font-size:10px;font-weight:800;letter-spacing:.05em;padding:4px 9px;border-radius:7px}
+  .scr h4{font-family:var(--serif);font-size:21px;margin:8px 0 12px}
+  .meta3{display:flex;gap:8px;margin-bottom:14px}
+  .meta3 .m{flex:1;border:1px solid rgba(0,0,0,.1);border-radius:10px;padding:7px 8px;text-align:center}
+  .meta3 .m .k{font-size:9.5px;color:#998d83;text-transform:uppercase;letter-spacing:.04em}
+  .meta3 .m .v{font-weight:800;font-size:13px;margin-top:2px}
+  .ing-h{font-size:12px;font-weight:800;margin-bottom:8px}
+  .ing{display:flex;align-items:center;gap:8px;font-size:12.5px;padding:8px 10px;border-radius:9px;background:rgba(0,0,0,.04);margin-bottom:6px}
+  .ing .dot{width:6px;height:6px;border-radius:50%;background:var(--accent)}
+  .scr .cta{margin-top:6px;height:42px;border-radius:11px;background:#1a1209;color:#fff;display:flex;align-items:center;justify-content:center;gap:8px;font-weight:700;font-size:13px}
+  /* scaler */
+  .sc-lab{font-size:10px;letter-spacing:.14em;text-transform:uppercase;color:#9a8e84;font-weight:700;margin-bottom:12px}
+  .scr.dark .sc-lab{color:#8b7a6c}
+  .stepper{display:flex;align-items:center;gap:10px;background:rgba(0,0,0,.05);border-radius:14px;padding:8px;margin-bottom:14px}
+  .scr.dark .stepper{background:rgba(255,255,255,.06)}
+  .stepper button{width:44px;height:44px;border-radius:11px;border:none;font-size:22px;font-weight:700;cursor:pointer;background:rgba(0,0,0,.06);color:inherit}
+  .stepper .plus{background:var(--accent);color:#fff}
+  .stepper .cnt{flex:1;text-align:center}
+  .stepper .cnt b{font-family:var(--serif);font-size:30px;display:block;line-height:1}
+  .stepper .cnt span{font-size:10px;color:#9a8e84}
+  .scr-row{display:flex;justify-content:space-between;font-size:13px;padding:11px 4px;border-bottom:1px solid rgba(0,0,0,.06)}
+  .scr.dark .scr-row{border-color:rgba(255,255,255,.08)}
+  .scr-row b{color:var(--accent)}
+  /* cook mode */
+  .cook-scr{position:absolute;inset:0;background:#120c08;color:#f4ece5;padding:18px}
+  .cook-scr .cl{font-size:10px;letter-spacing:.12em;color:#8b7a6c;font-weight:700}
+  .cook-scr .ins{font-family:var(--serif);font-size:21px;line-height:1.2;margin:10px 0 18px}
+  .ring{width:150px;height:150px;border-radius:50%;margin:6px auto 14px;display:flex;align-items:center;justify-content:center;font-family:var(--serif);font-size:34px;background:conic-gradient(var(--accent) 0 62%,rgba(255,255,255,.12) 62% 100%);position:relative}
+  .ring::before{content:"";position:absolute;inset:12px;border-radius:50%;background:#120c08}
+  .ring span{position:relative;z-index:2}
+  .cook-scr .note{text-align:center;font-size:11px;color:#8b7a6c;margin-bottom:14px}
+  .cook-btns{display:flex;gap:10px}
+  .cook-btns .b{flex:1;height:42px;border-radius:11px;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:13px}
+  .cook-btns .back{background:rgba(255,255,255,.08)}
+  .cook-btns .next{background:var(--accent);color:#fff}
+
+  /* ───────── features ───────── */
+  .feat-try{margin-top:50px;border-radius:24px;border:1px solid var(--line);background:radial-gradient(120% 130% at 85% 0%,#23150d,#140d09);padding:38px;display:grid;grid-template-columns:1fr 1fr;gap:34px;align-items:center}
+  .feat-try h3{font-family:var(--serif);font-size:32px;margin:10px 0 12px}
+  .feat-try p{color:var(--on-dark-soft);font-size:15px;line-height:1.6;margin-bottom:22px}
+  .try-panel{background:rgba(0,0,0,.25);border:1px solid var(--line);border-radius:16px;padding:14px}
+  .try-panel .scr-row{border-color:rgba(255,255,255,.08);color:var(--on-dark)}
+  @media(max-width:760px){.feat-try{grid-template-columns:1fr;padding:26px}}
+  .fgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:26px}
+  .fcard{background:var(--bg-2);border:1px solid var(--line);border-radius:18px;padding:24px}
+  .fcard .fi{width:42px;height:42px;border-radius:12px;background:rgba(255,90,54,.14);display:flex;align-items:center;justify-content:center;color:var(--accent);margin-bottom:16px}
+  .fcard h4{font-size:17px;font-weight:700;margin-bottom:8px}
+  .fcard p{font-size:14px;line-height:1.55;color:var(--on-dark-soft)}
+  @media(max-width:860px){.fgrid{grid-template-columns:1fr 1fr}}
+  @media(max-width:560px){.fgrid{grid-template-columns:1fr}}
+
+  /* ───────── creators / roadmap ───────── */
+  .creators{position:relative}
+  .creators::before{content:"";position:absolute;top:0;right:0;width:560px;height:560px;background:radial-gradient(circle,rgba(244,165,44,.14),transparent 60%);pointer-events:none}
+  .creators .lead{max-width:540px}
+  .creators h2{font-size:clamp(32px,4.6vw,52px);margin:14px 0 16px}
+  .creators .lead p{color:var(--on-dark-soft);font-size:17px;line-height:1.6}
+  .roadmap-lab{margin:46px 0 16px;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--on-dark-faint);font-weight:700}
+  .road{display:grid;grid-template-columns:repeat(4,1fr);gap:14px}
+  .rcard{background:var(--bg-2);border:1px solid var(--line);border-radius:16px;padding:20px}
+  .rcard .rn{font-family:var(--serif);font-size:26px;color:var(--accent)}
+  .rcard h5{font-size:15px;font-weight:700;margin:8px 0 5px}
+  .rcard p{font-size:13px;color:var(--on-dark-faint);line-height:1.5}
+  .rcard.last{grid-column:1/-1;background:linear-gradient(100deg,rgba(255,90,54,.14),rgba(244,165,44,.07));border:1px solid rgba(255,90,54,.4)}
+  @media(max-width:860px){.road{grid-template-columns:1fr 1fr}}
+  @media(max-width:480px){.road{grid-template-columns:1fr}}
+
+  /* ───────── trust ───────── */
+  .trust-sec{text-align:center;padding:120px 0}
+  .trust-sec h2{font-size:clamp(36px,5.4vw,64px)}
+  .trust-sec p{max-width:540px;margin:22px auto 0;color:var(--on-dark-soft);font-size:17px;line-height:1.6}
+  .trust-links{margin-top:24px;display:flex;gap:14px;justify-content:center;flex-wrap:wrap;font-size:14.5px}
+  .trust-links a{color:var(--on-dark-soft);text-decoration:underline;text-underline-offset:3px}
+  .trust-links a:hover{color:#fff}
+
+  /* ───────── final CTA ───────── */
+  .cta-sec{padding:0 0 110px}
+  .cta-card{position:relative;overflow:hidden;border-radius:30px;background:linear-gradient(150deg,#ff6b40,#e8481f 60%,#d63f17);padding:78px 24px;text-align:center;box-shadow:0 40px 100px rgba(214,63,23,.35)}
+  .cta-card::after{content:"";position:absolute;inset:0;background:repeating-linear-gradient(135deg,rgba(255,255,255,.06) 0 2px,transparent 2px 9px);pointer-events:none}
+  .cta-card .b{font-family:var(--serif);font-size:26px;color:rgba(255,255,255,.9);position:relative}
+  .cta-card h2{font-family:var(--serif);font-size:clamp(38px,6vw,68px);color:#fff;margin:6px 0 0;position:relative}
+  .cta-card p{color:rgba(255,255,255,.92);font-size:17px;margin:18px auto 30px;max-width:420px;position:relative}
+  .cta-card .ctas{display:flex;gap:14px;justify-content:center;flex-wrap:wrap;position:relative}
+  .cta-card .store{background:#1a0f08;border:none}
+  .cta-card .weblink{justify-content:center;color:#fff}
+  .cta-card .weblink .arr{color:#fff}
+
+  /* ───────── footer ───────── */
+  footer{border-top:1px solid var(--line);padding:60px 0 40px}
+  .foot{display:grid;grid-template-columns:1.4fr 1fr 1fr;gap:34px}
+  .foot .brand{font-size:34px}
+  .foot .tag{margin:12px 0 18px;color:var(--on-dark-soft);font-size:14.5px;line-height:1.6;max-width:300px}
+  .socials{display:flex;gap:10px}
+  .socials a{width:38px;height:38px;border-radius:10px;background:var(--bg-2);border:1px solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--on-dark-soft);transition:color .15s,transform .15s}
+  .socials a:hover{color:#fff;transform:translateY(-2px)}
+  .fcol h6{font-size:13px;font-weight:700;color:var(--on-dark-faint);text-transform:uppercase;letter-spacing:.1em;margin-bottom:14px}
+  .fcol a{display:block;font-size:14.5px;color:var(--on-dark-soft);margin-bottom:11px;transition:color .15s}
+  .fcol a:hover{color:#fff}
+  .foot-base{max-width:var(--maxw);margin:40px auto 0;padding:22px 24px 0;border-top:1px solid var(--line);display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;font-size:13px;color:var(--on-dark-faint)}
+  @media(max-width:760px){.foot{grid-template-columns:1fr 1fr}.foot .brand-col{grid-column:1/-1}}
+</style>
+</head>
+<body>
+
+<!-- NAV -->
+<nav class="nav" id="nav"><div class="wrap row">
+  <a href="#top" class="brand">Sizzle</a>
+  <div class="navlinks">
+    <a href="#how">How it works</a>
+    <a href="#features">Features</a>
+    <a href="#creators">Creators</a>
+    <a href="/privacy">Privacy</a>
+    <a href="/" class="btn btn-accent cta">Get the app</a>
+  </div>
+</div></nav>
+
+<!-- HERO -->
+<header class="hero" id="top"><div class="wrap grid">
+  <div>
+    <span class="pill"><span class="dot"></span> TikTok for recipes</span>
+    <h1 class="serif">Watch it.<br>Scale it.<br><span class="grad" style="font-style:italic">Cook it.</span></h1>
+    <p class="sub">A full-screen video feed of real recipes from real home cooks. Swipe to discover, tap once for a clean, scalable recipe, and cook along — no ten-paragraph life stories, no ads, no tracking.</p>
+    <div class="ctas">
+      <a href="/" class="store"><span class="ico"></span><span><span class="l1">Download on the</span><br><span class="l2">App Store</span></span></a>
+      <a href="/" class="store"><span class="ico">▶</span><span><span class="l1">Get it on</span><br><span class="l2">Google Play</span></span></a>
+    </div>
+    <a href="/" class="weblink">Or open the web app <span class="arr">→</span></a>
+    <div class="trust"><span><span class="d"></span>No ads</span><span><span class="d"></span>No tracking</span><span><span class="d"></span>13+</span></div>
+  </div>
+  <div class="phone-stage">
+    <div class="phone"><div class="screen">
+      <div class="feedbg"></div>
+      <div class="pstatus"><span>9:41</span><span>●  ▮▮▮  ▰</span></div>
+      <div class="ftabs"><span>Following</span><span class="on">For You</span></div>
+      <div class="play"><svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z"/></svg></div>
+      <div class="rail">
+        <div class="av">MP<span class="plus">+</span></div>
+        <div class="act"><svg width="26" height="26" viewBox="0 0 24 24" fill="#ff5a36"><path d="M12 21s-7-4.35-9.5-8.5C.8 9.4 2.3 6 5.5 6c2 0 3.2 1.2 3.9 2.3C10 7.2 11.2 6 13.2 6c3.2 0 4.7 3.4 3 6.5C19 16.65 12 21 12 21z"/></svg>48.2k</div>
+        <div class="act"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4L3 21l1.1-4.5A8.4 8.4 0 1 1 21 11.5z"/></svg>612</div>
+        <div class="act"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M5 3h14v18l-7-5-7 5z"/></svg>Save</div>
+      </div>
+      <div class="caption">
+        <div class="who">Mina Park <span>@minapark</span></div>
+        <span class="chip">JAPANESE · 25 MIN</span>
+        <div class="title">Charred Miso<br>Eggplant</div>
+      </div>
+      <div class="progress"></div>
+      <div class="viewrec">↑ View recipe</div>
+    </div></div>
+    <div class="float saved">
+      <div class="mp">MP</div>
+      <div><div class="t1">Recipe saved</div><div class="t2">Charred Miso Eggplant</div><div class="t3">Japanese · 25 min · Easy</div></div>
+    </div>
+    <div class="float cook"><div class="lab">COOK MODE</div><div class="tm">06:30</div><div class="bar"></div></div>
+  </div>
+</div></header>
+
+<!-- PROCESS (3D) -->
+<section class="process" id="how">
+  <div class="intro wrap">
+    <span class="eyebrow">From scroll to supper</span>
+    <h2 class="serif" style="font-size:clamp(34px,5vw,58px);margin-top:14px">Video to real recipe, in one tap.</h2>
+    <div class="hint" style="margin-top:18px;font-size:12.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--on-dark-faint)">Scroll to discover the flow ↓</div>
+  </div>
+  <div class="deck"><div class="stage">
+
+    <!-- STEP 01 -->
+    <article class="step-card dark" data-step="0">
+      <div class="step-num">01</div>
+      <div class="step-inner">
+        <div>
+          <div class="step-lab">Step 01</div>
+          <h3>Discover the dish.</h3>
+          <p>Swipe a full-screen feed tuned to your taste — a personalized For You and a Following feed of real home cooks. No blogs, no clutter.</p>
+        </div>
+        <div class="phone-stage"><div class="phone"><div class="screen">
+          <div class="feedbg"></div>
+          <div class="ftabs" style="top:18px"><span>Following</span><span class="on">For You</span></div>
+          <div class="play"><svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z"/></svg></div>
+          <div class="rail" style="bottom:96px">
+            <div class="av">MP<span class="plus">+</span></div>
+            <div class="act"><svg width="24" height="24" viewBox="0 0 24 24" fill="#ff5a36"><path d="M12 21s-7-4.35-9.5-8.5C.8 9.4 2.3 6 5.5 6c2 0 3.2 1.2 3.9 2.3C10 7.2 11.2 6 13.2 6c3.2 0 4.7 3.4 3 6.5C19 16.65 12 21 12 21z"/></svg>48.2k</div>
+            <div class="act"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4L3 21l1.1-4.5A8.4 8.4 0 1 1 21 11.5z"/></svg>612</div>
+          </div>
+          <div class="caption" style="bottom:30px"><div class="who">Mina Park <span>@minapark</span></div><span class="chip">JAPANESE · 25 MIN</span><div class="title">Charred Miso<br>Eggplant</div></div>
+        </div></div></div>
+      </div>
+    </article>
+
+    <!-- STEP 02 -->
+    <article class="step-card cream" data-step="1">
+      <div class="step-num">02</div>
+      <div class="step-inner">
+        <div>
+          <div class="step-lab">Step 02</div>
+          <h3>Open the recipe.</h3>
+          <p>One tap turns any video into a clean, structured recipe — ingredients with quantities, numbered steps, cuisine, time and difficulty.</p>
+        </div>
+        <div class="phone-stage"><div class="phone"><div class="screen"><div class="scr">
+          <div class="vid"></div>
+          <div class="body">
+            <span class="mchip">JAPANESE</span>
+            <h4>Charred Miso Eggplant</h4>
+            <div class="meta3"><div class="m"><div class="k">Time</div><div class="v">25 min</div></div><div class="m"><div class="k">Serves</div><div class="v">2</div></div><div class="m"><div class="k">Level</div><div class="v">Easy</div></div></div>
+            <div class="ing-h">Ingredients</div>
+            <div class="ing"><span class="dot"></span>2 globe eggplants</div>
+            <div class="ing"><span class="dot"></span>3 tbsp white miso</div>
+            <div class="ing"><span class="dot"></span>1 tbsp mirin · 1 tbsp sake</div>
+            <div class="cta">Start Cook Mode</div>
+          </div>
+        </div></div></div></div>
+      </div>
+    </article>
+
+    <!-- STEP 03 -->
+    <article class="step-card dark" data-step="2">
+      <div class="step-num">03</div>
+      <div class="step-inner">
+        <div>
+          <div class="step-lab">Step 03</div>
+          <h3>Scale it to any table.</h3>
+          <p>Type how many you're feeding and every quantity recalculates instantly. Push the whole list — already scaled — to your shopping list.</p>
+        </div>
+        <div class="phone-stage"><div class="phone"><div class="screen"><div class="scr dark">
+          <div class="body">
+            <div class="sc-lab">Serving scaler</div>
+            <div class="stepper"><button>−</button><div class="cnt"><b>6</b><span>servings</span></div><button class="plus">+</button></div>
+            <div class="scr-row"><span>Globe eggplants</span><b>3</b></div>
+            <div class="scr-row"><span>White miso</span><b>4½ tbsp</b></div>
+            <div class="scr-row"><span>Mirin</span><b>1½ tbsp</b></div>
+            <div class="scr-row"><span>Toasted sesame</span><b>3 tsp</b></div>
+            <div class="cta" style="background:var(--accent);margin-top:16px">🛒 Add to shopping list</div>
+          </div>
+        </div></div></div></div>
+      </div>
+    </article>
+
+    <!-- STEP 04 -->
+    <article class="step-card cream" data-step="3">
+      <div class="step-num">04</div>
+      <div class="step-inner">
+        <div>
+          <div class="step-lab">Step 04</div>
+          <h3>Then cook it.</h3>
+          <p>A big step-by-step Cook Mode with built-in timers that keeps your screen awake — so you can cook along hands-free, start to plate.</p>
+        </div>
+        <div class="phone-stage"><div class="phone"><div class="screen"><div class="cook-scr">
+          <div class="cl">COOK MODE · STEP 4 OF 5</div>
+          <div class="ins">Flip, brush generously with glaze, and broil until lacquered.</div>
+          <div class="ring"><span>3:00</span></div>
+          <div class="note">Built-in timer · screen stays awake</div>
+          <div class="cook-btns"><div class="b back">Back</div><div class="b next">Next step</div></div>
+        </div></div></div></div>
+      </div>
+    </article>
+
+  </div></div>
+</section>
+
+<!-- FEATURES -->
+<section class="sec" id="features"><div class="wrap">
+  <div class="sec-head" style="text-align:left;max-width:620px;margin:0">
+    <span class="eyebrow">Built to actually cook</span>
+    <h2 class="serif">More than a feed.<br>A kitchen companion.</h2>
+  </div>
+
+  <div class="feat-try">
+    <div>
+      <span class="eyebrow">Serving-size scaler · Try it</span>
+      <h3 class="serif">Cooking for 2? Done.</h3>
+      <p>Type how many people you're feeding and every quantity recalculates instantly. No mental math, no half-eggs.</p>
+      <div class="stepper" style="max-width:280px">
+        <button id="scMinus">−</button>
+        <div class="cnt"><b id="scVal">2</b><span>servings</span></div>
+        <button class="plus" id="scPlus">+</button>
+      </div>
+    </div>
+    <div class="try-panel">
+      <div class="scr-row"><span>Globe eggplants</span><b data-base="1">1</b></div>
+      <div class="scr-row"><span>White miso</span><b data-base="1.5" data-unit="tbsp">1 ½ tbsp</b></div>
+      <div class="scr-row"><span>Mirin</span><b data-base="0.5" data-unit="tbsp">½ tbsp</b></div>
+      <div class="scr-row"><span>Toasted sesame</span><b data-base="1" data-unit="tsp">1 tsp</b></div>
+      <div class="scr-row" style="border:none;color:var(--on-dark-faint)"><span>🛒 Add all to shopping list</span><span></span></div>
+    </div>
+  </div>
+
+  <div class="fgrid">
+    <div class="fcard"><div class="fi">⏱</div><h4>Cook Mode &amp; timers</h4><p>A big step-by-step view with built-in timers that keeps your screen awake while your hands are busy.</p></div>
+    <div class="fcard"><div class="fi">📚</div><h4>Collections</h4><p>Group what you save into your own cookbooks — weeknight wins, weekend projects, the lot.</p></div>
+    <div class="fcard"><div class="fi">🛒</div><h4>Shopping list</h4><p>Push a recipe's ingredients straight to a built-in shopping list, already scaled to your servings.</p></div>
+    <div class="fcard"><div class="fi">★</div><h4>Foodie Reviews</h4><p>Two post types: cook-along recipes and honest food &amp; restaurant reviews you can rate.</p></div>
+    <div class="fcard"><div class="fi">🔍</div><h4>Discover &amp; taste picker</h4><p>Search, hashtags, and trending tags — plus an onboarding taste picker that personalizes day one.</p></div>
+    <div class="fcard"><div class="fi">📺</div><h4>Up to 4K, no ads</h4><p>Portrait &amp; landscape, autoplay, sound toggle, scrubber, hold-to-hide — all ad-free.</p></div>
+  </div>
+</div></section>
+
+<!-- CREATORS -->
+<section class="sec creators" id="creators"><div class="wrap">
+  <div class="lead">
+    <span class="eyebrow">For creators</span>
+    <h2 class="serif">Share your food. Grow your following.</h2>
+    <p>Record in-app or upload from your library, publish recipes or reviews, and build an audience around the food you love. Monetization is on the roadmap.</p>
+  </div>
+  <div class="roadmap-lab">The roadmap · 5 phases</div>
+  <div class="road">
+    <div class="rcard"><div class="rn">01</div><h5>Watch &amp; cook</h5><p>The core feed, recipes &amp; Cook Mode.</p></div>
+    <div class="rcard"><div class="rn">02</div><h5>Create &amp; grow</h5><p>Posting, profiles, following.</p></div>
+    <div class="rcard"><div class="rn">03</div><h5>Organize</h5><p>Collections &amp; shopping list.</p></div>
+    <div class="rcard"><div class="rn">04</div><h5>Community</h5><p>Reviews, reposts, verification.</p></div>
+    <div class="rcard last"><div class="rn">05</div><h5>Monetize</h5><p>Earn from the food you share.</p></div>
+  </div>
+</div></section>
+
+<!-- TRUST -->
+<section class="trust-sec"><div class="wrap">
+  <h2 class="serif">No ads. No tracking.<br><span class="grad" style="font-style:italic">Just good food.</span></h2>
+  <p>Privacy-first by design — no third-party tracking, ever. Built for everyone 13 and up.</p>
+  <div class="trust-links"><a href="/privacy">Privacy Policy</a><span style="color:var(--on-dark-faint)">·</span><a href="/terms">Terms of Service</a><span style="color:var(--on-dark-faint)">·</span><a href="/cookie-policy">Cookie Policy</a></div>
+</div></section>
+
+<!-- FINAL CTA -->
+<section class="cta-sec"><div class="wrap"><div class="cta-card">
+  <div class="b serif">Sizzle</div>
+  <h2>Recipes you can actually make.</h2>
+  <p>Watch it. Scale it. Cook it. Free on iOS, Android, and the web.</p>
+  <div class="ctas">
+    <a href="/" class="store on-cream"><span class="ico"></span><span><span class="l1">Download on the</span><br><span class="l2">App Store</span></span></a>
+    <a href="/" class="store on-cream"><span class="ico">▶</span><span><span class="l1">Get it on</span><br><span class="l2">Google Play</span></span></a>
+  </div>
+  <a href="/" class="weblink">Or open the web app <span class="arr">→</span></a>
+</div></div></section>
+
+<!-- FOOTER -->
+<footer><div class="wrap foot">
+  <div class="brand-col">
+    <div class="brand serif">Sizzle</div>
+    <p class="tag">Watch it. Scale it. Cook it. The home for real recipes from real cooks — at getsizzle.app.</p>
+    <div class="socials">
+      <a href="#" aria-label="Instagram">◎</a>
+      <a href="#" aria-label="TikTok">♪</a>
+      <a href="#" aria-label="X">✕</a>
+      <a href="#" aria-label="YouTube">▷</a>
+    </div>
+  </div>
+  <div class="fcol"><h6>Product</h6><a href="#how">How it works</a><a href="#features">Features</a><a href="#creators">For creators</a><a href="/">Get the app</a></div>
+  <div class="fcol"><h6>Legal</h6><a href="/privacy">Privacy Policy</a><a href="/terms">Terms of Service</a><a href="/cookie-policy">Cookie Policy</a><a href="/contact">Contact</a></div>
+</div>
+<div class="foot-base"><span>© 2026 Sizzle. All rights reserved.</span><span>No ads · No tracking · 13+</span></div>
+</footer>
+
+<script src="/landing/vendor/gsap.min.js"></script>
+<script src="/landing/vendor/ScrollTrigger.min.js"></script>
+<script>
+(function(){
+  // nav background on scroll
+  var nav=document.getElementById('nav');
+  addEventListener('scroll',function(){ nav.classList.toggle('scrolled', scrollY>20); },{passive:true});
+
+  // interactive serving scaler (features "Try it")
+  var val=document.getElementById('scVal'), minus=document.getElementById('scMinus'), plus=document.getElementById('scPlus');
+  var rows=[].slice.call(document.querySelectorAll('.try-panel b[data-base]'));
+  var n=2, BASE=2;
+  function fmtFrac(x){
+    var whole=Math.floor(x), frac=x-whole, f='';
+    if(Math.abs(frac-0.5)<.01)f='½'; else if(Math.abs(frac-0.25)<.01)f='¼'; else if(Math.abs(frac-0.75)<.01)f='¾';
+    else if(Math.abs(frac-0.33)<.04)f='⅓'; else if(frac>.01)return (Math.round(x*10)/10).toString();
+    if(whole&&f)return whole+' '+f; if(f)return f; return String(whole);
+  }
+  function render(){
+    val.textContent=n;
+    rows.forEach(function(b){
+      var base=parseFloat(b.getAttribute('data-base')), unit=b.getAttribute('data-unit')||'';
+      var scaled=base*n/BASE;
+      b.textContent=(unit?fmtFrac(scaled):String(Math.round(scaled)))+(unit?' '+unit:'');
+    });
+  }
+  minus&&minus.addEventListener('click',function(){ n=Math.max(1,n-1); render(); });
+  plus&&plus.addEventListener('click',function(){ n=Math.min(20,n+1); render(); });
+  render();
+
+  // 3D pinned process deck (desktop + motion allowed)
+  var reduce=matchMedia('(prefers-reduced-motion: reduce)').matches;
+  var desktop=matchMedia('(min-width:901px)').matches;
+  if(window.gsap && window.ScrollTrigger && desktop && !reduce){
+    gsap.registerPlugin(ScrollTrigger);
+    var proc=document.querySelector('.process');
+    proc.classList.add('is3d');
+    var cards=gsap.utils.toArray('.step-card');
+    var FROM={opacity:0,z:-560,rotateX:-26,y:170,scale:.86,filter:'blur(6px)'};
+    var ACTIVE={opacity:1,z:0,rotateX:0,y:0,scale:1,filter:'blur(0px)'};
+    var OUT={opacity:0,z:260,rotateX:16,y:-140,scale:1.12,filter:'blur(8px)'};
+    cards.forEach(function(c,i){
+      gsap.set(c,{transformOrigin:'50% 50%',zIndex:i+1});
+      gsap.set(c, i===0?ACTIVE:FROM);
+    });
+    var tl=gsap.timeline({scrollTrigger:{
+      trigger:'.stage', start:'top top',
+      end:'+='+(cards.length*window.innerHeight), pin:'.stage', scrub:.7, anticipatePin:1
+    }});
+    for(var i=0;i<cards.length-1;i++){
+      var lbl='s'+i;
+      tl.addLabel(lbl, i)
+        .to(cards[i], Object.assign({ease:'power2.inOut',duration:.9}, OUT), lbl)
+        .fromTo(cards[i+1], FROM, Object.assign({ease:'power2.out',duration:.9}, ACTIVE), lbl+'+=0.1');
+    }
+    addEventListener('load',function(){ ScrollTrigger.refresh(); });
+  }
+})();
+</script>
+</body>
+</html>
