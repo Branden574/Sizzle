@@ -1,5 +1,5 @@
 import { QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { AdminAppealDTO, AdminLogDTO, AdminReportGroupDTO, AdminStats, AdminUserDTO, CollectionDTO, CommentDTO, CookProfile, CookSummary, CreateRecipeInput, DirectUploadTicket, FeedResponse, MeProfile, NotificationDTO, RecipeCard, RecipeDetail, ReportInput, SearchResults, SuggestedCook, TrendingTag, VerificationTier } from '@sizzle/shared';
+import type { AdminAppealDTO, AdminLogDTO, AdminReportGroupDTO, AdminStats, AdminUserDTO, CollectionDTO, CommentDTO, CookProfile, CookSummary, CreateRecipeInput, DirectUploadTicket, FeedResponse, MeProfile, NotificationDTO, RecipeCard, RecipeDetail, ReportInput, SearchResults, SuggestedCook, SupportRequestDTO, TrendingTag, VerificationTier } from '@sizzle/shared';
 import { useAuth } from '../auth/useAuth';
 import { apiGet, apiSend } from '../lib/api';
 import { removeOffline, saveOffline } from '../lib/offline';
@@ -232,6 +232,10 @@ export function useAdminUsers(filter: 'all' | 'flagged' | 'banned', q: string, e
     enabled,
   });
 }
+export function useAdminSupportRequests(enabled: boolean) {
+  return useQuery({ queryKey: ['admin', 'support'], queryFn: () => apiGet<SupportRequestDTO[]>('/admin/support-requests'), enabled });
+}
+export const useResolveSupportRequest = adminMutation<{ id: string }>(({ id }) => apiSend('POST', `/admin/support-requests/${id}/resolve`));
 function adminMutation<V>(fn: (v: V) => Promise<unknown>) {
   return function useAdminMutation() {
     const qc = useQueryClient();

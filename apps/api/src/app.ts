@@ -15,6 +15,7 @@ import { cooks } from './routes/cooks';
 import { search } from './routes/search';
 import { uploads } from './routes/uploads';
 import { admin } from './routes/admin';
+import { support } from './routes/support';
 
 export function createApp() {
   const app = new Hono<AppEnv>();
@@ -58,6 +59,7 @@ export function createApp() {
   app.route('/search', search);
   app.route('/uploads', uploads);
   app.route('/admin', admin);
+  app.route('/support', support);
 
   return app;
 }

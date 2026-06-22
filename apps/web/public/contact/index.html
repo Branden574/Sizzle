@@ -1,0 +1,114 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Contact &amp; Privacy Requests · Sizzle</title>
+<meta name="description" content="Contact Sizzle or submit a privacy request (access, delete, correct, or opt out of your data)." />
+<link rel="icon" href="/favicon.ico" />
+<style>
+  :root { --accent: #e0532a; --ink: #1a1a1a; --muted: #6b6b6b; --line: #e4e4e4; }
+  html, body { margin: 0; background: #fff; }
+  body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Arial, sans-serif; color: var(--ink); -webkit-font-smoothing: antialiased; }
+  .wrap { max-width: 560px; margin: 0 auto; padding: 52px 22px 90px; }
+  .back { display: inline-block; margin-bottom: 26px; font-size: 14px; color: var(--accent); text-decoration: none; }
+  h1 { font-size: 28px; margin: 0 0 6px; letter-spacing: -0.02em; }
+  .sub { color: var(--muted); font-size: 15px; line-height: 1.55; margin: 0 0 26px; }
+  label { display: block; font-size: 13.5px; font-weight: 700; margin: 16px 0 6px; }
+  input, select, textarea {
+    width: 100%; box-sizing: border-box; font: inherit; font-size: 15px; color: var(--ink);
+    padding: 12px 13px; border: 1.5px solid var(--line); border-radius: 12px; background: #fafafa; outline: none;
+  }
+  input:focus, select:focus, textarea:focus { border-color: var(--accent); background: #fff; }
+  textarea { min-height: 130px; resize: vertical; }
+  .hp { position: absolute; left: -9999px; width: 1px; height: 1px; overflow: hidden; }
+  button {
+    margin-top: 22px; width: 100%; height: 52px; border: none; border-radius: 14px;
+    background: var(--ink); color: #fff; font-size: 16px; font-weight: 700; cursor: pointer;
+  }
+  button:disabled { opacity: 0.55; cursor: default; }
+  .note { font-size: 12.5px; color: var(--muted); margin-top: 16px; line-height: 1.5; }
+  .note a { color: var(--accent); }
+  .msg { margin-top: 18px; padding: 14px 16px; border-radius: 12px; font-size: 14.5px; line-height: 1.5; display: none; }
+  .msg.ok { display: block; background: #e7f6ec; color: #1b6b3a; border: 1px solid #bfe6cd; }
+  .msg.err { display: block; background: #fdecec; color: #b3261e; border: 1px solid #f3c4c1; }
+</style>
+</head>
+<body>
+<div class="wrap">
+<a class="back" href="https://getsizzle.app">&larr; Back to Sizzle</a>
+<h1>Contact &amp; Privacy Requests</h1>
+<p class="sub">Questions, support, or a privacy request (access, correct, delete, or opt out of your data)? Fill out the form below and we'll get back to you. You can also email us at <a href="mailto:privacy@getsizzle.app">privacy@getsizzle.app</a>.</p>
+
+<form id="f" novalidate>
+  <label for="name">Your name</label>
+  <input id="name" name="name" type="text" autocomplete="name" maxlength="120" required />
+
+  <label for="email">Email</label>
+  <input id="email" name="email" type="email" autocomplete="email" maxlength="200" required />
+
+  <label for="kind">What's this about?</label>
+  <select id="kind" name="kind">
+    <option value="general">General question or support</option>
+    <option value="access">Access the data you have about me</option>
+    <option value="correct">Correct my data</option>
+    <option value="delete">Delete my data / account</option>
+    <option value="optout">Opt out of sale or sharing</option>
+  </select>
+
+  <label for="message">Message</label>
+  <textarea id="message" name="message" maxlength="5000" required></textarea>
+
+  <!-- Honeypot: hidden from humans; bots fill it and get silently dropped. -->
+  <div class="hp" aria-hidden="true"><label for="company">Company</label><input id="company" name="company" type="text" tabindex="-1" autocomplete="off" /></div>
+
+  <button id="submit" type="submit">Send request</button>
+  <div id="msg" class="msg" role="status"></div>
+</form>
+
+<p class="note">We use your name and email only to respond to this request. See our <a href="https://getsizzle.app/privacy">Privacy Policy</a>.</p>
+</div>
+
+<script>
+  var API = (location.hostname === 'localhost' || location.hostname === '127.0.0.1')
+    ? 'http://localhost:8787'
+    : 'https://sizzle-chi.vercel.app';
+  var form = document.getElementById('f');
+  var btn = document.getElementById('submit');
+  var msg = document.getElementById('msg');
+
+  function show(kind, text) { msg.className = 'msg ' + kind; msg.textContent = text; }
+
+  form.addEventListener('submit', function (e) {
+    e.preventDefault();
+    var payload = {
+      name: document.getElementById('name').value.trim(),
+      email: document.getElementById('email').value.trim(),
+      kind: document.getElementById('kind').value,
+      message: document.getElementById('message').value.trim(),
+      company: document.getElementById('company').value,
+    };
+    if (!payload.name || !payload.email || !payload.message) {
+      show('err', 'Please fill in your name, email, and a message.');
+      return;
+    }
+    btn.disabled = true; btn.textContent = 'Sending…'; msg.className = 'msg';
+    fetch(API + '/support/requests', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(payload),
+    })
+      .then(function (r) { if (!r.ok) throw new Error('http ' + r.status); return r.json(); })
+      .then(function () {
+        form.reset();
+        btn.textContent = 'Send request';
+        show('ok', 'Thanks — we got your request and will respond by email soon.');
+      })
+      .catch(function () {
+        btn.disabled = false; btn.textContent = 'Send request';
+        show('err', 'Sorry, something went wrong. Please email us at privacy@getsizzle.app instead.');
+      });
+  });
+</script>
+</body>
+</html>

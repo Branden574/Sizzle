@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import type { AdminAppealDTO, AdminLogDTO, AdminReportGroupDTO, AdminStats, AdminUserDTO, ReportCategory } from '@sizzle/shared';
+import type { AdminAppealDTO, AdminLogDTO, AdminReportGroupDTO, AdminStats, AdminUserDTO, ReportCategory, SupportRequestDTO } from '@sizzle/shared';
 import { requireAdmin, requireAuth, requireNotBanned } from '../middleware/auth';
 import { supabaseAdmin } from '../lib/supabase';
 import { badRequest, dbFail, notFound } from '../lib/errors';
@@ -338,4 +338,33 @@ admin.post('/purge', async (c) => {
   const { data, error } = await supabaseAdmin.rpc('purge_expired_accounts');
   if (error) throw dbFail(error.message);
   return c.json({ purged: (data as number) ?? 0 });
+});
+
+/** GET /admin/support-requests — privacy/support requests from the contact form. */
+admin.get('/support-requests', async (c) => {
+  const { data, error } = await supabaseAdmin
+    .from('support_requests')
+    .select('id, name, email, kind, message, status, created_at')
+    .order('created_at', { ascending: false })
+    .limit(200);
+  if (error) throw dbFail(error.message);
+  const rows: SupportRequestDTO[] = (data ?? []).map((r) => ({
+    id: r.id as string,
+    name: r.name as string,
+    email: r.email as string,
+    kind: r.kind as string,
+    message: r.message as string,
+    status: r.status as string,
+    createdAt: relativeTime(new Date(r.created_at as string)),
+  }));
+  return c.json(rows);
+});
+
+/** POST /admin/support-requests/:id/resolve — mark a request handled. */
+admin.post('/support-requests/:id/resolve', async (c) => {
+  const id = c.req.param('id');
+  assertUuid(id);
+  const { error } = await supabaseAdmin.from('support_requests').update({ status: 'resolved' }).eq('id', id);
+  if (error) throw dbFail(error.message);
+  return c.json({ ok: true });
 });

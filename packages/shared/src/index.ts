@@ -397,3 +397,14 @@ export interface ApiErrorBody {
     details?: unknown;
   };
 }
+
+/** A privacy / support request submitted via the public contact form. */
+export interface SupportRequestDTO {
+  id: string;
+  name: string;
+  email: string;
+  kind: string;
+  message: string;
+  status: string;
+  createdAt: string;
+}

@@ -1,8 +1,8 @@
 import { useState, type CSSProperties } from 'react';
-import type { AdminAppealDTO, AdminReportGroupDTO, AdminUserDTO, ReportCategory, VerificationTier } from '@sizzle/shared';
+import type { AdminAppealDTO, AdminReportGroupDTO, AdminUserDTO, ReportCategory, SupportRequestDTO, VerificationTier } from '@sizzle/shared';
 import {
-  useAdminAppeals, useAdminLog, useAdminReports, useAdminStats, useAdminUsers, useBanUser, useDenyAppeal,
-  useMarkFalseReport, usePurgeAccounts, useRemoveRecipe, useRestoreRecipe, useVerifyUser,
+  useAdminAppeals, useAdminLog, useAdminReports, useAdminStats, useAdminSupportRequests, useAdminUsers, useBanUser, useDenyAppeal,
+  useMarkFalseReport, usePurgeAccounts, useRemoveRecipe, useResolveSupportRequest, useRestoreRecipe, useVerifyUser,
 } from '../data/queries';
 import { useSizzle } from '../store';
 import { formatCount } from '../lib/format';
@@ -24,7 +24,7 @@ const chip = (bg: string, color: string): CSSProperties => ({ fontSize: 11.5, fo
 
 export function AdminDashboard() {
   const setShowAdmin = useSizzle((s) => s.setShowAdmin);
-  const [tab, setTab] = useState<'reports' | 'appeals' | 'users' | 'log'>('reports');
+  const [tab, setTab] = useState<'reports' | 'appeals' | 'users' | 'log' | 'requests'>('reports');
   const stats = useAdminStats(true).data;
   const purge = usePurgeAccounts();
 
@@ -54,10 +54,11 @@ export function AdminDashboard() {
           <Tab on={tab === 'reports'} onClick={() => setTab('reports')}>Reports</Tab>
           <Tab on={tab === 'appeals'} onClick={() => setTab('appeals')}>Appeals{stats?.pendingAppeals ? ` (${stats.pendingAppeals})` : ''}</Tab>
           <Tab on={tab === 'users'} onClick={() => setTab('users')}>Users</Tab>
+          <Tab on={tab === 'requests'} onClick={() => setTab('requests')}>Requests</Tab>
           <Tab on={tab === 'log'} onClick={() => setTab('log')}>Log</Tab>
         </div>
 
-        {tab === 'reports' ? <ReportsTab /> : tab === 'appeals' ? <AppealsTab /> : tab === 'users' ? <UsersTab /> : <LogTab />}
+        {tab === 'reports' ? <ReportsTab /> : tab === 'appeals' ? <AppealsTab /> : tab === 'users' ? <UsersTab /> : tab === 'requests' ? <RequestsTab /> : <LogTab />}
       </div>
     </div>
   );
@@ -100,6 +101,40 @@ function LogTab() {
           {(e.targetName || e.targetRecipeTitle || e.detail) && (
             <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 3 }}>
               {[e.targetRecipeTitle && `“${e.targetRecipeTitle}”`, e.targetName, e.detail].filter(Boolean).join(' · ')}
+            </div>
+          )}
+        </div>
+      ))}
+    </>
+  );
+}
+
+const KIND_LABEL: Record<string, string> = {
+  access: 'Access my data', delete: 'Delete my data', correct: 'Correct my data', optout: 'Opt out of sale/share', general: 'General',
+};
+
+function RequestsTab() {
+  const reqs = useAdminSupportRequests(true);
+  const resolve = useResolveSupportRequest();
+  const list = reqs.data ?? [];
+  if (reqs.isLoading) return <Muted>Loading requests…</Muted>;
+  if (list.length === 0) return <Muted>No privacy or support requests yet.</Muted>;
+  return (
+    <>
+      <div style={{ fontSize: 12, color: 'var(--text-faint-2)', margin: '0 2px 10px' }}>Submitted via getsizzle.app/contact.</div>
+      {list.map((r: SupportRequestDTO) => (
+        <div key={r.id} style={{ ...card, opacity: r.status === 'resolved' ? 0.55 : 1 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+            <span style={chip('var(--surface-3)', 'var(--text-soft)')}>{KIND_LABEL[r.kind] ?? r.kind}</span>
+            {r.status === 'resolved' && <span style={chip('var(--invert-bg)', 'var(--invert-fg)')}>resolved</span>}
+            <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-faint-2)' }}>{r.createdAt}</span>
+          </div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{r.name}</div>
+          <a href={`mailto:${r.email}`} style={{ fontSize: 13, color: '#1d9bf0', textDecoration: 'none' }}>{r.email}</a>
+          <div style={{ fontSize: 13.5, color: 'var(--text-soft)', marginTop: 8, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{r.message}</div>
+          {r.status !== 'resolved' && (
+            <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+              <button disabled={resolve.isPending} onClick={() => resolve.mutate({ id: r.id })} style={pill('#1f9d55', '#fff')}>Mark resolved</button>
             </div>
           )}
         </div>

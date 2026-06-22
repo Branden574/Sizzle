@@ -7,9 +7,10 @@ import { CloseIcon } from './icons';
  * with your finalized, jurisdiction-aware documents (e.g. generated + hosted by
  * Termly) and they'll open the live policy instead of this placeholder.
  */
-export const LEGAL_URLS: { terms: string; privacy: string } = {
-  terms: '', // e.g. 'https://app.termly.io/document/terms-of-service/<id>'
-  privacy: '', // e.g. 'https://app.termly.io/document/privacy-policy/<id>'
+export const LEGAL_URLS: { terms: string; privacy: string; cookies: string } = {
+  terms: 'https://getsizzle.app/terms',
+  privacy: 'https://getsizzle.app/privacy',
+  cookies: 'https://getsizzle.app/cookie-policy',
 };
 
 const TERMS_SECTIONS: [string, string][] = [
