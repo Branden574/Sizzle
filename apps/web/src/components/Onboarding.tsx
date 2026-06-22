@@ -1,7 +1,8 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { useAuth } from '../auth/useAuth';
 import { tasteDefs } from '../data';
 import { useSuggestedCooks } from '../data/queries';
+import { apiGet } from '../lib/api';
 import { formatCount } from '../lib/format';
 import { useSizzle } from '../store';
 import { theme } from '../theme';
@@ -313,6 +314,8 @@ function StepAccount() {
 
   const [name, setName] = useState('');
   const [phone, setPhone] = useState('');
+  const [username, setUsername] = useState('');
+  const [handleState, setHandleState] = useState<'idle' | 'short' | 'checking' | 'available' | 'taken'>('idle');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [showPassword, setShowPassword] = useState(false);
@@ -323,6 +326,26 @@ function StepAccount() {
   const [resent, setResent] = useState(false);
 
   const isLogin = mode === 'login';
+
+  // Normalized username + debounced availability check (signup only).
+  const cleanHandle = username.trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+  useEffect(() => {
+    if (isLogin) return;
+    if (cleanHandle.length < 3) {
+      setHandleState(cleanHandle.length === 0 ? 'idle' : 'short');
+      return;
+    }
+    setHandleState('checking');
+    const t = setTimeout(async () => {
+      try {
+        const r = await apiGet<{ available: boolean }>(`/cooks/handle-available?handle=${encodeURIComponent(cleanHandle)}`);
+        setHandleState(r.available ? 'available' : 'taken');
+      } catch {
+        setHandleState('idle');
+      }
+    }, 450);
+    return () => clearTimeout(t);
+  }, [cleanHandle, isLogin]);
 
   if (forgot) {
     const back = () => { setForgot(false); setResetSent(false); clearError(); };
@@ -406,7 +429,7 @@ function StepAccount() {
 
   const canSubmit = isLogin
     ? email.trim().length > 0 && password.length > 0 && !busy
-    : name.trim().length > 0 && phone.trim().length > 0 && email.trim().length > 0 && pwValid && !busy;
+    : name.trim().length > 0 && phone.trim().length > 0 && handleState === 'available' && email.trim().length > 0 && pwValid && !busy;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -414,7 +437,7 @@ function StepAccount() {
     if (isLogin) {
       void signIn(email, password);
     } else {
-      const result = await signUp(email, password, { name, phone });
+      const result = await signUp(email, password, { name, phone, handle: cleanHandle });
       // 'confirmed' logs in automatically; 'pending' needs email verification.
       if (result === 'pending') setConfirmSent(true);
     }
@@ -459,6 +482,32 @@ function StepAccount() {
               <>
                 <input type="text" autoComplete="name" placeholder="Full name" value={name} onChange={(e) => setName(e.target.value)} style={inputStyle} />
                 <input type="tel" autoComplete="tel" inputMode="tel" placeholder="Phone number" value={phone} onChange={(e) => setPhone(e.target.value)} style={inputStyle} />
+                <div>
+                  <div style={{ position: 'relative' }}>
+                    <span style={{ position: 'absolute', left: 16, top: 0, bottom: 0, display: 'flex', alignItems: 'center', color: 'var(--text-faint-2)', fontSize: 16, pointerEvents: 'none' }}>@</span>
+                    <input
+                      type="text"
+                      autoComplete="username"
+                      autoCapitalize="none"
+                      spellCheck={false}
+                      placeholder="username"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      style={{ ...inputStyle, paddingLeft: 32, paddingRight: 44, width: '100%', boxSizing: 'border-box', borderColor: handleState === 'taken' ? '#d8521e' : handleState === 'available' ? '#1f9d55' : (inputStyle.border as string) }}
+                    />
+                    <span style={{ position: 'absolute', right: 14, top: 0, bottom: 0, display: 'flex', alignItems: 'center', fontSize: 15, fontWeight: 700, color: handleState === 'available' ? '#1f9d55' : '#d8521e' }}>
+                      {handleState === 'checking' ? '…' : handleState === 'available' ? '✓' : handleState === 'taken' ? '✕' : ''}
+                    </span>
+                  </div>
+                  {(handleState === 'taken' || handleState === 'short') && (
+                    <div style={{ color: '#d8521e', fontSize: 12.5, fontWeight: 600, marginTop: 5, marginLeft: 2 }}>
+                      {handleState === 'taken' ? 'That username is taken — try another.' : 'At least 3 characters (letters, numbers, _).'}
+                    </div>
+                  )}
+                  {handleState === 'available' && (
+                    <div style={{ color: '#1f9d55', fontSize: 12.5, fontWeight: 600, marginTop: 5, marginLeft: 2 }}>@{cleanHandle} is available</div>
+                  )}
+                </div>
               </>
             )}
             <input

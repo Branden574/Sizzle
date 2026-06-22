@@ -55,6 +55,21 @@ cooks.get('/suggested', optionalAuth, async (c) => {
   return c.json(ranked);
 });
 
+/**
+ * GET /cooks/handle-available?handle=foo — public username availability check for
+ * the signup form. Normalizes to [a-z0-9_] and matches case-insensitively (the
+ * underscore is escaped so ilike treats it literally, not as a wildcard).
+ */
+cooks.get('/handle-available', async (c) => {
+  const handle = (c.req.query('handle') ?? '').trim().toLowerCase().replace(/[^a-z0-9_]/g, '');
+  if (handle.length < 3) return c.json({ available: false, reason: 'At least 3 characters.' });
+  if (handle.length > 30) return c.json({ available: false, reason: 'Too long (max 30).' });
+  const pattern = handle.replace(/_/g, '\\_');
+  const { data, error } = await supabaseAdmin.from('profiles').select('id').ilike('handle', pattern).limit(1);
+  if (error) throw dbFail(error.message);
+  return c.json({ available: !(data && data.length > 0) });
+});
+
 /** GET /cooks/:id — public cook profile + recipe grid + viewer.following. */
 cooks.get('/:id', optionalAuth, async (c) => {
   const id = assertUuid(c.req.param('id'), 'cook');

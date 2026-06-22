@@ -30,7 +30,7 @@ interface AuthState {
   setMode: (mode: AuthMode) => void;
   clearError: () => void;
 
-  signUp: (email: string, password: string, opts?: { name?: string; phone?: string }) => Promise<'confirmed' | 'pending' | false>;
+  signUp: (email: string, password: string, opts?: { name?: string; phone?: string; handle?: string }) => Promise<'confirmed' | 'pending' | false>;
   /** Re-send the signup confirmation email. */
   resendSignup: (email: string) => Promise<boolean>;
   signIn: (email: string, password: string) => Promise<boolean>;
@@ -95,6 +95,7 @@ export const useAuth = create<AuthState>((set, get) => ({
         data: {
           display_name: opts?.name?.trim() || undefined,
           phone: opts?.phone?.trim() || undefined,
+          handle: opts?.handle?.trim() || undefined,
         },
       },
     });
