@@ -20,9 +20,10 @@ const schema = z.object({
 
 const parsed = schema.safeParse(process.env);
 if (!parsed.success) {
-  console.error('✗ Invalid API environment:\n', parsed.error.flatten().fieldErrors);
-  console.error('  → Copy apps/api/.env.example to apps/api/.env and fill in the Supabase keys (run `supabase start` to print the local ones).');
-  process.exit(1);
+  const fields = parsed.error.flatten().fieldErrors;
+  console.error('✗ Invalid API environment:\n', fields);
+  // Throw (not process.exit) so serverless wrappers can surface the cause.
+  throw new Error('Invalid API environment: ' + JSON.stringify(fields));
 }
 
 export const env = parsed.data;
@@ -40,8 +41,7 @@ function isLocalDemoKey(jwt: string): boolean {
 // Safety: never run against a hosted Supabase with the public local demo keys.
 const isLocalSupabase = /127\.0\.0\.1|localhost/.test(env.SUPABASE_URL);
 if (!isLocalSupabase && (isLocalDemoKey(env.SUPABASE_SERVICE_ROLE_KEY) || isLocalDemoKey(env.SUPABASE_ANON_KEY))) {
-  console.error('✗ Refusing to start: the public local demo Supabase keys are set against a non-local SUPABASE_URL. Set real SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY.');
-  process.exit(1);
+  throw new Error('Refusing to start: the public local demo Supabase keys are set against a non-local SUPABASE_URL. Set real SUPABASE_ANON_KEY / SUPABASE_SERVICE_ROLE_KEY.');
 }
 
 /** True when the user opted into real Cloudflare Stream and supplied creds. */
