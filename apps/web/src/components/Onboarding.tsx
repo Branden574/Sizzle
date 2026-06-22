@@ -308,6 +308,7 @@ function StepAccount() {
   const signIn = useAuth((s) => s.signIn);
   const signInOAuth = useAuth((s) => s.signInOAuth);
   const resetPassword = useAuth((s) => s.resetPassword);
+  const resendSignup = useAuth((s) => s.resendSignup);
   const clearError = useAuth((s) => s.clearError);
 
   const [name, setName] = useState('');
@@ -317,6 +318,9 @@ function StepAccount() {
   const [showPassword, setShowPassword] = useState(false);
   const [forgot, setForgot] = useState(false);
   const [resetSent, setResetSent] = useState(false);
+  const [confirmSent, setConfirmSent] = useState(false);
+  const [resending, setResending] = useState(false);
+  const [resent, setResent] = useState(false);
 
   const isLogin = mode === 'login';
 
@@ -355,6 +359,42 @@ function StepAccount() {
     );
   }
 
+  if (confirmSent) {
+    const back = () => { setConfirmSent(false); setResent(false); clearError(); };
+    const resend = async () => {
+      setResending(true);
+      const ok = await resendSignup(email);
+      setResending(false);
+      if (ok) setResent(true);
+    };
+    return (
+      <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '0 34px', animation: STEP_IN }}>
+        <div style={{ width: 100, height: 100, borderRadius: '50%', background: 'var(--surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', marginBottom: 26, animation: 'sz-pop .55s cubic-bezier(.34,1.56,.64,1)', boxShadow: '0 12px 34px -14px rgba(226,58,24,.5)' }}>
+          <svg width="46" height="46" viewBox="0 0 24 24" fill="none" stroke="var(--accent)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+            <rect x="2" y="4" width="20" height="16" rx="3" />
+            <path d="m3 6 9 6 9-6" />
+          </svg>
+        </div>
+        <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 40, lineHeight: 1.05, color: 'var(--text)' }}>Thanks for signing up!</div>
+        <p style={{ color: 'var(--text-soft)', fontSize: 16, lineHeight: 1.55, margin: '14px 0 6px', maxWidth: 350 }}>
+          We sent a confirmation link to <b style={{ color: 'var(--text)' }}>{email || 'your email'}</b>. Tap it to verify your email and start cooking.
+        </p>
+        <p style={{ color: 'var(--text-faint-2)', fontSize: 13.5, margin: '0 0 30px' }}>Didn’t get it? Check your spam folder.</p>
+        <button
+          onClick={resend}
+          disabled={resending || resent}
+          className="sz-press"
+          style={{ ...pressVars(0.97), width: '100%', maxWidth: 360, height: 54, border: 'none', borderRadius: 16, background: resent ? 'var(--surface-2)' : 'var(--invert-bg)', color: resent ? 'var(--text-soft)' : 'var(--invert-fg)', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 700, cursor: resending || resent ? 'default' : 'pointer', opacity: resending ? 0.6 : 1 }}
+        >
+          {resent ? 'Email sent ✓' : resending ? 'Sending…' : 'Resend email'}
+        </button>
+        <button type="button" onClick={back} style={{ marginTop: 14, height: 40, border: 'none', background: 'none', color: 'var(--text-soft)', fontFamily: "'Hanken Grotesk'", fontSize: 14.5, fontWeight: 600, cursor: 'pointer' }}>
+          Use a different email
+        </button>
+      </div>
+    );
+  }
+
   // Strong-password requirements (signup): 10+ chars, uppercase, number, symbol.
   const pwChecks = {
     length: password.length >= 10,
@@ -368,11 +408,16 @@ function StepAccount() {
     ? email.trim().length > 0 && password.length > 0 && !busy
     : name.trim().length > 0 && phone.trim().length > 0 && email.trim().length > 0 && pwValid && !busy;
 
-  const submit = (e: React.FormEvent) => {
+  const submit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!canSubmit) return;
-    if (isLogin) void signIn(email, password);
-    else void signUp(email, password, { name, phone });
+    if (isLogin) {
+      void signIn(email, password);
+    } else {
+      const result = await signUp(email, password, { name, phone });
+      // 'confirmed' logs in automatically; 'pending' needs email verification.
+      if (result === 'pending') setConfirmSent(true);
+    }
   };
 
   return (

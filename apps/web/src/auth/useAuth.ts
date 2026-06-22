@@ -30,7 +30,9 @@ interface AuthState {
   setMode: (mode: AuthMode) => void;
   clearError: () => void;
 
-  signUp: (email: string, password: string, opts?: { name?: string; phone?: string }) => Promise<boolean>;
+  signUp: (email: string, password: string, opts?: { name?: string; phone?: string }) => Promise<'confirmed' | 'pending' | false>;
+  /** Re-send the signup confirmation email. */
+  resendSignup: (email: string) => Promise<boolean>;
   signIn: (email: string, password: string) => Promise<boolean>;
   signInOAuth: (provider: 'apple' | 'google') => Promise<void>;
   signOut: () => Promise<void>;
@@ -86,7 +88,7 @@ export const useAuth = create<AuthState>((set, get) => ({
 
   signUp: async (email, password, opts) => {
     set({ busy: true, error: null });
-    const { error } = await supabase.auth.signUp({
+    const { data, error } = await supabase.auth.signUp({
       email: email.trim(),
       password,
       options: {
@@ -101,8 +103,19 @@ export const useAuth = create<AuthState>((set, get) => ({
       set({ error: error.message });
       return false;
     }
-    // With local email confirmations disabled, a session is returned immediately
-    // and onAuthStateChange flips status -> authed.
+    // If a session came back, confirmations are off → onAuthStateChange flips to
+    // authed. If not, email confirmation is required: tell the UI to show the
+    // "check your email" screen.
+    return data.session ? 'confirmed' : 'pending';
+  },
+
+  resendSignup: async (email) => {
+    set({ error: null });
+    const { error } = await supabase.auth.resend({ type: 'signup', email: email.trim() });
+    if (error) {
+      set({ error: error.message });
+      return false;
+    }
     return true;
   },
 
