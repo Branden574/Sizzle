@@ -327,26 +327,50 @@ export const baseComments: Comment[] = [
   },
 ];
 
+// Onboarding taste picks. Every label here MUST have keyword signals in the
+// API's taste matcher (apps/api/src/services/taste.ts) so it influences the For
+// You ranking — keep the two lists in sync when adding options.
 export const tasteDefs: string[] = [
+  // Cuisines
   'Japanese',
-  'Italian',
-  'Mexican',
-  'Vegetarian',
-  'Spicy',
-  'Mediterranean',
-  'Quick & easy',
-  'Baking',
-  'High protein',
+  'Chinese',
   'Korean',
-  'Comfort food',
-  'Vegan',
-  'Seafood',
-  'Street food',
-  'Low effort',
+  'Thai',
+  'Vietnamese',
   'Indian',
+  'Italian',
+  'French',
+  'Greek',
+  'Mediterranean',
+  'Mexican',
+  'Caribbean',
+  'Middle Eastern',
+  'Soul food',
+  'Southern BBQ',
+  'American',
+  // Diets & lifestyle
+  'Vegetarian',
+  'Vegan',
+  'High protein',
+  'Keto',
+  'Gluten-free',
   'Halal',
   'Kosher',
-  'Soul food',
+  'Healthy',
+  // Meals & styles
+  'Breakfast',
+  'Desserts',
+  'Baking',
+  'Street food',
+  'Comfort food',
+  'Spicy',
+  'Quick & easy',
+  'Low effort',
+  'Meal prep',
+  'Seafood',
+  'Soups & stews',
+  'Pasta',
+  'Drinks',
 ];
 
 export const trendChips: string[] = ['🔥 Trending', '15-min dinners', 'High protein', 'One pan', 'Sweet', 'Spicy'];

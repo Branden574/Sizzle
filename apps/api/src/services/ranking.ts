@@ -47,7 +47,9 @@ function popularityScore(likeCount: number): number {
 export function scoreRecipe(r: RecipeRow, s: ViewerSignals, now: number): number {
   const W = RANK_WEIGHTS;
   let score = W.recency * recencyScore(r.created_at, now);
-  if (tasteScore(`${r.cuisine} ${r.title}`, s.tastes) > 0) score += W.taste;
+  // Tastes match against cuisine + title + hashtags, so a recipe tagged
+  // #korean lifts a viewer who picked "Korean" even if its cuisine field differs.
+  if (tasteScore(`${r.cuisine} ${r.title} ${(r.tags ?? []).join(' ')}`, s.tastes) > 0) score += W.taste;
   if (s.followedCooks.has(r.cook_id)) score += W.follow;
   score += W.affinity * Math.min(1, (s.affinity.get(r.cook_id) ?? 0) / 5);
   // Hashtag affinity: sum the viewer's engagement with this recipe's tags.
