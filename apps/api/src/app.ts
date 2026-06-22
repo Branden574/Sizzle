@@ -28,12 +28,14 @@ export function createApp() {
   // Any Vercel deployment (production alias + preview URLs) of the web app, so the
   // hosted site works without re-pinning WEB_ORIGIN on every rename/preview.
   const vercelOrigin = /^https:\/\/[a-z0-9-]+\.vercel\.app$/;
+  // The production custom domain (apex + www) — the site users actually visit.
+  const siteOrigin = /^https:\/\/(www\.)?getsizzle\.app$/;
   app.use(
     '*',
     cors({
       origin: (origin) => {
         if (!origin) return env.WEB_ORIGIN;
-        if (origin === env.WEB_ORIGIN || nativeOrigins.has(origin) || lanOrigin.test(origin) || vercelOrigin.test(origin)) return origin;
+        if (origin === env.WEB_ORIGIN || nativeOrigins.has(origin) || lanOrigin.test(origin) || vercelOrigin.test(origin) || siteOrigin.test(origin)) return origin;
         return env.WEB_ORIGIN;
       },
       allowHeaders: ['Authorization', 'Content-Type'],
