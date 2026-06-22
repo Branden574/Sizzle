@@ -33,17 +33,26 @@ export function RecipeSheet() {
   const [confirmDel, setConfirmDel] = useState(false);
   const [appealText, setAppealText] = useState('');
   const [scale, setScale] = useState(1);
+  const [servesEdit, setServesEdit] = useState<string | null>(null);
   const units = useSizzle((s) => s.units);
   const [addedToList, setAddedToList] = useState(false);
   const addToShopping = useShopping((s) => s.add);
   // Offline fallback: if the fetch hasn't landed, use the locally cached copy.
   const r = data ?? getOffline(openRecipe);
 
+  // Each recipe opens at its own base serving size (don't carry scale over).
+  useEffect(() => { setScale(1); setServesEdit(null); }, [openRecipe]);
+
   if (!openRecipe) return null;
   const close = () => setOpenRecipe(null);
   const isOwner = !!r && !!me && r.cook.id === me.id;
   const isReview = r?.postType === 'review';
   const headerVideo = r?.video?.mp4Url || r?.video?.hlsUrl || null;
+  // Serving scaler: the recipe's own serving count is the baseline; the user can
+  // type or step a target number of servings and every ingredient scales to it.
+  const baseServes = r?.servings ?? 1;
+  const serves = Math.max(1, Math.round(baseServes * scale));
+  const setServes = (n: number) => setScale(Math.max(1, Math.min(100, Math.round(n))) / baseServes);
 
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 97 }}>
@@ -155,19 +164,23 @@ export function RecipeSheet() {
 
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '26px 0 12px' }}>
                     <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 26, color: 'var(--text)' }}>Ingredients</div>
-                    <div style={{ display: 'flex', gap: 4, padding: 4, borderRadius: 12, background: 'var(--surface-2)', border: '1px solid var(--line)' }}>
-                      {[0.5, 1, 2].map((f) => {
-                        const on = scale === f;
-                        return (
-                          <button
-                            key={f}
-                            onClick={() => setScale(f)}
-                            style={{ minWidth: 38, padding: '6px 8px', borderRadius: 9, border: 'none', cursor: 'pointer', fontFamily: "'Hanken Grotesk'", fontSize: 13, fontWeight: 700, background: on ? 'var(--invert-bg)' : 'transparent', color: on ? 'var(--invert-fg)' : 'var(--text-soft)', transition: 'all .18s ease' }}
-                          >
-                            {f === 0.5 ? '½×' : `${f}×`}
-                          </button>
-                        );
-                      })}
+                    {/* Type or step a target serving count; ingredients scale to it. */}
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
+                      <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-soft)' }}>Serves</span>
+                      <div style={{ display: 'flex', alignItems: 'center', background: 'var(--surface-2)', border: '1px solid var(--line)', borderRadius: 12, overflow: 'hidden' }}>
+                        <button onClick={() => { setServesEdit(null); setServes(serves - 1); }} disabled={serves <= 1} aria-label="Fewer servings" style={{ width: 36, height: 38, border: 'none', background: 'transparent', color: serves <= 1 ? 'var(--text-faint-2)' : 'var(--text)', fontSize: 22, fontWeight: 600, cursor: serves <= 1 ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>−</button>
+                        <input
+                          type="text"
+                          inputMode="numeric"
+                          value={servesEdit ?? String(serves)}
+                          onChange={(e) => { const v = e.target.value.replace(/[^0-9]/g, '').slice(0, 3); setServesEdit(v); const n = parseInt(v, 10); if (Number.isFinite(n) && n >= 1) setServes(n); }}
+                          onBlur={() => setServesEdit(null)}
+                          onFocus={(e) => e.currentTarget.select()}
+                          aria-label="Number of servings"
+                          style={{ width: 42, height: 38, textAlign: 'center', border: 'none', borderLeft: '1px solid var(--line)', borderRight: '1px solid var(--line)', background: 'transparent', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 15.5, fontWeight: 800, outline: 'none', fontVariantNumeric: 'tabular-nums', padding: 0 }}
+                        />
+                        <button onClick={() => { setServesEdit(null); setServes(serves + 1); }} disabled={serves >= 100} aria-label="More servings" style={{ width: 36, height: 38, border: 'none', background: 'transparent', color: serves >= 100 ? 'var(--text-faint-2)' : 'var(--text)', fontSize: 20, fontWeight: 600, cursor: serves >= 100 ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>+</button>
+                      </div>
                     </div>
                   </div>
                   <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 18, overflow: 'hidden' }}>
