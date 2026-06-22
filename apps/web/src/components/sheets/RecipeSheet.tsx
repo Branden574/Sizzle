@@ -7,7 +7,7 @@ import { scaleIngredient } from '../../lib/ingredients';
 import { useShopping } from '../../lib/shopping';
 import { useSizzle } from '../../store';
 import { theme } from '../../theme';
-import { BookmarkIcon, CloseIcon, CommentIcon, DownloadIcon, PlayIcon, SpeakerIcon, SpeakerOffIcon, TrashIcon } from '../icons';
+import { BookmarkIcon, CloseIcon, CommentIcon, DownloadIcon, PencilIcon, PlayIcon, SpeakerIcon, SpeakerOffIcon, TrashIcon } from '../icons';
 import { Hashtags } from '../Hashtags';
 import { VerifiedBadge } from '../VerifiedBadge';
 import { StarRow } from '../Stars';
@@ -19,6 +19,7 @@ export function RecipeSheet() {
   const openRecipe = useSizzle((s) => s.openRecipe);
   const setOpenRecipe = useSizzle((s) => s.setOpenRecipe);
   const setViewerCard = useSizzle((s) => s.setViewerCard);
+  const setEditPostFor = useSizzle((s) => s.setEditPostFor);
   const setOpenCook = useSizzle((s) => s.setOpenCook);
   const setCommentsFor = useSizzle((s) => s.setCommentsFor);
   const setCookFor = useSizzle((s) => s.setCookFor);
@@ -73,6 +74,11 @@ export function RecipeSheet() {
           {isOwner && (
             <button onClick={() => setConfirmDel(true)} title="Delete post" aria-label="Delete post" style={{ position: 'absolute', top: 16, left: 16, zIndex: 6, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.4)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
               <TrashIcon size={19} stroke="#fff" strokeWidth={2} />
+            </button>
+          )}
+          {isOwner && (
+            <button onClick={() => { if (r) setEditPostFor(r.id); }} title="Edit post" aria-label="Edit post" style={{ position: 'absolute', top: 16, left: 62, zIndex: 6, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.4)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+              <PencilIcon size={18} stroke="#fff" strokeWidth={2} />
             </button>
           )}
           <div style={{ position: 'absolute', top: 14, left: '50%', transform: 'translateX(-50%)', zIndex: 6, width: 42, height: 5, borderRadius: 3, background: 'rgba(255,255,255,.6)' }} />

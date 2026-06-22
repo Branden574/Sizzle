@@ -164,6 +164,33 @@ export function useDeleteRecipe() {
   });
 }
 
+/** Edit a published post's text (owner/admin). Video is immutable. */
+export type EditRecipeInput = {
+  recipeId: string;
+  title: string;
+  cuisine: string;
+  level: string;
+  timeMinutes: number;
+  servings: number;
+  caption?: string;
+  ingredients: string[];
+  steps: string[];
+  rating?: number;
+};
+export function useEditRecipe() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ recipeId, ...input }: EditRecipeInput) => apiSend<RecipeDetail>('PATCH', `/recipes/${recipeId}`, input),
+    onSuccess: (_d, { recipeId }) => {
+      void qc.invalidateQueries({ queryKey: keys.recipe(recipeId) });
+      void qc.invalidateQueries({ queryKey: ['feed'] });
+      void qc.invalidateQueries({ queryKey: ['cook'] });
+      void qc.invalidateQueries({ queryKey: keys.saved });
+      void qc.invalidateQueries({ queryKey: ['me', 'liked'] });
+    },
+  });
+}
+
 /** Owner appeals a removed video. */
 export function useAppealRecipe() {
   const qc = useQueryClient();

@@ -271,6 +271,15 @@ export function RotateIcon({ size = 19, stroke = '#fff', strokeWidth = 1.9 }: Ic
   );
 }
 
+/** Pencil / edit glyph. */
+export function PencilIcon({ size = 20, stroke = '#5c5048', strokeWidth = 2 }: IconBase) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M12 20h9M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4 12.5-12.5z" />
+    </svg>
+  );
+}
+
 /** Trash / delete glyph. */
 export function TrashIcon({ size = 20, stroke = '#d8521e', strokeWidth = 2 }: IconBase) {
   return (

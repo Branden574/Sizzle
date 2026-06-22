@@ -91,6 +91,8 @@ export interface SizzleState {
   reportFor: string | null;
   /** Repost sheet target (recipe id). */
   repostFor: string | null;
+  /** Edit-post sheet target (recipe id). */
+  editPostFor: string | null;
   /** Cook Mode overlay — the recipe being cooked + the chosen serving scale. */
   cookFor: { id: string; scale: number } | null;
   /** Shopping-list overlay. */
@@ -152,6 +154,7 @@ export interface SizzleState {
   setMoreFor: (id: string | null) => void;
   setReportFor: (id: string | null) => void;
   setRepostFor: (id: string | null) => void;
+  setEditPostFor: (id: string | null) => void;
   setCookFor: (v: { id: string; scale: number } | null) => void;
   setShowShopping: (v: boolean) => void;
   setCollectionPickerFor: (id: string | null) => void;
@@ -207,6 +210,7 @@ export const useSizzle = create<SizzleState>((set) => ({
   moreIsOwn: false,
   reportFor: null,
   repostFor: null,
+  editPostFor: null,
   cookFor: null,
   showShopping: false,
   collectionPickerFor: null,
@@ -269,6 +273,7 @@ export const useSizzle = create<SizzleState>((set) => ({
   setMoreFor: (id) => set({ moreFor: id }),
   setReportFor: (id) => set({ reportFor: id }),
   setRepostFor: (id) => set({ repostFor: id }),
+  setEditPostFor: (id) => set({ editPostFor: id }),
   setCookFor: (v) => set({ cookFor: v }),
   setShowShopping: (v) => set({ showShopping: v }),
   setCollectionPickerFor: (id) => set({ collectionPickerFor: id }),

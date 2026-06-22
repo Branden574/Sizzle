@@ -16,6 +16,7 @@ import { CollectionSheet } from './components/sheets/CollectionSheet';
 import { CommentsSheet } from './components/sheets/CommentsSheet';
 import { CookModeSheet } from './components/sheets/CookModeSheet';
 import { CookSheet } from './components/sheets/CookSheet';
+import { EditPostSheet } from './components/sheets/EditPostSheet';
 import { EditProfileSheet } from './components/sheets/EditProfileSheet';
 import { FollowListSheet } from './components/sheets/FollowListSheet';
 import { HashtagSheet } from './components/sheets/HashtagSheet';
@@ -114,6 +115,7 @@ export default function App() {
   const moreFor = useSizzle((s) => s.moreFor);
   const reportFor = useSizzle((s) => s.reportFor);
   const repostFor = useSizzle((s) => s.repostFor);
+  const editPostFor = useSizzle((s) => s.editPostFor);
   const cookFor = useSizzle((s) => s.cookFor);
   const showShopping = useSizzle((s) => s.showShopping);
   const collectionPickerFor = useSizzle((s) => s.collectionPickerFor);
@@ -197,6 +199,7 @@ export default function App() {
           {moreFor && <MoreSheet />}
           {reportFor && <ReportSheet />}
           {repostFor && <RepostSheet />}
+          {editPostFor && <EditPostSheet />}
           {followList && <FollowListSheet />}
           {openTag && <HashtagSheet />}
           {cookFor && <CookModeSheet />}

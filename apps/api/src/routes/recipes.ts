@@ -485,6 +485,72 @@ recipes.delete('/:id', requireAuth, async (c) => {
   return c.json({ ok: true });
 });
 
+const updateSchema = z.object({
+  title: z.string().min(1).max(120),
+  cuisine: z.string().max(40).default(''),
+  timeMinutes: z.number().int().min(0).max(6000),
+  servings: z.number().int().min(1).max(99),
+  level: z.string().max(20).default('Easy'),
+  ingredients: z.array(z.string().min(1)).max(40).default([]),
+  steps: z.array(z.string().min(1)).max(40).default([]),
+  caption: z.string().max(600).optional(),
+  rating: z.number().int().min(1).max(5).optional(),
+});
+
+/**
+ * PATCH /recipes/:id — the owner (or an admin) edits a published post's text
+ * (title, caption, recipe fields). The video is immutable here (re-record =
+ * new post). Re-moderates, re-parses hashtags, and replaces ingredients/steps.
+ */
+recipes.patch('/:id', requireAuth, requireNotBanned, rateLimit({ windowMs: 60_000, max: 30, name: 'recipe-edit' }), async (c) => {
+  const id = assertUuid(c.req.param('id'), 'recipe');
+  const userId = c.get('userId')!;
+  const { data: rec } = await supabaseAdmin.from('recipes').select('cook_id, post_type').eq('id', id).maybeSingle();
+  if (!rec) throw notFound('Recipe not found');
+  if (rec.cook_id !== userId) {
+    const { data: viewer } = await supabaseAdmin.from('profiles').select('role').eq('id', userId).maybeSingle();
+    if (viewer?.role !== 'admin') throw forbidden('You can only edit your own posts');
+  }
+  const parsed = updateSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) throw badRequest('Invalid recipe payload', parsed.error.flatten());
+  const input = parsed.data;
+  const isReview = rec.post_type === 'review';
+
+  const mod = moderateText(input.title, input.cuisine, input.ingredients, input.steps, input.caption ?? '');
+  if (!mod.ok) throw badRequest(mod.reason!);
+
+  const tags = parseHashtags(input.caption, input.title);
+  const { error } = await supabaseAdmin
+    .from('recipes')
+    .update({
+      title: input.title,
+      cuisine: input.cuisine,
+      time_minutes: isReview ? 0 : input.timeMinutes,
+      servings: isReview ? 1 : input.servings,
+      level: input.level,
+      caption: input.caption ?? null,
+      tags,
+      rating: isReview ? (input.rating ?? null) : null,
+    })
+    .eq('id', id);
+  if (error) throw dbFail(error.message);
+
+  // Replace ingredient + step rows (reviews keep none).
+  await supabaseAdmin.from('recipe_ingredients').delete().eq('recipe_id', id);
+  await supabaseAdmin.from('recipe_steps').delete().eq('recipe_id', id);
+  if (!isReview) {
+    if (input.ingredients.length) {
+      await supabaseAdmin.from('recipe_ingredients').insert(input.ingredients.map((text, i) => ({ recipe_id: id, position: i, text })));
+    }
+    if (input.steps.length) {
+      await supabaseAdmin.from('recipe_steps').insert(input.steps.map((text, i) => ({ recipe_id: id, position: i, text })));
+    }
+  }
+
+  const detail = await getRecipeDetail(userId, id);
+  return c.json(detail);
+});
+
 function hash(s: string): number {
   let h = 0;
   for (let i = 0; i < s.length; i++) h = (Math.imul(31, h) + s.charCodeAt(i)) | 0;

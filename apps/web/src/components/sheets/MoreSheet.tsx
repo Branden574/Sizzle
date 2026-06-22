@@ -1,7 +1,7 @@
 import { useEffect, useState } from 'react';
 import { useDeleteRecipe } from '../../data/queries';
 import { useSizzle } from '../../store';
-import { FlagIcon, GearIcon, RepostIcon, TrashIcon } from '../icons';
+import { FlagIcon, GearIcon, PencilIcon, RepostIcon, TrashIcon } from '../icons';
 
 /** Post "…" overflow menu: own posts get controls + delete; others get repost + report. */
 export function MoreSheet() {
@@ -11,6 +11,7 @@ export function MoreSheet() {
   const setReportFor = useSizzle((s) => s.setReportFor);
   const setRepostFor = useSizzle((s) => s.setRepostFor);
   const setSettingsFor = useSizzle((s) => s.setSettingsFor);
+  const setEditPostFor = useSizzle((s) => s.setEditPostFor);
   const del = useDeleteRecipe();
   const [confirming, setConfirming] = useState(false);
 
@@ -38,6 +39,15 @@ export function MoreSheet() {
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 15.5, fontWeight: 700, color: 'var(--text)' }}>Repost</div>
                 <div style={{ fontSize: 13, color: 'var(--text-faint)', marginTop: 2 }}>Share to friends who follow you back</div>
+              </div>
+            </button>
+          )}
+          {isOwn && (
+            <button onClick={() => { setEditPostFor(moreFor); setMoreFor(null); }} style={rowStyle}>
+              <div style={iconBox}><PencilIcon size={20} stroke="var(--text)" /></div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 15.5, fontWeight: 700, color: 'var(--text)' }}>Edit post</div>
+                <div style={{ fontSize: 13, color: 'var(--text-faint)', marginTop: 2 }}>Change the caption, recipe &amp; details</div>
               </div>
             </button>
           )}
