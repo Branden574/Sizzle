@@ -8,6 +8,7 @@ import { Onboarding } from './components/Onboarding';
 import { HomeIndicator, Phone } from './components/Phone';
 import { ResetPasswordScreen } from './components/ResetPasswordScreen';
 import { Splash } from './components/Splash';
+import { VideoViewer } from './components/VideoViewer';
 import { AppSettingsSheet } from './components/sheets/AppSettingsSheet';
 import { RoadmapSheet } from './components/sheets/RoadmapSheet';
 import { CollectionPickerSheet } from './components/sheets/CollectionPickerSheet';
@@ -100,6 +101,7 @@ export default function App() {
   const phase = useSizzle((s) => s.phase);
   const tab = useSizzle((s) => s.tab);
   const openRecipe = useSizzle((s) => s.openRecipe);
+  const viewerCard = useSizzle((s) => s.viewerCard);
   const openCook = useSizzle((s) => s.openCook);
   const commentsFor = useSizzle((s) => s.commentsFor);
   const settingsFor = useSizzle((s) => s.settingsFor);
@@ -182,6 +184,7 @@ export default function App() {
             </ErrorBoundary>
           )}
 
+          {viewerCard && <VideoViewer />}
           {showRecipe && <RecipeSheet />}
           {showComments && <CommentsSheet />}
           {showSettings && <SettingsSheet />}

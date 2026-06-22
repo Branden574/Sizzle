@@ -18,6 +18,7 @@ const accent = theme.accent;
 export function RecipeSheet() {
   const openRecipe = useSizzle((s) => s.openRecipe);
   const setOpenRecipe = useSizzle((s) => s.setOpenRecipe);
+  const setViewerCard = useSizzle((s) => s.setViewerCard);
   const setOpenCook = useSizzle((s) => s.setOpenCook);
   const setCommentsFor = useSizzle((s) => s.setCommentsFor);
   const setCookFor = useSizzle((s) => s.setCookFor);
@@ -60,7 +61,7 @@ export function RecipeSheet() {
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, top: 44, background: 'var(--bg)', borderRadius: '30px 30px 0 0', overflow: 'hidden', animation: 'sz-slideUp .42s cubic-bezier(.16,1,.3,1)', display: 'flex', flexDirection: 'column' }}>
         <div style={{ position: 'relative', height: headerVideo ? 300 : 230, flex: 'none', background: r?.bg ?? 'linear-gradient(165deg,#2a160e,#b5471f)' }}>
           {headerVideo ? (
-            <RecipeHeaderVideo src={headerVideo} poster={r?.video?.posterUrl} />
+            <RecipeHeaderVideo src={headerVideo} poster={r?.video?.posterUrl} onExpand={() => { if (r) { setViewerCard(r); setOpenRecipe(null); } }} />
           ) : (
             <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(70% 60% at 70% 20%, rgba(244,165,44,.5), transparent 70%)' }} />
           )}
@@ -301,7 +302,7 @@ export function RecipeSheet() {
 }
 
 /** Plays the recipe's actual clip in the sheet header (MP4 native, HLS via hls.js). */
-function RecipeHeaderVideo({ src, poster }: { src: string; poster?: string | null }) {
+function RecipeHeaderVideo({ src, poster, onExpand }: { src: string; poster?: string | null; onExpand: () => void }) {
   const ref = useRef<HTMLVideoElement>(null);
   const [paused, setPaused] = useState(false);
   const [muted, setMuted] = useState(true);
@@ -358,9 +359,18 @@ function RecipeHeaderVideo({ src, poster }: { src: string; poster?: string | nul
       <button
         onClick={(e) => { e.stopPropagation(); const v = ref.current; if (v) { v.muted = !v.muted; setMuted(v.muted); } }}
         aria-label={muted ? 'Unmute' : 'Mute'}
-        style={{ position: 'absolute', bottom: 64, right: 16, zIndex: 5, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.4)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+        style={{ position: 'absolute', bottom: 64, right: 62, zIndex: 5, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.4)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
       >
         {muted ? <SpeakerOffIcon size={19} /> : <SpeakerIcon size={19} />}
+      </button>
+      <button
+        onClick={(e) => { e.stopPropagation(); onExpand(); }}
+        aria-label="Watch full screen"
+        style={{ position: 'absolute', bottom: 64, right: 16, zIndex: 5, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.4)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+      >
+        <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+          <path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M3 16v3a2 2 0 0 0 2 2h3" />
+        </svg>
       </button>
     </div>
   );

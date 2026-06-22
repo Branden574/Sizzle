@@ -16,6 +16,7 @@ import {
   BookmarkIcon,
   CheckIcon,
   ChevronUpIcon,
+  CloseIcon,
   CommentIcon,
   DislikeIcon,
   DotsIcon,
@@ -212,7 +213,12 @@ function logView(recipeId: string, dwellMs: number) {
   }).catch(() => {});
 }
 
-function FeedCard({ card }: { card: RecipeCard }) {
+/**
+ * One full-bleed feed card. Reused by the profile/recipe full-screen viewer:
+ * when `onClose` is provided it renders in "viewer" mode with a close control,
+ * giving posted/saved videos the exact same TikTok-style player as the feed.
+ */
+export function FeedCard({ card, onClose }: { card: RecipeCard; onClose?: () => void }) {
   const requireAuth = useRequireAuth();
   const authed = useAuth((s) => s.status === 'authed');
   const isReview = card.postType === 'review';
@@ -379,6 +385,16 @@ function FeedCard({ card }: { card: RecipeCard }) {
         </div>
       )}
 
+      {onClose && (
+        <button
+          onClick={(e) => { e.stopPropagation(); onClose(); }}
+          aria-label="Close full screen"
+          style={{ position: 'absolute', top: 50, left: 14, zIndex: 30, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.4)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+        >
+          <CloseIcon size={20} stroke="#fff" strokeWidth={2.4} />
+        </button>
+      )}
+
       <button
         onClick={() => openMore(card.id, !!myId && card.cook.id === myId)}
         style={{ position: 'absolute', top: 96, right: 16, zIndex: 25, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.28)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', ...overlayFade }}
@@ -473,7 +489,7 @@ function FeedCard({ card }: { card: RecipeCard }) {
           </div>
         )}
         <button
-          onClick={() => setOpenRecipe(card.id)}
+          onClick={() => { onClose?.(); setOpenRecipe(card.id); }}
           className="sz-press"
           style={{ ...pressVars(0.95), display: 'flex', alignItems: 'center', gap: 9, background: '#fff', border: 'none', padding: '13px 20px', borderRadius: 15, cursor: 'pointer', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 700, color: '#1b1512', boxShadow: '0 6px 18px -4px rgba(0,0,0,.5)', transition: 'transform .2s cubic-bezier(.34,1.56,.64,1)' }}
         >
