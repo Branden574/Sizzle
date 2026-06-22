@@ -25,12 +25,15 @@ export function createApp() {
   // local/LAN dev hosts use, so the iOS/Android apps and emulators can call the API.
   const nativeOrigins = new Set(['capacitor://localhost', 'http://localhost', 'https://localhost', 'ionic://localhost']);
   const lanOrigin = /^https?:\/\/(localhost|127\.0\.0\.1|10\.0\.2\.2|(?:10|192\.168|172\.(?:1[6-9]|2\d|3[01]))\.[\d.]+)(?::\d+)?$/;
+  // Any Vercel deployment (production alias + preview URLs) of the web app, so the
+  // hosted site works without re-pinning WEB_ORIGIN on every rename/preview.
+  const vercelOrigin = /^https:\/\/[a-z0-9-]+\.vercel\.app$/;
   app.use(
     '*',
     cors({
       origin: (origin) => {
         if (!origin) return env.WEB_ORIGIN;
-        if (origin === env.WEB_ORIGIN || nativeOrigins.has(origin) || lanOrigin.test(origin)) return origin;
+        if (origin === env.WEB_ORIGIN || nativeOrigins.has(origin) || lanOrigin.test(origin) || vercelOrigin.test(origin)) return origin;
         return env.WEB_ORIGIN;
       },
       allowHeaders: ['Authorization', 'Content-Type'],
