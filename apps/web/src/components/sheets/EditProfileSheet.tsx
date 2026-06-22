@@ -3,6 +3,7 @@ import type { CSSProperties } from 'react';
 import { PROFILE_LINK_KEYS, type ProfileLinkKey } from '@sizzle/shared';
 import { useMe, useUpdateProfile } from '../../data/queries';
 import { uploadProfileImage } from '../../lib/storage';
+import { ImageCropper } from '../ImageCropper';
 import { useSizzle } from '../../store';
 import { CameraIcon } from '../icons';
 import { InstagramIcon, TikTokIcon, XIcon, YouTubeIcon, FacebookIcon, DiscordIcon, WebsiteIcon } from '../SocialLinks';
@@ -47,6 +48,8 @@ export function EditProfileSheet() {
   const [err, setErr] = useState<string | null>(null);
   const [handleErr, setHandleErr] = useState<string | null>(null);
   const [links, setLinks] = useState<Record<string, string>>({});
+  const [cropping, setCropping] = useState<{ src: string; bucket: 'avatars' | 'banners' } | null>(null);
+  const [photoNote, setPhotoNote] = useState<string | null>(null);
 
   const avatarInput = useRef<HTMLInputElement>(null);
   const bannerInput = useRef<HTMLInputElement>(null);
@@ -70,14 +73,31 @@ export function EditProfileSheet() {
 
   const close = () => setShowEditProfile(false);
 
-  const pick = async (bucket: 'avatars' | 'banners', file: File | undefined) => {
+  // Picking a file opens the cropper; the upload happens on "Use photo".
+  const pick = (bucket: 'avatars' | 'banners', file: File | undefined) => {
     if (!file || !me) return;
+    setErr(null);
+    setCropping({ src: URL.createObjectURL(file), bucket });
+  };
+
+  const cancelCrop = () => {
+    if (cropping) URL.revokeObjectURL(cropping.src);
+    setCropping(null);
+  };
+
+  const applyCrop = async (blob: Blob) => {
+    if (!cropping || !me) return;
+    const { src, bucket } = cropping;
+    setCropping(null);
+    URL.revokeObjectURL(src);
     setErr(null);
     setUploading(bucket === 'avatars' ? 'avatar' : 'banner');
     try {
+      const file = new File([blob], `${bucket}.jpg`, { type: 'image/jpeg' });
       const url = await uploadProfileImage(bucket, me.id, file);
       if (bucket === 'avatars') setAvatarUrl(url);
       else setBannerUrl(url);
+      setPhotoNote(bucket === 'avatars' ? 'Photo updated — tap Save to keep it.' : 'Banner updated — tap Save to keep it.');
     } catch {
       setErr('Image upload failed — try a smaller file.');
     } finally {
@@ -139,8 +159,25 @@ export function EditProfileSheet() {
               </div>
             </button>
           </div>
-          <input ref={bannerInput} type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => void pick('banners', e.target.files?.[0])} />
-          <input ref={avatarInput} type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => void pick('avatars', e.target.files?.[0])} />
+          <input ref={bannerInput} type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => { pick('banners', e.target.files?.[0]); e.target.value = ''; }} />
+          <input ref={avatarInput} type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => { pick('avatars', e.target.files?.[0]); e.target.value = ''; }} />
+
+          {photoNote && (
+            <div style={{ margin: '12px 22px 0', padding: '10px 14px', borderRadius: 12, background: 'rgba(31,157,85,.13)', color: '#1f9d55', fontSize: 13.5, fontWeight: 700 }}>
+              ✓ {photoNote}
+            </div>
+          )}
+
+          {cropping && (
+            <ImageCropper
+              src={cropping.src}
+              aspect={cropping.bucket === 'avatars' ? 1 : 3}
+              round={cropping.bucket === 'avatars'}
+              title={cropping.bucket === 'avatars' ? 'Adjust photo' : 'Adjust banner'}
+              onCancel={cancelCrop}
+              onComplete={applyCrop}
+            />
+          )}
 
           <div style={{ padding: '16px 22px 24px', display: 'flex', flexDirection: 'column', gap: 16 }}>
             <div>
