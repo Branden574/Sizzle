@@ -1,13 +1,25 @@
+import { useState } from 'react';
+import type { RecipeCard } from '@sizzle/shared';
 import { useAuth } from '../auth/useAuth';
 import { useRequireAuth } from '../auth/useRequireAuth';
-import { useMe, useNotifications, useSavedFeed } from '../data/queries';
+import { useCook, useLikedFeed, useMe, useNotifications, useSavedFeed } from '../data/queries';
 import { useSizzle } from '../store';
 import { formatCount } from '../lib/format';
 import { VerifiedBadge } from './VerifiedBadge';
 import { SocialLinks } from './SocialLinks';
-import { BellIcon, GearIcon } from './icons';
+import { BellIcon, BookmarkIcon, GearIcon, HeartIcon } from './icons';
 
 const BANNER = 'radial-gradient(120% 120% at 70% 0%, var(--saffron,#f4a52c), var(--accent,#ff5a36) 60%, #c23a1a)';
+
+/** 3×3 grid icon for the "Posts" tab. */
+function GridIcon({ size = 22, stroke = 'currentColor' }: { size?: number; stroke?: string }) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round">
+      <rect x="3" y="3" width="7" height="7" rx="1.5" /><rect x="14" y="3" width="7" height="7" rx="1.5" />
+      <rect x="3" y="14" width="7" height="7" rx="1.5" /><rect x="14" y="14" width="7" height="7" rx="1.5" />
+    </svg>
+  );
+}
 
 export function Profile() {
   const authed = useAuth((s) => s.status === 'authed');
@@ -22,9 +34,14 @@ export function Profile() {
 
   const { data: me } = useMe();
   const { data: saved } = useSavedFeed();
+  const { data: liked } = useLikedFeed();
+  const { data: myCook } = useCook(me?.id ?? null);
   const { data: notifications } = useNotifications();
   const savedItems = saved?.items ?? [];
+  const likedItems = liked?.items ?? [];
+  const postItems = myCook?.recipes ?? [];
   const unread = (notifications ?? []).filter((n) => !n.read).length;
+  const [tab, setTab] = useState<'posts' | 'liked' | 'saved'>('posts');
 
   if (!authed) {
     return (
@@ -90,23 +107,54 @@ export function Profile() {
             <VerifiedBadge tier="blue" size={16} /> Admin dashboard
           </button>
         )}
-        <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', margin: '26px 0 12px' }}>Your saved recipes</div>
-        {savedItems.length === 0 && (
-          <div style={{ padding: 30, textAlign: 'center', background: 'var(--surface)', border: '1px dashed var(--line-2)', borderRadius: 20, color: 'var(--text-faint-2)', fontSize: 14 }}>Recipes you save will collect here.</div>
-        )}
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
-          {savedItems.map((r) => (
-            <button
-              key={r.id}
-              onClick={() => setOpenRecipe(r.id)}
-              style={{ border: 'none', padding: 0, cursor: 'pointer', borderRadius: 14, overflow: 'hidden', position: 'relative', aspectRatio: '3 / 4', background: r.bg }}
-            >
-              <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg,transparent 45%, rgba(0,0,0,.7))' }} />
-              <div style={{ position: 'absolute', left: 8, right: 8, bottom: 8, fontFamily: "'Instrument Serif',serif", fontSize: 14, lineHeight: 1.05, color: '#fff' }}>{r.title}</div>
-            </button>
-          ))}
+        {/* Posts / Liked / Saved tabs — TikTok-style thumbnail grids. */}
+        <div style={{ display: 'flex', margin: '24px 0 14px', borderBottom: '1px solid var(--line-2)' }}>
+          {([['posts', GridIcon, 'Posts'], ['liked', HeartIcon, 'Liked'], ['saved', BookmarkIcon, 'Saved']] as const).map(([key, Icon, label]) => {
+            const on = tab === key;
+            return (
+              <button
+                key={key}
+                onClick={() => setTab(key)}
+                style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '10px 0', marginBottom: -1, background: 'none', border: 'none', borderBottom: on ? '2px solid var(--text)' : '2px solid transparent', cursor: 'pointer', color: on ? 'var(--text)' : 'var(--text-faint-2)' }}
+              >
+                <Icon size={19} stroke="currentColor" />
+                <span style={{ fontSize: 13.5, fontWeight: 700 }}>{label}</span>
+              </button>
+            );
+          })}
         </div>
+        <RecipeGrid
+          items={tab === 'posts' ? postItems : tab === 'liked' ? likedItems : savedItems}
+          empty={tab === 'posts' ? 'Videos you post will show up here.' : tab === 'liked' ? 'Videos you like will show up here.' : 'Recipes you save will collect here.'}
+          onOpen={setOpenRecipe}
+        />
       </div>
+    </div>
+  );
+}
+
+/** A 3-column thumbnail grid of recipes; tap a tile to open the video. */
+function RecipeGrid({ items, empty, onOpen }: { items: RecipeCard[]; empty: string; onOpen: (id: string) => void }) {
+  if (items.length === 0) {
+    return <div style={{ padding: 30, textAlign: 'center', background: 'var(--surface)', border: '1px dashed var(--line-2)', borderRadius: 20, color: 'var(--text-faint-2)', fontSize: 14 }}>{empty}</div>;
+  }
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
+      {items.map((r) => (
+        <button
+          key={r.id}
+          onClick={() => onOpen(r.id)}
+          style={{ border: 'none', padding: 0, cursor: 'pointer', borderRadius: 14, overflow: 'hidden', position: 'relative', aspectRatio: '3 / 4', background: r.bg }}
+        >
+          {r.video?.posterUrl && <img src={r.video.posterUrl} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
+          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg,transparent 38%, rgba(0,0,0,.74))' }} />
+          {r.removed && <div style={{ position: 'absolute', top: 7, left: 7, background: 'rgba(216,82,30,.92)', color: '#fff', fontSize: 10, fontWeight: 800, padding: '3px 6px', borderRadius: 6 }}>Removed</div>}
+          <div style={{ position: 'absolute', left: 8, right: 8, bottom: 26, fontFamily: "'Instrument Serif',serif", fontSize: 13.5, lineHeight: 1.05, color: '#fff', maxHeight: 30, overflow: 'hidden' }}>{r.title}</div>
+          <div style={{ position: 'absolute', left: 8, bottom: 8, display: 'flex', alignItems: 'center', gap: 4, color: '#fff', fontSize: 11.5, fontWeight: 700 }}>
+            <HeartIcon size={12} fill="#fff" stroke="#fff" strokeWidth={1.4} /> {formatCount(r.counts.likes)}
+          </div>
+        </button>
+      ))}
     </div>
   );
 }

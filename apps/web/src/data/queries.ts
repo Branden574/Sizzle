@@ -40,6 +40,11 @@ export function useSavedFeed() {
   return useQuery({ queryKey: keys.saved, queryFn: () => apiGet<FeedResponse>('/me/saved'), enabled: authed });
 }
 
+export function useLikedFeed() {
+  const authed = useAuth((s) => s.status === 'authed');
+  return useQuery({ queryKey: ['me', 'liked'], queryFn: () => apiGet<FeedResponse>('/me/liked'), enabled: authed });
+}
+
 export function useRecipe(id: string | null) {
   return useQuery({ queryKey: keys.recipe(id ?? ''), queryFn: () => apiGet<RecipeDetail>(`/recipes/${id}`), enabled: !!id });
 }

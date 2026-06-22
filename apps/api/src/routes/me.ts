@@ -104,6 +104,25 @@ me.get('/saved', async (c) => {
   return c.json<FeedResponse>({ items, nextCursor: null });
 });
 
+/** GET /me/liked — the viewer's liked recipes (newest first). */
+me.get('/liked', async (c) => {
+  const userId = c.get('userId')!;
+  const { data: likes } = await supabaseAdmin
+    .from('reactions')
+    .select('recipe_id, created_at')
+    .eq('user_id', userId)
+    .eq('kind', 'like')
+    .order('created_at', { ascending: false });
+  const ids = (likes ?? []).map((s) => s.recipe_id as string);
+  if (ids.length === 0) return c.json<FeedResponse>({ items: [], nextCursor: null });
+
+  const { data: recipeRows } = await supabaseAdmin.from('recipes').select('*').in('id', ids);
+  const byId = new Map<string, RecipeRow>((recipeRows ?? []).map((r) => [r.id as string, r as RecipeRow]));
+  const ordered = ids.map((id) => byId.get(id)).filter((r): r is RecipeRow => !!r);
+  const items = await buildCards(supabaseAdmin, userId, ordered);
+  return c.json<FeedResponse>({ items, nextCursor: null });
+});
+
 /* ───────────────────────── saved collections ───────────────────────── */
 
 const collectionSchema = z.object({ name: z.string().trim().min(1).max(60) });

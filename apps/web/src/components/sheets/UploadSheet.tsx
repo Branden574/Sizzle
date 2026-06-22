@@ -49,6 +49,7 @@ export function UploadSheet() {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [previewAspect, setPreviewAspect] = useState(0); // width / height of the picked clip
   const [prepping, setPrepping] = useState(false);
+  const [progress, setProgress] = useState(0); // upload % (0–100)
   const [videoErr, setVideoErr] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
 
@@ -86,6 +87,7 @@ export function UploadSheet() {
     if (videoFile && user) {
       try {
         setPrepping(true);
+        setProgress(0);
         setVideoErr(null);
         // Probe first (metadata only) so a too-long clip is rejected before the upload.
         const probe = await probeVideo(videoFile);
@@ -94,7 +96,7 @@ export function UploadSheet() {
           setVideoErr(`Videos can be up to ${Math.round(MAX_DURATION_SECONDS / 60)} minutes long.`);
           return;
         }
-        const uploadedUrl = await uploadVideo(user.id, videoFile);
+        const uploadedUrl = await uploadVideo(user.id, videoFile, setProgress);
         let posterUrl: string | undefined;
         if (probe.poster) posterUrl = await uploadPoster(user.id, probe.poster).catch(() => undefined);
         video = { uploadedUrl, posterUrl, durationSeconds: probe.durationSeconds ?? undefined };
@@ -288,6 +290,20 @@ export function UploadSheet() {
       </div>
 
       <div style={{ padding: '14px 20px 32px', flex: 'none' }}>
+        {prepping && (
+          <div style={{ marginBottom: 14 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 7 }}>
+              <span style={{ color: 'rgba(255,255,255,.85)', fontSize: 13.5, fontWeight: 700 }}>{progress >= 100 ? 'Finishing up…' : 'Uploading your video…'}</span>
+              <span style={{ color: '#fff', fontSize: 14, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{progress}%</span>
+            </div>
+            <div style={{ height: 8, borderRadius: 5, background: 'rgba(255,255,255,.14)', overflow: 'hidden' }}>
+              <div
+                className={progress === 0 ? 'sz-upload-indeterminate' : undefined}
+                style={{ height: '100%', width: progress === 0 ? '40%' : `${progress}%`, borderRadius: 5, background: `linear-gradient(90deg, ${accent}, #ffb52e)`, transition: 'width .25s ease', boxShadow: '0 0 12px rgba(255,138,72,.6)' }}
+              />
+            </div>
+          </div>
+        )}
         <button
           onClick={submit}
           disabled={!canPost}
