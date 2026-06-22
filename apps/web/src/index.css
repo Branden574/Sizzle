@@ -185,6 +185,13 @@ input {
   }
 }
 
+/* Pull-to-refresh spinner. */
+@keyframes sz-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 /* Indeterminate slide for the upload bar before the first progress event. */
 @keyframes sz-upload-slide {
   0% { transform: translateX(-120%); }

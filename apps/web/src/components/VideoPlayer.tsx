@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useSizzle } from '../store';
-import { PlayIcon, SpeakerIcon, SpeakerOffIcon } from './icons';
+import { PlayIcon, RotateIcon, SpeakerIcon, SpeakerOffIcon } from './icons';
 
 function fmt(t: number): string {
   if (!Number.isFinite(t)) return '0:00';
@@ -203,9 +203,7 @@ export function VideoPlayer({ src, poster, active, immersive = false }: { src: s
           aria-label={rotated ? 'Exit full screen' : 'Rotate to full screen'}
           style={{ position: 'absolute', top: 140, left: 16, zIndex: 25, width: 38, height: 38, borderRadius: '50%', border: 'none', background: rotated ? 'rgba(226,58,24,.85)' : 'rgba(0,0,0,.28)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', ...chromeFade }}
         >
-          <svg width={19} height={19} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
-            <path d="M15 3h6v6M9 21H3v-6M21 3l-7 7M3 21l7-7" />
-          </svg>
+          <RotateIcon size={20} stroke="#fff" strokeWidth={2} />
         </button>
       )}
 

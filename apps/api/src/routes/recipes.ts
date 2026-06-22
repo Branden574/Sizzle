@@ -443,6 +443,8 @@ recipes.post('/:id/repost', requireAuth, requireNotBanned, rateLimit({ windowMs:
     if (!mod.ok) throw badRequest(mod.reason!);
   }
   const cookId = await recipeCookId(id); // 404s / validates id
+  // Repost shares OTHER cooks' videos to your followers — you can't repost your own.
+  if (cookId === userId) throw badRequest("You can't repost your own video");
 
   const { error } = await supabaseAdmin
     .from('reposts')
@@ -458,6 +460,29 @@ recipes.delete('/:id/repost', requireAuth, async (c) => {
   const userId = c.get('userId')!;
   await supabaseAdmin.from('reposts').delete().eq('user_id', userId).eq('recipe_id', id);
   return c.json({ reposted: false });
+});
+
+/**
+ * DELETE /recipes/:id — the owner (or an admin) permanently deletes a post.
+ * Every recipe-referencing table (comments, saves, reactions, reposts,
+ * downloads, views, ingredients, steps, reports, notifications) has an
+ * ON DELETE CASCADE foreign key, so a single delete cleans everything up.
+ */
+recipes.delete('/:id', requireAuth, async (c) => {
+  const id = assertUuid(c.req.param('id'), 'recipe');
+  const userId = c.get('userId')!;
+  const { data: rec } = await supabaseAdmin.from('recipes').select('cook_id, video_asset_id').eq('id', id).maybeSingle();
+  if (!rec) throw notFound('Recipe not found');
+  if (rec.cook_id !== userId) {
+    const { data: viewer } = await supabaseAdmin.from('profiles').select('role').eq('id', userId).maybeSingle();
+    if (viewer?.role !== 'admin') throw forbidden('You can only delete your own posts');
+  }
+  const { error } = await supabaseAdmin.from('recipes').delete().eq('id', id);
+  if (error) throw dbFail(error.message);
+  // Best-effort: drop the now-orphaned video asset (and its storage object stays
+  // harmlessly; the mock/Cloudflare cleanup is out of scope here).
+  if (rec.video_asset_id) await supabaseAdmin.from('video_assets').delete().eq('id', rec.video_asset_id as string);
+  return c.json({ ok: true });
 });
 
 function hash(s: string): number {

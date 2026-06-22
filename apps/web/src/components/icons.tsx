@@ -258,6 +258,29 @@ export function FlagIcon({ size = 20, stroke = '#5c5048', strokeWidth = 1.9 }: I
   );
 }
 
+/** Device-rotation glyph (a phone turning to landscape) — "rotate to full screen". */
+export function RotateIcon({ size = 19, stroke = '#fff', strokeWidth = 1.9 }: IconBase) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+      {/* phone, landscape */}
+      <rect x="2.5" y="9.5" width="13" height="9" rx="2" />
+      {/* curved arrow sweeping over the top-right corner, into landscape */}
+      <path d="M13 6.2A6.5 6.5 0 0 1 20.4 12" />
+      <path d="M21 8.4l-.5 3.8-3.7-.7" />
+    </svg>
+  );
+}
+
+/** Trash / delete glyph. */
+export function TrashIcon({ size = 20, stroke = '#d8521e', strokeWidth = 2 }: IconBase) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none" stroke={stroke} strokeWidth={strokeWidth} strokeLinecap="round" strokeLinejoin="round">
+      <path d="M4 7h16M9.5 7V5.2a1.2 1.2 0 0 1 1.2-1.2h2.6a1.2 1.2 0 0 1 1.2 1.2V7M6.5 7l.9 12.1a1.4 1.4 0 0 0 1.4 1.3h6.4a1.4 1.4 0 0 0 1.4-1.3L18.5 7" />
+      <path d="M10.5 11v5.5M13.5 11v5.5" />
+    </svg>
+  );
+}
+
 const SPEAKER_BODY = 'M11 5 6 9H3v6h3l5 4V5Z';
 export function SpeakerIcon({ size = 20, stroke = '#fff', strokeWidth = 1.9 }: IconBase) {
   return (

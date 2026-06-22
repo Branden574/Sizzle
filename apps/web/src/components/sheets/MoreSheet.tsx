@@ -1,7 +1,9 @@
+import { useEffect, useState } from 'react';
+import { useDeleteRecipe } from '../../data/queries';
 import { useSizzle } from '../../store';
-import { FlagIcon, GearIcon, RepostIcon } from '../icons';
+import { FlagIcon, GearIcon, RepostIcon, TrashIcon } from '../icons';
 
-/** Post "…" overflow menu: repost + report (everyone) + post controls (owner only). */
+/** Post "…" overflow menu: own posts get controls + delete; others get repost + report. */
 export function MoreSheet() {
   const moreFor = useSizzle((s) => s.moreFor);
   const isOwn = useSizzle((s) => s.moreIsOwn);
@@ -9,6 +11,11 @@ export function MoreSheet() {
   const setReportFor = useSizzle((s) => s.setReportFor);
   const setRepostFor = useSizzle((s) => s.setRepostFor);
   const setSettingsFor = useSizzle((s) => s.setSettingsFor);
+  const del = useDeleteRecipe();
+  const [confirming, setConfirming] = useState(false);
+
+  // Reset the delete confirmation whenever the menu opens on a different post.
+  useEffect(() => setConfirming(false), [moreFor]);
 
   if (!moreFor) return null;
   const close = () => setMoreFor(null);
@@ -24,13 +31,16 @@ export function MoreSheet() {
           <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', width: 42, height: 5, borderRadius: 3, background: 'var(--track)' }} />
         </div>
         <div style={{ padding: '0 22px' }}>
-          <button onClick={() => { setRepostFor(moreFor); setMoreFor(null); }} style={rowStyle}>
-            <div style={iconBox}><RepostIcon size={20} stroke="var(--text)" /></div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 15.5, fontWeight: 700, color: 'var(--text)' }}>Repost</div>
-              <div style={{ fontSize: 13, color: 'var(--text-faint)', marginTop: 2 }}>Share to friends who follow you back</div>
-            </div>
-          </button>
+          {/* Repost is for sharing OTHER cooks' videos — hidden on your own posts. */}
+          {!isOwn && (
+            <button onClick={() => { setRepostFor(moreFor); setMoreFor(null); }} style={rowStyle}>
+              <div style={iconBox}><RepostIcon size={20} stroke="var(--text)" /></div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 15.5, fontWeight: 700, color: 'var(--text)' }}>Repost</div>
+                <div style={{ fontSize: 13, color: 'var(--text-faint)', marginTop: 2 }}>Share to friends who follow you back</div>
+              </div>
+            </button>
+          )}
           {isOwn && (
             <button onClick={() => { setSettingsFor(moreFor); setMoreFor(null); }} style={rowStyle}>
               <div style={iconBox}><GearIcon size={20} stroke="var(--text-soft)" /></div>
@@ -40,13 +50,30 @@ export function MoreSheet() {
               </div>
             </button>
           )}
-          <button onClick={() => { setReportFor(moreFor); setMoreFor(null); }} style={rowStyle}>
-            <div style={iconBox}><FlagIcon size={20} stroke="#d8521e" /></div>
-            <div style={{ flex: 1 }}>
-              <div style={{ fontSize: 15.5, fontWeight: 700, color: '#d8521e' }}>Report post</div>
-              <div style={{ fontSize: 13, color: 'var(--text-faint)', marginTop: 2 }}>Flag content that breaks the rules</div>
-            </div>
-          </button>
+          {isOwn && (
+            <button
+              onClick={() => {
+                if (!confirming) { setConfirming(true); return; }
+                if (!del.isPending) del.mutate(moreFor, { onSuccess: () => setMoreFor(null) });
+              }}
+              style={{ ...rowStyle, background: confirming ? 'var(--danger-bg)' : 'var(--surface)', borderColor: confirming ? 'var(--danger-fg)' : 'var(--line)' }}
+            >
+              <div style={iconBox}><TrashIcon size={20} stroke="#d8521e" /></div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 15.5, fontWeight: 700, color: '#d8521e' }}>{confirming ? (del.isPending ? 'Deleting…' : 'Tap again to delete') : 'Delete post'}</div>
+                <div style={{ fontSize: 13, color: 'var(--text-faint)', marginTop: 2 }}>{confirming ? 'This permanently removes it' : 'Remove this video & recipe for good'}</div>
+              </div>
+            </button>
+          )}
+          {!isOwn && (
+            <button onClick={() => { setReportFor(moreFor); setMoreFor(null); }} style={rowStyle}>
+              <div style={iconBox}><FlagIcon size={20} stroke="#d8521e" /></div>
+              <div style={{ flex: 1 }}>
+                <div style={{ fontSize: 15.5, fontWeight: 700, color: '#d8521e' }}>Report post</div>
+                <div style={{ fontSize: 13, color: 'var(--text-faint)', marginTop: 2 }}>Flag content that breaks the rules</div>
+              </div>
+            </button>
+          )}
           <button onClick={close} style={{ width: '100%', height: 52, border: 'none', borderRadius: 16, background: 'var(--invert-bg)', color: 'var(--invert-fg)', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 700, cursor: 'pointer', marginTop: 4 }}>Cancel</button>
         </div>
       </div>

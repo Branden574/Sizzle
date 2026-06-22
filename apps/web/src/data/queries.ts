@@ -147,6 +147,23 @@ export function useToggleRepost() {
   });
 }
 
+/** Delete one of your own posts (admins can delete anyone's). Clears it everywhere. */
+export function useDeleteRecipe() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (recipeId: string) => apiSend('DELETE', `/recipes/${recipeId}`),
+    onSuccess: (_d, recipeId) => {
+      qc.removeQueries({ queryKey: keys.recipe(recipeId) });
+      removeOffline(recipeId);
+      void qc.invalidateQueries({ queryKey: ['feed'] });
+      void qc.invalidateQueries({ queryKey: ['cook'] });
+      void qc.invalidateQueries({ queryKey: keys.saved });
+      void qc.invalidateQueries({ queryKey: ['me', 'liked'] });
+      void qc.invalidateQueries({ queryKey: keys.me });
+    },
+  });
+}
+
 /** Owner appeals a removed video. */
 export function useAppealRecipe() {
   const qc = useQueryClient();

@@ -1,13 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useRequireAuth } from '../../auth/useRequireAuth';
-import { useAppealRecipe, useMe, useRecipe, useToggleDownload, useToggleSave } from '../../data/queries';
+import { useAppealRecipe, useDeleteRecipe, useMe, useRecipe, useToggleDownload, useToggleSave } from '../../data/queries';
 import { getOffline } from '../../lib/offline';
 import { formatCount } from '../../lib/format';
 import { scaleIngredient } from '../../lib/ingredients';
 import { useShopping } from '../../lib/shopping';
 import { useSizzle } from '../../store';
 import { theme } from '../../theme';
-import { BookmarkIcon, CloseIcon, CommentIcon, DownloadIcon } from '../icons';
+import { BookmarkIcon, CloseIcon, CommentIcon, DownloadIcon, PlayIcon, SpeakerIcon, SpeakerOffIcon, TrashIcon } from '../icons';
 import { Hashtags } from '../Hashtags';
 import { VerifiedBadge } from '../VerifiedBadge';
 import { StarRow } from '../Stars';
@@ -29,6 +29,8 @@ export function RecipeSheet() {
   const { data, isLoading } = useRecipe(openRecipe);
   const { data: me } = useMe();
   const appeal = useAppealRecipe();
+  const del = useDeleteRecipe();
+  const [confirmDel, setConfirmDel] = useState(false);
   const [appealText, setAppealText] = useState('');
   const [scale, setScale] = useState(1);
   const units = useSizzle((s) => s.units);
@@ -41,18 +43,29 @@ export function RecipeSheet() {
   const close = () => setOpenRecipe(null);
   const isOwner = !!r && !!me && r.cook.id === me.id;
   const isReview = r?.postType === 'review';
+  const headerVideo = r?.video?.mp4Url || r?.video?.hlsUrl || null;
 
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 97 }}>
       <div onClick={close} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.5)', animation: 'sz-fadeIn .3s' }} />
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, top: 44, background: 'var(--bg)', borderRadius: '30px 30px 0 0', overflow: 'hidden', animation: 'sz-slideUp .42s cubic-bezier(.16,1,.3,1)', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ position: 'relative', height: 230, flex: 'none', background: r?.bg ?? 'linear-gradient(165deg,#2a160e,#b5471f)' }}>
-          <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(70% 60% at 70% 20%, rgba(244,165,44,.5), transparent 70%)' }} />
-          <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, transparent 50%, var(--bg))' }} />
-          <button onClick={close} style={{ position: 'absolute', top: 16, right: 16, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.35)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+        <div style={{ position: 'relative', height: headerVideo ? 300 : 230, flex: 'none', background: r?.bg ?? 'linear-gradient(165deg,#2a160e,#b5471f)' }}>
+          {headerVideo ? (
+            <RecipeHeaderVideo src={headerVideo} poster={r?.video?.posterUrl} />
+          ) : (
+            <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(70% 60% at 70% 20%, rgba(244,165,44,.5), transparent 70%)' }} />
+          )}
+          {/* fade the bottom into the sheet bg so the recipe title reads over it */}
+          <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: headerVideo ? 'linear-gradient(180deg, rgba(0,0,0,.3) 0%, transparent 24%, transparent 64%, var(--bg))' : 'linear-gradient(180deg, transparent 50%, var(--bg))' }} />
+          <button onClick={close} style={{ position: 'absolute', top: 16, right: 16, zIndex: 6, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.35)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
             <CloseIcon size={20} stroke="#fff" strokeWidth={2.2} />
           </button>
-          <div style={{ position: 'absolute', top: 14, left: '50%', transform: 'translateX(-50%)', width: 42, height: 5, borderRadius: 3, background: 'rgba(255,255,255,.6)' }} />
+          {isOwner && (
+            <button onClick={() => setConfirmDel(true)} title="Delete post" aria-label="Delete post" style={{ position: 'absolute', top: 16, left: 16, zIndex: 6, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.4)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+              <TrashIcon size={19} stroke="#fff" strokeWidth={2} />
+            </button>
+          )}
+          <div style={{ position: 'absolute', top: 14, left: '50%', transform: 'translateX(-50%)', zIndex: 6, width: 42, height: 5, borderRadius: 3, background: 'rgba(255,255,255,.6)' }} />
         </div>
 
         {!r ? (
@@ -250,6 +263,92 @@ export function RecipeSheet() {
           </>
         )}
       </div>
+
+      {confirmDel && r && (
+        <div style={{ position: 'absolute', inset: 0, zIndex: 110, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
+          <div onClick={() => setConfirmDel(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.55)', animation: 'sz-fadeIn .2s' }} />
+          <div style={{ position: 'relative', width: '100%', background: 'var(--bg)', borderRadius: '26px 26px 0 0', padding: '24px 22px 30px', animation: 'sz-slideUp .32s cubic-bezier(.16,1,.3,1)' }}>
+            <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 25, color: 'var(--text)', textAlign: 'center' }}>Delete this post?</div>
+            <p style={{ color: 'var(--text-faint)', fontSize: 14.5, textAlign: 'center', margin: '8px 0 20px', lineHeight: 1.45 }}>This permanently removes the video, recipe, likes and comments. This can’t be undone.</p>
+            {del.isError && <div style={{ color: 'var(--danger-fg)', fontSize: 13.5, fontWeight: 600, textAlign: 'center', marginBottom: 12 }}>Couldn’t delete — please try again.</div>}
+            <button
+              disabled={del.isPending}
+              onClick={() => del.mutate(r.id, { onSuccess: () => { setConfirmDel(false); setOpenRecipe(null); } })}
+              style={{ width: '100%', height: 52, border: 'none', borderRadius: 15, background: 'var(--danger-fg)', color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 700, cursor: del.isPending ? 'default' : 'pointer', opacity: del.isPending ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9 }}
+            >
+              <TrashIcon size={19} stroke="#fff" strokeWidth={2} />
+              {del.isPending ? 'Deleting…' : 'Delete post'}
+            </button>
+            <button onClick={() => setConfirmDel(false)} style={{ width: '100%', height: 50, marginTop: 10, border: '1.5px solid var(--line-2)', borderRadius: 15, background: 'var(--surface)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 15.5, fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Plays the recipe's actual clip in the sheet header (MP4 native, HLS via hls.js). */
+function RecipeHeaderVideo({ src, poster }: { src: string; poster?: string | null }) {
+  const ref = useRef<HTMLVideoElement>(null);
+  const [paused, setPaused] = useState(false);
+  const [muted, setMuted] = useState(true);
+
+  useEffect(() => {
+    const v = ref.current;
+    if (!v || !src) return;
+    let destroyed = false;
+    let hls: { destroy: () => void } | null = null;
+    if (src.includes('.m3u8') && !v.canPlayType('application/vnd.apple.mpegurl')) {
+      void import('hls.js').then(({ default: Hls }) => {
+        if (destroyed) return;
+        if (Hls.isSupported()) {
+          const h = new Hls({ enableWorker: true, capLevelToPlayerSize: true, maxBufferLength: 10 });
+          h.loadSource(src);
+          h.attachMedia(v);
+          hls = h;
+        } else {
+          v.src = src;
+        }
+      });
+    } else {
+      v.src = src;
+    }
+    return () => { destroyed = true; hls?.destroy(); };
+  }, [src]);
+
+  const toggle = () => {
+    const v = ref.current;
+    if (!v) return;
+    if (v.paused) void v.play().catch(() => {});
+    else v.pause();
+  };
+
+  return (
+    <div onClick={toggle} style={{ position: 'absolute', inset: 0, cursor: 'pointer', background: '#000' }}>
+      <video
+        ref={ref}
+        poster={poster ?? undefined}
+        muted={muted}
+        loop
+        autoPlay
+        playsInline
+        preload="metadata"
+        onPlay={() => setPaused(false)}
+        onPause={() => setPaused(true)}
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
+      />
+      {paused && (
+        <div style={{ position: 'absolute', top: '46%', left: '50%', transform: 'translate(-50%,-50%)', width: 60, height: 60, borderRadius: '50%', background: 'rgba(255,255,255,.18)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+          <PlayIcon size={24} />
+        </div>
+      )}
+      <button
+        onClick={(e) => { e.stopPropagation(); const v = ref.current; if (v) { v.muted = !v.muted; setMuted(v.muted); } }}
+        aria-label={muted ? 'Unmute' : 'Mute'}
+        style={{ position: 'absolute', bottom: 64, right: 16, zIndex: 5, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.4)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
+      >
+        {muted ? <SpeakerOffIcon size={19} /> : <SpeakerIcon size={19} />}
+      </button>
     </div>
   );
 }

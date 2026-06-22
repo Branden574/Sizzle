@@ -68,15 +68,113 @@ export function Feed() {
       ) : followingEmpty ? (
         <FollowingEmpty onExplore={() => setFeed('foryou')} />
       ) : (
-        <div style={{ position: 'absolute', inset: 0, overflowY: 'scroll', scrollSnapType: 'y mandatory' }}>
-          {items.map((card) => (
-            <ErrorBoundary key={card.id}>
-              <FeedCard card={card} />
-            </ErrorBoundary>
-          ))}
-        </div>
+        <FeedList items={items} onRefresh={() => active.refetch()} />
       )}
     </div>
+  );
+}
+
+/**
+ * The vertical snap-scroll feed with a TikTok-style pull-to-refresh. When the
+ * list is scrolled to the very top, dragging down past a threshold spins a
+ * loader and refetches the active feed. The touchmove listener is attached
+ * non-passively (so it can preventDefault and not fight native scroll), and the
+ * whole scroller translates with the pull for a smooth, rubber-band settle.
+ */
+function FeedList({ items, onRefresh }: { items: RecipeCard[]; onRefresh: () => Promise<unknown> }) {
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const [pull, setPull] = useState(0);
+  const [refreshing, setRefreshing] = useState(false);
+  const [dragging, setDragging] = useState(false);
+  const refreshingRef = useRef(false);
+  const onRefreshRef = useRef(onRefresh);
+  onRefreshRef.current = onRefresh;
+
+  const THRESH = 64;
+  const MAX = 92;
+  const REST = 52;
+
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (!el) return;
+    const drag = { startY: 0, active: false };
+    const onStart = (e: TouchEvent) => {
+      if (refreshingRef.current) return;
+      drag.active = el.scrollTop <= 0;
+      drag.startY = e.touches[0]?.clientY ?? 0;
+    };
+    const onMove = (e: TouchEvent) => {
+      if (!drag.active || refreshingRef.current) return;
+      if (el.scrollTop > 0) { drag.active = false; setDragging(false); setPull(0); return; }
+      const dy = (e.touches[0]?.clientY ?? 0) - drag.startY;
+      if (dy <= 0) { setDragging(false); setPull(0); return; }
+      e.preventDefault(); // hold the native scroll while we rubber-band
+      setDragging(true);
+      setPull(Math.min(MAX, dy * 0.5)); // damped
+    };
+    const onEnd = () => {
+      if (!drag.active) return;
+      drag.active = false;
+      setDragging(false);
+      setPull((p) => {
+        if (p >= THRESH && !refreshingRef.current) {
+          refreshingRef.current = true;
+          setRefreshing(true);
+          Promise.resolve(onRefreshRef.current())
+            .catch(() => {})
+            .finally(() => {
+              refreshingRef.current = false;
+              setRefreshing(false);
+              setPull(0);
+            });
+          return REST; // hold while the spinner runs
+        }
+        return 0;
+      });
+    };
+    el.addEventListener('touchstart', onStart, { passive: true });
+    el.addEventListener('touchmove', onMove, { passive: false });
+    el.addEventListener('touchend', onEnd, { passive: true });
+    el.addEventListener('touchcancel', onEnd, { passive: true });
+    return () => {
+      el.removeEventListener('touchstart', onStart);
+      el.removeEventListener('touchmove', onMove);
+      el.removeEventListener('touchend', onEnd);
+      el.removeEventListener('touchcancel', onEnd);
+    };
+  }, []);
+
+  const offset = refreshing ? REST : pull;
+  const showInd = pull > 0 || refreshing;
+  const progress = Math.min(1, pull / THRESH);
+
+  return (
+    <>
+      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 70, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 5, pointerEvents: 'none', opacity: showInd ? 1 : 0, transition: 'opacity .2s ease' }}>
+        <div
+          style={{
+            width: 30,
+            height: 30,
+            borderRadius: '50%',
+            border: '2.5px solid rgba(255,255,255,.25)',
+            borderTopColor: '#fff',
+            transform: refreshing ? undefined : `rotate(${progress * 300}deg)`,
+            animation: refreshing ? 'sz-spin .7s linear infinite' : undefined,
+            opacity: refreshing ? 1 : 0.35 + progress * 0.65,
+          }}
+        />
+      </div>
+      <div
+        ref={scrollRef}
+        style={{ position: 'absolute', inset: 0, overflowY: 'scroll', scrollSnapType: 'y mandatory', transform: offset ? `translateY(${offset}px)` : undefined, transition: dragging ? 'none' : 'transform .34s cubic-bezier(.16,1,.3,1)' }}
+      >
+        {items.map((card) => (
+          <ErrorBoundary key={card.id}>
+            <FeedCard card={card} />
+          </ErrorBoundary>
+        ))}
+      </div>
+    </>
   );
 }
 
@@ -332,16 +430,19 @@ function FeedCard({ card }: { card: RecipeCard }) {
           <BookmarkIcon size={30} fill={viewer.saved ? accent : 'none'} stroke={viewer.saved ? accent : '#fff'} strokeWidth={1.8} />
           <span style={railLabel}>{hideCount ? (viewer.saved ? 'Saved' : 'Save') : formatCount(counts.saves)}</span>
         </button>
-        <button
-          onClick={gated(() => {
-            if (viewer.reposted) repost.mutate({ recipeId: card.id, reposted: true });
-            else setRepostFor(card.id);
-          })}
-          style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, padding: 0 }}
-        >
-          <RepostIcon size={31} stroke={viewer.reposted ? accent : '#fff'} strokeWidth={1.9} />
-          <span style={{ ...railLabel, color: viewer.reposted ? accent : '#fff' }}>{viewer.reposted ? 'Reposted' : 'Repost'}</span>
-        </button>
+        {/* Repost is for sharing OTHER cooks' videos to your followers — never your own. */}
+        {card.cook.id !== myId && (
+          <button
+            onClick={gated(() => {
+              if (viewer.reposted) repost.mutate({ recipeId: card.id, reposted: true });
+              else setRepostFor(card.id);
+            })}
+            style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, padding: 0 }}
+          >
+            <RepostIcon size={31} stroke={viewer.reposted ? accent : '#fff'} strokeWidth={1.9} />
+            <span style={{ ...railLabel, color: viewer.reposted ? accent : '#fff' }}>{viewer.reposted ? 'Reposted' : 'Repost'}</span>
+          </button>
+        )}
         <button onClick={onShare} aria-label="Share" style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 5, padding: 0 }}>
           <ShareIcon size={30} stroke="#fff" strokeWidth={1.8} />
           {!hideCount && <span style={railLabel}>{formatCount(counts.shares)}</span>}
