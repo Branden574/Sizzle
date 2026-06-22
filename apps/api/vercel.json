@@ -1,6 +1,4 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
-  "buildCommand": "mkdir -p public && echo 'Sizzle API' > public/index.html",
-  "outputDirectory": "public",
-  "rewrites": [{ "source": "/(.*)", "destination": "/api" }]
+  "buildCommand": "node scripts/build-vercel.mjs"
 }

@@ -1,30 +1,11 @@
-// Vercel serverless entry for the Sizzle API. Local dev still uses
-// src/index.ts (@hono/node-server); this wraps the same Hono app for Vercel.
-//
-// The app is created lazily inside a try/catch so a startup error (bad env, a
-// throwing module init) is surfaced as a readable JSON 500 instead of an opaque
-// FUNCTION_INVOCATION_FAILED crash.
-import { Hono } from 'hono';
-import { handle } from 'hono/vercel';
+// Source entry for the Vercel function. scripts/build-vercel.mjs esbuild-bundles
+// this (and the whole src/ tree) into one self-contained file under
+// .vercel/output, so there are no runtime relative-import lookups. Local dev
+// still uses src/index.ts (@hono/node-server).
+import { getRequestListener } from '@hono/node-server';
+import { createApp } from '../src/app';
 
-export const config = { runtime: 'nodejs' };
+const app = createApp();
 
-let ready: Promise<(...args: unknown[]) => unknown> | null = null;
-
-async function init() {
-  try {
-    const { createApp } = await import('../src/app');
-    return handle(createApp()) as unknown as (...args: unknown[]) => unknown;
-  } catch (err) {
-    const detail = err instanceof Error ? String(err.stack || err.message) : String(err);
-    const fallback = new Hono();
-    fallback.all('*', (c) => c.json({ error: 'api_init_failed', detail }, 500));
-    return handle(fallback) as unknown as (...args: unknown[]) => unknown;
-  }
-}
-
-export default async function handler(...args: unknown[]) {
-  ready ??= init();
-  const h = await ready;
-  return h(...args);
-}
+// A Node (req, res) handler for Vercel's Build Output API "Nodejs" launcher.
+export default getRequestListener((request) => app.fetch(request));
