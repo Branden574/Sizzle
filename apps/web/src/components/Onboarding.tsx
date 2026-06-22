@@ -1,8 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { useAuth } from '../auth/useAuth';
 import { tasteDefs } from '../data';
 import { useSuggestedCooks } from '../data/queries';
 import { apiGet } from '../lib/api';
+import { countries, subdivisions, TERMS_VERSION } from '../lib/geo';
+import { LegalDoc } from './LegalDoc';
 import { formatCount } from '../lib/format';
 import { useSizzle } from '../store';
 import { theme } from '../theme';
@@ -300,6 +302,9 @@ const inputStyle = {
   width: '100%',
 } as const;
 
+const selectChevron = { position: 'absolute', right: 16, top: 0, bottom: 0, display: 'flex', alignItems: 'center', color: 'var(--text-faint-2)', fontSize: 13, pointerEvents: 'none' } as const;
+const legalLinkStyle = { background: 'none', border: 'none', padding: 0, color: 'var(--accent)', fontWeight: 700, fontSize: 13.5, cursor: 'pointer', textDecoration: 'underline' } as const;
+
 function StepAccount() {
   const mode = useAuth((s) => s.mode);
   const setMode = useAuth((s) => s.setMode);
@@ -324,6 +329,13 @@ function StepAccount() {
   const [confirmSent, setConfirmSent] = useState(false);
   const [resending, setResending] = useState(false);
   const [resent, setResent] = useState(false);
+  // Signup compliance: country + state/region + Terms/Privacy acceptance.
+  const [country, setCountry] = useState('');
+  const [region, setRegion] = useState('');
+  const [agreed, setAgreed] = useState(false);
+  const [showLegal, setShowLegal] = useState<'terms' | 'privacy' | null>(null);
+  const countryOpts = useMemo(() => countries(), []);
+  const subs = country ? subdivisions(country) : null;
 
   const isLogin = mode === 'login';
 
@@ -429,7 +441,7 @@ function StepAccount() {
 
   const canSubmit = isLogin
     ? email.trim().length > 0 && password.length > 0 && !busy
-    : name.trim().length > 0 && phone.trim().length > 0 && handleState === 'available' && email.trim().length > 0 && pwValid && !busy;
+    : name.trim().length > 0 && phone.trim().length > 0 && handleState === 'available' && email.trim().length > 0 && pwValid && country !== '' && (subs ? region !== '' : true) && agreed && !busy;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -437,7 +449,15 @@ function StepAccount() {
     if (isLogin) {
       void signIn(email, password);
     } else {
-      const result = await signUp(email, password, { name, phone, handle: cleanHandle });
+      const result = await signUp(email, password, {
+        name,
+        phone,
+        handle: cleanHandle,
+        country,
+        region: region || undefined,
+        termsAcceptedAt: new Date().toISOString(),
+        termsVersion: TERMS_VERSION,
+      });
       // 'confirmed' logs in automatically; 'pending' needs email verification.
       if (result === 'pending') setConfirmSent(true);
     }
@@ -446,6 +466,7 @@ function StepAccount() {
   return (
     <div style={{ position: 'absolute', inset: 0, padding: '88px 0 0', display: 'flex', flexDirection: 'column', animation: STEP_IN }}>
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 26px 16px', display: 'flex', flexDirection: 'column' }}>
+        {showLegal && <LegalDoc which={showLegal} onClose={() => setShowLegal(null)} />}
         <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 42, lineHeight: 1.02, color: 'var(--text)' }}>
           {isLogin ? 'Welcome back.' : 'Save your taste.'}
         </div>
@@ -541,6 +562,38 @@ function StepAccount() {
                 )}
               </button>
             </div>
+
+            {!isLogin && (
+              <>
+                {/* Country + state/region — captured for per-jurisdiction compliance. */}
+                <div style={{ position: 'relative' }}>
+                  <select value={country} onChange={(e) => { setCountry(e.target.value); setRegion(''); }} aria-label="Country" style={{ ...inputStyle, appearance: 'none', WebkitAppearance: 'none', color: country ? 'var(--text)' : 'var(--text-faint-2)', paddingRight: 40, cursor: 'pointer' }}>
+                    <option value="" disabled>Country</option>
+                    {countryOpts.map((c) => <option key={c.code} value={c.code} style={{ color: 'var(--text)' }}>{c.name}</option>)}
+                  </select>
+                  <span style={selectChevron}>▾</span>
+                </div>
+                {subs && (
+                  <div style={{ position: 'relative' }}>
+                    <select value={region} onChange={(e) => setRegion(e.target.value)} aria-label={country === 'CA' ? 'Province' : 'State'} style={{ ...inputStyle, appearance: 'none', WebkitAppearance: 'none', color: region ? 'var(--text)' : 'var(--text-faint-2)', paddingRight: 40, cursor: 'pointer' }}>
+                      <option value="" disabled>{country === 'CA' ? 'Province' : 'State'}</option>
+                      {subs.map((s) => <option key={s} value={s} style={{ color: 'var(--text)' }}>{s}</option>)}
+                    </select>
+                    <span style={selectChevron}>▾</span>
+                  </div>
+                )}
+                {/* Required Terms + Privacy acceptance (blocks Create account until checked). */}
+                <label style={{ display: 'flex', alignItems: 'flex-start', gap: 11, padding: '6px 2px 2px', cursor: 'pointer' }}>
+                  <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} aria-label="Agree to Terms and Privacy Policy" style={{ width: 20, height: 20, marginTop: 1, accentColor: theme.accent, flex: 'none', cursor: 'pointer' }} />
+                  <span style={{ fontSize: 13.5, lineHeight: 1.45, color: 'var(--text-soft)' }}>
+                    I’m 13+ and agree to Sizzle’s{' '}
+                    <button type="button" onClick={() => setShowLegal('terms')} style={legalLinkStyle}>Terms of Service</button>
+                    {' '}and{' '}
+                    <button type="button" onClick={() => setShowLegal('privacy')} style={legalLinkStyle}>Privacy Policy</button>.
+                  </span>
+                </label>
+              </>
+            )}
 
             {isLogin && (
               <button
