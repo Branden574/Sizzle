@@ -15,12 +15,16 @@ export function VideoViewer() {
   const scrollRef = useRef<HTMLDivElement>(null);
 
   // Jump to the tapped item when the viewer opens (before paint, no flash).
+  // Clamp the index so a delete/refresh that shrank the list can't blank the view.
   useLayoutEffect(() => {
     const el = scrollRef.current;
-    if (el && viewer) el.scrollTop = viewer.index * el.clientHeight;
+    if (el && viewer && viewer.items.length) {
+      const idx = Math.min(viewer.index, viewer.items.length - 1);
+      el.scrollTop = idx * el.clientHeight;
+    }
   }, [viewer]);
 
-  if (!viewer) return null;
+  if (!viewer || viewer.items.length === 0) return null;
   const close = () => setViewer(null);
 
   return (

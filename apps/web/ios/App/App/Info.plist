@@ -57,12 +57,17 @@
 	<string>Sizzle saves videos and photos you choose to your library.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
-		<key>NSAllowsArbitraryLoads</key>
-		<true/>
+		<!-- ATS stays ENABLED (App Store-safe): the production app talks to the
+		     hosted https backend. Only local-networking is allowed, so the
+		     `:lan` dev builds can still reach an http backend on the Wi-Fi LAN. -->
 		<key>NSAllowsLocalNetworking</key>
 		<true/>
 	</dict>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>Sizzle connects to its server on your local network during development.</string>
+	<!-- Standard HTTPS/TLS only — exempt from export compliance. Auto-clears the
+	     "Missing Compliance" gate so TestFlight builds reach testers immediately. -->
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 </dict>
 </plist>

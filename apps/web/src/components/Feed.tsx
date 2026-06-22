@@ -66,6 +66,8 @@ export function Feed() {
 
       {active.isLoading ? (
         <FeedLoading />
+      ) : active.isError && items.length === 0 ? (
+        <FeedError onRetry={() => active.refetch()} retrying={active.isFetching} />
       ) : followingEmpty ? (
         <FollowingEmpty onExplore={() => setFeed('foryou')} />
       ) : (
@@ -183,6 +185,18 @@ function FeedLoading() {
   return (
     <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
       <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 34, color: 'rgba(255,255,255,.25)' }}>Sizzle</div>
+    </div>
+  );
+}
+
+function FeedError({ onRetry, retrying }: { onRetry: () => void; retrying: boolean }) {
+  return (
+    <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 40, textAlign: 'center', animation: 'sz-fadeIn .4s' }}>
+      <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 30, color: '#fff' }}>Can’t load the feed</div>
+      <p style={{ color: 'rgba(255,255,255,.55)', fontSize: 15, margin: '10px 0 22px', maxWidth: 260 }}>Check your connection and try again — your recipes are waiting.</p>
+      <button onClick={onRetry} disabled={retrying} style={{ padding: '14px 28px', borderRadius: 16, border: 'none', background: accent, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 700, cursor: retrying ? 'default' : 'pointer', opacity: retrying ? 0.6 : 1 }}>
+        {retrying ? 'Retrying…' : 'Try again'}
+      </button>
     </div>
   );
 }

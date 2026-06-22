@@ -45,7 +45,7 @@ const TASTE_SIGNALS: Record<string, string[]> = {
   'Street food': ['street', 'chaat', 'puri', 'taco', 'noodles', 'skewer', 'vendor'],
   'Comfort food': ['comfort', 'noodles', 'buns', 'cake', 'stew', 'casserole', 'cheesy', 'creamy'],
   Spicy: ['spicy', 'chili', 'harissa', 'heat', 'sichuan', 'chaat', 'sweat', 'hot', 'gochujang', 'jalapeno'],
-  'Quick & easy': ['quick', 'easy', 'weeknight', 'fast', 'fridge', '15-min', 'min', 'simple'],
+  'Quick & easy': ['quick', 'easy', 'weeknight', 'fast', 'fridge', '15-min', '30-min', 'simple'],
   'Low effort': ['low effort', 'easy', 'quick', 'fridge', 'fast', 'one pot', 'one-pan', 'sheet pan', 'no cook'],
   'Meal prep': ['meal prep', 'mealprep', 'batch', 'make ahead', 'prep', 'lunchbox', 'freezer'],
   Seafood: ['seafood', 'saffron', 'fish', 'coastal', 'shrimp', 'salmon', 'prawn', 'scallop', 'crab', 'tuna'],

@@ -62,10 +62,17 @@ export function probeVideo(file: File): Promise<{ durationSeconds: number | null
     video.preload = 'metadata';
     video.src = url;
 
+    let settled = false;
     const done = (durationSeconds: number | null, poster: Blob | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
       URL.revokeObjectURL(url);
       resolve({ durationSeconds, poster });
     };
+    // Safety net: some clips never fire loadedmetadata/seeked/error (e.g. a codec
+    // the browser can't decode), which would otherwise hang the upload forever.
+    const timer = setTimeout(() => done(null, null), 8000);
 
     video.onerror = () => done(null, null);
     video.onloadedmetadata = () => {

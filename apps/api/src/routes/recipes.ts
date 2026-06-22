@@ -505,12 +505,16 @@ const updateSchema = z.object({
 recipes.patch('/:id', requireAuth, requireNotBanned, rateLimit({ windowMs: 60_000, max: 30, name: 'recipe-edit' }), async (c) => {
   const id = assertUuid(c.req.param('id'), 'recipe');
   const userId = c.get('userId')!;
-  const { data: rec } = await supabaseAdmin.from('recipes').select('cook_id, post_type').eq('id', id).maybeSingle();
+  const { data: rec } = await supabaseAdmin.from('recipes').select('cook_id, post_type, status').eq('id', id).maybeSingle();
   if (!rec) throw notFound('Recipe not found');
+  let isAdmin = false;
   if (rec.cook_id !== userId) {
     const { data: viewer } = await supabaseAdmin.from('profiles').select('role').eq('id', userId).maybeSingle();
-    if (viewer?.role !== 'admin') throw forbidden('You can only edit your own posts');
+    isAdmin = viewer?.role === 'admin';
+    if (!isAdmin) throw forbidden('You can only edit your own posts');
   }
+  // A moderator-removed post can be appealed, not edited (no evading removal by edit).
+  if (rec.status === 'removed' && !isAdmin) throw badRequest("This post was removed — you can appeal it, but it can't be edited");
   const parsed = updateSchema.safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) throw badRequest('Invalid recipe payload', parsed.error.flatten());
   const input = parsed.data;
