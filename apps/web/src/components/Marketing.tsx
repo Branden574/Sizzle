@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { useGSAP } from '@gsap/react';
@@ -50,6 +50,34 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
           .to(cards[i], { ...OUT, ease: 'power2.inOut', duration: 0.9 }, lbl)
           .fromTo(cards[i + 1], FROM, { ...ACTIVE, ease: 'power2.out', duration: 0.9 }, lbl + '+=0.1');
       }
+
+      // Cinematic "feed to plate" clip: pin the section and scrub the video's
+      // playhead from scroll progress (Apple-style scrollytelling).
+      const cine = root.current!.querySelector<HTMLElement>('.cinema');
+      const vid = root.current!.querySelector<HTMLVideoElement>('.cinema video');
+      if (cine && vid) {
+        vid.pause();
+        vid.removeAttribute('loop');
+        vid.removeAttribute('autoplay');
+        const seek = (p: number) => {
+          const d = vid.duration || 10;
+          vid.currentTime = Math.max(0, Math.min(d - 0.05, p * d));
+        };
+        ScrollTrigger.create({
+          trigger: cine,
+          start: 'top top',
+          end: '+=' + window.innerHeight * 2.2,
+          pin: true,
+          // Tight scrub — the all-intra re-encode makes every frame seek
+          // instantly, so we don't need much lerp (which itself reads as lag).
+          scrub: 0.35,
+          // This section is the first pinned block on the page, so its pin
+          // spacer must be measured first — otherwise the two pins overlap.
+          refreshPriority: 2,
+          onUpdate: (self) => seek(self.progress),
+        });
+        vid.addEventListener('loadedmetadata', () => ScrollTrigger.refresh(), { once: true });
+      }
     },
     { scope: root },
   );
@@ -72,6 +100,12 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
   const k = servings / 2;
   const app = () => onGetStarted();
 
+  // Lazy-register the <model-viewer> custom element only on the landing, so it
+  // never weighs down the main app bundle.
+  useEffect(() => {
+    void import('@google/model-viewer');
+  }, []);
+
   return (
     <div className="szl" ref={root}>
       <style>{CSS}</style>
@@ -90,6 +124,26 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
           </div>
         </div>
       </nav>
+
+      {/* CINEMATIC SCROLL REVEAL (top) — Kling "feed to plate" clip, scrubbed by
+          scroll on desktop; loops as a cinematic background on mobile / reduced-motion. */}
+      <section className="cinema" aria-label="From feed to plate">
+        <video
+          className="cinemavid"
+          src="/landing/feed-to-plate.mp4"
+          poster="/landing/feed-to-plate-poster.jpg"
+          muted
+          playsInline
+          autoPlay
+          loop
+          preload="auto"
+        />
+        <div className="cinemaveil" />
+        <div className="cinemacap wrap">
+          <span className="eyebrow">From feed to plate</span>
+          <h2 className="serif">Scroll the feed.<br /><span className="grad ital">Watch it come to life.</span></h2>
+        </div>
+      </section>
 
       {/* HERO */}
       <header className="hero" id="top">
@@ -230,6 +284,36 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
         </div></div>
       </section>
 
+      {/* 3D DISH — real generated GLB (Higgsfield image_to_3d), drag to rotate */}
+      <section className="sec d3" id="dish"><div className="wrap d3grid">
+        <div>
+          <span className="eyebrow">See it from every angle</span>
+          <h2 className="serif">A real dish,<br /><span className="grad ital">in your hands.</span></h2>
+          <p className="sub">Every recipe on Sizzle is a real plate of food. Grab it, give it a spin, get hungry — then swipe to cook it yourself.</p>
+          <button className="btn btn-accent cta" onClick={app}>Start cooking</button>
+        </div>
+        <div className="d3stage">
+          <model-viewer
+            src="/landing/dish.glb"
+            poster="/landing/dish3d-poster.jpg"
+            alt="A 3D plated dish you can rotate"
+            camera-controls
+            auto-rotate
+            rotation-per-second="22deg"
+            interaction-prompt="none"
+            disable-zoom
+            exposure="1.05"
+            shadow-intensity="1.1"
+            environment-image="neutral"
+            camera-orbit="20deg 72deg 2.5m"
+            min-camera-orbit="auto 40deg auto"
+            max-camera-orbit="auto 95deg auto"
+            touch-action="pan-y"
+            style={{ width: '100%', height: '100%', backgroundColor: 'transparent' }}
+          />
+        </div>
+      </div></section>
+
       {/* FEATURES */}
       <section className="sec" id="features"><div className="wrap">
         <div className="sec-head left">
@@ -360,6 +444,18 @@ const CSS = `
 .szl .trust span{display:inline-flex;align-items:center;gap:7px}
 .szl .trust .d{width:6px;height:6px;border-radius:50%;background:var(--accent)}
 @media(max-width:900px){.szl .hero .grid{grid-template-columns:1fr}.szl .hero{padding:108px 0 50px}}
+.szl .cinema{position:relative;height:100vh;width:100%;overflow:hidden;background:#0a0807}
+.szl .cinema .cinemavid{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+.szl .cinema .cinemaveil{position:absolute;inset:0;background:linear-gradient(to top,rgba(10,8,7,.92),rgba(10,8,7,.05) 44%,rgba(10,8,7,.42));pointer-events:none}
+.szl .cinema .cinemacap{position:absolute;left:0;right:0;bottom:8%;text-align:center}
+.szl .cinema .cinemacap h2{font-size:clamp(32px,5vw,66px);margin:12px 0 0;line-height:1.04}
+@media(max-width:900px){.szl .cinema{height:72vh}.szl .cinema .cinemacap{bottom:6%}}
+.szl .d3 .d3grid{display:grid;grid-template-columns:1fr 1fr;gap:48px;align-items:center}
+.szl .d3 .d3stage{position:relative;height:520px;border-radius:28px;border:1px solid var(--line);background:radial-gradient(120% 120% at 50% 32%,rgba(255,90,54,.14),transparent 62%);overflow:hidden}
+.szl .d3 .d3stage model-viewer{--poster-color:transparent;width:100%;height:100%;background:transparent}
+.szl .d3 h2{font-size:clamp(40px,5vw,72px);margin:14px 0 0}
+.szl .d3 .cta{margin-top:26px}
+@media(max-width:900px){.szl .d3 .d3grid{grid-template-columns:1fr;gap:26px}.szl .d3 .d3stage{height:360px}}
 .szl .phone-stage{position:relative;justify-self:center}
 .szl .phone{position:relative;width:300px;height:632px;border-radius:42px;background:#0a0706;border:1px solid rgba(255,255,255,.12);box-shadow:0 40px 90px rgba(0,0,0,.55),inset 0 0 0 6px #000;overflow:hidden}
 .szl .phone .screen{position:absolute;inset:8px;border-radius:34px;overflow:hidden;background:#120c09}
