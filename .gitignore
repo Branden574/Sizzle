@@ -44,3 +44,8 @@ pnpm-debug.log*
 supabase/.temp
 supabase/.branches
 !*.example
+
+# Firebase push config — added locally to the native projects, not committed.
+# (Not secret, but kept out of git; the web/Vercel build doesn't use them.)
+**/GoogleService-Info.plist
+**/google-services.json

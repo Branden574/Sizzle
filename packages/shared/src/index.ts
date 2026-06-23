@@ -246,6 +246,8 @@ export interface MeProfile {
     saved: number;
   };
   tastes: string[];
+  /** Master switch for device push notifications (mirrors the Settings toggle). */
+  pushEnabled: boolean;
 }
 
 export type NotificationKind = 'follow' | 'like' | 'comment' | 'verified' | 'repost' | 'removed' | 'restored' | 'banned';

@@ -33,6 +33,12 @@ import { queryClient } from './data/queries';
 import { apiSend } from './lib/api';
 import { useOnlineStatus } from './lib/useOnlineStatus';
 import { isNative } from './lib/native';
+import { syncPushRegistration, disablePush } from './lib/push';
+import { biometricAvailability } from './lib/biometric';
+import { BiometricLock } from './components/BiometricLock';
+import { DesktopSidebar } from './components/DesktopSidebar';
+import { useMediaQuery } from './lib/useMediaQuery';
+import { App as CapApp } from '@capacitor/app';
 import { useSizzle } from './store';
 
 /** Resolve the System/Light/Dark preference to a concrete scheme, tracking the
@@ -99,6 +105,61 @@ export default function App() {
     })();
   }, [authStatus]);
 
+  // Native push: when signed in, silently refresh this device's FCM token if the
+  // user already granted permission (the opt-in prompt lives in Settings). On
+  // sign-out, drop the token so a logged-out device stops receiving pushes.
+  useEffect(() => {
+    if (authStatus === 'authed') void syncPushRegistration();
+    else if (authStatus === 'anon' || authStatus === 'guest') void disablePush();
+  }, [authStatus]);
+
+  // ── Biometric app-lock (opt-in) ────────────────────────────────────────────
+  const biometricLock = useSizzle((s) => s.biometricLock);
+  const appUnlocked = useSizzle((s) => s.appUnlocked);
+  const setAppUnlocked = useSizzle((s) => s.setAppUnlocked);
+  const stashBiometricToken = useAuth((s) => s.stashBiometricToken);
+  const restoreWithBiometric = useAuth((s) => s.restoreWithBiometric);
+  const [bioLabel, setBioLabel] = useState('biometrics');
+  const [bioRestoreTried, setBioRestoreTried] = useState(false);
+
+  // Resolve the device's biometry label; fail OPEN if biometrics aren't usable
+  // (e.g. disabled at the OS level) so the user is never trapped behind a lock
+  // they can't pass.
+  useEffect(() => {
+    if (!isNative || !biometricLock) return;
+    void biometricAvailability().then(({ available, label }) => {
+      if (available) setBioLabel(label);
+      else setAppUnlocked(true);
+    });
+  }, [biometricLock, setAppUnlocked]);
+
+  // Re-lock when the app returns from the background (true app-lock behaviour).
+  useEffect(() => {
+    if (!isNative) return;
+    const handle = CapApp.addListener('appStateChange', ({ isActive }) => {
+      if (isActive && useSizzle.getState().biometricLock) setAppUnlocked(false);
+    });
+    return () => { void handle.then((l) => l.remove()); };
+  }, [setAppUnlocked]);
+
+  // Keep the keychain refresh token fresh while the lock is on, and re-lock for
+  // the next sign-in once the user logs out.
+  useEffect(() => {
+    if (authStatus === 'authed') {
+      if (isNative && biometricLock) void stashBiometricToken();
+    } else if (authStatus === 'anon' || authStatus === 'guest') {
+      setAppUnlocked(false);
+    }
+  }, [authStatus, biometricLock, stashBiometricToken, setAppUnlocked]);
+
+  // Faster re-login: if the saved session is gone but the user enabled biometric
+  // unlock, restore it from the keychain token instead of asking for a password.
+  useEffect(() => {
+    if (!isNative || bioRestoreTried || !biometricLock || authStatus !== 'anon') return;
+    setBioRestoreTried(true);
+    void restoreWithBiometric().then((ok) => { if (ok) setAppUnlocked(true); });
+  }, [authStatus, biometricLock, bioRestoreTried, restoreWithBiometric, setAppUnlocked]);
+
   const phase = useSizzle((s) => s.phase);
   const tab = useSizzle((s) => s.tab);
   const openRecipe = useSizzle((s) => s.openRecipe);
@@ -152,6 +213,10 @@ export default function App() {
   const darkGlyphs = lightStatus && !isDark;
   const homeIndicator = darkGlyphs ? 'rgba(27,21,18,.22)' : 'rgba(255,255,255,.5)';
 
+  // Wide-screen web: present the app as a desktop shell (left sidebar + the
+  // phone-width app column) instead of a lone floating phone. Never on native.
+  const isDesktop = useMediaQuery('(min-width: 1024px)') && !isNative;
+
   // Web front door: show the marketing site to logged-out visitors until they
   // choose Get started / Log in. Native + authed + password-recovery skip it.
   const showMarketing = !isNative && (authStatus === 'anon' || authStatus === 'guest') && !recovery && !webEntered;
@@ -164,8 +229,9 @@ export default function App() {
   }
 
   return (
-    <div className={`sz-stage${isNative ? ' native' : ''}${reduceMotion ? ' sz-reduce-motion' : ''}`} data-theme={scheme}>
-      <Phone bare={isNative}>
+    <div className={`sz-stage${isNative ? ' native' : ''}${isDesktop ? ' desktop' : ''}${reduceMotion ? ' sz-reduce-motion' : ''}`} data-theme={scheme}>
+      {isDesktop && <DesktopSidebar />}
+      <Phone bare={isNative} desktop={isDesktop}>
         {/* The fake "9:41" iOS status bar was web-mockup chrome — removed so the
             real app (web + native) doesn't show a fake clock/battery. */}
         <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
@@ -210,6 +276,10 @@ export default function App() {
 
           {recovery && <ResetPasswordScreen />}
           {banned && authStatus === 'authed' && <BannedScreen />}
+
+          {isNative && biometricLock && authStatus === 'authed' && !appUnlocked && !recovery && (
+            <BiometricLock label={bioLabel} onUnlock={() => setAppUnlocked(true)} />
+          )}
 
           {!isNative && <HomeIndicator color={homeIndicator} />}
         </div>

@@ -5,16 +5,24 @@ import type { ReactNode } from 'react';
  * (`bare`) it fills the screen with no fake frame (the real device IS the frame).
  * Sized via the --app-w/--app-h CSS vars set on .sz-stage.
  */
-export function Phone({ children, bare = false }: { children: ReactNode; bare?: boolean }) {
+export function Phone({ children, bare = false, desktop = false }: { children: ReactNode; bare?: boolean; desktop?: boolean }) {
+  // bare = native (real device is the frame). desktop = a clean rounded app
+  // panel (no skeuomorphic phone bezel) for the wide-screen desktop shell.
+  const radius = bare ? 0 : desktop ? 34 : 54;
+  const boxShadow = bare
+    ? 'none'
+    : desktop
+      ? '0 30px 80px -24px rgba(0,0,0,.65), 0 0 0 1px rgba(255,255,255,.06)'
+      : '0 2px 0 2px #2c2521 inset, 0 40px 90px -20px rgba(0,0,0,.7), 0 0 0 12px #1c1714';
   return (
     <div
       style={{
         position: 'relative',
         width: 'var(--app-w)',
         height: 'var(--app-h)',
-        borderRadius: bare ? 0 : 54,
+        borderRadius: radius,
         background: '#0c0a09',
-        boxShadow: bare ? 'none' : '0 2px 0 2px #2c2521 inset, 0 40px 90px -20px rgba(0,0,0,.7), 0 0 0 12px #1c1714',
+        boxShadow,
         overflow: 'hidden',
         flex: 'none',
       }}

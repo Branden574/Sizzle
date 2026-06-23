@@ -1,9 +1,12 @@
-import { useState, type ReactNode } from 'react';
+import { useState, useEffect, type ReactNode } from 'react';
 import { useAuth } from '../../auth/useAuth';
 import { useSizzle, type FeedKindPref, type ThemePref, type UnitPref } from '../../store';
 import { clearOffline } from '../../lib/offline';
 import { apiSend } from '../../lib/api';
-import { queryClient } from '../../data/queries';
+import { queryClient, useMe } from '../../data/queries';
+import { enablePush, disablePush } from '../../lib/push';
+import { biometricAvailability, biometricVerify, clearBiometricToken } from '../../lib/biometric';
+import { isNative } from '../../lib/native';
 import { PlayIcon, SpeakerIcon } from '../icons';
 
 const APP_VERSION = '1.0.0';
@@ -113,8 +116,60 @@ export function AppSettingsSheet() {
   const [pwMsg, setPwMsg] = useState<string | null>(null);
   const [delStep, setDelStep] = useState(false);
   const [delBusy, setDelBusy] = useState(false);
+  const [delConfirm, setDelConfirm] = useState('');
   const [cacheCleared, setCacheCleared] = useState(false);
   const [legal, setLegal] = useState<'terms' | 'privacy' | null>(null);
+
+  const me = useMe();
+  const [pushLocal, setPushLocal] = useState<boolean | null>(null);
+  const [pushBusy, setPushBusy] = useState(false);
+  const pushOn = pushLocal ?? me.data?.pushEnabled ?? true;
+
+  const togglePush = async () => {
+    if (pushBusy) return;
+    const next = !pushOn;
+    setPushBusy(true);
+    setPushLocal(next);
+    try {
+      await apiSend('POST', '/me/push-enabled', { enabled: next });
+      // On a device, also (de)register this install's token. enablePush() prompts
+      // for OS permission the first time; on the web build both are no-ops.
+      if (next) await enablePush();
+      else await disablePush();
+      void queryClient.invalidateQueries({ queryKey: ['me'] });
+    } catch {
+      setPushLocal(!next); // revert on failure
+    } finally {
+      setPushBusy(false);
+    }
+  };
+
+  // Biometric app-lock (native only).
+  const biometricLock = useSizzle((s) => s.biometricLock);
+  const setBiometricLock = useSizzle((s) => s.setBiometricLock);
+  const setAppUnlocked = useSizzle((s) => s.setAppUnlocked);
+  const stashBiometricToken = useAuth((s) => s.stashBiometricToken);
+  const [bio, setBio] = useState<{ available: boolean; label: string }>({ available: false, label: 'biometrics' });
+  const [bioBusy, setBioBusy] = useState(false);
+  useEffect(() => { void biometricAvailability().then(setBio); }, []);
+
+  const toggleBiometric = async () => {
+    if (bioBusy || !bio.available) return;
+    if (biometricLock) {
+      setBiometricLock(false);
+      await clearBiometricToken();
+      return;
+    }
+    // Turning ON: require one successful biometric check first, then keep the
+    // current session unlocked so we don't immediately lock the user out.
+    setBioBusy(true);
+    const ok = await biometricVerify(`Enable ${bio.label} unlock`);
+    setBioBusy(false);
+    if (!ok) return;
+    setBiometricLock(true);
+    setAppUnlocked(true);
+    await stashBiometricToken();
+  };
 
   if (!open) return null;
   const close = () => setOpen(false);
@@ -129,8 +184,13 @@ export function AppSettingsSheet() {
     else setPwMsg('Could not update password — try again.');
   };
 
+  // Deleting is irreversible, so require the user to type the exact phrase
+  // "Delete <their username>" — guards against an accidental double-tap.
+  const delPhrase = me.data?.handle ? `Delete ${me.data.handle}` : null;
+  const delReady = !!delPhrase && delConfirm.trim() === delPhrase && !delBusy;
+
   const deleteAccount = async () => {
-    if (delBusy) return;
+    if (!delReady) return;
     setDelBusy(true);
     try {
       await apiSend('DELETE', '/me');
@@ -212,6 +272,24 @@ export function AppSettingsSheet() {
             onToggle={() => setDataSaver(!dataSaver)}
           />
 
+          <SectionLabel>Notifications</SectionLabel>
+          <ToggleRow
+            title="Push notifications"
+            sub="Follows, likes & comments on your recipes"
+            icon={<span style={{ fontSize: 20 }}>🔔</span>}
+            on={pushOn}
+            onToggle={() => void togglePush()}
+          />
+
+          <SectionLabel>Security</SectionLabel>
+          <ToggleRow
+            title={`Unlock with ${bio.available ? bio.label : 'Face ID / Touch ID'}`}
+            sub={bio.available ? 'Require it each time you open Sizzle' : isNative ? 'Not set up on this device' : 'Available in the Sizzle app'}
+            icon={<span style={{ fontSize: 20, opacity: bio.available ? 1 : 0.5 }}>🔒</span>}
+            on={biometricLock}
+            onToggle={() => void toggleBiometric()}
+          />
+
           <SectionLabel>Feed</SectionLabel>
           <div style={{ fontSize: 13, color: 'var(--text-faint)', margin: '0 2px 8px' }}>Which feed opens first</div>
           <Segmented<FeedKindPref>
@@ -257,14 +335,26 @@ export function AppSettingsSheet() {
           {delStep ? (
             <div style={{ background: 'var(--surface)', border: '1px solid #f2c8bb', borderRadius: 18, padding: 16, marginBottom: 12 }}>
               <div style={{ fontSize: 14.5, fontWeight: 800, color: '#d8521e' }}>Delete your account?</div>
-              <div style={{ fontSize: 13, color: 'var(--text-faint)', margin: '4px 0 12px' }}>This permanently removes your profile, recipes, and all your data. This can't be undone.</div>
+              <div style={{ fontSize: 13, color: 'var(--text-faint)', margin: '4px 0 10px' }}>This permanently removes your profile, recipes, and all your data. This can't be undone.</div>
+              <div style={{ fontSize: 13, color: 'var(--text-faint)', margin: '0 0 6px' }}>
+                To confirm, type <b style={{ color: 'var(--text)' }}>{delPhrase ?? 'Delete …'}</b>
+              </div>
+              <input
+                value={delConfirm}
+                onChange={(e) => setDelConfirm(e.target.value)}
+                placeholder={delPhrase ?? 'Delete username'}
+                autoCapitalize="off"
+                autoCorrect="off"
+                spellCheck={false}
+                style={{ width: '100%', height: 46, border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--surface-2)', padding: '0 14px', fontFamily: "'Hanken Grotesk'", fontSize: 15, color: 'var(--text)', outline: 'none', marginBottom: 10 }}
+              />
               <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => setDelStep(false)} style={{ flex: 1, height: 46, border: '1px solid var(--line-2)', borderRadius: 12, background: 'transparent', color: 'var(--text)', fontWeight: 700, fontFamily: "'Hanken Grotesk'", fontSize: 14.5, cursor: 'pointer' }}>Cancel</button>
-                <button onClick={() => void deleteAccount()} disabled={delBusy} style={{ flex: 1, height: 46, border: 'none', borderRadius: 12, background: '#d8521e', color: '#fff', fontWeight: 700, fontFamily: "'Hanken Grotesk'", fontSize: 14.5, cursor: 'pointer', opacity: delBusy ? 0.6 : 1 }}>{delBusy ? 'Deleting…' : 'Delete everything'}</button>
+                <button onClick={() => { setDelStep(false); setDelConfirm(''); }} style={{ flex: 1, height: 46, border: '1px solid var(--line-2)', borderRadius: 12, background: 'transparent', color: 'var(--text)', fontWeight: 700, fontFamily: "'Hanken Grotesk'", fontSize: 14.5, cursor: 'pointer' }}>Cancel</button>
+                <button onClick={() => void deleteAccount()} disabled={!delReady} style={{ flex: 1, height: 46, border: 'none', borderRadius: 12, background: '#d8521e', color: '#fff', fontWeight: 700, fontFamily: "'Hanken Grotesk'", fontSize: 14.5, cursor: delReady ? 'pointer' : 'default', opacity: delReady ? 1 : 0.5 }}>{delBusy ? 'Deleting…' : 'Delete everything'}</button>
               </div>
             </div>
           ) : (
-            <RowButton label="Delete account" danger hint="Permanent" onClick={() => setDelStep(true)} />
+            <RowButton label="Delete account" danger hint="Permanent" onClick={() => { setDelConfirm(''); setDelStep(true); }} />
           )}
 
           <SectionLabel>About &amp; Legal</SectionLabel>

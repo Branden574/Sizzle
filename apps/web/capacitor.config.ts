@@ -18,6 +18,12 @@ const config: CapacitorConfig = {
     androidScheme: 'http',
     cleartext: true,
   },
+  plugins: {
+    // Show banners for pushes even while the app is in the foreground (iOS).
+    FirebaseMessaging: {
+      presentationOptions: ['badge', 'sound', 'alert'],
+    },
+  },
 };
 
 export default config;

@@ -55,6 +55,8 @@
 	<string>Sizzle needs access to your photo library so you can upload videos and photos.</string>
 	<key>NSPhotoLibraryAddUsageDescription</key>
 	<string>Sizzle saves videos and photos you choose to your library.</string>
+	<key>NSFaceIDUsageDescription</key>
+	<string>Sizzle uses Face ID to unlock the app and keep your account secure.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<!-- ATS stays ENABLED (App Store-safe): the production app talks to the

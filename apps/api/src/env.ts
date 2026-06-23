@@ -16,6 +16,13 @@ const schema = z.object({
   CLOUDFLARE_ACCOUNT_ID: z.string().optional(),
   CLOUDFLARE_STREAM_TOKEN: z.string().optional(),
   CLOUDFLARE_STREAM_WEBHOOK_SECRET: z.string().optional(),
+
+  // Push notifications via Firebase Cloud Messaging HTTP v1. Paste the FULL
+  // service-account JSON (Firebase console → Project settings → Service
+  // accounts → Generate new private key) as a single-line string. When unset,
+  // the push service is a safe no-op (rows are still written to `notifications`,
+  // we just don't deliver to devices) — so the app runs fine without it.
+  FCM_SERVICE_ACCOUNT: z.string().optional(),
 });
 
 const parsed = schema.safeParse(process.env);

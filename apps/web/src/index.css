@@ -137,6 +137,16 @@ body {
   justify-content: stretch;
   overflow-y: auto;
 }
+/* Desktop shell (wide web): a left sidebar nav beside the phone-width app
+   column, centered together on the backdrop — instead of a lone floating
+   phone. The app surface itself stays 393×852 so the mobile UI + every sheet
+   render unchanged. */
+.sz-stage.desktop {
+  flex-direction: row;
+  align-items: center;
+  justify-content: center;
+  gap: 30px;
+}
 
 button {
   font-family: inherit;

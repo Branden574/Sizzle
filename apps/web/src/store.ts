@@ -28,8 +28,10 @@ interface Prefs {
   defaultFeed: FeedKindPref;
   units: UnitPref;
   dataSaver: boolean;
+  /** Require Face ID / Touch ID / fingerprint to open the app (native only). */
+  biometricLock: boolean;
 }
-const PREFS_DEFAULT: Prefs = { muted: true, autoplay: true, theme: 'system', reduceMotion: false, defaultFeed: 'foryou', units: 'original', dataSaver: false };
+const PREFS_DEFAULT: Prefs = { muted: true, autoplay: true, theme: 'system', reduceMotion: false, defaultFeed: 'foryou', units: 'original', dataSaver: false, biometricLock: false };
 function loadPrefs(): Prefs {
   try {
     const raw = localStorage.getItem(PREFS_KEY);
@@ -43,6 +45,7 @@ function loadPrefs(): Prefs {
         defaultFeed: p.defaultFeed ?? PREFS_DEFAULT.defaultFeed,
         units: p.units ?? PREFS_DEFAULT.units,
         dataSaver: p.dataSaver ?? PREFS_DEFAULT.dataSaver,
+        biometricLock: p.biometricLock ?? PREFS_DEFAULT.biometricLock,
       };
     }
   } catch {
@@ -60,7 +63,7 @@ function savePrefs(p: Prefs) {
 const prefs0 = loadPrefs();
 /** Snapshot the persisted prefs from current state, applying a partial change. */
 function prefsFrom(s: Prefs, patch: Partial<Prefs>): Prefs {
-  return { muted: s.muted, autoplay: s.autoplay, theme: s.theme, reduceMotion: s.reduceMotion, defaultFeed: s.defaultFeed, units: s.units, dataSaver: s.dataSaver, ...patch };
+  return { muted: s.muted, autoplay: s.autoplay, theme: s.theme, reduceMotion: s.reduceMotion, defaultFeed: s.defaultFeed, units: s.units, dataSaver: s.dataSaver, biometricLock: s.biometricLock, ...patch };
 }
 
 export interface SizzleState {
@@ -72,6 +75,9 @@ export interface SizzleState {
   feed: FeedKind;
   /** Hold-to-hide immersive mode: hides all feed overlays + the bottom nav. */
   immersive: boolean;
+  /** Biometric app-lock: true once the user has passed the lock this session
+      (runtime only — not persisted, so a fresh launch re-locks). */
+  appUnlocked: boolean;
   openRecipe: string | null;
   /** Full-screen, swipeable feed-style video viewer: the list + the card in view. */
   viewer: { items: RecipeCard[]; index: number } | null;
@@ -114,6 +120,7 @@ export interface SizzleState {
   defaultFeed: FeedKindPref;
   units: UnitPref;
   dataSaver: boolean;
+  biometricLock: boolean;
   likes: BoolMap;
   dislikes: BoolMap;
   saves: BoolMap;
@@ -178,6 +185,8 @@ export interface SizzleState {
   setDefaultFeed: (v: FeedKindPref) => void;
   setUnits: (v: UnitPref) => void;
   setDataSaver: (v: boolean) => void;
+  setBiometricLock: (v: boolean) => void;
+  setAppUnlocked: (v: boolean) => void;
 
   // creator post controls
   togglePostSetting: (recipeId: string, key: keyof PostSettings) => void;
@@ -195,6 +204,7 @@ export const useSizzle = create<SizzleState>((set) => ({
   tab: 'feed',
   feed: prefs0.defaultFeed,
   immersive: false,
+  appUnlocked: false,
   openRecipe: null,
   viewer: null,
   openCook: null,
@@ -221,6 +231,7 @@ export const useSizzle = create<SizzleState>((set) => ({
   autoplay: prefs0.autoplay,
   theme: prefs0.theme,
   reduceMotion: prefs0.reduceMotion,
+  biometricLock: prefs0.biometricLock,
   defaultFeed: prefs0.defaultFeed,
   units: prefs0.units,
   dataSaver: prefs0.dataSaver,
@@ -260,6 +271,7 @@ export const useSizzle = create<SizzleState>((set) => ({
   setTab: (tab) => set({ tab, immersive: false }),
   setFeed: (feed) => set({ feed, immersive: false }),
   setImmersive: (on) => set({ immersive: on }),
+  setAppUnlocked: (v) => set({ appUnlocked: v }),
 
   setOpenRecipe: (id) => set({ openRecipe: id }),
   setViewer: (v) => set({ viewer: v }),
@@ -296,6 +308,7 @@ export const useSizzle = create<SizzleState>((set) => ({
   setDefaultFeed: (v) => set((s) => { savePrefs(prefsFrom(s, { defaultFeed: v })); return { defaultFeed: v }; }),
   setUnits: (v) => set((s) => { savePrefs(prefsFrom(s, { units: v })); return { units: v }; }),
   setDataSaver: (v) => set((s) => { savePrefs(prefsFrom(s, { dataSaver: v })); return { dataSaver: v }; }),
+  setBiometricLock: (v) => set((s) => { savePrefs(prefsFrom(s, { biometricLock: v })); return { biometricLock: v }; }),
 
   togglePostSetting: (recipeId, key) =>
     set((s) => {

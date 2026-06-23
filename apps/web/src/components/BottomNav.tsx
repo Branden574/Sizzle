@@ -1,5 +1,7 @@
 import { useSizzle } from '../store';
 import { theme } from '../theme';
+import { useMediaQuery } from '../lib/useMediaQuery';
+import { isNative } from '../lib/native';
 import type { Tab } from '../types';
 import { BookmarkIcon, HomeIcon, NavPlusIcon, PersonIcon, SearchIcon } from './icons';
 
@@ -10,6 +12,9 @@ export function BottomNav() {
   const setTab = useSizzle((s) => s.setTab);
   const setShowUpload = useSizzle((s) => s.setShowUpload);
   const immersive = useSizzle((s) => s.immersive);
+  // On the wide-screen desktop shell the left sidebar replaces the tab bar.
+  const isDesktop = useMediaQuery('(min-width: 1024px)') && !isNative;
+  if (isDesktop) return null;
 
   const navDark = tab === 'feed';
   const navIdle = navDark ? 'rgba(255,255,255,.5)' : 'var(--text-faint-2)';

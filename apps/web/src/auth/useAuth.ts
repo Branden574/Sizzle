@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import type { MeProfile } from '@sizzle/shared';
 import { apiGet } from '../lib/api';
 import { supabase } from '../lib/supabase';
+import { biometricVerify, getBiometricToken, storeBiometricToken, clearBiometricToken } from '../lib/biometric';
 
 /**
  * loading — deciding initial session
@@ -42,6 +43,10 @@ interface AuthState {
   resetPassword: (email: string) => Promise<boolean>;
   /** Set a new password (during recovery or while authed). */
   updatePassword: (password: string) => Promise<boolean>;
+  /** Stash the current refresh token in the biometric keychain (for restore). */
+  stashBiometricToken: () => Promise<void>;
+  /** Restore an expired session from the biometric-stashed refresh token. */
+  restoreWithBiometric: () => Promise<boolean>;
 }
 
 export const useAuth = create<AuthState>((set, get) => ({
@@ -149,6 +154,8 @@ export const useAuth = create<AuthState>((set, get) => ({
 
   signOut: async () => {
     await supabase.auth.signOut();
+    // Drop the biometric-stashed token so a logged-out device can't restore.
+    await clearBiometricToken();
     set({ status: 'anon', session: null, user: null, profile: null, error: null });
   },
 
@@ -183,6 +190,22 @@ export const useAuth = create<AuthState>((set, get) => ({
       return false;
     }
     set({ recovery: false });
+    return true;
+  },
+
+  stashBiometricToken: async () => {
+    const rt = get().session?.refresh_token;
+    if (rt) await storeBiometricToken(rt);
+  },
+
+  restoreWithBiometric: async () => {
+    const token = await getBiometricToken();
+    if (!token) return false;
+    if (!(await biometricVerify('Sign in to Sizzle'))) return false;
+    const { data, error } = await supabase.auth.refreshSession({ refresh_token: token });
+    if (error || !data.session) return false;
+    // The refresh token rotates — re-stash the new one for next time.
+    if (data.session.refresh_token) await storeBiometricToken(data.session.refresh_token);
     return true;
   },
 }));

@@ -46,6 +46,7 @@ me.get('/', async (c) => {
     banAppealStatus: profile.ban_appeal_status ?? 'none',
     counts: { following: profile.following_count ?? 0, followers: profile.follower_count ?? 0, saved: savedCount ?? 0 },
     tastes: profile.tastes ?? [],
+    pushEnabled: profile.push_enabled ?? true,
   };
   return c.json(dto);
 });
@@ -84,6 +85,66 @@ me.post('/tastes', async (c) => {
     throw badRequest('Could not save tastes');
   }
   return c.json({ ok: true, tastes: body.data.tastes });
+});
+
+const pushTokenSchema = z.object({
+  token: z.string().trim().min(1).max(4096),
+  platform: z.enum(['ios', 'android', 'web']).default('ios'),
+});
+
+/**
+ * POST /me/push-token — register (upsert) this device's FCM token so the user
+ * receives pushes. The token is globally unique, so re-registering the same
+ * device (or one that moved accounts) just rebinds it to this user. Uses the
+ * service role because `push_tokens` is RLS-locked with no public policies.
+ */
+me.post('/push-token', async (c) => {
+  const userId = c.get('userId')!;
+  const body = pushTokenSchema.safeParse(await c.req.json().catch(() => null));
+  if (!body.success) throw badRequest('Expected { token, platform? }', body.error.flatten());
+
+  const { error } = await supabaseAdmin.from('push_tokens').upsert(
+    { user_id: userId, token: body.data.token, platform: body.data.platform, updated_at: new Date().toISOString() },
+    { onConflict: 'token' },
+  );
+  if (error) {
+    console.error('push-token register:', error.message);
+    throw badRequest('Could not register device');
+  }
+  return c.json({ ok: true });
+});
+
+/** DELETE /me/push-token — unregister a device token (sign-out / opt-out). */
+me.delete('/push-token', async (c) => {
+  const userId = c.get('userId')!;
+  const body = z.object({ token: z.string().trim().min(1) }).safeParse(await c.req.json().catch(() => null));
+  if (!body.success) throw badRequest('Expected { token }', body.error.flatten());
+
+  const { error } = await supabaseAdmin
+    .from('push_tokens')
+    .delete()
+    .eq('token', body.data.token)
+    .eq('user_id', userId);
+  if (error) {
+    console.error('push-token delete:', error.message);
+    throw badRequest('Could not unregister device');
+  }
+  return c.json({ ok: true });
+});
+
+/** POST /me/push-enabled — the in-app master switch for push delivery. */
+me.post('/push-enabled', async (c) => {
+  const userId = c.get('userId')!;
+  const body = z.object({ enabled: z.boolean() }).safeParse(await c.req.json().catch(() => null));
+  if (!body.success) throw badRequest('Expected { enabled: boolean }', body.error.flatten());
+
+  const db = userClient(c.get('accessToken')!);
+  const { error } = await db.from('profiles').update({ push_enabled: body.data.enabled }).eq('id', userId);
+  if (error) {
+    console.error('push-enabled update:', error.message);
+    throw badRequest('Could not update push setting');
+  }
+  return c.json({ ok: true, enabled: body.data.enabled });
 });
 
 /** GET /me/saved — the viewer's saved recipes (newest first). */
