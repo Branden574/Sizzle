@@ -492,6 +492,17 @@ function StepAccount() {
             Continue with Google
           </button>
 
+          {/* Social sign-up consent: the email form has its own 13+ checkbox, but
+              OAuth skips that form, so capture the same agreement here. */}
+          {!isLogin && (
+            <p style={{ fontSize: 12.5, lineHeight: 1.45, color: 'var(--text-faint)', textAlign: 'center', margin: '2px 6px 0' }}>
+              By continuing, you confirm you’re 13+ and agree to Sizzle’s{' '}
+              <button type="button" onClick={() => setShowLegal('terms')} style={legalLinkStyle}>Terms</button>
+              {' '}and{' '}
+              <button type="button" onClick={() => setShowLegal('privacy')} style={legalLinkStyle}>Privacy Policy</button>.
+            </p>
+          )}
+
           <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '4px 0' }}>
             <div style={{ flex: 1, height: 1, background: 'var(--line-2)' }} />
             <span style={{ color: 'var(--text-faint-2)', fontSize: 13 }}>or</span>
