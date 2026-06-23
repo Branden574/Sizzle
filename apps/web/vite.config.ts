@@ -7,7 +7,7 @@ import { fileURLToPath } from 'node:url';
 // served at clean routes in production (Vercel serves the files directly). In
 // dev, Vite's SPA fallback would otherwise return the app for these paths, so
 // this plugin serves the real files — keeping the preview faithful to prod.
-const STATIC_ROUTES = ['privacy', 'terms', 'cookie-policy', 'contact', 'landing'];
+const STATIC_ROUTES = ['privacy', 'terms', 'cookie-policy', 'contact'];
 const publicDir = fileURLToPath(new URL('./public', import.meta.url));
 
 function staticPages() {
