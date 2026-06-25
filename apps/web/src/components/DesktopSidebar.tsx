@@ -42,7 +42,8 @@ export function DesktopSidebar() {
         color: 'rgba(255,255,255,.62)',
       }}
     >
-      <div style={{ fontFamily: "'Instrument Serif', serif", fontSize: 30, color: '#fff', padding: '0 12px 18px', letterSpacing: '.3px' }}>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 10, fontFamily: "'Instrument Serif', serif", fontSize: 30, color: '#fff', padding: '0 12px 18px', letterSpacing: '.3px' }}>
+        <img src="/brand/sizzle-mark-flat.svg" alt="" width={26} height={33} style={{ display: 'block' }} />
         Sizzle
       </div>
 

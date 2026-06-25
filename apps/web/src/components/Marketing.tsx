@@ -113,7 +113,10 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
       {/* NAV */}
       <nav className="nav">
         <div className="wrap row">
-          <button className="brand linkbtn" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })}>Sizzle</button>
+          <button className="brand linkbtn" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} style={{ display: 'inline-flex', alignItems: 'center', gap: 9 }}>
+            <img src="/brand/sizzle-mark-flat.svg" alt="" width={28} height={35} style={{ display: 'block' }} />
+            Sizzle
+          </button>
           <div className="navlinks">
             <a href="#how">How it works</a>
             <a href="#features">Features</a>

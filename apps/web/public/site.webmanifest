@@ -1,0 +1,14 @@
+{
+  "name": "Sizzle",
+  "short_name": "Sizzle",
+  "description": "Watch it, then cook it — a full-screen video feed of real recipes from real home cooks.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#0e0b09",
+  "theme_color": "#0e0b09",
+  "icons": [
+    { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" },
+    { "src": "/favicon.svg", "type": "image/svg+xml", "sizes": "any" }
+  ]
+}
