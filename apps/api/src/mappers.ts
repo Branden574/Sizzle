@@ -24,6 +24,7 @@ export interface CommentRow {
   parent_id: string | null;
   reply_count: number;
   created_at: string;
+  hidden?: boolean;
 }
 
 export function commentDTO(row: CommentRow, author: ProfileRow | undefined, likedSet?: Set<string>): CommentDTO {
@@ -42,6 +43,9 @@ export function commentDTO(row: CommentRow, author: ProfileRow | undefined, like
     likedByMe: likedSet ? likedSet.has(row.id) : false,
     parentId: row.parent_id ?? null,
     replyCount: row.reply_count ?? 0,
+    // Per-viewer: the route coerces this to false for non-moderator viewers so a
+    // shadow-hidden comment never reveals its state to its own author.
+    hidden: row.hidden ?? false,
   };
 }
 

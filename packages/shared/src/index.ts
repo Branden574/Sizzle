@@ -175,6 +175,10 @@ export interface CommentDTO {
   parentId: string | null;
   /** Number of replies (top-level comments only). */
   replyCount: number;
+  /** Hidden by the post owner/admin. Only ever true for the owner/admin viewer
+   *  (the public never receives hidden comments; the author sees their own as
+   *  normal), so the UI can show a "Hidden" badge + unhide control. */
+  hidden: boolean;
   /** Nested replies, present on top-level comments. */
   replies?: CommentDTO[];
 }

@@ -133,7 +133,6 @@ export function useDeleteComment(recipeId: string) {
     mutationFn: (commentId: string) => apiSend('DELETE', `/recipes/${recipeId}/comments/${commentId}`),
     onMutate: async (commentId) => {
       await qc.cancelQueries({ queryKey: key });
-      const prev = qc.getQueryData<CommentDTO[]>(key);
       qc.setQueryData<CommentDTO[]>(key, (old) =>
         (old ?? [])
           // Drop a deleted top-level comment outright; otherwise prune it from replies.
@@ -144,13 +143,34 @@ export function useDeleteComment(recipeId: string) {
               : c,
           ),
       );
-      return { prev };
     },
-    onError: (_e, _id, ctx) => {
-      if (ctx?.prev) qc.setQueryData(key, ctx.prev);
-    },
+    // Each removal is independent, so overlapping deletes are safe; on failure we
+    // reconcile from the server rather than rolling back a shared snapshot.
+    onError: () => void qc.invalidateQueries({ queryKey: key }),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['feed'] }); // comment_count
+      void qc.invalidateQueries({ queryKey: keys.recipe(recipeId) });
+    },
+  });
+}
+
+/** Owner/admin moderation: hide or unhide a comment on your own recipe (optimistic). */
+export function useHideComment(recipeId: string) {
+  const qc = useQueryClient();
+  const key = ['comments', recipeId] as const;
+  return useMutation({
+    mutationFn: ({ commentId, hidden }: { commentId: string; hidden: boolean }) =>
+      apiSend('POST', `/recipes/${recipeId}/comments/${commentId}/hide`, { hidden }),
+    onMutate: async ({ commentId, hidden }) => {
+      await qc.cancelQueries({ queryKey: key });
+      const flip = (c: CommentDTO): CommentDTO => (c.id === commentId ? { ...c, hidden } : c);
+      qc.setQueryData<CommentDTO[]>(key, (old) => old?.map((c) => ({ ...flip(c), replies: c.replies?.map(flip) })));
+    },
+    // Each flip is independent, so overlapping moderations are safe; on failure we
+    // reconcile from the server rather than rolling back a shared snapshot.
+    onError: () => void qc.invalidateQueries({ queryKey: key }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['feed'] });
       void qc.invalidateQueries({ queryKey: keys.recipe(recipeId) });
     },
   });

@@ -295,11 +295,26 @@ recipes.get('/:id/comments', optionalAuth, async (c) => {
     for (const l of likes ?? []) likedSet.add(l.comment_id as string);
   }
 
-  const dto = (r: CommentRow) => commentDTO(r, authorMap.get(r.author_id), likedSet);
-  // Group replies under their parent. `list` is newest-first; reverse each
+  // Comment moderation visibility: a hidden comment is shown only to the post
+  // owner / an admin (flagged so they can unhide) and to its own author (shadow
+  // — it looks normal, so they don't just re-post it). Everyone else never sees it.
+  let viewerIsModerator = !!viewerId && viewerId === rec.cook_id;
+  if (viewerId && !viewerIsModerator) {
+    const { data: vp } = await supabaseAdmin.from('profiles').select('role').eq('id', viewerId).maybeSingle();
+    viewerIsModerator = vp?.role === 'admin';
+  }
+  const canSee = (r: CommentRow) => !r.hidden || viewerIsModerator || r.author_id === viewerId;
+  const visible = list.filter(canSee);
+
+  // `hidden` only ever reaches a moderator — coerce it off for everyone else so a
+  // shadow-hidden comment can't reveal its state to its own author.
+  const dto = (r: CommentRow) => ({ ...commentDTO(r, authorMap.get(r.author_id), likedSet), hidden: viewerIsModerator ? !!r.hidden : false });
+  // Group replies under their parent. `visible` is newest-first; reverse each
   // group so replies read oldest-first under the parent (top-level stays newest).
+  // A hidden parent that the viewer can't see drops out here, taking its thread
+  // with it (orphaned replies are never attached to a top-level comment).
   const repliesByParent = new Map<string, CommentDTO[]>();
-  for (const r of list) {
+  for (const r of visible) {
     if (!r.parent_id) continue;
     const arr = repliesByParent.get(r.parent_id);
     if (arr) arr.push(dto(r));
@@ -307,10 +322,49 @@ recipes.get('/:id/comments', optionalAuth, async (c) => {
   }
   for (const arr of repliesByParent.values()) arr.reverse();
 
-  const top = list
+  const top = visible
     .filter((r) => !r.parent_id)
     .map((r) => ({ ...dto(r), replies: repliesByParent.get(r.id) ?? [] }));
   return c.json<CommentDTO[]>(top);
+});
+
+const hideSchema = z.object({ hidden: z.boolean() });
+
+/**
+ * POST /recipes/:id/comments/:commentId/hide {hidden} — the recipe owner (or an
+ * admin) hides/unhides a comment on their own post (TikTok-style moderation).
+ * Hidden comments are filtered from the public thread by GET /comments — the
+ * author still sees their own (shadow-hide); the counter is left untouched
+ * (hiding is moderation, not deletion).
+ */
+recipes.post('/:id/comments/:commentId/hide', requireAuth, requireNotBanned, async (c) => {
+  const id = assertUuid(c.req.param('id'), 'recipe');
+  const commentId = assertUuid(c.req.param('commentId'), 'comment');
+  const userId = c.get('userId')!;
+  const parsed = hideSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) throw badRequest('hidden flag required');
+
+  // Only the post owner or an admin can moderate comments.
+  const { data: rec } = await supabaseAdmin.from('recipes').select('cook_id').eq('id', id).maybeSingle();
+  if (!rec) throw notFound('Recipe not found');
+  if (rec.cook_id !== userId) {
+    const { data: viewer } = await supabaseAdmin.from('profiles').select('role').eq('id', userId).maybeSingle();
+    if (viewer?.role !== 'admin') throw forbidden('Only the post owner can hide comments');
+  }
+
+  const { data: comment } = await supabaseAdmin.from('comments').select('id, recipe_id').eq('id', commentId).maybeSingle();
+  if (!comment || comment.recipe_id !== id) throw notFound('Comment not found');
+
+  const { error } = await supabaseAdmin
+    .from('comments')
+    .update({
+      hidden: parsed.data.hidden,
+      hidden_at: parsed.data.hidden ? new Date().toISOString() : null,
+      hidden_by: parsed.data.hidden ? userId : null,
+    })
+    .eq('id', commentId);
+  if (error) throw dbFail(error.message);
+  return c.json({ hidden: parsed.data.hidden });
 });
 
 /** POST /recipes/:id/comments — add a comment or a reply, bump counts, notify. */
@@ -374,7 +428,7 @@ recipes.post('/:id/comments/:commentId/like', requireAuth, requireNotBanned, rat
  * cascade via ON DELETE CASCADE, so the recipe's comment counter is corrected
  * by the full thread size (the comment + its replies).
  */
-recipes.delete('/:id/comments/:commentId', requireAuth, async (c) => {
+recipes.delete('/:id/comments/:commentId', requireAuth, requireNotBanned, async (c) => {
   const id = assertUuid(c.req.param('id'), 'recipe');
   const commentId = assertUuid(c.req.param('commentId'), 'comment');
   const userId = c.get('userId')!;

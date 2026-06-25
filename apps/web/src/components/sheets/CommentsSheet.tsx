@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { CommentDTO } from '@sizzle/shared';
 import { useRequireAuth } from '../../auth/useRequireAuth';
-import { useAddComment, useComments, useDeleteComment, useMe, useRecipe, useToggleCommentLike } from '../../data/queries';
+import { useAddComment, useComments, useDeleteComment, useHideComment, useMe, useRecipe, useToggleCommentLike } from '../../data/queries';
 import { useSizzle } from '../../store';
 import { theme } from '../../theme';
 import { formatCount } from '../../lib/format';
@@ -21,21 +21,29 @@ export function CommentsSheet() {
   const add = useAddComment(commentsFor ?? '');
   const likeComment = useToggleCommentLike(commentsFor ?? '');
   const del = useDeleteComment(commentsFor ?? '');
+  const hide = useHideComment(commentsFor ?? '');
 
   const [draft, setDraft] = useState('');
   const [replyTo, setReplyTo] = useState<{ id: string; name: string } | null>(null);
 
   if (!commentsFor) return null;
 
-  // You can remove a comment you wrote, any comment on a recipe you own, or
-  // (as an admin) anything.
+  // Moderation: you can delete a comment you wrote, and (as the post owner or an
+  // admin) delete OR hide/unhide any comment on the recipe — TikTok-style.
   const myId = me?.id;
   const isOwnerOrAdmin = !!myId && (recipe?.cook.id === myId || me?.role === 'admin');
   const canDelete = (cm: CommentDTO) => !!myId && (cm.authorId === myId || isOwnerOrAdmin);
   const onDelete = (id: string) => {
-    if (!requireAuth() || del.isPending) return;
+    if (!requireAuth()) return;
     if (typeof window !== 'undefined' && !window.confirm('Delete this comment?')) return;
     del.mutate(id);
+  };
+  // As the post owner (or an admin) you can hide/unhide anyone's comment. No
+  // in-flight guard — each mutation flips its own comment, so rapid moderation
+  // of several comments isn't swallowed.
+  const onHide = (id: string, hidden: boolean) => {
+    if (!requireAuth()) return;
+    hide.mutate({ commentId: id, hidden });
   };
 
   const list = comments ?? [];
@@ -80,7 +88,7 @@ export function CommentsSheet() {
           {isLoading && <div style={{ color: 'var(--text-faint-2)', fontSize: 14 }}>Loading comments…</div>}
           {!isLoading && list.length === 0 && <div style={{ color: 'var(--text-faint-2)', fontSize: 14, textAlign: 'center', marginTop: 30 }}>No comments yet — be the first.</div>}
           {list.map((cm) => (
-            <CommentItem key={cm.id} cm={cm} onLike={onLike} onReply={onReply} onAuthor={onAuthor} canDelete={canDelete} onDelete={onDelete} />
+            <CommentItem key={cm.id} cm={cm} onLike={onLike} onReply={onReply} onAuthor={onAuthor} canDelete={canDelete} onDelete={onDelete} canModerate={isOwnerOrAdmin} onHide={onHide} />
           ))}
         </div>
 
@@ -112,34 +120,35 @@ export function CommentsSheet() {
   );
 }
 
-function CommentItem({ cm, onLike, onReply, onAuthor, canDelete, onDelete, isReply }: { cm: CommentDTO; onLike: (id: string) => void; onReply: (parentId: string, name: string) => void; onAuthor: (id: string) => void; canDelete: (cm: CommentDTO) => boolean; onDelete: (id: string) => void; isReply?: boolean }) {
+const actionBtn = { background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 12.5, color: 'var(--text-faint-2)', fontWeight: 600 } as const;
+
+function CommentItem({ cm, onLike, onReply, onAuthor, canDelete, onDelete, canModerate, onHide, isReply }: { cm: CommentDTO; onLike: (id: string) => void; onReply: (parentId: string, name: string) => void; onAuthor: (id: string) => void; canDelete: (cm: CommentDTO) => boolean; onDelete: (id: string) => void; canModerate: boolean; onHide: (id: string, hidden: boolean) => void; isReply?: boolean }) {
   const size = isReply ? 30 : 38;
+  // A hidden comment (only the owner/admin ever sees this flag) is dimmed and
+  // tagged so it reads as moderated, with an Unhide action.
+  const dim = cm.hidden ? 0.45 : 1;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div style={{ display: 'flex', gap: 12 }}>
-        <div onClick={() => onAuthor(cm.authorId)} style={{ width: size, height: size, flex: 'none', borderRadius: '50%', background: cm.authorColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Instrument Serif',serif", fontSize: isReply ? 13 : 16, color: '#fff', overflow: 'hidden', cursor: 'pointer' }}>
+        <div onClick={() => onAuthor(cm.authorId)} style={{ width: size, height: size, flex: 'none', borderRadius: '50%', background: cm.authorColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Instrument Serif',serif", fontSize: isReply ? 13 : 16, color: '#fff', overflow: 'hidden', cursor: 'pointer', opacity: dim }}>
           {cm.authorAvatarUrl ? <img src={cm.authorAvatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : cm.authorInit}
         </div>
         <div style={{ flex: 1 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: dim }}>
             <span onClick={() => onAuthor(cm.authorId)} style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', cursor: 'pointer' }}>{cm.authorName}</span>
             <span style={{ fontSize: 12, color: 'var(--text-faint-2)' }}>{cm.time}</span>
+            {cm.hidden && (
+              <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.3px', textTransform: 'uppercase', color: 'var(--text-faint-2)', background: 'var(--track)', padding: '2px 7px', borderRadius: 7 }}>Hidden</span>
+            )}
           </div>
-          <div style={{ fontSize: 14.5, color: 'var(--text-2)', lineHeight: 1.45, marginTop: 3 }}>{cm.text}</div>
+          <div style={{ fontSize: 14.5, color: 'var(--text-2)', lineHeight: 1.45, marginTop: 3, opacity: dim }}>{cm.text}</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 5 }}>
-            <button
-              onClick={() => onReply(cm.parentId ?? cm.id, cm.authorName)}
-              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 12.5, color: 'var(--text-faint-2)', fontWeight: 600 }}
-            >
-              Reply
-            </button>
+            <button onClick={() => onReply(cm.parentId ?? cm.id, cm.authorName)} style={actionBtn}>Reply</button>
+            {canModerate && (
+              <button onClick={() => onHide(cm.id, !cm.hidden)} style={actionBtn}>{cm.hidden ? 'Unhide' : 'Hide'}</button>
+            )}
             {canDelete(cm) && (
-              <button
-                onClick={() => onDelete(cm.id)}
-                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 12.5, color: 'var(--text-faint-2)', fontWeight: 600 }}
-              >
-                Delete
-              </button>
+              <button onClick={() => onDelete(cm.id)} style={actionBtn}>Delete</button>
             )}
           </div>
         </div>
@@ -152,7 +161,7 @@ function CommentItem({ cm, onLike, onReply, onAuthor, canDelete, onDelete, isRep
       {cm.replies && cm.replies.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14, paddingLeft: 30 }}>
           {cm.replies.map((rp) => (
-            <CommentItem key={rp.id} cm={rp} onLike={onLike} onReply={onReply} onAuthor={onAuthor} canDelete={canDelete} onDelete={onDelete} isReply />
+            <CommentItem key={rp.id} cm={rp} onLike={onLike} onReply={onReply} onAuthor={onAuthor} canDelete={canDelete} onDelete={onDelete} canModerate={canModerate} onHide={onHide} isReply />
           ))}
         </div>
       )}
