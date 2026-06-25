@@ -431,7 +431,7 @@ const CSS = `
 .szl .navlinks a,.szl .navlinks .login{font-size:14.5px;color:var(--soft);font-weight:500;transition:color .15s}
 .szl .navlinks a:hover,.szl .navlinks .login:hover{color:var(--on)}
 .szl .nav .cta{height:42px;padding:0 18px;border-radius:11px}
-@media(max-width:820px){.szl .navlinks a:not(.cta),.szl .navlinks .login{display:none}}
+@media(max-width:820px){.szl .navlinks a:not(.cta){display:none}.szl .navlinks{gap:14px}}
 .szl .hero{position:relative;padding:130px 0 90px;overflow:hidden}
 .szl .hero::before{content:"";position:absolute;top:-10%;right:-5%;width:680px;height:680px;background:radial-gradient(circle,rgba(255,90,54,.20),transparent 62%);pointer-events:none}
 .szl .hero .grid{display:grid;grid-template-columns:1.05fr .95fr;gap:40px;align-items:center;position:relative}

@@ -305,6 +305,10 @@ export function FeedCard({ card, onClose }: { card: RecipeCard; onClose?: () => 
           setActive(visible);
           if (visible) {
             start = Date.now();
+            // Swiping to a new video closes a comments sheet left open on the
+            // previous one (it shouldn't hang over a different recipe).
+            const open = useSizzle.getState().commentsFor;
+            if (open && open !== card.id) useSizzle.getState().setCommentsFor(null);
           } else if (start) {
             if (authed) logView(card.id, Date.now() - start);
             start = 0;

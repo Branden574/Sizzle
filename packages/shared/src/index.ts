@@ -252,6 +252,9 @@ export interface MeProfile {
   tastes: string[];
   /** Master switch for device push notifications (mirrors the Settings toggle). */
   pushEnabled: boolean;
+  /** True when the handle was auto-derived (e.g. Google sign-up) and the user
+   *  hasn't chosen one yet — the app shows a "pick a username" step. */
+  needsUsername: boolean;
 }
 
 export type NotificationKind = 'follow' | 'like' | 'comment' | 'verified' | 'repost' | 'removed' | 'restored' | 'banned';

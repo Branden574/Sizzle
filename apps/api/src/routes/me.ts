@@ -47,6 +47,7 @@ me.get('/', async (c) => {
     counts: { following: profile.following_count ?? 0, followers: profile.follower_count ?? 0, saved: savedCount ?? 0 },
     tastes: profile.tastes ?? [],
     pushEnabled: profile.push_enabled ?? true,
+    needsUsername: profile.handle_auto ?? false,
   };
   return c.json(dto);
 });
@@ -367,8 +368,12 @@ me.patch('/', async (c) => {
   if (body.data.displayName !== undefined) updates.display_name = body.data.displayName;
   if (body.data.bio !== undefined) updates.bio = body.data.bio;
   // Keep the case the user typed (strip @ + invalid chars); uniqueness is enforced
-  // case-insensitively by the lower(handle) unique index.
-  if (body.data.handle !== undefined) updates.handle = body.data.handle.replace(/^@/, '').replace(/[^A-Za-z0-9_]/g, '');
+  // case-insensitively by the lower(handle) unique index. Choosing a handle also
+  // clears the "auto-derived" flag so the pick-a-username step won't show again.
+  if (body.data.handle !== undefined) {
+    updates.handle = body.data.handle.replace(/^@/, '').replace(/[^A-Za-z0-9_]/g, '');
+    updates.handle_auto = false;
+  }
   if (body.data.phone !== undefined) updates.phone = body.data.phone;
   if (body.data.avatarUrl !== undefined) updates.avatar_url = body.data.avatarUrl;
   if (body.data.bannerUrl !== undefined) updates.banner_url = body.data.bannerUrl;

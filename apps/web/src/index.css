@@ -118,7 +118,12 @@ body {
   padding: 32px;
   font-family: 'Hanken Grotesk', sans-serif;
 }
-.sz-stage.native {
+.sz-stage.native,
+/* Mobile web (a real phone browser — not native, not the wide desktop shell):
+   fill the viewport exactly like native instead of centering the 393×852
+   mockup. The fixed phone-frame overflowed small screens, clipping the bottom
+   nav on the feed; this makes every full-screen surface fit edge-to-edge. */
+.sz-stage.fill {
   --app-w: 100vw;
   --app-h: 100dvh;
   min-height: 100dvh;

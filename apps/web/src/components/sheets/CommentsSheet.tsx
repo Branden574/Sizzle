@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import type { CommentDTO } from '@sizzle/shared';
 import { useRequireAuth } from '../../auth/useRequireAuth';
-import { useAddComment, useComments, useMe, useRecipe, useToggleCommentLike } from '../../data/queries';
+import { useAddComment, useComments, useDeleteComment, useMe, useRecipe, useToggleCommentLike } from '../../data/queries';
 import { useSizzle } from '../../store';
 import { theme } from '../../theme';
 import { formatCount } from '../../lib/format';
@@ -20,11 +20,23 @@ export function CommentsSheet() {
   const { data: me } = useMe();
   const add = useAddComment(commentsFor ?? '');
   const likeComment = useToggleCommentLike(commentsFor ?? '');
+  const del = useDeleteComment(commentsFor ?? '');
 
   const [draft, setDraft] = useState('');
   const [replyTo, setReplyTo] = useState<{ id: string; name: string } | null>(null);
 
   if (!commentsFor) return null;
+
+  // You can remove a comment you wrote, any comment on a recipe you own, or
+  // (as an admin) anything.
+  const myId = me?.id;
+  const isOwnerOrAdmin = !!myId && (recipe?.cook.id === myId || me?.role === 'admin');
+  const canDelete = (cm: CommentDTO) => !!myId && (cm.authorId === myId || isOwnerOrAdmin);
+  const onDelete = (id: string) => {
+    if (!requireAuth() || del.isPending) return;
+    if (typeof window !== 'undefined' && !window.confirm('Delete this comment?')) return;
+    del.mutate(id);
+  };
 
   const list = comments ?? [];
   const total = recipe?.counts.comments ?? list.reduce((n, c) => n + 1 + (c.replies?.length ?? 0), 0);
@@ -68,7 +80,7 @@ export function CommentsSheet() {
           {isLoading && <div style={{ color: 'var(--text-faint-2)', fontSize: 14 }}>Loading comments…</div>}
           {!isLoading && list.length === 0 && <div style={{ color: 'var(--text-faint-2)', fontSize: 14, textAlign: 'center', marginTop: 30 }}>No comments yet — be the first.</div>}
           {list.map((cm) => (
-            <CommentItem key={cm.id} cm={cm} onLike={onLike} onReply={onReply} onAuthor={onAuthor} />
+            <CommentItem key={cm.id} cm={cm} onLike={onLike} onReply={onReply} onAuthor={onAuthor} canDelete={canDelete} onDelete={onDelete} />
           ))}
         </div>
 
@@ -100,7 +112,7 @@ export function CommentsSheet() {
   );
 }
 
-function CommentItem({ cm, onLike, onReply, onAuthor, isReply }: { cm: CommentDTO; onLike: (id: string) => void; onReply: (parentId: string, name: string) => void; onAuthor: (id: string) => void; isReply?: boolean }) {
+function CommentItem({ cm, onLike, onReply, onAuthor, canDelete, onDelete, isReply }: { cm: CommentDTO; onLike: (id: string) => void; onReply: (parentId: string, name: string) => void; onAuthor: (id: string) => void; canDelete: (cm: CommentDTO) => boolean; onDelete: (id: string) => void; isReply?: boolean }) {
   const size = isReply ? 30 : 38;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -114,12 +126,22 @@ function CommentItem({ cm, onLike, onReply, onAuthor, isReply }: { cm: CommentDT
             <span style={{ fontSize: 12, color: 'var(--text-faint-2)' }}>{cm.time}</span>
           </div>
           <div style={{ fontSize: 14.5, color: 'var(--text-2)', lineHeight: 1.45, marginTop: 3 }}>{cm.text}</div>
-          <button
-            onClick={() => onReply(cm.parentId ?? cm.id, cm.authorName)}
-            style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 12.5, color: 'var(--text-faint-2)', fontWeight: 600, marginTop: 5 }}
-          >
-            Reply
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 5 }}>
+            <button
+              onClick={() => onReply(cm.parentId ?? cm.id, cm.authorName)}
+              style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 12.5, color: 'var(--text-faint-2)', fontWeight: 600 }}
+            >
+              Reply
+            </button>
+            {canDelete(cm) && (
+              <button
+                onClick={() => onDelete(cm.id)}
+                style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 12.5, color: 'var(--text-faint-2)', fontWeight: 600 }}
+              >
+                Delete
+              </button>
+            )}
+          </div>
         </div>
         <button onClick={() => onLike(cm.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, paddingTop: 3 }}>
           <HeartIcon width={16} height={16} fill={cm.likedByMe ? accent : 'none'} stroke={cm.likedByMe ? accent : '#bcae9f'} strokeWidth={1.8} />
@@ -130,7 +152,7 @@ function CommentItem({ cm, onLike, onReply, onAuthor, isReply }: { cm: CommentDT
       {cm.replies && cm.replies.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14, paddingLeft: 30 }}>
           {cm.replies.map((rp) => (
-            <CommentItem key={rp.id} cm={rp} onLike={onLike} onReply={onReply} onAuthor={onAuthor} isReply />
+            <CommentItem key={rp.id} cm={rp} onLike={onLike} onReply={onReply} onAuthor={onAuthor} canDelete={canDelete} onDelete={onDelete} isReply />
           ))}
         </div>
       )}

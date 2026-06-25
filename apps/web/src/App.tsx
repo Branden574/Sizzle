@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { AdminDashboard } from './components/AdminDashboard';
 import { AppShell } from './components/AppShell';
+import { ChooseUsername } from './components/ChooseUsername';
 import { BannedScreen } from './components/BannedScreen';
 import { ErrorBoundary } from './components/ErrorBoundary';
 import { Marketing } from './components/Marketing';
@@ -62,6 +63,9 @@ export default function App() {
   const authStatus = useAuth((s) => s.status);
   const recovery = useAuth((s) => s.recovery);
   const banned = useAuth((s) => !!s.profile?.banned);
+  // Social sign-ups land with an auto-derived handle — make them pick one before
+  // the app shell (so onboarding isn't silently skipped).
+  const needsUsername = useAuth((s) => !!s.profile?.needsUsername);
   const initAuth = useAuth((s) => s.init);
   const setMode = useAuth((s) => s.setMode);
   const setPhase = useSizzle((s) => s.setPhase);
@@ -216,6 +220,9 @@ export default function App() {
   // Wide-screen web: present the app as a desktop shell (left sidebar + the
   // phone-width app column) instead of a lone floating phone. Never on native.
   const isDesktop = useMediaQuery('(min-width: 1024px)') && !isNative;
+  // Phone-sized web browser: render full-screen like native (no centered
+  // mockup) so the bottom nav + every sheet fit on a real phone screen.
+  const isMobileWeb = useMediaQuery('(max-width: 760px)') && !isNative;
 
   // Web front door: show the marketing site to logged-out visitors until they
   // choose Get started / Log in. Native + authed + password-recovery skip it.
@@ -229,9 +236,9 @@ export default function App() {
   }
 
   return (
-    <div className={`sz-stage${isNative ? ' native' : ''}${isDesktop ? ' desktop' : ''}${reduceMotion ? ' sz-reduce-motion' : ''}`} data-theme={scheme}>
+    <div className={`sz-stage${isNative ? ' native' : ''}${isMobileWeb ? ' fill' : ''}${isDesktop ? ' desktop' : ''}${reduceMotion ? ' sz-reduce-motion' : ''}`} data-theme={scheme}>
       {isDesktop && <DesktopSidebar />}
-      <Phone bare={isNative} desktop={isDesktop}>
+      <Phone bare={isNative || isMobileWeb} desktop={isDesktop}>
         {/* The fake "9:41" iOS status bar was web-mockup chrome — removed so the
             real app (web + native) doesn't show a fake clock/battery. */}
         <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
@@ -248,7 +255,7 @@ export default function App() {
           )}
           {authStatus !== 'loading' && isApp && (
             <ErrorBoundary fallback={<CrashFallback />}>
-              <AppShell />
+              {needsUsername ? <ChooseUsername /> : <AppShell />}
             </ErrorBoundary>
           )}
 
@@ -281,7 +288,7 @@ export default function App() {
             <BiometricLock label={bioLabel} onUnlock={() => setAppUnlocked(true)} />
           )}
 
-          {!isNative && <HomeIndicator color={homeIndicator} />}
+          {!isNative && !isMobileWeb && <HomeIndicator color={homeIndicator} />}
         </div>
       </Phone>
     </div>

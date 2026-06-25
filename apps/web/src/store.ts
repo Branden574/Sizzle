@@ -268,8 +268,10 @@ export const useSizzle = create<SizzleState>((set) => ({
       likes: { ...s.likes, [id]: false },
     })),
 
-  setTab: (tab) => set({ tab, immersive: false }),
-  setFeed: (feed) => set({ feed, immersive: false }),
+  // Leaving the current view drops any open comments sheet — it's tied to one
+  // recipe and shouldn't linger over the next screen.
+  setTab: (tab) => set({ tab, immersive: false, commentsFor: null }),
+  setFeed: (feed) => set({ feed, immersive: false, commentsFor: null }),
   setImmersive: (on) => set({ immersive: on }),
   setAppUnlocked: (v) => set({ appUnlocked: v }),
 

@@ -124,6 +124,38 @@ export function useToggleCommentLike(recipeId: string) {
   });
 }
 
+/** Delete a comment (own comment, or any comment on a recipe you own). Optimistically
+ *  removes it from the open thread, then refreshes the comment counter. */
+export function useDeleteComment(recipeId: string) {
+  const qc = useQueryClient();
+  const key = ['comments', recipeId] as const;
+  return useMutation({
+    mutationFn: (commentId: string) => apiSend('DELETE', `/recipes/${recipeId}/comments/${commentId}`),
+    onMutate: async (commentId) => {
+      await qc.cancelQueries({ queryKey: key });
+      const prev = qc.getQueryData<CommentDTO[]>(key);
+      qc.setQueryData<CommentDTO[]>(key, (old) =>
+        (old ?? [])
+          // Drop a deleted top-level comment outright; otherwise prune it from replies.
+          .filter((c) => c.id !== commentId)
+          .map((c) =>
+            c.replies?.some((r) => r.id === commentId)
+              ? { ...c, replyCount: Math.max(0, c.replyCount - 1), replies: c.replies.filter((r) => r.id !== commentId) }
+              : c,
+          ),
+      );
+      return { prev };
+    },
+    onError: (_e, _id, ctx) => {
+      if (ctx?.prev) qc.setQueryData(key, ctx.prev);
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['feed'] }); // comment_count
+      void qc.invalidateQueries({ queryKey: keys.recipe(recipeId) });
+    },
+  });
+}
+
 export function useReportRecipe(recipeId: string) {
   return useMutation({
     mutationFn: (input: ReportInput) => apiSend('POST', `/recipes/${recipeId}/report`, input),

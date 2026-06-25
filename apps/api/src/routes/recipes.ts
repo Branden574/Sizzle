@@ -368,6 +368,55 @@ recipes.post('/:id/comments/:commentId/like', requireAuth, requireNotBanned, rat
   return c.json({ liked: !!liked, likes: row?.like_count ?? 0 });
 });
 
+/**
+ * DELETE /recipes/:id/comments/:commentId — the comment's author, the recipe
+ * owner, or an admin removes a comment. Replies (parent_id) and any likes
+ * cascade via ON DELETE CASCADE, so the recipe's comment counter is corrected
+ * by the full thread size (the comment + its replies).
+ */
+recipes.delete('/:id/comments/:commentId', requireAuth, async (c) => {
+  const id = assertUuid(c.req.param('id'), 'recipe');
+  const commentId = assertUuid(c.req.param('commentId'), 'comment');
+  const userId = c.get('userId')!;
+
+  const { data: comment } = await supabaseAdmin
+    .from('comments')
+    .select('id, recipe_id, author_id, parent_id')
+    .eq('id', commentId)
+    .maybeSingle();
+  if (!comment || comment.recipe_id !== id) throw notFound('Comment not found');
+
+  // Authorize: the comment's author, the recipe owner, or an admin.
+  if (comment.author_id !== userId) {
+    const { data: rec } = await supabaseAdmin.from('recipes').select('cook_id').eq('id', id).maybeSingle();
+    if (!rec) throw notFound('Recipe not found');
+    if (rec.cook_id !== userId) {
+      const { data: viewer } = await supabaseAdmin.from('profiles').select('role').eq('id', userId).maybeSingle();
+      if (viewer?.role !== 'admin') throw forbidden('You can only delete your own comments');
+    }
+  }
+
+  // A top-level comment takes its replies with it (cascade) — count them so the
+  // recipe's comment counter drops by the whole thread, not just one.
+  let removed = 1;
+  if (!comment.parent_id) {
+    const { count } = await supabaseAdmin
+      .from('comments')
+      .select('*', { count: 'exact', head: true })
+      .eq('parent_id', commentId);
+    removed += count ?? 0;
+  }
+
+  const { error } = await supabaseAdmin.from('comments').delete().eq('id', commentId);
+  if (error) throw dbFail(error.message);
+
+  await supabaseAdmin.rpc('adjust_comment_count', { rid: id, delta: -removed });
+  // Deleting a reply also drops its parent's reply counter.
+  if (comment.parent_id) await supabaseAdmin.rpc('adjust_comment_reply_count', { cid: comment.parent_id, delta: -1 });
+
+  return c.json({ ok: true });
+});
+
 const reportSchema = z.object({
   category: z.enum(['nudity', 'harassment', 'violence', 'spam', 'other']),
   reason: z.string().trim().max(500).optional(),
