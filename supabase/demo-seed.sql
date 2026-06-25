@@ -107,3 +107,21 @@ insert into public.recipe_steps (recipe_id, position, text) values
   ('50000000-0000-4000-8000-000000000006',1,'Add shrimp and cook 2 minutes a side, basting.'),
   ('50000000-0000-4000-8000-000000000006',2,'Finish with parsley, lemon, and chili flakes.')
 on conflict do nothing;
+
+-- 7) A PHOTO post (image carousel, no video) — exercises recipes.image_urls.
+insert into public.recipes (id, cook_id, title, cuisine, time_minutes, servings, level, video_asset_id, image_urls, status, post_type, caption, tags, like_count, comment_count, share_count, save_count)
+values ('50000000-0000-4000-8000-0000000000a1','c0000000-0000-4000-8000-000000000004','Fresh Plates, Three Ways','Healthy',15,2,'Easy', null,
+  array['/recipes/poke-bowl.jpg','/recipes/garlic-shrimp.jpg','/recipes/cacio-e-pepe.jpg'],
+  'published','recipe','Swipe through the plates 📸 no video, just vibes. #photo #plates #quick',
+  array['photo','plates','quick','healthy'], 4200, 38, 110, 640)
+on conflict (id) do nothing;
+delete from public.recipe_ingredients where recipe_id='50000000-0000-4000-8000-0000000000a1';
+delete from public.recipe_steps where recipe_id='50000000-0000-4000-8000-0000000000a1';
+insert into public.recipe_ingredients (recipe_id, position, text) values
+  ('50000000-0000-4000-8000-0000000000a1',0,'Whatever''s fresh in the fridge'),
+  ('50000000-0000-4000-8000-0000000000a1',1,'A good drizzle of olive oil'),
+  ('50000000-0000-4000-8000-0000000000a1',2,'Flaky salt + lemon');
+insert into public.recipe_steps (recipe_id, position, text) values
+  ('50000000-0000-4000-8000-0000000000a1',0,'Plate it pretty.'),
+  ('50000000-0000-4000-8000-0000000000a1',1,'Snap a few photos.'),
+  ('50000000-0000-4000-8000-0000000000a1',2,'Eat before it gets cold.');
