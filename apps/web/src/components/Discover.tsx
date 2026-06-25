@@ -50,10 +50,10 @@ export function Discover() {
         )}
       </div>
 
-      {/* cook results */}
+      {/* people results */}
       {query && cooks.length > 0 && (
         <div style={{ padding: '4px 22px 8px' }}>
-          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '.4px', marginBottom: 10 }}>Cooks</div>
+          <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '.4px', marginBottom: 10 }}>People</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {cooks.map((ck) => (
               <button key={ck.id} onClick={() => setOpenCook(ck.id)} style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 18, padding: 12, cursor: 'pointer', textAlign: 'left' }}>
@@ -68,8 +68,8 @@ export function Discover() {
         </div>
       )}
 
-      {query && tiles.length === 0 && !isFetching && (
-        <div style={{ padding: '40px 22px', textAlign: 'center', color: 'var(--text-faint-2)', fontSize: 15 }}>No recipes match “{query}”.</div>
+      {query && tiles.length === 0 && cooks.length === 0 && !isFetching && (
+        <div style={{ padding: '40px 22px', textAlign: 'center', color: 'var(--text-faint-2)', fontSize: 15 }}>No results for “{query}”.</div>
       )}
 
       <div style={{ padding: '6px 18px 110px', columns: 2, columnGap: 14 }}>

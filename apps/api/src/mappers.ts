@@ -30,6 +30,7 @@ export function commentDTO(row: CommentRow, author: ProfileRow | undefined, like
   const name = author?.display_name ?? 'cook';
   return {
     id: row.id,
+    authorId: row.author_id,
     authorName: name,
     authorInit: initialsOf(name),
     authorColor: author?.avatar_color ?? 'linear-gradient(135deg,#3a2a22,#1b1512)',

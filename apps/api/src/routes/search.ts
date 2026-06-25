@@ -38,8 +38,8 @@ search.get('/', optionalAuth, async (c) => {
     supabaseAdmin.from('recipes').select('*').eq('status', 'published').ilike('title', like).limit(20),
     supabaseAdmin.from('recipes').select('*').eq('status', 'published').ilike('cuisine', like).limit(20),
     tagTerm ? supabaseAdmin.from('recipes').select('*').eq('status', 'published').contains('tags', [tagTerm]).limit(20) : Promise.resolve({ data: [] }),
-    supabaseAdmin.from('profiles').select('*').eq('is_cook', true).ilike('display_name', like).limit(10),
-    supabaseAdmin.from('profiles').select('*').eq('is_cook', true).ilike('handle', like).limit(10),
+    supabaseAdmin.from('profiles').select('*').neq('banned', true).ilike('display_name', like).limit(10),
+    supabaseAdmin.from('profiles').select('*').neq('banned', true).ilike('handle', like).limit(10),
   ]);
 
   const recipeMap = new Map<string, RecipeRow>();

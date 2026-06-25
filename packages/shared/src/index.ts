@@ -156,6 +156,8 @@ export interface TrendingTag {
 
 export interface CommentDTO {
   id: string;
+  /** The comment author's profile id — used to open their profile. */
+  authorId: string;
   authorName: string;
   authorInit: string;
   authorColor: string;

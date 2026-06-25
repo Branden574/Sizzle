@@ -66,6 +66,10 @@ export function useComments(recipeId: string | null) {
     queryKey: ['comments', recipeId],
     queryFn: () => apiGet<CommentDTO[]>(`/recipes/${recipeId}/comments`),
     enabled: !!recipeId,
+    // Comments should feel live: refetch every time the sheet opens so a viewer
+    // always sees the latest (others' new comments aren't pushed in real time).
+    refetchOnMount: 'always',
+    staleTime: 0,
   });
 }
 

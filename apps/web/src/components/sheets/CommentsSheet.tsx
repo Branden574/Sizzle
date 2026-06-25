@@ -12,6 +12,7 @@ const accent = theme.accent;
 export function CommentsSheet() {
   const commentsFor = useSizzle((s) => s.commentsFor);
   const setCommentsFor = useSizzle((s) => s.setCommentsFor);
+  const setOpenCook = useSizzle((s) => s.setOpenCook);
   const requireAuth = useRequireAuth();
 
   const { data: comments, isLoading } = useComments(commentsFor);
@@ -29,6 +30,8 @@ export function CommentsSheet() {
   const total = recipe?.counts.comments ?? list.reduce((n, c) => n + 1 + (c.replies?.length ?? 0), 0);
   const sendBg = draft.trim() ? accent : 'var(--track)';
   const close = () => setCommentsFor(null);
+  // Tap a commenter to open their profile (works for any user, cook or not).
+  const onAuthor = (id: string) => { setCommentsFor(null); setOpenCook(id); };
 
   const send = () => {
     if (!requireAuth()) return;
@@ -65,7 +68,7 @@ export function CommentsSheet() {
           {isLoading && <div style={{ color: 'var(--text-faint-2)', fontSize: 14 }}>Loading comments…</div>}
           {!isLoading && list.length === 0 && <div style={{ color: 'var(--text-faint-2)', fontSize: 14, textAlign: 'center', marginTop: 30 }}>No comments yet — be the first.</div>}
           {list.map((cm) => (
-            <CommentItem key={cm.id} cm={cm} onLike={onLike} onReply={onReply} />
+            <CommentItem key={cm.id} cm={cm} onLike={onLike} onReply={onReply} onAuthor={onAuthor} />
           ))}
         </div>
 
@@ -97,17 +100,17 @@ export function CommentsSheet() {
   );
 }
 
-function CommentItem({ cm, onLike, onReply, isReply }: { cm: CommentDTO; onLike: (id: string) => void; onReply: (parentId: string, name: string) => void; isReply?: boolean }) {
+function CommentItem({ cm, onLike, onReply, onAuthor, isReply }: { cm: CommentDTO; onLike: (id: string) => void; onReply: (parentId: string, name: string) => void; onAuthor: (id: string) => void; isReply?: boolean }) {
   const size = isReply ? 30 : 38;
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div style={{ display: 'flex', gap: 12 }}>
-        <div style={{ width: size, height: size, flex: 'none', borderRadius: '50%', background: cm.authorColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Instrument Serif',serif", fontSize: isReply ? 13 : 16, color: '#fff', overflow: 'hidden' }}>
+        <div onClick={() => onAuthor(cm.authorId)} style={{ width: size, height: size, flex: 'none', borderRadius: '50%', background: cm.authorColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Instrument Serif',serif", fontSize: isReply ? 13 : 16, color: '#fff', overflow: 'hidden', cursor: 'pointer' }}>
           {cm.authorAvatarUrl ? <img src={cm.authorAvatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : cm.authorInit}
         </div>
         <div style={{ flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-            <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{cm.authorName}</span>
+            <span onClick={() => onAuthor(cm.authorId)} style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', cursor: 'pointer' }}>{cm.authorName}</span>
             <span style={{ fontSize: 12, color: 'var(--text-faint-2)' }}>{cm.time}</span>
           </div>
           <div style={{ fontSize: 14.5, color: 'var(--text-2)', lineHeight: 1.45, marginTop: 3 }}>{cm.text}</div>
@@ -127,7 +130,7 @@ function CommentItem({ cm, onLike, onReply, isReply }: { cm: CommentDTO; onLike:
       {cm.replies && cm.replies.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14, paddingLeft: 30 }}>
           {cm.replies.map((rp) => (
-            <CommentItem key={rp.id} cm={rp} onLike={onLike} onReply={onReply} isReply />
+            <CommentItem key={rp.id} cm={rp} onLike={onLike} onReply={onReply} onAuthor={onAuthor} isReply />
           ))}
         </div>
       )}
