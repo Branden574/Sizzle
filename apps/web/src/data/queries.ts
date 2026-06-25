@@ -477,6 +477,10 @@ export function useUploadRecipe() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: async ({ video, ...input }: UploadRecipeInput) => {
+      // Photo post: images were already uploaded; create the recipe directly.
+      if (input.images && input.images.length) {
+        return apiSend<RecipeDetail>('POST', '/recipes', input);
+      }
       const ticket = await apiSend<DirectUploadTicket>('POST', '/uploads/video', video ?? undefined);
       return apiSend<RecipeDetail>('POST', '/recipes', { ...input, videoAssetId: ticket.videoAssetId });
     },

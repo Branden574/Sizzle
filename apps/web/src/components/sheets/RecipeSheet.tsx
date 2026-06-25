@@ -9,6 +9,7 @@ import { useSizzle } from '../../store';
 import { theme } from '../../theme';
 import { BookmarkIcon, CloseIcon, CommentIcon, DownloadIcon, PencilIcon, PlayIcon, SpeakerIcon, SpeakerOffIcon, TrashIcon } from '../icons';
 import { Hashtags } from '../Hashtags';
+import { ImageCarousel } from '../ImageCarousel';
 import { VerifiedBadge } from '../VerifiedBadge';
 import { StarRow } from '../Stars';
 import { pressVars } from '../ui';
@@ -50,6 +51,8 @@ export function RecipeSheet() {
   const isOwner = !!r && !!me && r.cook.id === me.id;
   const isReview = r?.postType === 'review';
   const headerVideo = r?.video?.mp4Url || r?.video?.hlsUrl || null;
+  const headerImages = r?.images ?? [];
+  const hasMedia = !!headerVideo || headerImages.length > 0;
   // Serving scaler: the recipe's own serving count is the baseline; the user can
   // type or step a target number of servings and every ingredient scales to it.
   const baseServes = r?.servings ?? 1;
@@ -60,14 +63,16 @@ export function RecipeSheet() {
     <div style={{ position: 'absolute', inset: 0, zIndex: 97 }}>
       <div onClick={close} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.5)', animation: 'sz-fadeIn .3s' }} />
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, top: 44, background: 'var(--bg)', borderRadius: '30px 30px 0 0', overflow: 'hidden', animation: 'sz-slideUp .42s cubic-bezier(.16,1,.3,1)', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ position: 'relative', height: headerVideo ? 300 : 230, flex: 'none', background: r?.bg ?? 'linear-gradient(165deg,#2a160e,#b5471f)' }}>
+        <div style={{ position: 'relative', height: hasMedia ? 300 : 230, flex: 'none', background: r?.bg ?? 'linear-gradient(165deg,#2a160e,#b5471f)' }}>
           {headerVideo ? (
             <RecipeHeaderVideo src={headerVideo} poster={r?.video?.posterUrl} onExpand={() => { if (r) { setViewer({ items: [r], index: 0 }); setOpenRecipe(null); } }} />
+          ) : headerImages.length > 0 ? (
+            <ImageCarousel images={headerImages} />
           ) : (
             <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(70% 60% at 70% 20%, rgba(244,165,44,.5), transparent 70%)' }} />
           )}
           {/* fade the bottom into the sheet bg so the recipe title reads over it */}
-          <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: headerVideo ? 'linear-gradient(180deg, rgba(0,0,0,.3) 0%, transparent 24%, transparent 64%, var(--bg))' : 'linear-gradient(180deg, transparent 50%, var(--bg))' }} />
+          <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: hasMedia ? 'linear-gradient(180deg, rgba(0,0,0,.3) 0%, transparent 24%, transparent 64%, var(--bg))' : 'linear-gradient(180deg, transparent 50%, var(--bg))' }} />
           <button onClick={close} style={{ position: 'absolute', top: 16, right: 16, zIndex: 6, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.35)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
             <CloseIcon size={20} stroke="#fff" strokeWidth={2.2} />
           </button>

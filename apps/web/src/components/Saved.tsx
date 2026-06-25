@@ -90,6 +90,7 @@ export function Saved() {
             onClick={() => setOpenRecipe(r.id)}
             style={{ border: 'none', padding: 0, cursor: 'pointer', borderRadius: 20, overflow: 'hidden', position: 'relative', height: 200, background: r.bg, textAlign: 'left' }}
           >
+            {(r.images[0] || r.video?.posterUrl) && <img src={r.images[0] || r.video?.posterUrl || ''} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
             <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, transparent 40%, rgba(0,0,0,.72))' }} />
             {r.viewer.downloaded && (
               <div style={{ position: 'absolute', top: 10, right: 10, display: 'flex', alignItems: 'center', gap: 4, background: 'rgba(0,0,0,.5)', backdropFilter: 'blur(6px)', padding: '5px 9px', borderRadius: 10 }}>

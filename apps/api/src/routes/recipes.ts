@@ -52,7 +52,8 @@ recipes.get('/:id', optionalAuth, async (c) => {
 });
 
 const createSchema = z.object({
-  videoAssetId: z.string().uuid(),
+  videoAssetId: z.string().uuid().optional(),
+  images: z.array(z.string().url()).min(1).max(8).optional(),
   title: z.string().min(1).max(120),
   cuisine: z.string().max(40).default(''),
   timeMinutes: z.number().int().min(0).max(6000),
@@ -66,6 +67,9 @@ const createSchema = z.object({
 }).refine((v) => v.postType === 'review' || v.rating === undefined, {
   message: 'rating is only allowed on a review',
   path: ['rating'],
+}).refine((v) => !!v.videoAssetId !== !!(v.images && v.images.length), {
+  message: 'Provide either a video or photos, not both',
+  path: ['videoAssetId'],
 });
 
 const POSTER_GRADIENTS = [
@@ -86,13 +90,20 @@ recipes.post('/', requireAuth, requireNotBanned, rateLimit({ windowMs: 60_000, m
   const mod = moderateText(input.title, input.cuisine, input.ingredients, input.steps, input.caption ?? '');
   if (!mod.ok) throw badRequest(mod.reason!);
 
-  // The video asset must exist and belong to this user.
-  const { data: asset } = await supabaseAdmin
-    .from('video_assets')
-    .select('id, owner_id')
-    .eq('id', input.videoAssetId)
-    .maybeSingle();
-  if (!asset || asset.owner_id !== userId) throw badRequest('Unknown or unowned video asset');
+  // Media is either a video asset you own, or photos you uploaded.
+  if (input.videoAssetId) {
+    const { data: asset } = await supabaseAdmin
+      .from('video_assets')
+      .select('id, owner_id')
+      .eq('id', input.videoAssetId)
+      .maybeSingle();
+    if (!asset || asset.owner_id !== userId) throw badRequest('Unknown or unowned video asset');
+  } else {
+    // Photo post: each image must live in our public storage under the user's
+    // own folder — blocks posting arbitrary or someone else's URLs.
+    const ok = (input.images ?? []).every((u) => u.includes(`/storage/v1/object/public/videos/${userId}/`));
+    if (!ok) throw badRequest('Invalid image upload');
+  }
 
   const bg = POSTER_GRADIENTS[Math.abs(hash(input.title)) % POSTER_GRADIENTS.length]!;
   const tags = parseHashtags(input.caption, input.title);
@@ -107,7 +118,8 @@ recipes.post('/', requireAuth, requireNotBanned, rateLimit({ windowMs: 60_000, m
       servings: input.servings,
       level: input.level,
       bg,
-      video_asset_id: input.videoAssetId,
+      video_asset_id: input.videoAssetId ?? null,
+      image_urls: input.images ?? [],
       caption: input.caption ?? null,
       tags,
       post_type: input.postType,

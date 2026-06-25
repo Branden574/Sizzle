@@ -96,6 +96,19 @@ export function probeVideo(file: File): Promise<{ durationSeconds: number | null
   });
 }
 
+/**
+ * Upload a recipe photo (carousel image) to the user-scoped `videos` bucket and
+ * return its public URL. The `${userId}/` prefix is what the API checks to
+ * confirm you own the image.
+ */
+export async function uploadRecipeImage(userId: string, file: File): Promise<string> {
+  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '');
+  const path = `${userId}/photo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
+  const { error } = await supabase.storage.from('videos').upload(path, file, { upsert: true, contentType: file.type || 'image/jpeg' });
+  if (error) throw error;
+  return supabase.storage.from('videos').getPublicUrl(path).data.publicUrl;
+}
+
 /** Upload a captured poster frame to the user-scoped `videos` bucket. */
 export async function uploadPoster(userId: string, blob: Blob): Promise<string> {
   const path = `${userId}/poster-${Date.now()}.jpg`;

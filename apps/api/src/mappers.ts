@@ -85,6 +85,7 @@ export interface RecipeRow {
   level: string;
   bg: string;
   video_asset_id: string | null;
+  image_urls: string[] | null;
   status: string;
   like_count: number;
   dislike_count: number;
@@ -200,6 +201,7 @@ function toCard(r: RecipeRow, cook: ProfileRow, video: VideoRow | null, ctx: Vie
     bg: r.bg,
     cook: cookSummary(cook),
     video: videoDTO(video),
+    images: r.image_urls ?? [],
     counts: { likes: r.like_count, dislikes: r.dislike_count, comments: r.comment_count, saves: r.save_count, shares: r.share_count },
     viewer: viewerState(r.id, r.cook_id, ctx),
     controls: DEFAULT_CONTROLS,

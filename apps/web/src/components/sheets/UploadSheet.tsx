@@ -5,7 +5,7 @@ import { useRequireAuth } from '../../auth/useRequireAuth';
 import { useUploadRecipe, type UploadRecipeInput } from '../../data/queries';
 import { useSizzle } from '../../store';
 import { theme } from '../../theme';
-import { probeVideo, uploadPoster, uploadVideo } from '../../lib/storage';
+import { probeVideo, uploadPoster, uploadRecipeImage, uploadVideo } from '../../lib/storage';
 import { CameraRecorder } from '../CameraRecorder';
 import { CameraIcon } from '../icons';
 
@@ -53,6 +53,25 @@ export function UploadSheet() {
   const [videoErr, setVideoErr] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
 
+  // Photo posts (carousel).
+  const photoInputRef = useRef<HTMLInputElement>(null);
+  const [mediaKind, setMediaKind] = useState<'video' | 'photo'>('video');
+  const [photos, setPhotos] = useState<{ file: File; url: string }[]>([]);
+
+  const pickPhotos = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files ?? []);
+    e.target.value = '';
+    if (!files.length) return;
+    setVideoErr(null);
+    setPhotos((prev) => [...prev, ...files.map((file) => ({ file, url: URL.createObjectURL(file) }))].slice(0, 8));
+  };
+  const removePhoto = (i: number) =>
+    setPhotos((prev) => {
+      const p = prev[i];
+      if (p) URL.revokeObjectURL(p.url);
+      return prev.filter((_, j) => j !== i);
+    });
+
   const acceptFile = (file: File) => {
     if (file.size > MAX_UPLOAD_BYTES) {
       setVideoErr(`That file is too large (max ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024 / 1024)} GB).`);
@@ -77,14 +96,15 @@ export function UploadSheet() {
   };
 
   const busy = prepping || upload.isPending;
-  const canPost = title.trim().length > 0 && !busy;
+  const canPost = title.trim().length > 0 && !busy && (mediaKind === 'video' || photos.length > 0);
 
   const submit = async () => {
     if (!requireAuth()) return;
     if (!canPost) return;
 
     let video: UploadRecipeInput['video'];
-    if (videoFile && user) {
+    let images: string[] | undefined;
+    if (mediaKind === 'video' && videoFile && user) {
       try {
         setPrepping(true);
         setProgress(0);
@@ -106,6 +126,23 @@ export function UploadSheet() {
         return;
       }
       setPrepping(false);
+    } else if (mediaKind === 'photo' && photos.length && user) {
+      try {
+        setPrepping(true);
+        setProgress(0);
+        setVideoErr(null);
+        const urls: string[] = [];
+        for (let i = 0; i < photos.length; i++) {
+          urls.push(await uploadRecipeImage(user.id, photos[i]!.file));
+          setProgress(Math.round(((i + 1) / photos.length) * 100));
+        }
+        images = urls;
+      } catch {
+        setPrepping(false);
+        setVideoErr("Couldn't upload your photos — please try again.");
+        return;
+      }
+      setPrepping(false);
     }
 
     upload.mutate(
@@ -122,10 +159,12 @@ export function UploadSheet() {
         postType,
         rating: isReview && rating > 0 ? rating : undefined,
         video,
+        images,
       },
       {
         onSuccess: () => {
           if (videoUrl) URL.revokeObjectURL(videoUrl);
+          photos.forEach((p) => URL.revokeObjectURL(p.url));
           setShowUpload(false);
           setFeed('foryou');
           setTab('feed');
@@ -150,6 +189,7 @@ export function UploadSheet() {
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 16px' }}>
         <input ref={fileRef} type="file" accept="video/*" onChange={pickVideo} style={{ display: 'none' }} />
+        <input ref={photoInputRef} type="file" accept="image/*" multiple onChange={pickPhotos} style={{ display: 'none' }} />
 
         {/* Post type — recipe/tutorial vs foodie review. */}
         <div style={{ display: 'flex', gap: 6, padding: 5, borderRadius: 16, background: 'rgba(255,255,255,.06)', border: '1.5px solid rgba(255,255,255,.12)', marginBottom: 18 }}>
@@ -180,7 +220,42 @@ export function UploadSheet() {
           })}
         </div>
 
-        {videoUrl ? (
+        {/* Media kind — a video clip or a photo carousel. */}
+        <div style={{ display: 'flex', gap: 6, padding: 5, borderRadius: 16, background: 'rgba(255,255,255,.06)', border: '1.5px solid rgba(255,255,255,.12)', marginBottom: 14 }}>
+          {([['video', 'Video'], ['photo', 'Photos']] as const).map(([val, label]) => {
+            const on = mediaKind === val;
+            return (
+              <button key={val} onClick={() => setMediaKind(val)} style={{ flex: 1, padding: '10px 0', borderRadius: 12, border: 'none', cursor: 'pointer', fontFamily: "'Hanken Grotesk'", fontSize: 14.5, fontWeight: 700, background: on ? '#fff' : 'transparent', color: on ? '#0c0a09' : 'rgba(255,255,255,.6)' }}>{label}</button>
+            );
+          })}
+        </div>
+
+        {mediaKind === 'photo' ? (
+          <div style={{ marginBottom: 18 }}>
+            {photos.length === 0 ? (
+              <button onClick={() => photoInputRef.current?.click()} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 14, padding: 16, borderRadius: 20, border: 'none', background: `linear-gradient(135deg,${accent},#e23a18)`, cursor: 'pointer', textAlign: 'left', boxShadow: '0 10px 26px -10px rgba(226,58,24,.7)' }}>
+                <div style={{ width: 52, height: 52, flex: 'none', borderRadius: '50%', background: 'rgba(255,255,255,.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26 }}>🖼️</div>
+                <div>
+                  <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 21, color: '#fff' }}>Add photos</div>
+                  <div style={{ color: 'rgba(255,255,255,.78)', fontSize: 13, marginTop: 2 }}>Up to 8 · swipe through them in the feed</div>
+                </div>
+              </button>
+            ) : (
+              <div className="sz-hscroll" style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 4 }}>
+                {photos.map((p, i) => (
+                  <div key={p.url} style={{ position: 'relative', flex: '0 0 auto' }}>
+                    <img src={p.url} alt="" style={{ width: 96, height: 120, objectFit: 'cover', borderRadius: 14, display: 'block' }} />
+                    <button onClick={() => removePhoto(i)} aria-label="Remove photo" style={{ position: 'absolute', top: 6, right: 6, width: 24, height: 24, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.6)', color: '#fff', cursor: 'pointer', fontSize: 15, lineHeight: 1 }}>×</button>
+                    <div style={{ position: 'absolute', bottom: 6, left: 6, fontSize: 11, color: '#fff', background: 'rgba(0,0,0,.5)', borderRadius: 6, padding: '1px 6px' }}>{i + 1}</div>
+                  </div>
+                ))}
+                {photos.length < 8 && (
+                  <button onClick={() => photoInputRef.current?.click()} aria-label="Add more photos" style={{ flex: '0 0 auto', width: 96, height: 120, borderRadius: 14, border: '1.5px dashed rgba(255,255,255,.25)', background: 'rgba(255,255,255,.05)', color: 'rgba(255,255,255,.7)', cursor: 'pointer', fontSize: 28 }}>+</button>
+                )}
+              </div>
+            )}
+          </div>
+        ) : videoUrl ? (
           <div style={{ position: 'relative', borderRadius: 20, overflow: 'hidden', marginBottom: 18, aspectRatio: previewAspect > 1.05 ? '16 / 9' : '9 / 12', background: '#000', transition: 'aspect-ratio .25s ease' }}>
             <video
               src={videoUrl}

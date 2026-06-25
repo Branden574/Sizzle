@@ -8,6 +8,7 @@ import { useSizzle } from '../store';
 import { theme } from '../theme';
 import { formatCount } from '../lib/format';
 import { VideoPlayer } from './VideoPlayer';
+import { ImageCarousel } from './ImageCarousel';
 import { VerifiedBadge } from './VerifiedBadge';
 import { Hashtags } from './Hashtags';
 import { StarRow } from './Stars';
@@ -336,7 +337,8 @@ export function FeedCard({ card, onClose }: { card: RecipeCard; onClose?: () => 
   const local = useSizzle((s) => s.postSettings[card.id]) ?? {};
 
   const { cook, viewer, counts, controls } = card;
-  const videoSrc = card.video?.mp4Url || card.video?.hlsUrl || null;
+  const hasImages = card.images.length > 0;
+  const videoSrc = !hasImages ? card.video?.mp4Url || card.video?.hlsUrl || null : null;
   const showLikes = controls.likesEnabled && !local.likesOff;
   const showComments = controls.commentsEnabled && !local.commentsOff;
   const hideCount = !controls.countsVisible || !!local.hideCount;
@@ -368,14 +370,16 @@ export function FeedCard({ card, onClose }: { card: RecipeCard; onClose?: () => 
       onClickCapture={onClickCapture}
       style={{ position: 'relative', height: 'var(--app-h)', scrollSnapAlign: 'start', overflow: 'hidden', background: card.bg }}
     >
-      {videoSrc && near ? (
+      {hasImages ? (
+        <ImageCarousel images={card.images} />
+      ) : videoSrc && near ? (
         <VideoPlayer src={videoSrc} poster={card.video?.posterUrl} active={active} immersive={immersive} />
       ) : (
         card.video?.posterUrl && (
           <img src={card.video.posterUrl} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
         )
       )}
-      {!videoSrc && (
+      {!videoSrc && !hasImages && (
         <>
           <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: 'radial-gradient(70% 50% at 72% 28%, rgba(244,165,44,.4), transparent 70%)' }} />
           <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', opacity: 0.1, background: 'repeating-linear-gradient(125deg,#000 0 2px, transparent 2px 8px)' }} />
@@ -383,7 +387,7 @@ export function FeedCard({ card, onClose }: { card: RecipeCard; onClose?: () => 
       )}
       <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: 'linear-gradient(180deg, rgba(0,0,0,.35) 0%, transparent 22%, transparent 50%, rgba(0,0,0,.85) 100%)', opacity: immersive ? 0 : 1, transition: 'opacity .28s ease' }} />
 
-      {!videoSrc && (
+      {!videoSrc && !hasImages && (
         <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 64, height: 64, borderRadius: '50%', background: 'rgba(255,255,255,.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.5 }}>
           <PlayIcon size={26} />
         </div>

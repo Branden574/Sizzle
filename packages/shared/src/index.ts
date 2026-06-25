@@ -106,6 +106,8 @@ export interface RecipeCard {
   bg: string;
   cook: CookSummary;
   video: VideoAssetDTO | null;
+  /** Photo post: ordered carousel image URLs. Empty for video posts. */
+  images: string[];
   counts: RecipeCounts;
   viewer: RecipeViewerState;
   controls: PostControls;
@@ -369,7 +371,10 @@ export type FeedResponse = Paginated<RecipeCard>;
 
 /** Body for creating a recipe after its video upload is registered. */
 export interface CreateRecipeInput {
-  videoAssetId: string;
+  /** Video post: the uploaded video asset. Omit for a photo post. */
+  videoAssetId?: string;
+  /** Photo post: 1–8 uploaded image URLs (carousel). Omit for a video post. */
+  images?: string[];
   title: string;
   cuisine: string;
   timeMinutes: number;

@@ -168,6 +168,14 @@ input {
   transform: scale(var(--press, 0.96));
 }
 
+/* Horizontal photo carousel: hide the scrollbar (swipe/drag only). */
+.sz-hscroll {
+  scrollbar-width: none;
+}
+.sz-hscroll::-webkit-scrollbar {
+  display: none;
+}
+
 @keyframes sz-stepIn {
   from {
     opacity: 0;
