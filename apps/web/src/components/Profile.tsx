@@ -2,12 +2,12 @@ import { useState } from 'react';
 import type { RecipeCard } from '@sizzle/shared';
 import { useAuth } from '../auth/useAuth';
 import { useRequireAuth } from '../auth/useRequireAuth';
-import { useCook, useLikedFeed, useMe, useNotifications, useSavedFeed } from '../data/queries';
+import { useCook, useLikedFeed, useMe, useNotifications, useSavedFeed, useUnreadMessages } from '../data/queries';
 import { useSizzle } from '../store';
 import { formatCount } from '../lib/format';
 import { VerifiedBadge } from './VerifiedBadge';
 import { SocialLinks } from './SocialLinks';
-import { BellIcon, BookmarkIcon, GearIcon, HeartIcon } from './icons';
+import { BellIcon, BookmarkIcon, GearIcon, HeartIcon, ShareIcon } from './icons';
 
 const BANNER = 'radial-gradient(120% 120% at 70% 0%, var(--saffron,#f4a52c), var(--accent,#ff5a36) 60%, #c23a1a)';
 
@@ -29,6 +29,7 @@ export function Profile() {
   const setShowEditProfile = useSizzle((s) => s.setShowEditProfile);
   const setShowNotifications = useSizzle((s) => s.setShowNotifications);
   const setShowAppSettings = useSizzle((s) => s.setShowAppSettings);
+  const setMessagesOpen = useSizzle((s) => s.setMessagesOpen);
   const setShowAdmin = useSizzle((s) => s.setShowAdmin);
   const setFollowList = useSizzle((s) => s.setFollowList);
 
@@ -41,6 +42,7 @@ export function Profile() {
   const likedItems = liked?.items ?? [];
   const postItems = myCook?.recipes ?? [];
   const unread = (notifications ?? []).filter((n) => !n.read).length;
+  const dmUnread = useUnreadMessages().data?.count ?? 0;
   const [tab, setTab] = useState<'posts' | 'liked' | 'saved'>('posts');
   const gridItems = tab === 'posts' ? postItems : tab === 'liked' ? likedItems : savedItems;
 
@@ -91,6 +93,14 @@ export function Profile() {
           >
             <BellIcon size={20} stroke="var(--text-muted)" />
             {unread > 0 && <div style={{ position: 'absolute', top: 9, right: 9, width: 9, height: 9, borderRadius: '50%', background: 'var(--accent,#ff5a36)', border: '2px solid var(--surface)' }} />}
+          </button>
+          <button
+            onClick={() => setMessagesOpen(true)}
+            title="Messages"
+            style={{ position: 'relative', width: 48, height: 48, border: '1.5px solid var(--line-2)', borderRadius: 14, background: 'var(--surface)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          >
+            <ShareIcon size={20} stroke="var(--text-muted)" strokeWidth={1.8} />
+            {dmUnread > 0 && <div style={{ position: 'absolute', top: 9, right: 9, width: 9, height: 9, borderRadius: '50%', background: 'var(--accent,#ff5a36)', border: '2px solid var(--surface)' }} />}
           </button>
           <button
             onClick={() => setShowAppSettings(true)}

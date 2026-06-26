@@ -23,6 +23,8 @@ import { FollowListSheet } from './components/sheets/FollowListSheet';
 import { HashtagSheet } from './components/sheets/HashtagSheet';
 import { MoreSheet } from './components/sheets/MoreSheet';
 import { NotificationsSheet } from './components/sheets/NotificationsSheet';
+import { MessagesSheet } from './components/sheets/MessagesSheet';
+import { ThreadSheet } from './components/sheets/ThreadSheet';
 import { RecipeSheet } from './components/sheets/RecipeSheet';
 import { ReportSheet } from './components/sheets/ReportSheet';
 import { RepostSheet } from './components/sheets/RepostSheet';
@@ -173,6 +175,8 @@ export default function App() {
   const settingsFor = useSizzle((s) => s.settingsFor);
   const showUpload = useSizzle((s) => s.showUpload);
   const showNotifications = useSizzle((s) => s.showNotifications);
+  const messagesOpen = useSizzle((s) => s.messagesOpen);
+  const threadWith = useSizzle((s) => s.threadWith);
   const showEditProfile = useSizzle((s) => s.showEditProfile);
   const showAppSettings = useSizzle((s) => s.showAppSettings);
   const showRoadmap = useSizzle((s) => s.showRoadmap);
@@ -266,6 +270,8 @@ export default function App() {
           {showCook && <CookSheet />}
           {showUpload && <UploadSheet />}
           {showNotifications && <NotificationsSheet />}
+          {messagesOpen && <MessagesSheet />}
+          {threadWith && <ThreadSheet />}
           {showEditProfile && <EditProfileSheet />}
           {showAppSettings && <AppSettingsSheet />}
           {showRoadmap && <RoadmapSheet />}

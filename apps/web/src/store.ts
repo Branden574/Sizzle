@@ -88,6 +88,10 @@ export interface SizzleState {
   showAppSettings: boolean;
   showRoadmap: boolean;
   showAdmin: boolean;
+  /** Direct-messages inbox overlay. */
+  messagesOpen: boolean;
+  /** Open DM thread — the OTHER user's id (null = closed). */
+  threadWith: string | null;
   commentsFor: string | null;
   settingsFor: string | null;
   /** Post "…" overflow menu (recipe id) + whether the viewer owns it. */
@@ -174,6 +178,8 @@ export interface SizzleState {
   setShowAppSettings: (v: boolean) => void;
   setShowRoadmap: (v: boolean) => void;
   setShowAdmin: (v: boolean) => void;
+  setMessagesOpen: (v: boolean) => void;
+  setThreadWith: (id: string | null) => void;
 
   // playback + appearance prefs
   toggleMuted: () => void;
@@ -214,6 +220,8 @@ export const useSizzle = create<SizzleState>((set) => ({
   showAppSettings: false,
   showRoadmap: false,
   showAdmin: false,
+  messagesOpen: false,
+  threadWith: null,
   commentsFor: null,
   settingsFor: null,
   moreFor: null,
@@ -300,6 +308,8 @@ export const useSizzle = create<SizzleState>((set) => ({
   setShowAppSettings: (v) => set({ showAppSettings: v }),
   setShowRoadmap: (v) => set({ showRoadmap: v }),
   setShowAdmin: (v) => set({ showAdmin: v }),
+  setMessagesOpen: (v) => set({ messagesOpen: v }),
+  setThreadWith: (id) => set({ threadWith: id }),
 
   toggleMuted: () => set((s) => { const muted = !s.muted; savePrefs(prefsFrom(s, { muted })); return { muted }; }),
   setMuted: (v) => set((s) => { savePrefs(prefsFrom(s, { muted: v })); return { muted: v }; }),

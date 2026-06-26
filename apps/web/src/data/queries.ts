@@ -1,5 +1,5 @@
 import { QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { AdminAppealDTO, AdminLogDTO, AdminReportGroupDTO, AdminStats, AdminUserDTO, CollectionDTO, CommentDTO, CookProfile, CookSummary, CreateRecipeInput, DirectUploadTicket, FeedResponse, MeProfile, NotificationDTO, RecipeCard, RecipeDetail, ReportInput, SearchResults, SuggestedCook, SupportRequestDTO, TrendingTag, VerificationTier } from '@sizzle/shared';
+import type { AdminAppealDTO, AdminLogDTO, AdminReportGroupDTO, AdminStats, AdminUserDTO, CollectionDTO, CommentDTO, ConversationDTO, CookProfile, CookSummary, CreateRecipeInput, DirectUploadTicket, FeedResponse, MeProfile, MessageDTO, NotificationDTO, RecipeCard, RecipeDetail, ReportInput, SearchResults, SuggestedCook, SupportRequestDTO, ThreadDTO, TrendingTag, VerificationTier } from '@sizzle/shared';
 import { useAuth } from '../auth/useAuth';
 import { apiGet, apiSend } from '../lib/api';
 import { removeOffline, saveOffline } from '../lib/offline';
@@ -602,6 +602,57 @@ export function useToggleMute() {
 /** The accounts the viewer has blocked (Settings → Blocked accounts). */
 export function useBlockedList() {
   return useQuery({ queryKey: ['blocked'], queryFn: () => apiGet<CookSummary[]>('/me/blocked') });
+}
+
+/* ─────────────────────────── direct messages ─────────────────────────── */
+
+/** The DM inbox — polls while open so new messages surface without a manual refresh. */
+export function useConversations(enabled: boolean) {
+  return useQuery({
+    queryKey: ['conversations'],
+    queryFn: () => apiGet<ConversationDTO[]>('/messages'),
+    enabled,
+    refetchOnMount: 'always',
+    refetchInterval: enabled ? 8000 : false,
+    staleTime: 0,
+  });
+}
+
+/** One thread (other user + messages). Marks read server-side on each load; polls while open. */
+export function useThread(otherId: string | null) {
+  return useQuery({
+    queryKey: ['thread', otherId],
+    queryFn: () => apiGet<ThreadDTO>(`/messages/with/${otherId}`),
+    enabled: !!otherId,
+    refetchOnMount: 'always',
+    refetchInterval: otherId ? 4000 : false,
+    staleTime: 0,
+  });
+}
+
+/** Send a DM (optimistic append to the open thread). */
+export function useSendMessage(otherId: string) {
+  const qc = useQueryClient();
+  const key = ['thread', otherId] as const;
+  return useMutation({
+    mutationFn: (text: string) => apiSend<MessageDTO>('POST', `/messages/with/${otherId}`, { text }),
+    onSuccess: (msg) => {
+      qc.setQueryData<ThreadDTO>(key, (old) => (old ? { ...old, messages: [...old.messages, msg] } : old));
+      void qc.invalidateQueries({ queryKey: ['conversations'] });
+      void qc.invalidateQueries({ queryKey: ['messages-unread'] });
+    },
+  });
+}
+
+/** Unread-conversation count for the inbox badge (polled globally while signed in). */
+export function useUnreadMessages() {
+  const authed = useAuth((s) => s.status === 'authed');
+  return useQuery({
+    queryKey: ['messages-unread'],
+    queryFn: () => apiGet<{ count: number }>('/messages/unread-count'),
+    enabled: authed,
+    refetchInterval: authed ? 20000 : false,
+  });
 }
 
 /* ─────────────────────────── saved collections ─────────────────────────── */

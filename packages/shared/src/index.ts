@@ -280,6 +280,38 @@ export interface SearchResults {
   cooks: CookSummary[];
 }
 
+/* ─────────────────────────── direct messages ─────────────────────────── */
+export interface MessageDTO {
+  id: string;
+  /** True if the viewer sent it (right-aligned bubble). */
+  fromMe: boolean;
+  text: string;
+  createdAt: string;
+  /** Relative label, e.g. "2h". */
+  time: string;
+}
+
+/** One row in the messages inbox. */
+export interface ConversationDTO {
+  id: string;
+  otherUser: CookSummary;
+  lastText: string | null;
+  lastAt: string | null;
+  /** Relative label for the last message, e.g. "2h". */
+  lastTime: string;
+  /** Whether the last message was sent by the viewer. */
+  lastFromMe: boolean;
+  /** True when the other person's latest message is unread by the viewer. */
+  unread: boolean;
+}
+
+/** A full conversation thread (the other user + messages oldest→newest). */
+export interface ThreadDTO {
+  conversationId: string;
+  otherUser: CookSummary;
+  messages: MessageDTO[];
+}
+
 export type ReportCategory = 'nudity' | 'harassment' | 'violence' | 'spam' | 'other';
 
 /** Body for reporting a recipe. */

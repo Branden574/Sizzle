@@ -13,6 +13,7 @@ import { feed } from './routes/feed';
 import { recipes } from './routes/recipes';
 import { cooks } from './routes/cooks';
 import { search } from './routes/search';
+import { messages } from './routes/messages';
 import { uploads } from './routes/uploads';
 import { admin } from './routes/admin';
 import { support } from './routes/support';
@@ -57,6 +58,7 @@ export function createApp() {
   app.route('/recipes', recipes);
   app.route('/cooks', cooks);
   app.route('/search', search);
+  app.route('/messages', messages);
   app.route('/uploads', uploads);
   app.route('/admin', admin);
   app.route('/support', support);

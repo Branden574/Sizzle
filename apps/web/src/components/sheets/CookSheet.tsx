@@ -16,6 +16,7 @@ export function CookSheet() {
   const setOpenCook = useSizzle((s) => s.setOpenCook);
   const setOpenRecipe = useSizzle((s) => s.setOpenRecipe);
   const setFollowList = useSizzle((s) => s.setFollowList);
+  const setThreadWith = useSizzle((s) => s.setThreadWith);
   const requireAuth = useRequireAuth();
   const follow = useToggleFollow();
   const block = useToggleBlock();
@@ -91,16 +92,25 @@ export function CookSheet() {
               </div>
               <div style={{ color: 'var(--text-faint)', fontSize: 14.5 }}>@{ck.handle}</div>
             </div>
-            <button
-              onClick={() => {
-                if (!requireAuth()) return;
-                follow.mutate({ cookId: ck.id, following: ck.viewer.following });
-              }}
-              className="sz-press"
-              style={{ ...pressVars(0.94), padding: '12px 24px', borderRadius: 15, border: `1.5px solid ${ck.viewer.following ? 'var(--invert-bg)' : accent}`, background: ck.viewer.following ? 'var(--invert-bg)' : accent, color: ck.viewer.following ? 'var(--invert-fg)' : '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 700, cursor: 'pointer', transition: 'transform .2s cubic-bezier(.34,1.56,.64,1)' }}
-            >
-              {ck.viewer.following ? 'Following' : 'Follow'}
-            </button>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              <button
+                onClick={() => { if (requireAuth()) setThreadWith(ck.id); }}
+                className="sz-press"
+                style={{ ...pressVars(0.94), padding: '12px 18px', borderRadius: 15, border: '1.5px solid var(--line-2)', background: 'var(--surface)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 700, cursor: 'pointer', transition: 'transform .2s cubic-bezier(.34,1.56,.64,1)' }}
+              >
+                Message
+              </button>
+              <button
+                onClick={() => {
+                  if (!requireAuth()) return;
+                  follow.mutate({ cookId: ck.id, following: ck.viewer.following });
+                }}
+                className="sz-press"
+                style={{ ...pressVars(0.94), padding: '12px 24px', borderRadius: 15, border: `1.5px solid ${ck.viewer.following ? 'var(--invert-bg)' : accent}`, background: ck.viewer.following ? 'var(--invert-bg)' : accent, color: ck.viewer.following ? 'var(--invert-fg)' : '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 700, cursor: 'pointer', transition: 'transform .2s cubic-bezier(.34,1.56,.64,1)' }}
+              >
+                {ck.viewer.following ? 'Following' : 'Follow'}
+              </button>
+            </div>
           </div>
           <p style={{ color: 'var(--text-muted)', fontSize: 15, lineHeight: 1.5, margin: '14px 0 0' }}>{ck.bio}</p>
           <SocialLinks links={ck.links} size={34} />

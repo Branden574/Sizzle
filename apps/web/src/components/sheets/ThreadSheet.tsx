@@ -1,0 +1,97 @@
+import { useEffect, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
+import { useRequireAuth } from '../../auth/useRequireAuth';
+import { useSendMessage, useThread } from '../../data/queries';
+import { useSizzle } from '../../store';
+import { theme } from '../../theme';
+import { ChevronLeftIcon, ShareIcon } from '../icons';
+
+const accent = theme.accent;
+
+/** A 1:1 chat thread. */
+export function ThreadSheet() {
+  const threadWith = useSizzle((s) => s.threadWith);
+  const setThreadWith = useSizzle((s) => s.setThreadWith);
+  const setOpenCook = useSizzle((s) => s.setOpenCook);
+  const requireAuth = useRequireAuth();
+
+  const { data: thread, isLoading } = useThread(threadWith);
+  const send = useSendMessage(threadWith ?? '');
+  const [draft, setDraft] = useState('');
+  const scrollRef = useRef<HTMLDivElement>(null);
+  const qc = useQueryClient();
+
+  const msgs = thread?.messages ?? [];
+  // Keep the newest message in view as the thread grows / loads.
+  useEffect(() => {
+    const el = scrollRef.current;
+    if (el) el.scrollTop = el.scrollHeight;
+  }, [msgs.length, threadWith]);
+
+  // Opening a thread marks it read server-side — refresh the inbox + unread badge
+  // immediately so they don't linger as unread until their slow poll.
+  useEffect(() => {
+    if (!thread) return;
+    void qc.invalidateQueries({ queryKey: ['messages-unread'] });
+    void qc.invalidateQueries({ queryKey: ['conversations'] });
+  }, [thread?.conversationId, qc]);
+
+  if (!threadWith) return null;
+  const other = thread?.otherUser;
+  const close = () => setThreadWith(null);
+  const openProfile = () => { if (other) { setThreadWith(null); setOpenCook(other.id); } };
+
+  const submit = () => {
+    if (!requireAuth()) return;
+    const text = draft.trim();
+    if (!text || send.isPending) return;
+    setDraft('');
+    send.mutate(text, { onError: () => setDraft(text) });
+  };
+
+  return (
+    <div style={{ position: 'absolute', inset: 0, zIndex: 92, background: 'var(--bg)', display: 'flex', flexDirection: 'column', animation: 'sz-slideUp .35s cubic-bezier(.16,1,.3,1)' }}>
+      <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 10, padding: '52px 16px 12px', borderBottom: '1px solid var(--line)' }}>
+        <button onClick={close} aria-label="Back" style={{ width: 36, height: 36, flex: 'none', borderRadius: '50%', border: 'none', background: 'var(--surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+          <ChevronLeftIcon size={20} stroke="var(--text)" strokeWidth={2.2} />
+        </button>
+        <button onClick={openProfile} style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0 }}>
+          <div style={{ width: 38, height: 38, flex: 'none', borderRadius: '50%', background: other?.avatarColor ?? 'var(--surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Instrument Serif',serif", fontSize: 16, color: '#fff', overflow: 'hidden' }}>
+            {other?.avatarUrl ? <img src={other.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : other?.init ?? ''}
+          </div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>{other?.name ?? 'Loading…'}</div>
+        </button>
+      </div>
+
+      <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '16px 16px 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {isLoading && msgs.length === 0 && <div style={{ color: 'var(--text-faint-2)', fontSize: 14, textAlign: 'center', marginTop: 20 }}>Loading…</div>}
+        {!isLoading && msgs.length === 0 && (
+          <div style={{ textAlign: 'center', color: 'var(--text-faint-2)', fontSize: 14.5, margin: 'auto', padding: '0 30px' }}>
+            No messages yet. Say hi to {other?.name ?? 'them'} 👋
+          </div>
+        )}
+        {msgs.map((m) => (
+          <div key={m.id} style={{ display: 'flex', justifyContent: m.fromMe ? 'flex-end' : 'flex-start' }}>
+            <div style={{ maxWidth: '76%', padding: '9px 14px', borderRadius: m.fromMe ? '18px 18px 5px 18px' : '18px 18px 18px 5px', background: m.fromMe ? accent : 'var(--surface)', color: m.fromMe ? '#fff' : 'var(--text)', border: m.fromMe ? 'none' : '1px solid var(--line)', fontSize: 15, lineHeight: 1.4, wordBreak: 'break-word' }}>
+              {m.text}
+            </div>
+          </div>
+        ))}
+      </div>
+
+      <div style={{ flex: 'none', borderTop: '1px solid var(--line)', background: 'var(--surface)', padding: '12px 16px 28px', display: 'flex', alignItems: 'center', gap: 10 }}>
+        <input
+          value={draft}
+          onChange={(e) => setDraft(e.target.value)}
+          onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) submit(); }}
+          placeholder="Message…"
+          maxLength={2000}
+          style={{ flex: 1, height: 44, border: '1.5px solid var(--line)', borderRadius: 22, padding: '0 16px', fontFamily: "'Hanken Grotesk'", fontSize: 15, color: 'var(--text)', outline: 'none', background: 'var(--bg-soft)' }}
+        />
+        <button onClick={submit} aria-label="Send" style={{ width: 44, height: 44, flex: 'none', border: 'none', borderRadius: '50%', background: draft.trim() ? accent : 'var(--track)', cursor: draft.trim() ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+          <ShareIcon size={20} stroke="#fff" strokeWidth={1.9} />
+        </button>
+      </div>
+    </div>
+  );
+}
