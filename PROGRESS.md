@@ -277,3 +277,21 @@ npm run dev:all           # web → http://localhost:5173 , api → http://local
 
 ## Deploy (later)
 API bundles to `apps/api/dist/index.js` (`npm run build -w @sizzle/api`), runs with `node dist/index.js`. Target Railway/Fly with env = a hosted Supabase project + (optional) Cloudflare Stream creds. Web is a static Vite build.
+
+---
+
+## Trust & safety + messaging + observability — 2026-06-26 (deployed)
+
+- **Comment moderation (owner hide/unhide + delete)** — recipe owner/admin can delete OR hide/unhide any comment on their post; hidden = shadow-hide (author still sees their own, owner sees it tagged "Hidden"). `comments.hidden`; `POST /recipes/:id/comments/:commentId/hide`; visibility enforced in GET /comments.
+- **Block / mute users** (`…030000_user_blocks_and_mutes.sql`) — Block = mutual invisibility everywhere (feed/search/profile/followers/suggested/comments/notifications/direct links via the `buildCards` chokepoint + `loadBlockedIds` both-directions); tears down follows both ways; blocked users can't follow/comment/like/dislike/view/repost/DM the blocker (guarded — no row, no push). Mute = silent feed-only. UI: profile "···" menu, blocked shell, Settings → Blocked accounts.
+- **Direct messages** (`…040000_direct_messages.sql`) — 1:1 DMs (canonical-pair `conversations` + `messages`), inbox (Profile paper-plane icon + unread badge), chat thread (polling, optimistic send), "Message" button on profiles. Block- + ban-aware. `routes/messages.ts` at `/messages`. Realtime = future (polling for now).
+- **Real moderation provider** — `services/moderation.ts` `moderate()` runs OpenAI's moderation model when `OPENAI_API_KEY` set, on top of the local blocklist; fails OPEN. Callers now `await moderate(...)`.
+- **Observability** — dependency-free Sentry capture (API error handler + web global handlers/ErrorBoundary) gated on `SENTRY_DSN`/`VITE_SENTRY_DSN`; Resend email (`services/email.ts`) for ban/removal/restore, gated on `RESEND_API_KEY`. Both no-op + best-effort.
+
+### Launch credential checklist (code is ready; these light up on configure)
+- **Video (A1)**: Cloudflare Stream provider already coded (`services/stream.ts`). Set on `sizzle-api`: `VIDEO_PROVIDER=cloudflare`, `CLOUDFLARE_ACCOUNT_ID`, `CLOUDFLARE_STREAM_TOKEN`.
+- **Moderation (B3)**: `OPENAI_API_KEY` on `sizzle-api`.
+- **Email + monitoring (A5)**: `RESEND_API_KEY` (+ `EMAIL_FROM`) and `SENTRY_DSN` on `sizzle-api`; `VITE_SENTRY_DSN` on `sizzle` (web).
+- **Google (A4)**: OAuth consent screen → "Publish app" (no code).
+- **Apple Sign-In (A2)**: Apple Services ID + key → Supabase Auth → Apple provider (client button already wired).
+- **Vercel note**: the `sizzle-api` "Ignored Build Step" mis-skips some api-only commits — verify deploys via `gh api repos/Branden574/Sizzle/commits/<sha>/status` (look for "Deployment has completed", not "Skipped"/"inactive").
