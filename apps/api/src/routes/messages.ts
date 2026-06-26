@@ -8,7 +8,7 @@ import { badRequest, dbFail, notFound } from '../lib/errors';
 import { assertUuid } from '../lib/validate';
 import { relativeTime } from '../lib/format';
 import { cookSummary, loadBlockedIds, type ProfileRow } from '../mappers';
-import { moderateText } from '../services/moderation';
+import { moderate } from '../services/moderation';
 import type { AppEnv } from '../types';
 
 export const messages = new Hono<AppEnv>();
@@ -139,7 +139,7 @@ messages.post('/with/:userId', requireAuth, requireNotBanned, rateLimit({ window
   if (otherId === userId) throw badRequest('You cannot message yourself');
   const parsed = sendSchema.safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) throw badRequest('Message text required');
-  const mod = moderateText(parsed.data.text);
+  const mod = await moderate(parsed.data.text);
   if (!mod.ok) throw badRequest(mod.reason!);
 
   // Can't message someone you've blocked or who has blocked you.

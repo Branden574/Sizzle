@@ -23,6 +23,11 @@ const schema = z.object({
   // the push service is a safe no-op (rows are still written to `notifications`,
   // we just don't deliver to devices) — so the app runs fine without it.
   FCM_SERVICE_ACCOUNT: z.string().optional(),
+
+  // Real content moderation via OpenAI's moderation model. When unset, moderation
+  // falls back to the local keyword/link-spam pass only (the app runs fine
+  // without it). Get a key at platform.openai.com → API keys.
+  OPENAI_API_KEY: z.string().optional(),
 });
 
 const parsed = schema.safeParse(process.env);

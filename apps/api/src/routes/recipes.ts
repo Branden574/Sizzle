@@ -7,7 +7,7 @@ import { badRequest, dbFail, forbidden, notFound } from '../lib/errors';
 import { assertUuid } from '../lib/validate';
 import { buildCards, commentDTO, loadBlockedIds, type CommentRow, type ProfileRow, type RecipeRow } from '../mappers';
 import { rateLimit } from '../middleware/rateLimit';
-import { moderateText } from '../services/moderation';
+import { moderate } from '../services/moderation';
 import { parseHashtags } from '../services/hashtags';
 import { logModeration } from '../services/audit';
 import { notify } from '../services/notify';
@@ -87,7 +87,7 @@ recipes.post('/', requireAuth, requireNotBanned, rateLimit({ windowMs: 60_000, m
   if (!parsed.success) throw badRequest('Invalid recipe payload', parsed.error.flatten());
   const input = parsed.data;
 
-  const mod = moderateText(input.title, input.cuisine, input.ingredients, input.steps, input.caption ?? '');
+  const mod = await moderate(input.title, input.cuisine, input.ingredients, input.steps, input.caption ?? '');
   if (!mod.ok) throw badRequest(mod.reason!);
 
   // Media is either a video asset you own, or photos you uploaded.
@@ -387,7 +387,7 @@ recipes.post('/:id/comments', requireAuth, requireNotBanned, rateLimit({ windowM
   const userId = c.get('userId')!;
   const parsed = commentSchema.safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) throw badRequest('Comment text required');
-  const mod = moderateText(parsed.data.text);
+  const mod = await moderate(parsed.data.text);
   if (!mod.ok) throw badRequest(mod.reason!);
   const cookId = await recipeCookId(id);
 
@@ -574,7 +574,7 @@ recipes.post('/:id/repost', requireAuth, requireNotBanned, rateLimit({ windowMs:
   const parsed = repostSchema.safeParse(await c.req.json().catch(() => ({})));
   const comment = parsed.success ? parsed.data.comment ?? null : null;
   if (comment) {
-    const mod = moderateText(comment);
+    const mod = await moderate(comment);
     if (!mod.ok) throw badRequest(mod.reason!);
   }
   const cookId = await recipeCookIdUnblocked(id, userId); // 404s / validates id / blocks
@@ -655,7 +655,7 @@ recipes.patch('/:id', requireAuth, requireNotBanned, rateLimit({ windowMs: 60_00
   const input = parsed.data;
   const isReview = rec.post_type === 'review';
 
-  const mod = moderateText(input.title, input.cuisine, input.ingredients, input.steps, input.caption ?? '');
+  const mod = await moderate(input.title, input.cuisine, input.ingredients, input.steps, input.caption ?? '');
   if (!mod.ok) throw badRequest(mod.reason!);
 
   const tags = parseHashtags(input.caption, input.title);
