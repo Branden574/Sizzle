@@ -3,7 +3,7 @@ import { useAuth } from '../../auth/useAuth';
 import { useSizzle, type FeedKindPref, type ThemePref, type UnitPref } from '../../store';
 import { clearOffline } from '../../lib/offline';
 import { apiSend } from '../../lib/api';
-import { queryClient, useMe } from '../../data/queries';
+import { queryClient, useBlockedList, useMe, useToggleBlock } from '../../data/queries';
 import { enablePush, disablePush } from '../../lib/push';
 import { biometricAvailability, biometricVerify, clearBiometricToken } from '../../lib/biometric';
 import { isNative } from '../../lib/native';
@@ -119,6 +119,7 @@ export function AppSettingsSheet() {
   const [delConfirm, setDelConfirm] = useState('');
   const [cacheCleared, setCacheCleared] = useState(false);
   const [legal, setLegal] = useState<'terms' | 'privacy' | null>(null);
+  const [showBlocked, setShowBlocked] = useState(false);
 
   const me = useMe();
   const [pushLocal, setPushLocal] = useState<boolean | null>(null);
@@ -207,8 +208,8 @@ export function AppSettingsSheet() {
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, top: 70, background: 'var(--bg)', borderRadius: '26px 26px 0 0', overflow: 'hidden', animation: 'sz-slideUp .4s cubic-bezier(.16,1,.3,1)', display: 'flex', flexDirection: 'column' }}>
         <div style={{ textAlign: 'center', padding: '16px 0 6px', position: 'relative', flex: 'none' }}>
           <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', width: 42, height: 5, borderRadius: 3, background: 'var(--track)' }} />
-          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginTop: 6 }}>{legal ? LEGAL_COPY[legal].title : 'Settings'}</div>
-          <div style={{ fontSize: 13, color: 'var(--text-faint)', marginTop: 2 }}>{legal ? 'Sizzle' : 'Appearance, recipes, playback & account'}</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginTop: 6 }}>{legal ? LEGAL_COPY[legal].title : showBlocked ? 'Blocked accounts' : 'Settings'}</div>
+          <div style={{ fontSize: 13, color: 'var(--text-faint)', marginTop: 2 }}>{legal ? 'Sizzle' : showBlocked ? "People you've blocked" : 'Appearance, recipes, playback & account'}</div>
         </div>
 
         {legal ? (
@@ -216,6 +217,8 @@ export function AppSettingsSheet() {
             <p style={{ fontSize: 15, lineHeight: 1.6, color: 'var(--text-2)' }}>{LEGAL_COPY[legal].body}</p>
             <button onClick={() => setLegal(null)} style={{ width: '100%', height: 50, marginTop: 18, border: '1px solid var(--line-2)', borderRadius: 16, background: 'var(--surface)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>Back to settings</button>
           </div>
+        ) : showBlocked ? (
+          <BlockedAccounts onBack={() => setShowBlocked(false)} />
         ) : (
         <div style={{ flex: 1, overflowY: 'auto', padding: '4px 22px 30px' }}>
           <SectionLabel>Appearance</SectionLabel>
@@ -305,6 +308,9 @@ export function AppSettingsSheet() {
           <RowButton label="Clear downloaded recipes" hint="Free up space" onClick={() => clearOffline()} />
           <RowButton label="Clear cache" hint={cacheCleared ? '✓ Cleared' : 'Reload fresh data'} onClick={() => { queryClient.clear(); setCacheCleared(true); window.setTimeout(() => setCacheCleared(false), 1800); }} />
 
+          <SectionLabel>Privacy &amp; safety</SectionLabel>
+          <RowButton label="Blocked accounts" hint="Manage who you've blocked" onClick={() => setShowBlocked(true)} />
+
           <SectionLabel>Account</SectionLabel>
           {pwOpen ? (
             <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 18, padding: 14, marginBottom: 10 }}>
@@ -369,6 +375,45 @@ export function AppSettingsSheet() {
         </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/** Settings → Blocked accounts: the people you've blocked, each with an Unblock. */
+function BlockedAccounts({ onBack }: { onBack: () => void }) {
+  const { data: list, isLoading } = useBlockedList();
+  const block = useToggleBlock();
+  const blocked = list ?? [];
+
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', padding: '8px 22px 30px' }}>
+      {isLoading ? (
+        <div style={{ color: 'var(--text-faint-2)', fontSize: 14, padding: '20px 0' }}>Loading…</div>
+      ) : blocked.length === 0 ? (
+        <div style={{ textAlign: 'center', padding: '40px 20px', color: 'var(--text-faint)' }}>
+          <div style={{ fontSize: 15.5, fontWeight: 700, color: 'var(--text)' }}>No blocked accounts</div>
+          <p style={{ fontSize: 13.5, marginTop: 6 }}>Anyone you block from their profile shows up here.</p>
+        </div>
+      ) : (
+        blocked.map((u) => (
+          <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 16, padding: 12, marginBottom: 10 }}>
+            <div style={{ width: 44, height: 44, flex: 'none', borderRadius: 13, background: u.avatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Instrument Serif',serif", fontSize: 17, color: '#fff', overflow: 'hidden' }}>
+              {u.avatarUrl ? <img src={u.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : u.init}
+            </div>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.name}</div>
+              <div style={{ fontSize: 13, color: 'var(--text-faint)' }}>@{u.handle}</div>
+            </div>
+            <button
+              onClick={() => block.mutate({ cookId: u.id, blocked: true })}
+              style={{ flex: 'none', padding: '9px 16px', borderRadius: 12, border: '1.5px solid var(--line-2)', background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 13.5, fontWeight: 700, cursor: 'pointer' }}
+            >
+              Unblock
+            </button>
+          </div>
+        ))
+      )}
+      <button onClick={onBack} style={{ width: '100%', height: 50, marginTop: 8, border: '1px solid var(--line-2)', borderRadius: 16, background: 'var(--surface)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>Back to settings</button>
     </div>
   );
 }

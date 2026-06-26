@@ -1,11 +1,12 @@
+import { useState } from 'react';
+import { useCook, useMe, useToggleBlock, useToggleFollow, useToggleMute } from '../../data/queries';
 import { useRequireAuth } from '../../auth/useRequireAuth';
-import { useCook, useToggleFollow } from '../../data/queries';
 import { useSizzle } from '../../store';
 import { VerifiedBadge } from '../VerifiedBadge';
 import { SocialLinks } from '../SocialLinks';
 import { theme } from '../../theme';
 import { formatCount } from '../../lib/format';
-import { ChevronLeftIcon } from '../icons';
+import { ChevronLeftIcon, DotsIcon } from '../icons';
 import { pressVars } from '../ui';
 
 const accent = theme.accent;
@@ -17,11 +18,28 @@ export function CookSheet() {
   const setFollowList = useSizzle((s) => s.setFollowList);
   const requireAuth = useRequireAuth();
   const follow = useToggleFollow();
+  const block = useToggleBlock();
+  const mute = useToggleMute();
+  const { data: me } = useMe();
+  const [menuOpen, setMenuOpen] = useState(false);
 
   const { data: ck, isLoading } = useCook(openCook);
 
   if (!openCook) return null;
   const close = () => setOpenCook(null);
+  const isOwn = !!me && me.id === openCook;
+
+  const onBlock = () => {
+    setMenuOpen(false);
+    if (!requireAuth() || !ck) return;
+    if (!ck.viewer.blocked && typeof window !== 'undefined' && !window.confirm(`Block @${ck.handle}? They won't be able to find your profile or content, and you won't see theirs.`)) return;
+    block.mutate({ cookId: ck.id, blocked: ck.viewer.blocked });
+  };
+  const onMute = () => {
+    setMenuOpen(false);
+    if (!requireAuth() || !ck) return;
+    mute.mutate({ cookId: ck.id, muted: ck.viewer.muted });
+  };
 
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 85, background: 'var(--bg)', overflowY: 'auto', animation: 'sz-slideUp .42s cubic-bezier(.16,1,.3,1)' }}>
@@ -30,10 +48,37 @@ export function CookSheet() {
         <button onClick={close} style={{ position: 'absolute', top: 54, left: 18, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.3)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
           <ChevronLeftIcon size={20} stroke="#fff" strokeWidth={2.2} />
         </button>
+        {ck && !isOwn && (
+          <button onClick={() => setMenuOpen((o) => !o)} aria-label="More" style={{ position: 'absolute', top: 54, right: 18, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.3)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+            <DotsIcon size={20} />
+          </button>
+        )}
       </div>
+
+      {menuOpen && ck && (
+        <>
+          <div onClick={() => setMenuOpen(false)} style={{ position: 'absolute', inset: 0, zIndex: 5 }} />
+          <div style={{ position: 'absolute', top: 98, right: 18, zIndex: 6, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 16, overflow: 'hidden', minWidth: 200, boxShadow: '0 12px 34px -10px rgba(0,0,0,.5)' }}>
+            <button onClick={onMute} style={menuRow}>{ck.viewer.muted ? 'Unmute' : 'Mute'} <span style={menuHint}>{ck.viewer.muted ? 'show their posts again' : "hide their posts from your feed"}</span></button>
+            <div style={{ height: 1, background: 'var(--line)' }} />
+            <button onClick={onBlock} style={{ ...menuRow, color: '#e0573a' }}>{ck.viewer.blocked ? 'Unblock' : 'Block'} <span style={menuHint}>{ck.viewer.blocked ? '' : 'hide each other everywhere'}</span></button>
+          </div>
+        </>
+      )}
 
       {!ck ? (
         <div style={{ padding: '60px 22px', textAlign: 'center', color: 'var(--text-faint-2)', fontSize: 15 }}>{isLoading ? 'Loading…' : 'Cook not found'}</div>
+      ) : ck.viewer.blocked ? (
+        <div style={{ padding: '0 22px 60px', marginTop: -44, position: 'relative', zIndex: 1 }}>
+          <div style={{ width: 88, height: 88, borderRadius: 28, background: ck.avatarColor, border: '4px solid var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Instrument Serif',serif", fontSize: 36, color: '#fff', overflow: 'hidden', opacity: 0.6 }}>{ck.init}</div>
+          <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 30, color: 'var(--text)', marginTop: 12 }}>{ck.name}</div>
+          <div style={{ color: 'var(--text-faint)', fontSize: 14.5 }}>@{ck.handle}</div>
+          <div style={{ marginTop: 26, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 18, padding: 20, textAlign: 'center' }}>
+            <div style={{ fontSize: 15.5, fontWeight: 700, color: 'var(--text)' }}>You blocked @{ck.handle}</div>
+            <p style={{ fontSize: 13.5, color: 'var(--text-faint)', lineHeight: 1.5, margin: '8px 0 16px' }}>They can't find your profile or content, and you won't see theirs anywhere on Sizzle.</p>
+            <button onClick={onBlock} className="sz-press" style={{ ...pressVars(0.95), padding: '12px 28px', borderRadius: 14, border: '1.5px solid var(--line-2)', background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>Unblock</button>
+          </div>
+        </div>
       ) : (
         <div style={{ padding: '0 22px 60px', marginTop: -44, position: 'relative', zIndex: 1 }}>
           <div style={{ width: 88, height: 88, borderRadius: 28, background: ck.avatarUrl ? `url(${ck.avatarUrl}) center/cover` : ck.avatarColor, border: '4px solid var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Instrument Serif',serif", fontSize: 36, color: '#fff', overflow: 'hidden' }}>{ck.avatarUrl ? '' : ck.init}</div>
@@ -42,6 +87,7 @@ export function CookSheet() {
               <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
                 <span style={{ fontFamily: "'Instrument Serif',serif", fontSize: 30, color: 'var(--text)' }}>{ck.name}</span>
                 <VerifiedBadge tier={ck.verifiedTier} size={20} />
+                {ck.viewer.muted && <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-faint-2)', background: 'var(--surface-2)', padding: '2px 8px', borderRadius: 8 }}>Muted</span>}
               </div>
               <div style={{ color: 'var(--text-faint)', fontSize: 14.5 }}>@{ck.handle}</div>
             </div>
@@ -99,6 +145,9 @@ export function CookSheet() {
     </div>
   );
 }
+
+const menuRow = { display: 'flex', flexDirection: 'column' as const, alignItems: 'flex-start', gap: 2, width: '100%', background: 'none', border: 'none', padding: '13px 16px', cursor: 'pointer', textAlign: 'left' as const, fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 700, color: 'var(--text)' };
+const menuHint = { fontSize: 12, fontWeight: 500, color: 'var(--text-faint-2)' };
 
 function CookStat({ value, label, border, onClick }: { value: string; label: string; border?: boolean; onClick?: () => void }) {
   const style = { flex: 1, padding: '14px 8px', textAlign: 'center' as const, borderRight: border ? '1px solid var(--line)' : undefined };

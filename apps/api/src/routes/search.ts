@@ -2,7 +2,7 @@ import { Hono } from 'hono';
 import type { SearchResults } from '@sizzle/shared';
 import { optionalAuth } from '../middleware/auth';
 import { supabaseAdmin } from '../lib/supabase';
-import { buildCards, cookSummary, type ProfileRow, type RecipeRow } from '../mappers';
+import { buildCards, cookSummary, loadBlockedIds, type ProfileRow, type RecipeRow } from '../mappers';
 import { normalizeTag } from '../services/hashtags';
 import type { AppEnv } from '../types';
 
@@ -46,9 +46,10 @@ search.get('/', optionalAuth, async (c) => {
   for (const r of [...(titleHits.data ?? []), ...(cuisineHits.data ?? []), ...(tagHits.data ?? [])]) recipeMap.set(r.id as string, r as RecipeRow);
   const recipeRows = [...recipeMap.values()].sort((a, b) => b.like_count - a.like_count).slice(0, 20);
 
+  const blocked = await loadBlockedIds(supabaseAdmin, c.get('userId'));
   const cookMap = new Map<string, ProfileRow>();
   for (const p of [...(nameHits.data ?? []), ...(handleHits.data ?? [])]) cookMap.set(p.id as string, p as ProfileRow);
-  const cookRows = [...cookMap.values()].sort((a, b) => b.follower_count - a.follower_count).slice(0, 10);
+  const cookRows = [...cookMap.values()].filter((p) => !blocked.has(p.id)).sort((a, b) => b.follower_count - a.follower_count).slice(0, 10);
 
   const recipes = await buildCards(supabaseAdmin, c.get('userId'), recipeRows);
   const cooks = cookRows.map(cookSummary);

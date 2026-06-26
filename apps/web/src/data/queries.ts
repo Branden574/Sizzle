@@ -421,7 +421,7 @@ function patchCookEverywhere(qc: QueryClient, cookId: string, following: boolean
   for (const key of [keys.forYou, keys.following, keys.saved]) {
     qc.setQueryData<FeedResponse>(key, (old) => (old ? { ...old, items: old.items.map(cardFix) } : old));
   }
-  qc.setQueryData<CookProfile>(keys.cook(cookId), (old) => (old ? { ...old, viewer: { following } } : old));
+  qc.setQueryData<CookProfile>(keys.cook(cookId), (old) => (old ? { ...old, viewer: { ...old.viewer, following } } : old));
 }
 
 function snapshot(qc: QueryClient) {
@@ -563,6 +563,45 @@ export function useToggleFollow() {
       void qc.invalidateQueries({ queryKey: keys.me });
     },
   });
+}
+
+/** Block / unblock a user. Refreshes everything (blocking removes follows + hides
+ *  content across the feed, search, profile, and comments). */
+export function useToggleBlock() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ cookId, blocked }: { cookId: string; blocked: boolean }) =>
+      apiSend(blocked ? 'DELETE' : 'POST', `/cooks/${cookId}/block`),
+    onSuccess: (_d, { cookId, blocked }) => {
+      qc.setQueryData<CookProfile>(keys.cook(cookId), (old) =>
+        old ? { ...old, viewer: { ...old.viewer, blocked: !blocked, following: false }, recipes: blocked ? old.recipes : [] } : old,
+      );
+    },
+    onSettled: () => {
+      // Blocking hides content across every surface it can appear on.
+      for (const key of [['feed'], ['cook'], keys.saved, ['search'], ['tag'], ['blocked'], ['comments'], ['notifications']]) {
+        void qc.invalidateQueries({ queryKey: key });
+      }
+    },
+  });
+}
+
+/** Mute / unmute a user (feed-only, silent). */
+export function useToggleMute() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ cookId, muted }: { cookId: string; muted: boolean }) =>
+      apiSend(muted ? 'DELETE' : 'POST', `/cooks/${cookId}/mute`),
+    onSuccess: (_d, { cookId, muted }) => {
+      qc.setQueryData<CookProfile>(keys.cook(cookId), (old) => (old ? { ...old, viewer: { ...old.viewer, muted: !muted } } : old));
+    },
+    onSettled: () => void qc.invalidateQueries({ queryKey: ['feed'] }),
+  });
+}
+
+/** The accounts the viewer has blocked (Settings → Blocked accounts). */
+export function useBlockedList() {
+  return useQuery({ queryKey: ['blocked'], queryFn: () => apiGet<CookSummary[]>('/me/blocked') });
 }
 
 /* ─────────────────────────── saved collections ─────────────────────────── */

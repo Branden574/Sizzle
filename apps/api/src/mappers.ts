@@ -226,13 +226,40 @@ function toCard(r: RecipeRow, cook: ProfileRow, video: VideoRow | null, ctx: Vie
  * the viewer's interaction state (no N+1). `db` should be the service-role
  * client; `viewerId` is undefined for guests.
  */
+/**
+ * Ids the viewer can't see, from blocks in EITHER direction (they blocked me, or
+ * I blocked them). Used as a hard filter on every surface that lists users or
+ * their content — the single source of truth for block visibility.
+ */
+export async function loadBlockedIds(db: SupabaseClient, viewerId: string | undefined): Promise<Set<string>> {
+  if (!viewerId) return new Set();
+  const [{ data: outgoing }, { data: incoming }] = await Promise.all([
+    db.from('user_blocks').select('blocked_id').eq('blocker_id', viewerId),
+    db.from('user_blocks').select('blocker_id').eq('blocked_id', viewerId),
+  ]);
+  const s = new Set<string>();
+  for (const r of outgoing ?? []) s.add(r.blocked_id as string);
+  for (const r of incoming ?? []) s.add(r.blocker_id as string);
+  return s;
+}
+
+/** Cooks the viewer has muted (one-directional). Applied to the feed only. */
+export async function loadMutedIds(db: SupabaseClient, viewerId: string | undefined): Promise<Set<string>> {
+  if (!viewerId) return new Set();
+  const { data } = await db.from('user_mutes').select('muted_id').eq('muter_id', viewerId);
+  return new Set((data ?? []).map((r) => r.muted_id as string));
+}
+
 export async function buildCards(db: SupabaseClient, viewerId: string | undefined, rows: RecipeRow[]): Promise<RecipeCard[]> {
   if (rows.length === 0) return [];
 
   const cookIds = [...new Set(rows.map((r) => r.cook_id))];
   const videoIds = rows.map((r) => r.video_asset_id).filter((x): x is string => !!x);
 
-  const { data: cooks } = await db.from('profiles').select('*').in('id', cookIds);
+  const [{ data: cooks }, blocked] = await Promise.all([
+    db.from('profiles').select('*').in('id', cookIds),
+    loadBlockedIds(db, viewerId),
+  ]);
   const cookMap = new Map<string, ProfileRow>((cooks ?? []).map((c) => [c.id as string, c as ProfileRow]));
 
   const videoMap = new Map<string, VideoRow>();
@@ -247,6 +274,7 @@ export async function buildCards(db: SupabaseClient, viewerId: string | undefine
   for (const r of rows) {
     const cook = cookMap.get(r.cook_id);
     if (!cook || cook.banned) continue; // banned creators' content is hidden everywhere
+    if (blocked.has(r.cook_id)) continue; // blocked in either direction — hidden everywhere
     // Auto-hidden (pending review) and removed posts are visible only to their owner.
     if ((r.auto_hidden || r.status === 'removed') && r.cook_id !== viewerId) continue;
     cards.push(toCard(r, cook, r.video_asset_id ? videoMap.get(r.video_asset_id) ?? null : null, ctx));

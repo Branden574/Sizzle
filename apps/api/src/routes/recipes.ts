@@ -5,7 +5,7 @@ import { optionalAuth, requireAuth, requireNotBanned } from '../middleware/auth'
 import { supabaseAdmin } from '../lib/supabase';
 import { badRequest, dbFail, forbidden, notFound } from '../lib/errors';
 import { assertUuid } from '../lib/validate';
-import { buildCards, commentDTO, type CommentRow, type ProfileRow, type RecipeRow } from '../mappers';
+import { buildCards, commentDTO, loadBlockedIds, type CommentRow, type ProfileRow, type RecipeRow } from '../mappers';
 import { rateLimit } from '../middleware/rateLimit';
 import { moderateText } from '../services/moderation';
 import { parseHashtags } from '../services/hashtags';
@@ -177,10 +177,22 @@ async function recipeCookId(recipeId: string): Promise<string> {
   return data.cook_id as string;
 }
 
+/**
+ * Resolve a recipe's owner, but 404 if the viewer and owner are in a block
+ * relationship (either direction). Blocks forbid the blocked user from
+ * interacting with the blocker's content (liking, reposting, viewing, etc.).
+ */
+async function recipeCookIdUnblocked(recipeId: string, userId: string): Promise<string> {
+  const cookId = await recipeCookId(recipeId);
+  const blocked = await loadBlockedIds(supabaseAdmin, userId);
+  if (blocked.has(cookId)) throw notFound('Recipe not found');
+  return cookId;
+}
+
 recipes.post('/:id/like', requireAuth, requireNotBanned, async (c) => {
   const id = c.req.param('id');
   const userId = c.get('userId')!;
-  const cookId = await recipeCookId(id);
+  const cookId = await recipeCookIdUnblocked(id, userId);
   const result = await setReaction(id, userId, 'like');
   if (result === 'like') await notify({ userId: cookId, type: 'like', actorId: userId, recipeId: id });
   return reactionResponse(c, id, userId);
@@ -189,7 +201,7 @@ recipes.post('/:id/like', requireAuth, requireNotBanned, async (c) => {
 recipes.post('/:id/dislike', requireAuth, requireNotBanned, async (c) => {
   const id = c.req.param('id');
   const userId = c.get('userId')!;
-  await recipeCookId(id);
+  await recipeCookIdUnblocked(id, userId);
   await setReaction(id, userId, 'dislike');
   return reactionResponse(c, id, userId);
 });
@@ -246,7 +258,7 @@ recipes.post('/:id/view', requireAuth, requireNotBanned, rateLimit({ windowMs: 6
   const userId = c.get('userId')!;
   const body = viewSchema.safeParse(await c.req.json().catch(() => null));
   if (!body.success) throw badRequest('Invalid view payload', body.error.flatten());
-  await recipeCookId(id);
+  await recipeCookIdUnblocked(id, userId);
   await supabaseAdmin.from('recipe_views').insert({
     user_id: userId,
     recipe_id: id,
@@ -303,7 +315,9 @@ recipes.get('/:id/comments', optionalAuth, async (c) => {
     const { data: vp } = await supabaseAdmin.from('profiles').select('role').eq('id', viewerId).maybeSingle();
     viewerIsModerator = vp?.role === 'admin';
   }
-  const canSee = (r: CommentRow) => !r.hidden || viewerIsModerator || r.author_id === viewerId;
+  // Comments from blocked users (either direction) never reach the viewer.
+  const blocked = await loadBlockedIds(supabaseAdmin, viewerId);
+  const canSee = (r: CommentRow) => (!r.hidden || viewerIsModerator || r.author_id === viewerId) && !blocked.has(r.author_id);
   const visible = list.filter(canSee);
 
   // `hidden` only ever reaches a moderator — coerce it off for everyone else so a
@@ -377,6 +391,10 @@ recipes.post('/:id/comments', requireAuth, requireNotBanned, rateLimit({ windowM
   if (!mod.ok) throw badRequest(mod.reason!);
   const cookId = await recipeCookId(id);
 
+  // Can't comment on a post by someone you've blocked or who has blocked you.
+  const blockedFromOwner = await loadBlockedIds(supabaseAdmin, userId);
+  if (blockedFromOwner.has(cookId)) throw notFound('Recipe not found');
+
   // A reply must target a top-level comment on the same recipe.
   let parentId: string | null = null;
   let parentAuthor: string | null = null;
@@ -387,6 +405,8 @@ recipes.post('/:id/comments', requireAuth, requireNotBanned, rateLimit({ windowM
       .eq('id', parsed.data.parentId)
       .maybeSingle();
     if (!parent || parent.recipe_id !== id || parent.parent_id) throw badRequest('Invalid parent comment');
+    // Can't reply to (and notify) someone in a block relationship with you.
+    if (blockedFromOwner.has(parent.author_id as string)) throw badRequest('Invalid parent comment');
     parentId = parent.id as string;
     parentAuthor = parent.author_id as string;
   }
@@ -557,7 +577,7 @@ recipes.post('/:id/repost', requireAuth, requireNotBanned, rateLimit({ windowMs:
     const mod = moderateText(comment);
     if (!mod.ok) throw badRequest(mod.reason!);
   }
-  const cookId = await recipeCookId(id); // 404s / validates id
+  const cookId = await recipeCookIdUnblocked(id, userId); // 404s / validates id / blocks
   // Repost shares OTHER cooks' videos to your followers — you can't repost your own.
   if (cookId === userId) throw badRequest("You can't repost your own video");
 

@@ -4,7 +4,7 @@ import { optionalAuth, requireAuth } from '../middleware/auth';
 import { supabaseAdmin } from '../lib/supabase';
 import { dbFail } from '../lib/errors';
 import { relativeTime } from '../lib/format';
-import { buildCards, type RecipeRow } from '../mappers';
+import { buildCards, loadBlockedIds, loadMutedIds, type RecipeRow } from '../mappers';
 import { rankRecipes, type ViewerSignals } from '../services/ranking';
 import { normalizeTag } from '../services/hashtags';
 import type { AppEnv } from '../types';
@@ -140,7 +140,11 @@ feed.get('/for-you', optionalAuth, async (c) => {
   const userId = c.get('userId');
 
   if (userId && !cursor) {
-    const signals = await loadViewerSignals(userId);
+    const [signals, blocked, muted] = await Promise.all([
+      loadViewerSignals(userId),
+      loadBlockedIds(supabaseAdmin, userId),
+      loadMutedIds(supabaseAdmin, userId),
+    ]);
     const { data, error } = await supabaseAdmin
       .from('recipes')
       .select('*')
@@ -149,7 +153,10 @@ feed.get('/for-you', optionalAuth, async (c) => {
       .limit(CANDIDATES);
     if (error) throw dbFail(error.message);
 
-    const ranked = rankRecipes((data ?? []) as RecipeRow[], signals, Date.now()).slice(0, PAGE);
+    // Drop blocked + muted cooks BEFORE ranking/impressions so they neither
+    // surface nor pollute the viewer's signal history.
+    const candidates = ((data ?? []) as RecipeRow[]).filter((r) => !blocked.has(r.cook_id) && !muted.has(r.cook_id));
+    const ranked = rankRecipes(candidates, signals, Date.now()).slice(0, PAGE);
     if (ranked.length) {
       await supabaseAdmin.from('recipe_impressions').insert(ranked.map((r) => ({ user_id: userId, recipe_id: r.id })));
     }
@@ -169,7 +176,12 @@ feed.get('/for-you', optionalAuth, async (c) => {
   const { data, error } = await q;
   if (error) throw dbFail(error.message);
 
-  const rows = (data ?? []) as RecipeRow[];
+  let rows = (data ?? []) as RecipeRow[];
+  // Authed pagination: drop muted cooks (blocked are dropped by buildCards).
+  if (userId) {
+    const muted = await loadMutedIds(supabaseAdmin, userId);
+    if (muted.size) rows = rows.filter((r) => !muted.has(r.cook_id));
+  }
   const hasMore = rows.length > PAGE;
   const page = rows.slice(0, PAGE);
   const items = await buildCards(supabaseAdmin, userId, page);
@@ -226,7 +238,9 @@ feed.get('/following', requireAuth, async (c) => {
 
   const { data: follows, error: fErr } = await supabaseAdmin.from('follows').select('cook_id').eq('follower_id', userId);
   if (fErr) throw dbFail(fErr.message);
-  const cookIds = (follows ?? []).map((f) => f.cook_id as string);
+  // A muted (or blocked) followed cook drops out of the Following feed too.
+  const [muted, blocked] = await Promise.all([loadMutedIds(supabaseAdmin, userId), loadBlockedIds(supabaseAdmin, userId)]);
+  const cookIds = (follows ?? []).map((f) => f.cook_id as string).filter((id) => !muted.has(id) && !blocked.has(id));
   if (cookIds.length === 0) return c.json<FeedResponse>({ items: [], nextCursor: null });
 
   // Followed cooks' recipes (cursor-paginated).

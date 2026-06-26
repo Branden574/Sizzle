@@ -224,7 +224,7 @@ export interface CookProfile {
     likes: number;
     recipes: number;
   };
-  viewer: { following: boolean };
+  viewer: { following: boolean; blocked: boolean; muted: boolean };
   recipes: RecipeCard[];
 }
 

@@ -6,7 +6,7 @@ import { supabaseAdmin, userClient } from '../lib/supabase';
 import { badRequest, notFound } from '../lib/errors';
 import { assertUuid } from '../lib/validate';
 import { initialsOf, relativeTime } from '../lib/format';
-import { buildCards, cookSummary, profileLinks, type ProfileRow, type RecipeRow } from '../mappers';
+import { buildCards, cookSummary, loadBlockedIds, profileLinks, type ProfileRow, type RecipeRow } from '../mappers';
 import { normalizeLink, PROFILE_LINK_KEYS } from '../services/links';
 import type { AppEnv } from '../types';
 
@@ -318,9 +318,11 @@ me.get('/notifications', async (c) => {
   ]);
   const actorMap = new Map<string, ProfileRow>((actors ?? []).map((a) => [a.id as string, a as ProfileRow]));
   const titleMap = new Map<string, string>(((recipesRes.data ?? []) as { id: string; title: string }[]).map((r) => [r.id, r.title]));
+  // Drop notifications from blocked users (either direction).
+  const blocked = await loadBlockedIds(supabaseAdmin, userId);
 
   const items: NotificationDTO[] = list
-    .filter((n) => actorMap.has(n.actor_id))
+    .filter((n) => actorMap.has(n.actor_id) && !blocked.has(n.actor_id))
     .map((n) => ({
       id: n.id,
       type: n.type,
@@ -332,6 +334,18 @@ me.get('/notifications', async (c) => {
       time: relativeTime(new Date(n.created_at)),
     }));
   return c.json(items);
+});
+
+/** GET /me/blocked — the accounts the viewer has blocked (for the unblock list). */
+me.get('/blocked', async (c) => {
+  const userId = c.get('userId')!;
+  const { data: rows } = await supabaseAdmin.from('user_blocks').select('blocked_id, created_at').eq('blocker_id', userId).order('created_at', { ascending: false });
+  const ids = (rows ?? []).map((r) => r.blocked_id as string);
+  if (ids.length === 0) return c.json([]);
+  const { data: profiles } = await supabaseAdmin.from('profiles').select('*').in('id', ids);
+  const byId = new Map((profiles ?? []).map((p) => [p.id as string, p as ProfileRow]));
+  // Preserve newest-blocked-first order.
+  return c.json(ids.map((id) => byId.get(id)).filter((p): p is ProfileRow => !!p).map((p) => cookSummary(p)));
 });
 
 /** POST /me/notifications/read — mark all as read. */
