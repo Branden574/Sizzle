@@ -28,6 +28,15 @@ const schema = z.object({
   // falls back to the local keyword/link-spam pass only (the app runs fine
   // without it). Get a key at platform.openai.com → API keys.
   OPENAI_API_KEY: z.string().optional(),
+
+  // Error monitoring (Sentry). When unset, capture is a no-op. DSN from
+  // Sentry → project → Settings → Client Keys (DSN).
+  SENTRY_DSN: z.string().optional(),
+
+  // Transactional email (Resend) for ban / removal / restore notices. When
+  // unset, email sending is a safe no-op. Key from resend.com → API Keys.
+  RESEND_API_KEY: z.string().optional(),
+  EMAIL_FROM: z.string().default('Sizzle <noreply@getsizzle.app>'),
 });
 
 const parsed = schema.safeParse(process.env);

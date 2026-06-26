@@ -8,6 +8,7 @@ import { assertUuid } from '../lib/validate';
 import { initialsOf, relativeTime } from '../lib/format';
 import { notify } from '../services/notify';
 import { logModeration } from '../services/audit';
+import { emails, sendEmail, userEmail } from '../services/email';
 import type { ProfileRow } from '../mappers';
 import type { AppEnv } from '../types';
 
@@ -143,7 +144,7 @@ admin.post('/recipes/:id/remove', async (c) => {
   const body = removeSchema.safeParse(await c.req.json().catch(() => ({})));
   const reason = (body.success && body.data.reason) || 'Violated community guidelines';
 
-  const { data: rec } = await supabaseAdmin.from('recipes').select('cook_id, status').eq('id', id).maybeSingle();
+  const { data: rec } = await supabaseAdmin.from('recipes').select('cook_id, status, title').eq('id', id).maybeSingle();
   if (!rec) throw notFound('Recipe not found');
 
   await supabaseAdmin
@@ -156,6 +157,8 @@ admin.post('/recipes/:id/remove', async (c) => {
     .eq('recipe_id', id)
     .eq('status', 'open');
   await notify({ userId: rec.cook_id as string, type: 'removed', actorId: adminId, recipeId: id });
+  const removeTo = await userEmail(rec.cook_id as string);
+  if (removeTo) await sendEmail({ to: removeTo, subject: 'Your Sizzle post was removed', html: emails.removed((rec.title as string) ?? null, reason) });
   await logModeration({ adminId, action: 'remove', targetUserId: rec.cook_id as string, targetRecipeId: id, detail: reason });
   return c.json({ ok: true });
 });
@@ -164,7 +167,7 @@ admin.post('/recipes/:id/remove', async (c) => {
 admin.post('/recipes/:id/restore', async (c) => {
   const id = assertUuid(c.req.param('id'), 'recipe');
   const adminId = c.get('userId')!;
-  const { data: rec } = await supabaseAdmin.from('recipes').select('cook_id').eq('id', id).maybeSingle();
+  const { data: rec } = await supabaseAdmin.from('recipes').select('cook_id, title').eq('id', id).maybeSingle();
   if (!rec) throw notFound('Recipe not found');
 
   await supabaseAdmin
@@ -172,6 +175,8 @@ admin.post('/recipes/:id/restore', async (c) => {
     .update({ status: 'published', removal_reason: null, removed_at: null, auto_hidden: false, appeal_status: 'none', appeal_text: null, appealed_at: null })
     .eq('id', id);
   await notify({ userId: rec.cook_id as string, type: 'restored', actorId: adminId, recipeId: id });
+  const restoreTo = await userEmail(rec.cook_id as string);
+  if (restoreTo) await sendEmail({ to: restoreTo, subject: 'Your Sizzle post was restored', html: emails.restored((rec.title as string) ?? null) });
   await logModeration({ adminId, action: 'restore', targetUserId: rec.cook_id as string, targetRecipeId: id });
   return c.json({ ok: true });
 });
@@ -321,7 +326,10 @@ admin.post('/users/:id/ban', async (c) => {
       })
       .eq('id', id);
     await notify({ userId: id, type: 'banned', actorId: adminId });
-    await logModeration({ adminId, action: 'ban', targetUserId: id, detail: body.data.reason ?? 'Violated community guidelines' });
+    const reason = body.data.reason ?? 'Violated community guidelines';
+    const to = await userEmail(id);
+    if (to) await sendEmail({ to, subject: 'Your Sizzle account was suspended', html: emails.banned(reason, new Date(now + BAN_DELETE_DAYS * 86_400_000).toISOString()) });
+    await logModeration({ adminId, action: 'ban', targetUserId: id, detail: reason });
   } else {
     await supabaseAdmin
       .from('profiles')

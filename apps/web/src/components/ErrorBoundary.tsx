@@ -1,4 +1,5 @@
 import { Component, type ReactNode } from 'react';
+import { captureException } from '../lib/sentry';
 
 interface Props {
   children: ReactNode;
@@ -20,6 +21,7 @@ export class ErrorBoundary extends Component<Props, State> {
   componentDidCatch(error: unknown) {
     // eslint-disable-next-line no-console
     console.warn('[ErrorBoundary] caught', error);
+    captureException(error, { kind: 'react.errorBoundary' });
   }
 
   render() {
