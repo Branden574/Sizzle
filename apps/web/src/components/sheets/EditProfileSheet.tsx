@@ -114,7 +114,7 @@ export function EditProfileSheet() {
     }
     const linkPayload = Object.fromEntries(PROFILE_LINK_KEYS.map((k) => [k, links[k]?.trim() || null]));
     update.mutate(
-      { displayName: name.trim(), handle: handle.trim(), bio: bio.trim(), phone: phone.trim(), avatarUrl, bannerUrl, links: linkPayload },
+      { displayName: name.trim(), handle: handle.trim(), bio: bio.trim().slice(0, 150), phone: phone.trim(), avatarUrl, bannerUrl, links: linkPayload },
       {
         onSuccess: () => close(),
         onError: (e) => {
@@ -199,7 +199,8 @@ export function EditProfileSheet() {
             </div>
             <div>
               <label style={labelStyle}>Bio</label>
-              <textarea value={bio} onChange={(e) => setBio(e.target.value)} rows={3} style={{ ...field, height: 'auto', padding: '12px 16px', resize: 'vertical', lineHeight: 1.5 }} />
+              <textarea value={bio} onChange={(e) => setBio(e.target.value.slice(0, 150))} maxLength={150} rows={3} style={{ ...field, height: 'auto', padding: '12px 16px', resize: 'vertical', lineHeight: 1.5 }} />
+              <div style={{ textAlign: 'right', fontSize: 12, color: bio.length >= 150 ? '#d8521e' : 'rgba(255,255,255,.4)', marginTop: 4 }}>{bio.length}/150</div>
             </div>
 
             {/* Social links */}

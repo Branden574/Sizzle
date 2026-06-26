@@ -358,7 +358,7 @@ me.post('/notifications/read', async (c) => {
 const linkOrNull = z.string().trim().max(300).nullable().optional();
 const patchSchema = z.object({
   displayName: z.string().trim().min(1).max(60).optional(),
-  bio: z.string().max(300).optional(),
+  bio: z.string().max(150).optional(),
   handle: z.string().trim().min(2).max(30).optional(),
   phone: z.string().trim().max(30).optional(),
   avatarUrl: z.string().url().max(1000).nullable().optional(),
@@ -382,11 +382,9 @@ me.patch('/', async (c) => {
   if (body.data.displayName !== undefined) updates.display_name = body.data.displayName;
   if (body.data.bio !== undefined) updates.bio = body.data.bio;
   // Keep the case the user typed (strip @ + invalid chars); uniqueness is enforced
-  // case-insensitively by the lower(handle) unique index. Choosing a handle also
-  // clears the "auto-derived" flag so the pick-a-username step won't show again.
+  // case-insensitively by the lower(handle) unique index.
   if (body.data.handle !== undefined) {
     updates.handle = body.data.handle.replace(/^@/, '').replace(/[^A-Za-z0-9_]/g, '');
-    updates.handle_auto = false;
   }
   if (body.data.phone !== undefined) updates.phone = body.data.phone;
   if (body.data.avatarUrl !== undefined) updates.avatar_url = body.data.avatarUrl;
@@ -405,6 +403,13 @@ me.patch('/', async (c) => {
     if (/duplicate|unique/i.test(error.message)) throw badRequest('That handle is taken');
     console.error('profile update:', error.message);
     throw badRequest('Could not update profile');
+  }
+  // Choosing a handle clears the "auto-derived" flag (so the pick-a-username step
+  // won't reappear). `handle_auto` is intentionally NOT in the user's update grant
+  // (profile column-lock), so clear it with the admin client — doing it in the
+  // user update above would fail with "permission denied for column handle_auto".
+  if (body.data.handle !== undefined) {
+    await supabaseAdmin.from('profiles').update({ handle_auto: false }).eq('id', userId);
   }
   return c.json({ ok: true });
 });
