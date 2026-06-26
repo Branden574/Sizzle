@@ -1,5 +1,5 @@
 import { QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
-import type { AdminAppealDTO, AdminLogDTO, AdminReportGroupDTO, AdminStats, AdminUserDTO, CollectionDTO, CommentDTO, ConversationDTO, CookProfile, CookSummary, CreateRecipeInput, DirectUploadTicket, FeedResponse, MeProfile, MessageDTO, NotificationDTO, RecipeCard, RecipeDetail, ReportInput, SearchResults, SuggestedCook, SupportRequestDTO, ThreadDTO, TrendingTag, VerificationTier } from '@sizzle/shared';
+import type { AdminAppealDTO, AdminLogDTO, AdminReportGroupDTO, AdminStats, AdminUserDTO, CollectionDTO, CommentDTO, ConversationDTO, CookProfile, CookSummary, CreateRecipeInput, DirectUploadTicket, FeedResponse, MeProfile, MessageDTO, NotificationDTO, RecipeCard, RecipeDetail, ReportInput, SearchResults, SuggestedCook, SupportRequestDTO, ThreadDTO, TrendingTag, VerificationTier, VideoAssetStatus, VideoUploadConfig } from '@sizzle/shared';
 import { useAuth } from '../auth/useAuth';
 import { apiGet, apiSend } from '../lib/api';
 import { removeOffline, saveOffline } from '../lib/offline';
@@ -523,16 +523,49 @@ export function useToggleDownload() {
 export type UploadRecipeInput = Omit<CreateRecipeInput, 'videoAssetId'> & {
   /** When the user picked a clip, the storage URL (+ optional poster/duration) it was uploaded to. */
   video?: { uploadedUrl: string; posterUrl?: string; durationSeconds?: number };
+  /** Cloudflare flow: the asset id the client already registered + uploaded to. */
+  videoAssetId?: string;
 };
+
+/** Which upload flow to use (Cloudflare vs Supabase), driven by the API env. */
+export function useVideoConfig() {
+  const authed = useAuth((s) => s.status === 'authed');
+  return useQuery({
+    queryKey: ['video-config'],
+    queryFn: () => apiGet<VideoUploadConfig>('/uploads/config'),
+    enabled: authed,
+    staleTime: Infinity,
+  });
+}
+
+/** Poll a Cloudflare asset until it finishes transcoding (or give up). */
+export async function pollVideoReady(assetId: string, tries = 60, intervalMs = 2000): Promise<boolean> {
+  for (let i = 0; i < tries; i++) {
+    try {
+      const s = await apiGet<VideoAssetStatus>(`/uploads/video/${assetId}/status`);
+      if (s.status === 'ready') return true;
+      if (s.status === 'error') return false;
+    } catch {
+      /* transient — keep polling */
+    }
+    await new Promise((r) => setTimeout(r, intervalMs));
+  }
+  return false; // timed out; the post still carries the asset id and self-heals on load
+}
 
 export function useUploadRecipe() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ video, ...input }: UploadRecipeInput) => {
+    mutationFn: async ({ video, videoAssetId, ...input }: UploadRecipeInput) => {
       // Photo post: images were already uploaded; create the recipe directly.
       if (input.images && input.images.length) {
         return apiSend<RecipeDetail>('POST', '/recipes', input);
       }
+      // Cloudflare flow: the client already registered + uploaded the clip.
+      if (videoAssetId) {
+        return apiSend<RecipeDetail>('POST', '/recipes', { ...input, videoAssetId });
+      }
+      // Supabase flow: register the already-uploaded storage URL.
       const ticket = await apiSend<DirectUploadTicket>('POST', '/uploads/video', video ?? undefined);
       return apiSend<RecipeDetail>('POST', '/recipes', { ...input, videoAssetId: ticket.videoAssetId });
     },

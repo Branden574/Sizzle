@@ -1,11 +1,12 @@
 import { useRef, useState, type CSSProperties } from 'react';
-import { MAX_DURATION_SECONDS, MAX_UPLOAD_BYTES, type PostType } from '@sizzle/shared';
+import { MAX_DURATION_SECONDS, MAX_UPLOAD_BYTES, type DirectUploadTicket, type PostType } from '@sizzle/shared';
 import { useAuth } from '../../auth/useAuth';
 import { useRequireAuth } from '../../auth/useRequireAuth';
-import { useUploadRecipe, type UploadRecipeInput } from '../../data/queries';
+import { pollVideoReady, useUploadRecipe, useVideoConfig, type UploadRecipeInput } from '../../data/queries';
+import { apiSend } from '../../lib/api';
 import { useSizzle } from '../../store';
 import { theme } from '../../theme';
-import { probeVideo, uploadPoster, uploadRecipeImage, uploadVideo } from '../../lib/storage';
+import { probeVideo, uploadPoster, uploadRecipeImage, uploadToCloudflare, uploadVideo } from '../../lib/storage';
 import { CameraRecorder } from '../CameraRecorder';
 import { CameraIcon } from '../icons';
 
@@ -30,7 +31,9 @@ export function UploadSheet() {
   const setFeed = useSizzle((s) => s.setFeed);
   const requireAuth = useRequireAuth();
   const upload = useUploadRecipe();
+  const { data: videoConfig } = useVideoConfig();
   const user = useAuth((s) => s.user);
+  const [processing, setProcessing] = useState(false);
 
   const [postType, setPostType] = useState<PostType>('recipe');
   const [rating, setRating] = useState(0);
@@ -103,6 +106,7 @@ export function UploadSheet() {
     if (!canPost) return;
 
     let video: UploadRecipeInput['video'];
+    let videoAssetId: string | undefined;
     let images: string[] | undefined;
     if (mediaKind === 'video' && videoFile && user) {
       try {
@@ -116,12 +120,25 @@ export function UploadSheet() {
           setVideoErr(`Videos can be up to ${Math.round(MAX_DURATION_SECONDS / 60)} minutes long.`);
           return;
         }
-        const uploadedUrl = await uploadVideo(user.id, videoFile, setProgress);
-        let posterUrl: string | undefined;
-        if (probe.poster) posterUrl = await uploadPoster(user.id, probe.poster).catch(() => undefined);
-        video = { uploadedUrl, posterUrl, durationSeconds: probe.durationSeconds ?? undefined };
+        if (videoConfig?.provider === 'cloudflare') {
+          // Register first → upload the clip to Cloudflare → wait for transcoding.
+          // Cloudflare auto-generates the thumbnail, so no client poster upload.
+          const ticket = await apiSend<DirectUploadTicket>('POST', '/uploads/video', {});
+          await uploadToCloudflare(ticket.uploadUrl, videoFile, setProgress);
+          setProgress(100);
+          setProcessing(true);
+          await pollVideoReady(ticket.videoAssetId); // best-effort; posts even if it times out
+          setProcessing(false);
+          videoAssetId = ticket.videoAssetId;
+        } else {
+          const uploadedUrl = await uploadVideo(user.id, videoFile, setProgress);
+          let posterUrl: string | undefined;
+          if (probe.poster) posterUrl = await uploadPoster(user.id, probe.poster).catch(() => undefined);
+          video = { uploadedUrl, posterUrl, durationSeconds: probe.durationSeconds ?? undefined };
+        }
       } catch {
         setPrepping(false);
+        setProcessing(false);
         setVideoErr("Couldn't upload the video — please try again.");
         return;
       }
@@ -159,6 +176,7 @@ export function UploadSheet() {
         postType,
         rating: isReview && rating > 0 ? rating : undefined,
         video,
+        videoAssetId,
         images,
       },
       {
@@ -368,7 +386,7 @@ export function UploadSheet() {
         {prepping && (
           <div style={{ marginBottom: 14 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 7 }}>
-              <span style={{ color: 'rgba(255,255,255,.85)', fontSize: 13.5, fontWeight: 700 }}>{progress >= 100 ? 'Finishing up…' : 'Uploading your video…'}</span>
+              <span style={{ color: 'rgba(255,255,255,.85)', fontSize: 13.5, fontWeight: 700 }}>{processing ? 'Processing video…' : progress >= 100 ? 'Finishing up…' : 'Uploading your video…'}</span>
               <span style={{ color: '#fff', fontSize: 14, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{progress}%</span>
             </div>
             <div style={{ height: 8, borderRadius: 5, background: 'rgba(255,255,255,.14)', overflow: 'hidden' }}>

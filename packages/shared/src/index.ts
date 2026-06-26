@@ -438,6 +438,20 @@ export interface DirectUploadTicket {
   provider: string;
 }
 
+/** Which upload flow the client should use (driven by the API's VIDEO_PROVIDER). */
+export interface VideoUploadConfig {
+  /** 'cloudflare' → register-first + upload to the ticket; 'storage' → upload to Supabase. */
+  provider: 'cloudflare' | 'storage';
+}
+
+/** A provider asset's processing status (polled after a Cloudflare upload). */
+export interface VideoAssetStatus {
+  status: 'pending' | 'uploading' | 'processing' | 'ready' | 'error';
+  hlsUrl: string | null;
+  posterUrl: string | null;
+  mp4Url: string | null;
+}
+
 export interface ApiErrorBody {
   error: {
     code: string;

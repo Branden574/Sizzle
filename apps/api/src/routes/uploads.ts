@@ -1,10 +1,11 @@
 import { createHmac, timingSafeEqual } from 'node:crypto';
 import { Hono } from 'hono';
 import { z } from 'zod';
-import type { DirectUploadTicket } from '@sizzle/shared';
+import type { DirectUploadTicket, VideoAssetStatus, VideoUploadConfig } from '@sizzle/shared';
 import { requireAuth } from '../middleware/auth';
 import { supabaseAdmin } from '../lib/supabase';
-import { badRequest, dbFail } from '../lib/errors';
+import { badRequest, dbFail, notFound } from '../lib/errors';
+import { assertUuid } from '../lib/validate';
 import { cloudflareConfigured, env } from '../env';
 import { getStreamProvider } from '../services/stream';
 import { rateLimit } from '../middleware/rateLimit';
@@ -113,4 +114,45 @@ uploads.post('/webhook/cloudflare-stream', async (c) => {
     .update({ status: a.status, hls_url: a.hlsUrl, poster_url: a.posterUrl, duration_seconds: a.duration })
     .eq('provider_uid', uid);
   return c.json({ ok: true });
+});
+
+/**
+ * GET /uploads/config — tells the client which upload flow to use: 'cloudflare'
+ * (register-first, upload to the provider ticket) or 'storage' (upload to
+ * Supabase, then register). Driven by the API's VIDEO_PROVIDER env.
+ */
+uploads.get('/config', requireAuth, (c) => {
+  return c.json<VideoUploadConfig>({ provider: cloudflareConfigured ? 'cloudflare' : 'storage' });
+});
+
+/**
+ * GET /uploads/video/:id/status — refresh + return a provider asset's processing
+ * status. The client polls this after a Cloudflare upload until it's `ready`
+ * (we skip webhooks, so this poll is the readiness signal).
+ */
+uploads.get('/video/:id/status', requireAuth, async (c) => {
+  const id = assertUuid(c.req.param('id'), 'asset');
+  const userId = c.get('userId')!;
+  const { data: asset } = await supabaseAdmin
+    .from('video_assets')
+    .select('owner_id, provider_uid, status, hls_url, mp4_url, poster_url')
+    .eq('id', id)
+    .maybeSingle();
+  if (!asset || asset.owner_id !== userId) throw notFound('Video not found');
+
+  let status = asset.status as VideoAssetStatus['status'];
+  let hlsUrl = asset.hls_url as string | null;
+  let posterUrl = asset.poster_url as string | null;
+  // Still processing → ask the provider for the latest and persist it.
+  if (asset.provider_uid && status !== 'ready' && status !== 'error') {
+    const a = await getStreamProvider().getAsset(asset.provider_uid as string);
+    status = a.status;
+    hlsUrl = a.hlsUrl;
+    posterUrl = a.posterUrl;
+    await supabaseAdmin
+      .from('video_assets')
+      .update({ status: a.status, hls_url: a.hlsUrl, poster_url: a.posterUrl, duration_seconds: a.duration })
+      .eq('id', id);
+  }
+  return c.json<VideoAssetStatus>({ status, hlsUrl, posterUrl, mp4Url: asset.mp4_url as string | null });
 });

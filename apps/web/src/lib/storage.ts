@@ -17,6 +17,26 @@ function xhrPut(url: string, file: File, onProgress?: (pct: number) => void): Pr
   });
 }
 
+/**
+ * Upload a clip to a Cloudflare Stream one-time direct-upload URL. Cloudflare's
+ * basic creator upload takes a multipart POST with a `file` field (good for
+ * clips up to ~200MB; tus/resumable is a future add for larger files).
+ */
+export function uploadToCloudflare(uploadUrl: string, file: File, onProgress?: (pct: number) => void): Promise<void> {
+  return new Promise((resolve, reject) => {
+    const form = new FormData();
+    form.append('file', file);
+    const xhr = new XMLHttpRequest();
+    xhr.open('POST', uploadUrl);
+    xhr.upload.onprogress = (e) => {
+      if (e.lengthComputable) onProgress?.(Math.min(99, Math.round((e.loaded / e.total) * 100)));
+    };
+    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`upload failed (${xhr.status})`)));
+    xhr.onerror = () => reject(new Error('upload network error'));
+    xhr.send(form);
+  });
+}
+
 /** Upload a profile image to a user-scoped path and return its public URL. */
 export async function uploadProfileImage(bucket: 'avatars' | 'banners', userId: string, file: File): Promise<string> {
   const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '');
