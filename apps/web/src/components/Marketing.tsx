@@ -1,9 +1,18 @@
-import { useEffect, useRef, useState } from 'react';
+import { useRef, useState } from 'react';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { useGSAP } from '@gsap/react';
 
 gsap.registerPlugin(ScrollTrigger, useGSAP);
+
+/** "The Menu" — playful FAQ accordion (cerealbnb-style, Sizzle voice). */
+const FAQS = [
+  { q: 'Is Sizzle actually free?', a: 'Completely. No ads, no subscription, no catch. We make money later — never off your data.' },
+  { q: 'Do recipes really scale themselves?', a: 'Tap your serving count and every ingredient redoes the math on the spot. Cooking for 2 or for 12, the amounts are always right.' },
+  { q: 'No ads — for real?', a: 'For real. Your feed feeds you, not advertisers. Zero ads, zero third-party tracking, ever.' },
+  { q: 'Can I post my own recipes?', a: 'Record a clip, drop in the recipe, hit post. Creators keep their videos, their followers, and all the credit.' },
+  { q: 'Where are the ten-paragraph life stories?', a: 'Nowhere to be found. You came for the recipe, so you get the recipe — clean, scaled, and ready for the stove.' },
+];
 
 /**
  * The Sizzle marketing website (the web "front door") — a faithful build of the
@@ -17,45 +26,51 @@ gsap.registerPlugin(ScrollTrigger, useGSAP);
 export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void; onLogin: () => void }) {
   const root = useRef<HTMLDivElement>(null);
   const [servings, setServings] = useState(2);
+  const [openFaq, setOpenFaq] = useState<number | null>(0);
 
   // Pinned 3D process deck — desktop + motion only; useGSAP auto-cleans up.
   useGSAP(
     () => {
-      if (!window.matchMedia('(min-width: 901px)').matches) return;
       if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-      const proc = root.current!.querySelector('.process');
-      if (!proc) return;
-      proc.classList.add('is3d');
-      const cards = gsap.utils.toArray<HTMLElement>('.step-card', root.current!);
-      const FROM = { opacity: 0, z: -560, rotateX: -26, y: 170, scale: 0.86, filter: 'blur(6px)' };
-      const ACTIVE = { opacity: 1, z: 0, rotateX: 0, y: 0, scale: 1, filter: 'blur(0px)' };
-      const OUT = { opacity: 0, z: 260, rotateX: 16, y: -140, scale: 1.12, filter: 'blur(8px)' };
-      cards.forEach((c, i) => {
-        gsap.set(c, { transformOrigin: '50% 50%', zIndex: i + 1 });
-        gsap.set(c, i === 0 ? ACTIVE : FROM);
-      });
-      const tl = gsap.timeline({
-        scrollTrigger: {
-          trigger: '.stage',
-          start: 'top top',
-          end: '+=' + cards.length * window.innerHeight,
-          pin: '.stage',
-          scrub: 0.7,
-          anticipatePin: 1,
-        },
-      });
-      for (let i = 0; i < cards.length - 1; i++) {
-        const lbl = 's' + i;
-        tl.addLabel(lbl, i)
-          .to(cards[i], { ...OUT, ease: 'power2.inOut', duration: 0.9 }, lbl)
-          .fromTo(cards[i + 1], FROM, { ...ACTIVE, ease: 'power2.out', duration: 0.9 }, lbl + '+=0.1');
+      const wide = window.matchMedia('(min-width: 901px)').matches;
+      const canScrub = window.matchMedia('(min-width: 760px)').matches;
+
+      // Pinned 3D process deck — wide desktop only (the heaviest effect).
+      const proc = wide ? root.current!.querySelector('.process') : null;
+      if (proc) {
+        proc.classList.add('is3d');
+        const cards = gsap.utils.toArray<HTMLElement>('.step-card', root.current!);
+        const FROM = { opacity: 0, z: -560, rotateX: -26, y: 170, scale: 0.86, filter: 'blur(6px)' };
+        const ACTIVE = { opacity: 1, z: 0, rotateX: 0, y: 0, scale: 1, filter: 'blur(0px)' };
+        const OUT = { opacity: 0, z: 260, rotateX: 16, y: -140, scale: 1.12, filter: 'blur(8px)' };
+        cards.forEach((c, i) => {
+          gsap.set(c, { transformOrigin: '50% 50%', zIndex: i + 1 });
+          gsap.set(c, i === 0 ? ACTIVE : FROM);
+        });
+        const tl = gsap.timeline({
+          scrollTrigger: {
+            trigger: '.stage',
+            start: 'top top',
+            end: '+=' + cards.length * window.innerHeight,
+            pin: '.stage',
+            scrub: 0.7,
+            anticipatePin: 1,
+          },
+        });
+        for (let i = 0; i < cards.length - 1; i++) {
+          const lbl = 's' + i;
+          tl.addLabel(lbl, i)
+            .to(cards[i], { ...OUT, ease: 'power2.inOut', duration: 0.9 }, lbl)
+            .fromTo(cards[i + 1], FROM, { ...ACTIVE, ease: 'power2.out', duration: 0.9 }, lbl + '+=0.1');
+        }
       }
 
       // Cinematic "feed to plate" clip: pin the section and scrub the video's
-      // playhead from scroll progress (Apple-style scrollytelling).
+      // playhead from scroll progress (Apple-style scrollytelling). Runs on
+      // tablet+/laptop; true-mobile keeps the autoplay-loop fallback.
       const cine = root.current!.querySelector<HTMLElement>('.cinema');
       const vid = root.current!.querySelector<HTMLVideoElement>('.cinema video');
-      if (cine && vid) {
+      if (canScrub && cine && vid) {
         vid.pause();
         vid.removeAttribute('loop');
         vid.removeAttribute('autoplay');
@@ -66,7 +81,8 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
         ScrollTrigger.create({
           trigger: cine,
           start: 'top top',
-          end: '+=' + window.innerHeight * 2.2,
+          // ~29s clip → pin for ~4 screen-heights so the scrub paces comfortably.
+          end: '+=' + window.innerHeight * 4,
           pin: true,
           // Tight scrub — the all-intra re-encode makes every frame seek
           // instantly, so we don't need much lerp (which itself reads as lag).
@@ -100,15 +116,10 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
   const k = servings / 2;
   const app = () => onGetStarted();
 
-  // Lazy-register the <model-viewer> custom element only on the landing, so it
-  // never weighs down the main app bundle.
-  useEffect(() => {
-    void import('@google/model-viewer');
-  }, []);
-
   return (
     <div className="szl" ref={root}>
       <style>{CSS}</style>
+      <div className="grain" aria-hidden="true" />
 
       {/* NAV */}
       <nav className="nav">
@@ -133,8 +144,8 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
       <section className="cinema" aria-label="From feed to plate">
         <video
           className="cinemavid"
-          src="/landing/feed-to-plate.mp4"
-          poster="/landing/feed-to-plate-poster.jpg"
+          src="/landing/feed-to-plate-3d.mp4"
+          poster="/landing/feed-to-plate-3d-poster.jpg"
           muted
           playsInline
           autoPlay
@@ -144,7 +155,7 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
         <div className="cinemaveil" />
         <div className="cinemacap wrap">
           <span className="eyebrow">From feed to plate</span>
-          <h2 className="serif">Scroll the feed.<br /><span className="grad ital">Watch it come to life.</span></h2>
+          <h2 className="serif">Scroll the feed.<br /><span className="hot ital">Watch it come to life.</span></h2>
         </div>
       </section>
 
@@ -152,20 +163,19 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
       <header className="hero" id="top">
         <div className="wrap grid">
           <div>
-            <span className="pill"><span className="dot" /> TikTok for recipes</span>
-            <h1 className="serif">Watch it.<br />Scale it.<br /><span className="grad ital">Cook it.</span></h1>
-            <p className="sub">A full-screen video feed of real recipes from real home cooks. Swipe to discover, tap once for a clean, scalable recipe, and cook along — no ten-paragraph life stories, no ads, no tracking.</p>
+            <span className="ticket"><span className="tdot" /> Live feed — <b>12,408 recipes</b> · 0 ads</span>
+            <h1 className="serif">Watch it.<br />Then <span className="hot ital">actually</span><br />cook&nbsp;it.</h1>
+            <p className="sub">Full-screen video recipes from real home cooks. Tap once and the clip becomes a clean recipe — already scaled to your servings and built for the stove. No ten-paragraph life stories. No ads. No tracking.</p>
             <div className="ctas">
               <button className="store" onClick={app}><span className="ico"></span><span><span className="l1">Download on the</span><br /><span className="l2">App Store</span></span></button>
               <button className="store" onClick={app}><span className="ico">▶</span><span><span className="l1">Get it on</span><br /><span className="l2">Google Play</span></span></button>
             </div>
             <button className="weblink linkbtn" onClick={app}>Or open the web app <span className="arr">→</span></button>
-            <div className="trust"><span><span className="d" />No ads</span><span><span className="d" />No tracking</span><span><span className="d" />13+</span></div>
+            <div className="madewith"><span className="ml">Made with</span> real home cooks · zero ads · no tracking · <em>just food</em></div>
           </div>
           <div className="phone-stage">
             <div className="phone"><div className="screen">
               <div className="feedbg" />
-              <div className="pstatus"><span>9:41</span><span>●  ▮▮▮  ▰</span></div>
               <div className="ftabs"><span>Following</span><span className="on">For You</span></div>
               <div className="play"><svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z" /></svg></div>
               <div className="rail">
@@ -176,7 +186,7 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
               </div>
               <div className="caption">
                 <div className="who">Mina Park <span>@minapark</span></div>
-                <span className="chip">JAPANESE · 25 MIN</span>
+                <span className="chip">JAPANESE · 25:00 · ●●●○</span>
                 <div className="title">Charred Miso<br />Eggplant</div>
               </div>
               <div className="progress" />
@@ -203,7 +213,7 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
             <div className="step-num">01</div>
             <div className="step-inner">
               <div>
-                <div className="step-lab">Step 01</div>
+                <div className="step-lab">The crave</div>
                 <h3>Discover the dish.</h3>
                 <p>Swipe a full-screen feed tuned to your taste — a personalized For You and a Following feed of real home cooks. No blogs, no clutter.</p>
               </div>
@@ -225,7 +235,7 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
             <div className="step-num">02</div>
             <div className="step-inner">
               <div>
-                <div className="step-lab">Step 02</div>
+                <div className="step-lab">The tap</div>
                 <h3>Open the recipe.</h3>
                 <p>One tap turns any video into a clean, structured recipe — ingredients with quantities, numbered steps, cuisine, time and difficulty.</p>
               </div>
@@ -249,7 +259,7 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
             <div className="step-num">03</div>
             <div className="step-inner">
               <div>
-                <div className="step-lab">Step 03</div>
+                <div className="step-lab">The math</div>
                 <h3>Scale it to any table.</h3>
                 <p>Type how many you're feeding and every quantity recalculates instantly. Push the whole list — already scaled — to your shopping list.</p>
               </div>
@@ -271,7 +281,7 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
             <div className="step-num">04</div>
             <div className="step-inner">
               <div>
-                <div className="step-lab">Step 04</div>
+                <div className="step-lab">The cook</div>
                 <h3>Then cook it.</h3>
                 <p>A big step-by-step Cook Mode with built-in timers that keeps your screen awake — so you can cook along hands-free, start to plate.</p>
               </div>
@@ -287,33 +297,16 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
         </div></div>
       </section>
 
-      {/* 3D DISH — real generated GLB (Higgsfield image_to_3d), drag to rotate */}
-      <section className="sec d3" id="dish"><div className="wrap d3grid">
-        <div>
-          <span className="eyebrow">See it from every angle</span>
-          <h2 className="serif">A real dish,<br /><span className="grad ital">in your hands.</span></h2>
-          <p className="sub">Every recipe on Sizzle is a real plate of food. Grab it, give it a spin, get hungry — then swipe to cook it yourself.</p>
-          <button className="btn btn-accent cta" onClick={app}>Start cooking</button>
-        </div>
-        <div className="d3stage">
-          <model-viewer
-            src="/landing/dish.glb"
-            poster="/landing/dish3d-poster.jpg"
-            alt="A 3D plated dish you can rotate"
-            camera-controls
-            auto-rotate
-            rotation-per-second="22deg"
-            interaction-prompt="none"
-            disable-zoom
-            exposure="1.05"
-            shadow-intensity="1.1"
-            environment-image="neutral"
-            camera-orbit="20deg 72deg 2.5m"
-            min-camera-orbit="auto 40deg auto"
-            max-camera-orbit="auto 95deg auto"
-            touch-action="pan-y"
-            style={{ width: '100%', height: '100%', backgroundColor: 'transparent' }}
-          />
+
+      {/* MANIFESTO + STATS */}
+      <section className="manifesto"><div className="wrap">
+        <span className="eyebrow">Why we built it</span>
+        <h2 className="serif">The feed got so good at <span className="hot ital">keeping you scrolling</span> it forgot to feed you. So we built one that does.</h2>
+        <div className="stats">
+          <div className="stat"><div className="n">12,408</div><div className="l">recipes &amp; counting</div></div>
+          <div className="stat"><div className="n">0</div><div className="l">ads, ever</div></div>
+          <div className="stat"><div className="n">22<span>min</span></div><div className="l">average cook</div></div>
+          <div className="stat"><div className="n">100<span>%</span></div><div className="l">real home cooks</div></div>
         </div>
       </div></section>
 
@@ -373,9 +366,26 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
 
       {/* TRUST */}
       <section className="trust-sec"><div className="wrap">
-        <h2 className="serif">No ads. No tracking.<br /><span className="grad ital">Just good food.</span></h2>
+        <h2 className="serif">No ads. No tracking.<br /><span className="hot ital">Just good food.</span></h2>
         <p>Privacy-first by design — no third-party tracking, ever. Built for everyone 13 and up.</p>
         <div className="trust-links"><a href="/privacy">Privacy Policy</a><span className="sep">·</span><a href="/terms">Terms of Service</a><span className="sep">·</span><a href="/cookie-policy">Cookie Policy</a></div>
+      </div></section>
+
+      {/* THE MENU — FAQ accordion */}
+      <section className="menu-sec" id="menu"><div className="wrap">
+        <span className="eyebrow">The menu</span>
+        <h2 className="serif">Questions, <span className="hot ital">answered.</span></h2>
+        <div className="menu-list">
+          {FAQS.map((f, i) => (
+            <div key={i} className={'faq' + (openFaq === i ? ' open' : '')}>
+              <button onClick={() => setOpenFaq(openFaq === i ? null : i)} aria-expanded={openFaq === i}>
+                <span className="q">{f.q}</span>
+                <span className="pm">+</span>
+              </button>
+              <div className="a"><p>{f.a}</p></div>
+            </div>
+          ))}
+        </div>
       </div></section>
 
       {/* FINAL CTA */}
@@ -390,31 +400,59 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
         <button className="weblink linkbtn" onClick={app}>Or open the web app <span className="arr">→</span></button>
       </div></div></section>
 
-      {/* FOOTER */}
-      <footer className="foot-wrap"><div className="wrap foot">
-        <div className="brand-col">
-          <div className="brand serif">Sizzle</div>
-          <p className="tag">Watch it. Scale it. Cook it. The home for real recipes from real cooks — at getsizzle.app.</p>
+      {/* FOOTER — Nutrition Facts label */}
+      <footer className="nutri-foot"><div className="wrap nwrap">
+        <div className="nutri-label">
+          <div className="nl-title">Nutrition Facts</div>
+          <div className="nl-sub">1 serving per kitchen · Serving size: 1 hungry human</div>
+          <div className="nl-amt">Amount per scroll</div>
+          <div className="nl-cal"><span>Calories</span><span>∞</span></div>
+          <div className="nl-dv">% Sizzle Value*</div>
+          <div className="nl-row"><b>Real home cooks</b><span>100%</span></div>
+          <div className="nl-row"><b>Flavor</b><span>200%</span></div>
+          <div className="nl-row sub"><span>Recipes that actually slap</span><span>✓</span></div>
+          <div className="nl-row"><b>Ads</b><span>0%</span></div>
+          <div className="nl-row"><b>Tracking</b><span>0%</span></div>
+          <div className="nl-row thickb"><b>Ten-paragraph life stories</b><span>0%</span></div>
+          <div className="nl-note">* Percent Sizzle Values are based on a daily diet of zero ads and 100% real food. Your mileage may vary by appetite.</div>
         </div>
-        <div className="fcol"><h6>Product</h6><a href="#how">How it works</a><a href="#features">Features</a><a href="#creators">For creators</a><button className="linkbtn fl" onClick={app}>Get the app</button></div>
-        <div className="fcol"><h6>Legal</h6><a href="/privacy">Privacy Policy</a><a href="/terms">Terms of Service</a><a href="/cookie-policy">Cookie Policy</a><a href="/contact">Contact</a></div>
+        <div className="nutri-links">
+          <div className="brand serif">Sizzle</div>
+          <p className="tag">Watch it. Then actually cook it. The home for real recipes from real home cooks — at getsizzle.app.</p>
+          <div className="nutri-cols">
+            <div><h6>Product</h6><a href="#how">How it works</a><a href="#features">Features</a><a href="#creators">For creators</a><button className="fl" onClick={app}>Get the app</button></div>
+            <div><h6>The menu</h6><a href="#menu">FAQ</a><a href="/contact">Contact</a><button className="fl" onClick={onLogin}>Log in</button></div>
+            <div><h6>Legal</h6><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/cookie-policy">Cookies</a></div>
+          </div>
+        </div>
       </div>
-      <div className="foot-base wrap"><span>© 2026 Sizzle. All rights reserved.</span><span>No ads · No tracking · 13+</span></div>
+      <div className="wrap nutri-base"><span>© 2026 Sizzle · made with real home cooks</span><span>NO ADS · NO TRACKING · 13+</span></div>
       </footer>
     </div>
   );
 }
 
 const CSS = `
-.szl{--bg:#0e0b09;--bg2:#16100c;--accent:#ff5a36;--saffron:#f4a52c;--on:#f4ece5;--soft:#c3b3a6;--faint:#8b7a6c;--line:rgba(255,255,255,.10);--serif:'Instrument Serif',Georgia,serif;--sans:'Hanken Grotesk',-apple-system,sans-serif;background:var(--bg);color:var(--on);font-family:var(--sans);overflow-x:hidden}
+.szl{--bg:#0f0b08;--bg2:#17110c;--accent:#ff5a36;--saffron:#f4a52c;--herb:#9bbd6e;--on:#f6ede2;--soft:#c3b3a6;--faint:#8b7a6c;--line:rgba(255,255,255,.10);--serif:'Fraunces',Georgia,serif;--sans:'Hanken Grotesk',-apple-system,sans-serif;--mono:'Spline Sans Mono',ui-monospace,monospace;background:var(--bg);color:var(--on);font-family:var(--sans);overflow-x:hidden}
+.szl .grain{position:fixed;inset:0;z-index:80;pointer-events:none;opacity:.05;mix-blend-mode:overlay;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
 .szl *{margin:0;padding:0;box-sizing:border-box}
 .szl a{color:inherit;text-decoration:none}
 .szl .linkbtn{background:none;border:none;color:inherit;font-family:inherit;cursor:pointer}
 .szl .wrap{max-width:1180px;margin:0 auto;padding:0 24px}
-.szl .serif{font-family:var(--serif);font-weight:400;line-height:1.02;letter-spacing:-.01em}
+.szl .serif{font-family:var(--serif);font-weight:480;line-height:1.0;letter-spacing:-.018em;font-optical-sizing:auto}
 .szl .ital{font-style:italic}
 .szl .grad{background:linear-gradient(105deg,var(--accent),var(--saffron));-webkit-background-clip:text;background-clip:text;color:transparent}
-.szl .eyebrow{font-size:12px;font-weight:700;letter-spacing:.18em;text-transform:uppercase;color:var(--accent)}
+/* Emphasis: a solid warm word, no clipped-gradient cliché. */
+.szl .hot{color:var(--saffron)}
+/* Eyebrows + status read like a kitchen order ticket: mono, spaced, an ember tick. */
+.szl .eyebrow{font-family:var(--mono);font-size:12px;font-weight:500;letter-spacing:.16em;text-transform:uppercase;color:var(--saffron)}
+.szl .ticket{display:inline-flex;align-items:center;gap:9px;font-family:var(--mono);font-size:12.5px;font-weight:500;letter-spacing:.08em;text-transform:uppercase;color:var(--soft)}
+.szl .ticket .tdot{width:7px;height:7px;border-radius:50%;background:var(--accent);box-shadow:0 0 12px var(--accent)}
+.szl .ticket b{color:var(--on);font-weight:600}
+/* "Ingredient label" — replaces the generic trust-badge dots. */
+.szl .madewith{display:flex;align-items:baseline;flex-wrap:wrap;gap:10px 12px;margin-top:26px;font-family:var(--mono);font-size:12.5px;letter-spacing:.04em;color:var(--faint)}
+.szl .madewith .ml{color:var(--saffron);font-weight:600;letter-spacing:.14em;text-transform:uppercase}
+.szl .madewith em{font-style:normal;color:var(--herb)}
 .szl .btn{display:inline-flex;align-items:center;gap:10px;height:52px;padding:0 22px;border-radius:14px;font-weight:700;font-size:15px;cursor:pointer;border:none;transition:transform .15s}
 .szl .btn:hover{transform:translateY(-2px)}
 .szl .btn-accent{background:linear-gradient(180deg,#ff6a44,#ed4f2c);color:#fff;box-shadow:0 8px 24px rgba(237,79,44,.35)}
@@ -476,7 +514,7 @@ const CSS = `
 .szl .caption{position:absolute;left:16px;right:70px;bottom:74px;z-index:4}
 .szl .caption .who{font-size:13.5px;font-weight:700;color:#fff}
 .szl .caption .who span{color:rgba(255,255,255,.6);font-weight:500}
-.szl .chip{display:inline-block;margin:8px 0 6px;padding:4px 9px;border-radius:7px;background:rgba(255,255,255,.16);font-size:10.5px;font-weight:700;letter-spacing:.05em;color:#fff}
+.szl .chip{display:inline-block;margin:8px 0 6px;padding:4px 9px;border-radius:7px;background:rgba(255,255,255,.14);font-family:var(--mono);font-size:10px;font-weight:500;letter-spacing:.04em;color:#fff}
 .szl .caption .title{font-family:var(--serif);font-size:22px;color:#fff;line-height:1.05}
 .szl .viewrec{position:absolute;left:14px;right:14px;bottom:18px;height:44px;border-radius:13px;background:rgba(255,255,255,.95);color:#1a1209;display:flex;align-items:center;justify-content:center;gap:8px;font-weight:700;font-size:13.5px;z-index:4}
 .szl .progress{position:absolute;left:16px;right:16px;bottom:66px;height:3px;border-radius:3px;background:rgba(255,255,255,.25);z-index:4}
@@ -505,9 +543,9 @@ const CSS = `
 .szl .step-card.dark{background:radial-gradient(120% 120% at 88% 0%,#23150d,#140d09);color:var(--on)}
 .szl .step-card.cream{background:linear-gradient(180deg,#f7ede2,#efe2d3);color:#2a211b;border-color:rgba(0,0,0,.10)}
 .szl .step-inner{display:grid;grid-template-columns:1fr 300px;gap:36px;align-items:center;position:relative;z-index:2}
-.szl .step-num{position:absolute;top:18px;right:34px;font-family:var(--serif);font-size:160px;line-height:1;opacity:.10;z-index:1}
-.szl .step-card.cream .step-num{color:var(--accent);opacity:.16}
-.szl .step-lab{font-size:12px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;color:var(--accent)}
+.szl .step-num{position:absolute;top:24px;right:30px;font-family:var(--mono);font-size:13px;font-weight:500;letter-spacing:.12em;color:var(--saffron);z-index:2}
+.szl .step-card.cream .step-num{color:#c2410c}
+.szl .step-lab{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--saffron)}
 .szl .step-card h3{font-family:var(--serif);font-size:clamp(30px,4vw,46px);margin:12px 0 16px;line-height:1.02}
 .szl .step-card p{font-size:16px;line-height:1.6;max-width:420px}
 .szl .step-card.dark p{color:var(--soft)}
@@ -518,7 +556,7 @@ const CSS = `
 .szl .process.is3d .stage{position:relative;height:100vh;display:grid;place-items:center;perspective:1400px}
 .szl .process.is3d .step-card{grid-area:1/1;align-self:center;justify-self:center;width:min(1020px,92vw);max-height:86vh;margin:0;transform-style:preserve-3d;backface-visibility:hidden;will-change:transform,opacity,filter;box-shadow:0 50px 110px rgba(0,0,0,.6)}
 }
-@media(max-width:900px){.szl .step-inner{grid-template-columns:1fr;gap:24px}.szl .step-card{padding:30px}.szl .step-num{font-size:96px;top:10px;right:18px}.szl .step-card .phone-stage{transform:scale(.82);justify-self:center}}
+@media(max-width:900px){.szl .step-inner{grid-template-columns:1fr;gap:24px}.szl .step-card{padding:30px}.szl .step-num{top:18px;right:18px}.szl .step-card .phone-stage{transform:scale(.82);justify-self:center}}
 .szl .scr{position:absolute;inset:0;background:#fff;color:#1a1209}
 .szl .scr.dark{background:#120c08;color:#f4ece5}
 .szl .scr .vid{height:150px;background:radial-gradient(120% 90% at 70% 20%,#7a3a1e,#2c160d)}
@@ -611,4 +649,50 @@ const CSS = `
 .szl .fcol a:hover,.szl .fcol .fl:hover{color:#fff}
 .szl .foot-base{margin-top:38px;padding-top:22px;border-top:1px solid var(--line);display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;font-size:13px;color:var(--faint)}
 @media(max-width:760px){.szl .foot{grid-template-columns:1fr 1fr}.szl .foot .brand-col{grid-column:1/-1}}
+
+/* The Menu — FAQ accordion */
+.szl .menu-sec{padding:30px 0 100px}
+.szl .menu-sec .eyebrow{display:block;text-align:center}
+.szl .menu-sec h2{text-align:center;font-size:clamp(36px,5.4vw,62px);margin:12px 0 38px}
+.szl .menu-list{max-width:780px;margin:0 auto;border-top:1px solid var(--line)}
+.szl .faq{border-bottom:1px solid var(--line)}
+.szl .faq button{display:flex;width:100%;align-items:center;justify-content:space-between;gap:20px;background:none;border:none;cursor:pointer;padding:24px 4px;text-align:left;color:var(--on);font-family:inherit}
+.szl .faq .q{font-family:var(--serif);font-weight:480;font-size:clamp(20px,2.6vw,27px);line-height:1.08}
+.szl .faq .pm{flex:none;width:30px;height:30px;border-radius:50%;border:1px solid var(--line);display:flex;align-items:center;justify-content:center;color:var(--saffron);font-size:19px;line-height:1;transition:transform .3s}
+.szl .faq.open .pm{transform:rotate(45deg);border-color:var(--saffron)}
+.szl .faq .a{max-height:0;overflow:hidden;transition:max-height .45s cubic-bezier(.16,1,.3,1)}
+.szl .faq.open .a{max-height:220px}
+.szl .faq .a p{color:var(--soft);font-size:16px;line-height:1.6;padding:0 4px 26px;max-width:640px}
+
+/* Footer — Nutrition Facts label */
+.szl .nutri-foot{border-top:1px solid var(--line);padding:72px 0 40px}
+.szl .nutri-foot .nwrap{display:grid;grid-template-columns:330px 1fr;gap:56px;align-items:start}
+.szl .nutri-label{background:#f6ede0;color:#15100c;border:2px solid #15100c;border-radius:5px;padding:13px 15px;box-shadow:0 26px 64px -22px rgba(0,0,0,.65)}
+.szl .nutri-label .nl-title{font-family:var(--serif);font-weight:700;font-size:35px;line-height:.92;letter-spacing:-.015em;border-bottom:9px solid #15100c;padding-bottom:3px;color:#15100c}
+.szl .nl-sub{font-family:var(--mono);font-size:11px;padding:5px 0;border-bottom:1px solid #15100c}
+.szl .nl-amt{font-family:var(--mono);font-size:10.5px;font-weight:600;padding:6px 0 1px}
+.szl .nl-cal{display:flex;justify-content:space-between;align-items:baseline;font-family:var(--serif);font-weight:700;font-size:25px;border-bottom:5px solid #15100c;padding-bottom:3px}
+.szl .nl-dv{text-align:right;font-family:var(--mono);font-size:10px;font-weight:700;padding:4px 0;border-bottom:1px solid #15100c}
+.szl .nl-row{display:flex;justify-content:space-between;align-items:baseline;font-family:var(--mono);font-size:12.5px;padding:5px 0;border-bottom:1px solid rgba(21,16,12,.3)}
+.szl .nl-row b{font-weight:700}
+.szl .nl-row.sub{padding-left:14px;color:#6a5b4e;font-size:11.5px}
+.szl .nl-row.thickb{border-bottom:6px solid #15100c}
+.szl .nl-note{font-family:var(--mono);font-size:9.5px;line-height:1.4;padding-top:8px;color:#6a5b4e}
+.szl .nutri-links .brand{font-size:36px;color:var(--on)}
+.szl .nutri-links .tag{margin:10px 0 24px;color:var(--soft);font-size:14.5px;line-height:1.6;max-width:380px}
+.szl .nutri-cols{display:flex;gap:50px;flex-wrap:wrap}
+.szl .nutri-cols h6{font-family:var(--mono);font-size:11px;letter-spacing:.12em;text-transform:uppercase;color:var(--saffron);margin-bottom:13px}
+.szl .nutri-cols a,.szl .nutri-cols .fl{display:block;color:var(--soft);font-size:14.5px;margin-bottom:9px;background:none;border:none;padding:0;cursor:pointer;font-family:inherit;text-align:left;transition:color .15s}
+.szl .nutri-cols a:hover,.szl .nutri-cols .fl:hover{color:var(--on)}
+.szl .nutri-base{margin-top:48px;padding-top:22px;border-top:1px solid var(--line);display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;font-family:var(--mono);font-size:12px;letter-spacing:.04em;color:var(--faint)}
+@media(max-width:760px){.szl .nutri-foot .nwrap{grid-template-columns:1fr;gap:36px}.szl .nutri-label{max-width:360px}}
+
+/* Manifesto + stats band */
+.szl .manifesto{padding:70px 0 40px;text-align:center}
+.szl .manifesto h2{font-size:clamp(30px,4.6vw,54px);max-width:920px;margin:14px auto 0;line-height:1.1}
+.szl .stats{display:grid;grid-template-columns:repeat(4,1fr);gap:24px;max-width:920px;margin:56px auto 0;border-top:1px solid var(--line);border-bottom:1px solid var(--line);padding:40px 0}
+.szl .stat .n{font-family:var(--serif);font-weight:480;font-size:clamp(40px,5vw,62px);color:var(--on);line-height:1}
+.szl .stat .n span{font-family:var(--mono);font-size:18px;font-weight:500;color:var(--saffron);margin-left:2px}
+.szl .stat .l{font-family:var(--mono);font-size:11.5px;letter-spacing:.06em;text-transform:uppercase;color:var(--faint);margin-top:11px}
+@media(max-width:760px){.szl .stats{grid-template-columns:1fr 1fr;gap:32px 20px}}
 `;
