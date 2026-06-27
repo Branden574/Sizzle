@@ -1,7 +1,8 @@
 import { useSizzle } from '../store';
 import { theme } from '../theme';
 import type { Tab } from '../types';
-import { BookmarkIcon, HomeIcon, NavPlusIcon, PersonIcon, SearchIcon } from './icons';
+import { useUnreadMessages } from '../data/queries';
+import { BookmarkIcon, HomeIcon, NavPlusIcon, PersonIcon, SearchIcon, ShareIcon } from './icons';
 
 const accent = theme.accent;
 
@@ -16,6 +17,8 @@ export function DesktopSidebar() {
   const tab = useSizzle((s) => s.tab);
   const setTab = useSizzle((s) => s.setTab);
   const setShowUpload = useSizzle((s) => s.setShowUpload);
+  const setMessagesOpen = useSizzle((s) => s.setMessagesOpen);
+  const dmUnread = useUnreadMessages().data?.count ?? 0;
 
   const items: { key: Tab; label: string; icon: (active: boolean) => React.ReactNode }[] = [
     { key: 'feed', label: 'Home', icon: (a) => <HomeIcon size={24} fill={a ? accent : 'none'} stroke={a ? accent : 'currentColor'} strokeWidth={2} /> },
@@ -75,6 +78,33 @@ export function DesktopSidebar() {
           </button>
         );
       })}
+
+      {/* Messages — opens the DM inbox sheet (not a tab); shows an unread dot. */}
+      <button
+        onClick={() => setMessagesOpen(true)}
+        style={{
+          display: 'flex',
+          alignItems: 'center',
+          gap: 14,
+          width: '100%',
+          padding: '12px 14px',
+          borderRadius: 14,
+          border: 'none',
+          cursor: 'pointer',
+          background: 'transparent',
+          color: 'rgba(255,255,255,.62)',
+          fontFamily: "'Hanken Grotesk'",
+          fontSize: 16,
+          fontWeight: 700,
+          transition: 'background .15s ease, color .15s ease',
+        }}
+      >
+        <span style={{ position: 'relative', display: 'flex', width: 24, height: 24 }}>
+          <ShareIcon size={23} stroke="currentColor" strokeWidth={1.9} />
+          {dmUnread > 0 && <span style={{ position: 'absolute', top: -3, right: -3, width: 9, height: 9, borderRadius: '50%', background: accent, border: '2px solid #17120f' }} />}
+        </span>
+        Messages
+      </button>
 
       <button
         onClick={() => setShowUpload(true)}

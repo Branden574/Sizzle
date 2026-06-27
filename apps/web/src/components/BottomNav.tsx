@@ -2,8 +2,9 @@ import { useSizzle } from '../store';
 import { theme } from '../theme';
 import { useMediaQuery } from '../lib/useMediaQuery';
 import { isNative } from '../lib/native';
+import { useUnreadMessages } from '../data/queries';
 import type { Tab } from '../types';
-import { BookmarkIcon, HomeIcon, NavPlusIcon, PersonIcon, SearchIcon } from './icons';
+import { BookmarkIcon, HomeIcon, NavPlusIcon, PersonIcon, SearchIcon, ShareIcon } from './icons';
 
 const accent = theme.accent;
 
@@ -11,6 +12,8 @@ export function BottomNav() {
   const tab = useSizzle((s) => s.tab);
   const setTab = useSizzle((s) => s.setTab);
   const setShowUpload = useSizzle((s) => s.setShowUpload);
+  const setMessagesOpen = useSizzle((s) => s.setMessagesOpen);
+  const dmUnread = useUnreadMessages().data?.count ?? 0;
   const immersive = useSizzle((s) => s.immersive);
   // On the wide-screen desktop shell the left sidebar replaces the tab bar.
   const isDesktop = useMediaQuery('(min-width: 1024px)') && !isNative;
@@ -60,21 +63,28 @@ export function BottomNav() {
       </button>
 
       <NavButton label="Saved" color={col(tab === 'saved')} onClick={go('saved')}>
-        <BookmarkIcon size={25} fill={tab === 'saved' ? accent : 'none'} stroke={col(tab === 'saved')} strokeWidth={2} />
+        <BookmarkIcon size={23} fill={tab === 'saved' ? accent : 'none'} stroke={col(tab === 'saved')} strokeWidth={2} />
+      </NavButton>
+
+      <NavButton label="Messages" color={navIdle} onClick={() => setMessagesOpen(true)} badge={dmUnread > 0}>
+        <ShareIcon size={23} stroke={navIdle} strokeWidth={1.9} />
       </NavButton>
 
       <NavButton label="Profile" color={col(tab === 'profile')} onClick={go('profile')}>
-        <PersonIcon size={25} stroke={col(tab === 'profile')} strokeWidth={2} />
+        <PersonIcon size={23} stroke={col(tab === 'profile')} strokeWidth={2} />
       </NavButton>
     </div>
   );
 }
 
-function NavButton({ label, color, onClick, children }: { label: string; color: string; onClick: () => void; children: React.ReactNode }) {
+function NavButton({ label, color, onClick, badge, children }: { label: string; color: string; onClick: () => void; badge?: boolean; children: React.ReactNode }) {
   return (
-    <button onClick={onClick} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, width: 52, padding: 0 }}>
-      {children}
-      <span style={{ fontSize: 10.5, fontWeight: 700, color }}>{label}</span>
+    <button onClick={onClick} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, width: 46, padding: 0 }}>
+      <span style={{ position: 'relative', display: 'flex' }}>
+        {children}
+        {badge && <span style={{ position: 'absolute', top: -3, right: -4, width: 8, height: 8, borderRadius: '50%', background: accent }} />}
+      </span>
+      <span style={{ fontSize: 10, fontWeight: 700, color }}>{label}</span>
     </button>
   );
 }
