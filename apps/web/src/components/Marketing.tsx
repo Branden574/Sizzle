@@ -476,22 +476,48 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
         </div>
       </div></section>
 
-      {/* CREATORS */}
-      <section className="sec creators" id="creators"><div className="wrap">
-        <div className="lead">
-          <span className="eyebrow">For creators</span>
-          <h2 className="serif">Share your food. Grow your following.</h2>
-          <p>Record in-app or upload from your library, publish recipes or reviews, and build an audience around the food you love. Monetization is on the roadmap.</p>
+      {/* ── FOR CREATORS — film chapter ───────────────────────────────────
+          The plating footage scrubs behind the creator pitch + roadmap, so the
+          section reads as one more reel of the film instead of a flat card grid. */}
+      <section className="story film-creators" id="creators" aria-label="For creators">
+        <div className="story-stage">
+          <video
+            className="story-bg"
+            src="/landing/creators-3d.mp4"
+            poster="/landing/creators-3d-poster.jpg"
+            muted
+            playsInline
+            autoPlay
+            loop
+            preload="auto"
+          />
+          <div className="story-veil" />
+
+          <div className="scene" data-scene="0">
+            <div className="wrap">
+              <span className="eyebrow">For creators</span>
+              <h2 className="serif">Share your food.<br /><span className="hot ital">Grow your following.</span></h2>
+              <p className="sub">Record in-app or upload from your library, publish recipes or honest reviews, and build an audience around the food you love. Your videos, your followers, all the credit.</p>
+            </div>
+          </div>
+
+          <div className="scene" data-scene="1">
+            <div className="wrap">
+              <span className="eyebrow">The roadmap · 5 phases</span>
+              <h2 className="serif">From first post<br />to <span className="hot ital">getting paid.</span></h2>
+              <div className="roadline">
+                <div className="rl"><span className="rln">01</span><b>Watch &amp; cook</b><span>Feed, recipes &amp; Cook Mode</span></div>
+                <div className="rl"><span className="rln">02</span><b>Create &amp; grow</b><span>Posting, profiles, following</span></div>
+                <div className="rl"><span className="rln">03</span><b>Organize</b><span>Collections &amp; shopping list</span></div>
+                <div className="rl"><span className="rln">04</span><b>Community</b><span>Reviews, reposts, verification</span></div>
+                <div className="rl hot-step"><span className="rln">05</span><b>Monetize</b><span>Earn from the food you share</span></div>
+              </div>
+            </div>
+          </div>
+
+          <div className="scrollcue" aria-hidden="true"><span>Keep scrolling</span><i /></div>
         </div>
-        <div className="roadmap-lab">The roadmap · 5 phases</div>
-        <div className="road">
-          <div className="rcard"><div className="rn">01</div><h5>Watch &amp; cook</h5><p>The core feed, recipes &amp; Cook Mode.</p></div>
-          <div className="rcard"><div className="rn">02</div><h5>Create &amp; grow</h5><p>Posting, profiles, following.</p></div>
-          <div className="rcard"><div className="rn">03</div><h5>Organize</h5><p>Collections &amp; shopping list.</p></div>
-          <div className="rcard"><div className="rn">04</div><h5>Community</h5><p>Reviews, reposts, verification.</p></div>
-          <div className="rcard last"><div className="rn">05</div><h5>Monetize</h5><p>Earn from the food you share.</p></div>
-        </div>
-      </div></section>
+      </section>
 
       {/* TRUST */}
       <section className="trust-sec"><div className="wrap">
@@ -684,6 +710,15 @@ html.lenis::-webkit-scrollbar{display:none}
 .szl .scene-cta h2{margin-left:auto;margin-right:auto}
 .szl .scene-cta .ctas{justify-content:center}
 .szl .scene-cta .weblink{justify-content:center;width:100%}
+/* Filmic roadmap timeline (replaces the old flat roadmap cards). */
+.szl .roadline{display:flex;flex-wrap:wrap;gap:22px 0;margin-top:30px;max-width:780px}
+.szl .roadline .rl{flex:1;min-width:130px;padding-right:18px}
+.szl .roadline .rln{position:relative;display:block;font-family:var(--mono);font-size:13px;font-weight:600;color:var(--saffron);padding-top:12px;margin-bottom:9px}
+.szl .roadline .rln::before{content:"";position:absolute;left:0;right:6px;top:0;height:2px;border-radius:2px;background:linear-gradient(90deg,var(--saffron),rgba(244,165,44,.15))}
+.szl .roadline .rl b{display:block;font-size:15px;font-weight:700;color:var(--on);margin-bottom:4px}
+.szl .roadline .rl>span:not(.rln){display:block;font-size:12.5px;line-height:1.45;color:var(--soft)}
+.szl .roadline .hot-step b{color:var(--saffron)}
+.szl .roadline .hot-step .rln::before{background:linear-gradient(90deg,var(--accent),var(--saffron))}
 .szl .scrollcue{position:absolute;left:50%;bottom:32px;transform:translateX(-50%);z-index:6;display:flex;flex-direction:column;align-items:center;gap:10px;font-family:var(--mono);font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--soft);pointer-events:none}
 .szl .scrollcue i{width:1px;height:46px;background:linear-gradient(var(--saffron),transparent);animation:sz-cue 1.9s ease-in-out infinite}
 @keyframes sz-cue{0%,100%{opacity:.25;transform:scaleY(.4);transform-origin:top}50%{opacity:1;transform:scaleY(1)}}
