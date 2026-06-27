@@ -40,44 +40,11 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [demoStep, setDemoStep] = useState(0);
 
-  // Pinned 3D process deck — desktop + motion only; useGSAP auto-cleans up.
+  // Scrollytelling film chapters — desktop + motion only; useGSAP auto-cleans up.
   useGSAP(
     () => {
       if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-      const wide = window.matchMedia('(min-width: 901px)').matches;
       const canScrub = window.matchMedia('(min-width: 760px)').matches;
-
-      // Pinned 3D process deck — wide desktop only (the heaviest effect).
-      const proc = wide ? root.current!.querySelector('.process') : null;
-      if (proc) {
-        proc.classList.add('is3d');
-        const cards = gsap.utils.toArray<HTMLElement>('.step-card', root.current!);
-        const FROM = { opacity: 0, z: -560, rotateX: -26, y: 170, scale: 0.86, filter: 'blur(6px)' };
-        const ACTIVE = { opacity: 1, z: 0, rotateX: 0, y: 0, scale: 1, filter: 'blur(0px)' };
-        const OUT = { opacity: 0, z: 260, rotateX: 16, y: -140, scale: 1.12, filter: 'blur(8px)' };
-        cards.forEach((c, i) => {
-          gsap.set(c, { transformOrigin: '50% 50%', zIndex: i + 1 });
-          gsap.set(c, i === 0 ? ACTIVE : FROM);
-        });
-        const tl = gsap.timeline({
-          scrollTrigger: {
-            trigger: '.stage',
-            start: 'top top',
-            // Function-based so it re-evaluates on every refresh (e.g. resize).
-            end: () => '+=' + cards.length * window.innerHeight,
-            pin: '.stage',
-            scrub: 0.7,
-            anticipatePin: 1,
-            invalidateOnRefresh: true,
-          },
-        });
-        for (let i = 0; i < cards.length - 1; i++) {
-          const lbl = 's' + i;
-          tl.addLabel(lbl, i)
-            .to(cards[i], { ...OUT, ease: 'power2.inOut', duration: 0.9 }, lbl)
-            .fromTo(cards[i + 1], FROM, { ...ACTIVE, ease: 'power2.out', duration: 0.9 }, lbl + '+=0.1');
-        }
-      }
 
       // ── SCROLLYTELLING STORY ─────────────────────────────────────────────
       // The food footage is a pinned backdrop the scroll flies through; the
@@ -522,12 +489,16 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
         </div>
       </section>
 
-      {/* TRUST */}
-      <section className="trust-sec"><div className="wrap">
-        <h2 className="serif">No ads. No tracking.<br /><span className="hot ital">Just good food.</span></h2>
-        <p>Privacy-first by design — no third-party tracking, ever. Built for everyone 13 and up.</p>
-        <div className="trust-links"><a href="/privacy">Privacy Policy</a><span className="sep">·</span><a href="/terms">Terms of Service</a><span className="sep">·</span><a href="/cookie-policy">Cookie Policy</a></div>
-      </div></section>
+      {/* TRUST — a film "title card": the statement over the sizzling-pan footage. */}
+      <section className="trust-sec">
+        <video className="trust-film" src="/landing/feed-to-plate-3d.mp4" poster="/landing/feed-to-plate-3d-poster.jpg" muted playsInline autoPlay loop preload="auto" aria-hidden="true" />
+        <div className="trust-film-veil" />
+        <div className="wrap">
+          <h2 className="serif">No ads. No tracking.<br /><span className="hot ital">Just good food.</span></h2>
+          <p>Privacy-first by design — no third-party tracking, ever. Built for everyone 13 and up.</p>
+          <div className="trust-links"><a href="/privacy">Privacy Policy</a><span className="sep">·</span><a href="/terms">Terms of Service</a><span className="sep">·</span><a href="/cookie-policy">Cookie Policy</a></div>
+        </div>
+      </section>
 
       {/* THE MENU — FAQ accordion */}
       <section className="menu-sec" id="menu"><div className="wrap">
@@ -834,28 +805,6 @@ html.lenis::-webkit-scrollbar{display:none}
 .szl .sec-head{text-align:center;max-width:760px;margin:0 auto}
 .szl .sec-head.left{text-align:left;max-width:620px;margin:0}
 .szl .sec-head h2{font-size:clamp(34px,5vw,58px);margin-top:14px}
-.szl .process .intro{padding:104px 0 40px;text-align:center}
-.szl .intro-h{font-size:clamp(34px,5vw,58px);margin-top:14px}
-.szl .hint{margin-top:18px;font-size:12.5px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint)}
-.szl .deck{max-width:1060px;margin:0 auto;padding:0 24px}
-.szl .step-card{position:relative;border-radius:28px;padding:48px;margin-bottom:34px;overflow:hidden;border:1px solid var(--line)}
-.szl .step-card.dark{background:radial-gradient(120% 120% at 88% 0%,#23150d,#140d09);color:var(--on)}
-.szl .step-card.cream{background:linear-gradient(180deg,#f7ede2,#efe2d3);color:#2a211b;border-color:rgba(0,0,0,.10)}
-.szl .step-inner{display:grid;grid-template-columns:1fr 300px;gap:36px;align-items:center;position:relative;z-index:2}
-.szl .step-num{position:absolute;top:24px;right:30px;font-family:var(--mono);font-size:13px;font-weight:500;letter-spacing:.12em;color:var(--saffron);z-index:2}
-.szl .step-card.cream .step-num{color:#c2410c}
-.szl .step-lab{font-family:var(--mono);font-size:11px;font-weight:500;letter-spacing:.14em;text-transform:uppercase;color:var(--saffron)}
-.szl .step-card h3{font-family:var(--serif);font-size:clamp(30px,4vw,46px);margin:12px 0 16px;line-height:1.02}
-.szl .step-card p{font-size:16px;line-height:1.6;max-width:420px}
-.szl .step-card.dark p{color:var(--soft)}
-.szl .step-card.cream p{color:#6f5e52}
-.szl .step-card .phone-stage{transform:scale(.92)}
-@media(min-width:901px){
-.szl .process.is3d .deck{max-width:none;margin:0;padding:0}
-.szl .process.is3d .stage{position:relative;height:100vh;display:grid;place-items:center;perspective:1400px}
-.szl .process.is3d .step-card{grid-area:1/1;align-self:center;justify-self:center;width:min(1020px,92vw);max-height:86vh;margin:0;transform-style:preserve-3d;backface-visibility:hidden;will-change:transform,opacity,filter;box-shadow:0 50px 110px rgba(0,0,0,.6)}
-}
-@media(max-width:900px){.szl .step-inner{grid-template-columns:1fr;gap:24px}.szl .step-card{padding:30px}.szl .step-num{top:18px;right:18px}.szl .step-card .phone-stage{transform:scale(.82);justify-self:center}}
 .szl .scr{position:absolute;inset:0;background:#fff;color:#1a1209}
 .szl .scr.dark{background:#120c08;color:#f4ece5}
 .szl .scr .vid{height:150px;background:radial-gradient(120% 90% at 70% 20%,#7a3a1e,#2c160d)}
@@ -916,21 +865,10 @@ html.lenis::-webkit-scrollbar{display:none}
 .szl .feat-sec .fcard{background:rgba(23,17,12,.72);backdrop-filter:blur(8px);border-color:rgba(255,255,255,.09)}
 .szl .feat-sec .feat-try{backdrop-filter:blur(8px)}
 @media(max-width:560px){.szl .fgrid{grid-template-columns:1fr}}
-.szl .creators{position:relative}
-.szl .creators::before{content:"";position:absolute;top:0;right:0;width:560px;height:560px;background:radial-gradient(circle,rgba(244,165,44,.14),transparent 60%);pointer-events:none}
-.szl .creators .lead{max-width:540px;position:relative}
-.szl .creators h2{font-size:clamp(32px,4.6vw,52px);margin:14px 0 16px}
-.szl .creators .lead p{color:var(--soft);font-size:17px;line-height:1.6}
-.szl .roadmap-lab{margin:46px 0 16px;font-size:12px;letter-spacing:.16em;text-transform:uppercase;color:var(--faint);font-weight:700;position:relative}
-.szl .road{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;position:relative}
-.szl .rcard{background:var(--bg2);border:1px solid var(--line);border-radius:16px;padding:20px}
-.szl .rcard .rn{font-family:var(--serif);font-size:26px;color:var(--accent)}
-.szl .rcard h5{font-size:15px;font-weight:700;margin:8px 0 5px}
-.szl .rcard p{font-size:13px;color:var(--faint);line-height:1.5}
-.szl .rcard.last{grid-column:1/-1;background:linear-gradient(100deg,rgba(255,90,54,.14),rgba(244,165,44,.07));border:1px solid rgba(255,90,54,.4)}
-@media(max-width:860px){.szl .road{grid-template-columns:1fr 1fr}}
-@media(max-width:480px){.szl .road{grid-template-columns:1fr}}
-.szl .trust-sec{text-align:center;padding:114px 0}
+.szl .trust-sec{position:relative;overflow:hidden;text-align:center;padding:130px 0}
+.szl .trust-film{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.42;z-index:0;pointer-events:none}
+.szl .trust-film-veil{position:absolute;inset:0;z-index:0;pointer-events:none;background:radial-gradient(120% 95% at 50% 50%,rgba(10,8,7,.5),rgba(10,8,7,.86) 78%)}
+.szl .trust-sec>.wrap{position:relative;z-index:1}
 .szl .trust-sec h2{font-size:clamp(36px,5.4vw,64px)}
 .szl .trust-sec p{max-width:540px;margin:22px auto 0;color:var(--soft);font-size:17px;line-height:1.6}
 .szl .trust-links{margin-top:24px;display:flex;gap:14px;justify-content:center;flex-wrap:wrap;font-size:14.5px}
