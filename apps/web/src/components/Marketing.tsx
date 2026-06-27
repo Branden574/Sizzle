@@ -35,6 +35,7 @@ const DEMO_STEPS = [
 export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void; onLogin: () => void }) {
   const root = useRef<HTMLDivElement>(null);
   const demoRef = useRef<HTMLElement>(null);
+  const lenisRef = useRef<Lenis | null>(null);
   const [servings, setServings] = useState(2);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
   const [demoStep, setDemoStep] = useState(0);
@@ -151,6 +152,7 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
   useEffect(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
     const lenis = new Lenis({ lerp: 0.085, wheelMultiplier: 1, smoothWheel: true });
+    lenisRef.current = lenis;
     lenis.on('scroll', ScrollTrigger.update);
     const tick = (time: number) => lenis.raf(time * 1000);
     gsap.ticker.add(tick);
@@ -178,6 +180,72 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
       gsap.ticker.remove(tick);
       gsap.ticker.lagSmoothing(500, 33);
       lenis.destroy();
+      lenisRef.current = null;
+    };
+  }, []);
+
+  // Custom scrollbar — the native one is hidden (overlay on macOS), so draw an
+  // always-visible bar on the right that tracks scroll position and can be
+  // dragged to scroll (drives Lenis when present).
+  useEffect(() => {
+    const bar = root.current?.querySelector<HTMLElement>('.szl-scroll');
+    const thumb = root.current?.querySelector<HTMLElement>('.szl-scroll-thumb');
+    if (!bar || !thumb) return;
+    const metrics = () => {
+      const docH = document.documentElement.scrollHeight;
+      const winH = window.innerHeight;
+      const maxScroll = Math.max(0, docH - winH);
+      const thumbH = Math.max(44, (winH / docH) * winH);
+      return { maxScroll, trackH: winH, thumbH };
+    };
+    const update = () => {
+      const { maxScroll, trackH, thumbH } = metrics();
+      // Inline opacity (not a toggled class) so React re-renders can't clobber it.
+      bar.style.opacity = maxScroll < 8 ? '0' : '1';
+      if (maxScroll < 8) return;
+      const y = (window.scrollY / maxScroll) * (trackH - thumbH);
+      thumb.style.height = thumbH + 'px';
+      thumb.style.transform = `translateY(${y}px)`;
+    };
+    let dragging = false;
+    let startY = 0;
+    let startScroll = 0;
+    const onDown = (e: MouseEvent) => {
+      dragging = true;
+      startY = e.clientY;
+      startScroll = window.scrollY;
+      thumb.classList.add('dragging');
+      document.body.style.userSelect = 'none';
+      e.preventDefault();
+    };
+    const onMove = (e: MouseEvent) => {
+      if (!dragging) return;
+      const { maxScroll, trackH, thumbH } = metrics();
+      const denom = trackH - thumbH;
+      const target = Math.max(0, Math.min(maxScroll, startScroll + (denom > 0 ? ((e.clientY - startY) / denom) * maxScroll : 0)));
+      if (lenisRef.current) lenisRef.current.scrollTo(target, { immediate: true });
+      else window.scrollTo(0, target);
+    };
+    const onUp = () => {
+      if (!dragging) return;
+      dragging = false;
+      thumb.classList.remove('dragging');
+      document.body.style.userSelect = '';
+    };
+    thumb.addEventListener('mousedown', onDown);
+    window.addEventListener('mousemove', onMove);
+    window.addEventListener('mouseup', onUp);
+    window.addEventListener('scroll', update, { passive: true });
+    window.addEventListener('resize', update);
+    const settle = window.setTimeout(update, 400);
+    update();
+    return () => {
+      thumb.removeEventListener('mousedown', onDown);
+      window.removeEventListener('mousemove', onMove);
+      window.removeEventListener('mouseup', onUp);
+      window.removeEventListener('scroll', update);
+      window.removeEventListener('resize', update);
+      window.clearTimeout(settle);
     };
   }, []);
 
@@ -229,6 +297,7 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
     <div className="szl" ref={root}>
       <style>{CSS}</style>
       <div className="grain" aria-hidden="true" />
+      <div className="szl-scroll" aria-hidden="true"><div className="szl-scroll-thumb" /></div>
 
       {/* NAV */}
       <nav className="nav">
@@ -588,6 +657,17 @@ html.lenis,html.lenis body{height:auto}
 .lenis.lenis-smooth{scroll-behavior:auto!important}
 .lenis.lenis-smooth [data-lenis-prevent]{overscroll-behavior:contain}
 .lenis.lenis-stopped{overflow:hidden}
+/* The landing hides the native (overlay) scrollbar and draws its own always-
+   visible, draggable bar (.szl-scroll, positioned in JS) so a scrollbar shows
+   regardless of the OS "show scroll bars" setting. */
+html.lenis{scrollbar-width:none}
+html.lenis::-webkit-scrollbar{display:none}
+.szl .szl-scroll{position:fixed;top:0;right:0;width:12px;height:100vh;z-index:85;opacity:0;transition:opacity .35s;pointer-events:none}
+.szl .szl-scroll::before{content:"";position:absolute;top:8px;bottom:8px;right:4px;width:4px;border-radius:4px;background:rgba(255,255,255,.08)}
+.szl .szl-scroll-thumb{position:absolute;top:0;right:3px;width:6px;min-height:46px;border-radius:6px;background:rgba(244,165,44,.75);pointer-events:auto;cursor:grab;transition:background .2s,width .2s,right .2s}
+.szl .szl-scroll-thumb:hover{background:var(--saffron);width:8px;right:2px}
+.szl .szl-scroll-thumb.dragging{background:var(--saffron);width:8px;right:2px;cursor:grabbing}
+@media(max-width:759px){.szl .szl-scroll{display:none}}
 /* ── Scrollytelling story stage: pinned film backdrop + crossfading scenes ── */
 .szl .story{position:relative;background:#0a0807}
 .szl .story-stage{position:relative;height:100vh;width:100%;overflow:hidden}
