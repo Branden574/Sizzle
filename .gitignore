@@ -49,3 +49,6 @@ supabase/.branches
 # (Not secret, but kept out of git; the web/Vercel build doesn't use them.)
 **/GoogleService-Info.plist
 **/google-services.json
+
+# Playwright MCP run artifacts
+.playwright-mcp/

@@ -1,7 +1,8 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { useGSAP } from '@gsap/react';
+import Lenis from 'lenis';
 
 gsap.registerPlugin(ScrollTrigger, useGSAP);
 
@@ -12,6 +13,14 @@ const FAQS = [
   { q: 'No ads — for real?', a: 'For real. Your feed feeds you, not advertisers. Zero ads, zero third-party tracking, ever.' },
   { q: 'Can I post my own recipes?', a: 'Record a clip, drop in the recipe, hit post. Creators keep their videos, their followers, and all the credit.' },
   { q: 'Where are the ten-paragraph life stories?', a: 'Nowhere to be found. You came for the recipe, so you get the recipe — clean, scaled, and ready for the stove.' },
+];
+
+/** "See it in action" — the four real app screens the demo phone cycles through. */
+const DEMO_STEPS = [
+  { lab: 'The feed', t: 'Swipe a feed that learns your taste.' },
+  { lab: 'The recipe', t: 'One tap to a clean, structured recipe.' },
+  { lab: 'The scaler', t: 'Scale every amount to your table.' },
+  { lab: 'Cook Mode', t: 'Cook along hands-free, with timers.' },
 ];
 
 /**
@@ -25,8 +34,10 @@ const FAQS = [
  */
 export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void; onLogin: () => void }) {
   const root = useRef<HTMLDivElement>(null);
+  const demoRef = useRef<HTMLElement>(null);
   const [servings, setServings] = useState(2);
   const [openFaq, setOpenFaq] = useState<number | null>(0);
+  const [demoStep, setDemoStep] = useState(0);
 
   // Pinned 3D process deck — desktop + motion only; useGSAP auto-cleans up.
   useGSAP(
@@ -51,10 +62,12 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
           scrollTrigger: {
             trigger: '.stage',
             start: 'top top',
-            end: '+=' + cards.length * window.innerHeight,
+            // Function-based so it re-evaluates on every refresh (e.g. resize).
+            end: () => '+=' + cards.length * window.innerHeight,
             pin: '.stage',
             scrub: 0.7,
             anticipatePin: 1,
+            invalidateOnRefresh: true,
           },
         });
         for (let i = 0; i < cards.length - 1; i++) {
@@ -65,38 +78,134 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
         }
       }
 
-      // Cinematic "feed to plate" clip: pin the section and scrub the video's
-      // playhead from scroll progress (Apple-style scrollytelling). Runs on
-      // tablet+/laptop; true-mobile keeps the autoplay-loop fallback.
-      const cine = root.current!.querySelector<HTMLElement>('.cinema');
-      const vid = root.current!.querySelector<HTMLVideoElement>('.cinema video');
-      if (canScrub && cine && vid) {
+      // ── SCROLLYTELLING STORY ─────────────────────────────────────────────
+      // The food footage is a pinned backdrop the scroll flies through; the
+      // story's text "scenes" crossfade in/out over it as the playhead scrubs,
+      // so the whole opening reads as one continuous film. Tablet+/laptop only;
+      // true-mobile keeps the autoplay-loop fallback (CSS stacks the scenes).
+      const smooth = (x: number) => (x <= 0 ? 0 : x >= 1 ? 1 : x * x * (3 - 2 * x));
+      // Wire one pinned "film chapter": its background clip scrubs with scroll
+      // progress while its text scenes crossfade in/out over it. Called for
+      // every `.story-stage` so the whole page reads as one continuous film.
+      const buildFilm = (stage: HTMLElement) => {
+        const vid = stage.querySelector<HTMLVideoElement>('.story-bg');
+        const scenes = gsap.utils.toArray<HTMLElement>('.scene', stage);
+        if (!vid || !scenes.length) return;
+        stage.classList.add('is-scrub');
         vid.pause();
         vid.removeAttribute('loop');
         vid.removeAttribute('autoplay');
+        const N = scenes.length;
+        const cue = stage.querySelector<HTMLElement>('.scrollcue');
         const seek = (p: number) => {
-          const d = vid.duration || 10;
+          const d = vid.duration || 20;
           vid.currentTime = Math.max(0, Math.min(d - 0.05, p * d));
         };
+        gsap.set(scenes, { opacity: 0 });
+        gsap.set(scenes[0]!, { opacity: 1 });
+        // Each scene "lives" at an evenly-spaced point along the scroll (0…1):
+        // full while near its centre, crossfading to the next. Scene 0 is full
+        // at the chapter's top; the last scene at its bottom.
+        const span = N > 1 ? 1 / (N - 1) : 1;
         ScrollTrigger.create({
-          trigger: cine,
+          trigger: stage,
           start: 'top top',
-          // ~29s clip → pin for ~4 screen-heights so the scrub paces comfortably.
-          end: '+=' + window.innerHeight * 4,
+          // One screen-height of scroll per scene → comfortable, filmic pace.
+          // Function-based so it re-measures on refresh (resize/orientation).
+          end: () => '+=' + window.innerHeight * N,
           pin: true,
-          // Tight scrub — the all-intra re-encode makes every frame seek
-          // instantly, so we don't need much lerp (which itself reads as lag).
-          scrub: 0.35,
-          // This section is the first pinned block on the page, so its pin
-          // spacer must be measured first — otherwise the two pins overlap.
+          // Tight scrub — the all-intra clip seeks every frame instantly, so we
+          // don't need much lerp (which itself reads as lag).
+          scrub: 0.4,
           refreshPriority: 2,
-          onUpdate: (self) => seek(self.progress),
+          // Recompute the pinned stage's locked width on every refresh so it
+          // always fills the viewport (otherwise a wider window leaves a gap).
+          invalidateOnRefresh: true,
+          onUpdate: (self) => {
+            const p = self.progress;
+            seek(p);
+            scenes.forEach((el, i) => {
+              const d = Math.abs(p - i * span);
+              const hold = span * 0.3;
+              const fade = span * 0.22;
+              const o = smooth(d <= hold ? 1 : d >= hold + fade ? 0 : 1 - (d - hold) / fade);
+              el.style.opacity = String(o);
+              el.style.transform = `translate3d(0, ${(1 - o) * 26}px, 0)`;
+              el.style.pointerEvents = o > 0.55 ? 'auto' : 'none';
+            });
+            if (cue) cue.style.opacity = String(Math.max(0, 1 - p * N * 2.4));
+          },
         });
         vid.addEventListener('loadedmetadata', () => ScrollTrigger.refresh(), { once: true });
+      };
+      if (canScrub) {
+        root.current!.querySelectorAll<HTMLElement>('.story-stage').forEach(buildFilm);
       }
     },
     { scope: root },
   );
+
+  // Lenis smooth scrolling — the "buttery" momentum that makes the scene
+  // transitions feel like one continuous film. Driven by GSAP's ticker so it
+  // stays in lock-step with ScrollTrigger. Skipped for reduced-motion.
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const lenis = new Lenis({ lerp: 0.085, wheelMultiplier: 1, smoothWheel: true });
+    lenis.on('scroll', ScrollTrigger.update);
+    const tick = (time: number) => lenis.raf(time * 1000);
+    gsap.ticker.add(tick);
+    gsap.ticker.lagSmoothing(0);
+
+    // Pinned sections lock a fixed pixel width when GSAP builds them; if the
+    // window later resizes (or finishes loading wider than the first measure),
+    // that lock goes stale and the pinned film stage stays stuck narrow,
+    // leaving a blank gutter on the right. Re-measure on resize to refit it.
+    let rid: number | undefined;
+    const onResize = () => {
+      window.clearTimeout(rid);
+      rid = window.setTimeout(() => ScrollTrigger.refresh(), 150);
+    };
+    window.addEventListener('resize', onResize);
+    window.addEventListener('orientationchange', onResize);
+    // One settle pass once fonts/video metadata have laid out.
+    const settle = window.setTimeout(() => ScrollTrigger.refresh(), 320);
+
+    return () => {
+      window.clearTimeout(rid);
+      window.clearTimeout(settle);
+      window.removeEventListener('resize', onResize);
+      window.removeEventListener('orientationchange', onResize);
+      gsap.ticker.remove(tick);
+      gsap.ticker.lagSmoothing(500, 33);
+      lenis.destroy();
+    };
+  }, []);
+
+  // "See it in action" demo phone — auto-advances through the four app screens,
+  // but only while the section is on screen (and never for reduced-motion, where
+  // the step chips stay clickable instead).
+  useEffect(() => {
+    const node = demoRef.current;
+    if (!node) return;
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    let timer: number | undefined;
+    const io = new IntersectionObserver(
+      ([e]) => {
+        if (e.isIntersecting) {
+          if (timer === undefined) timer = window.setInterval(() => setDemoStep((s) => (s + 1) % DEMO_STEPS.length), 2600);
+        } else if (timer !== undefined) {
+          window.clearInterval(timer);
+          timer = undefined;
+        }
+      },
+      { threshold: 0.3 },
+    );
+    io.observe(node);
+    return () => {
+      io.disconnect();
+      if (timer !== undefined) window.clearInterval(timer);
+    };
+  }, []);
 
   // serving scaler (base values are for 2 servings)
   const base = { egg: 1, miso: 1.5, mirin: 0.5, sesame: 1 };
@@ -139,177 +248,128 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
         </div>
       </nav>
 
-      {/* CINEMATIC SCROLL REVEAL (top) — Kling "feed to plate" clip, scrubbed by
-          scroll on desktop; loops as a cinematic background on mobile / reduced-motion. */}
-      <section className="cinema" aria-label="From feed to plate">
-        <video
-          className="cinemavid"
-          src="/landing/feed-to-plate-3d.mp4"
-          poster="/landing/feed-to-plate-3d-poster.jpg"
-          muted
-          playsInline
-          autoPlay
-          loop
-          preload="auto"
-        />
-        <div className="cinemaveil" />
-        <div className="cinemacap wrap">
-          <span className="eyebrow">From feed to plate</span>
-          <h2 className="serif">Scroll the feed.<br /><span className="hot ital">Watch it come to life.</span></h2>
+      {/* ── SCROLLYTELLING STORY ───────────────────────────────────────────
+          The "feed to plate" footage is a fixed backdrop the scroll flies
+          through; Sizzle's story crossfades over it scene by scene, so the
+          whole opening reads as one continuous film. */}
+      <section className="story" id="top" aria-label="From feed to plate">
+        <div className="story-stage">
+          <video
+            className="story-bg"
+            src="/landing/feed-to-plate-3d.mp4"
+            poster="/landing/feed-to-plate-3d-poster.jpg"
+            muted
+            playsInline
+            autoPlay
+            loop
+            preload="auto"
+          />
+          <div className="story-veil" />
+
+          <div className="scene" data-scene="0">
+            <div className="wrap">
+              <span className="ticket"><span className="tdot" /> Live feed — <b>12,408 recipes</b> · 0 ads</span>
+              <h1 className="serif">Watch it.<br />Then <span className="hot ital">actually</span> cook it.</h1>
+              <p className="sub">Full-screen video recipes from real home cooks — the good part of cooking: the watching, the wanting, the making.</p>
+            </div>
+          </div>
+
+          <div className="scene" data-scene="1">
+            <div className="wrap">
+              <span className="eyebrow">One tap</span>
+              <h2 className="serif">Every clip is a<br /><span className="hot ital">real recipe.</span></h2>
+              <p className="sub">Tap once and the video unfolds into a clean, structured recipe — ingredients, quantities, numbered steps. No ten-paragraph life story to scroll past.</p>
+            </div>
+          </div>
+
+          <div className="scene" data-scene="2">
+            <div className="wrap">
+              <span className="eyebrow">Serving scaler</span>
+              <h2 className="serif">Scaled to<br /><span className="hot ital">your</span> table.</h2>
+              <p className="sub">Cooking for two or for twelve? Set the servings and every amount redoes the math on the spot. No half-eggs, no mental arithmetic.</p>
+            </div>
+          </div>
+
+          <div className="scene" data-scene="3">
+            <div className="wrap">
+              <span className="eyebrow">Made with</span>
+              <h2 className="serif">No ads. No tracking.<br /><span className="hot ital">Just food.</span></h2>
+              <p className="sub">Your feed feeds you — not advertisers. Real home cooks, zero ads, no third-party tracking. Ever.</p>
+            </div>
+          </div>
+
+          <div className="scene scene-cta" data-scene="4">
+            <div className="wrap center">
+              <span className="eyebrow">Hungry yet?</span>
+              <h2 className="serif">Come get <span className="hot ital">hungry.</span></h2>
+              <div className="ctas">
+                <button className="store" onClick={app}><span className="ico"></span><span><span className="l1">Download on the</span><br /><span className="l2">App Store</span></span></button>
+                <button className="store" onClick={app}><span className="ico">▶</span><span><span className="l1">Get it on</span><br /><span className="l2">Google Play</span></span></button>
+              </div>
+              <button className="weblink linkbtn" onClick={app}>Or open the web app <span className="arr">→</span></button>
+            </div>
+          </div>
+
+          <div className="scrollcue" aria-hidden="true"><span>Scroll</span><i /></div>
         </div>
       </section>
 
-      {/* HERO */}
-      <header className="hero" id="top">
-        <div className="wrap grid">
-          <div>
-            <span className="ticket"><span className="tdot" /> Live feed — <b>12,408 recipes</b> · 0 ads</span>
-            <h1 className="serif">Watch it.<br />Then <span className="hot ital">actually</span><br />cook&nbsp;it.</h1>
-            <p className="sub">Full-screen video recipes from real home cooks. Tap once and the clip becomes a clean recipe — already scaled to your servings and built for the stove. No ten-paragraph life stories. No ads. No tracking.</p>
-            <div className="ctas">
-              <button className="store" onClick={app}><span className="ico"></span><span><span className="l1">Download on the</span><br /><span className="l2">App Store</span></span></button>
-              <button className="store" onClick={app}><span className="ico">▶</span><span><span className="l1">Get it on</span><br /><span className="l2">Google Play</span></span></button>
+      {/* ── HOW IT WORKS — film chapter ──────────────────────────────────
+          Replaces the old flat 3D card deck: the prep/cook footage scrubs as a
+          fixed backdrop while the four steps crossfade over it, same engine as
+          the hero so the page keeps reading as one continuous film. */}
+      <section className="story film-how" id="how" aria-label="How it works">
+        <div className="story-stage">
+          <video
+            className="story-bg"
+            src="/landing/how-it-works-3d.mp4"
+            poster="/landing/how-it-works-3d-poster.jpg"
+            muted
+            playsInline
+            autoPlay
+            loop
+            preload="auto"
+          />
+          <div className="story-veil" />
+
+          <div className="scene" data-scene="0">
+            <div className="wrap">
+              <span className="eyebrow">01 · The crave</span>
+              <h2 className="serif">Discover<br />the <span className="hot ital">dish.</span></h2>
+              <p className="sub">Swipe a full-screen feed tuned to your taste — a personalized For You and a Following feed of real home cooks. No blogs, no clutter, just the next thing you want to make.</p>
             </div>
-            <button className="weblink linkbtn" onClick={app}>Or open the web app <span className="arr">→</span></button>
-            <div className="madewith"><span className="ml">Made with</span> real home cooks · zero ads · no tracking · <em>just food</em></div>
           </div>
-          <div className="phone-stage">
-            <div className="phone"><div className="screen">
-              <div className="feedbg" />
-              <div className="ftabs"><span>Following</span><span className="on">For You</span></div>
-              <div className="play"><svg width="20" height="20" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z" /></svg></div>
-              <div className="rail">
-                <div className="av">MP<span className="plus">+</span></div>
-                <div className="act"><svg width="26" height="26" viewBox="0 0 24 24" fill="#ff5a36"><path d="M12 21s-7-4.35-9.5-8.5C.8 9.4 2.3 6 5.5 6c2 0 3.2 1.2 3.9 2.3C10 7.2 11.2 6 13.2 6c3.2 0 4.7 3.4 3 6.5C19 16.65 12 21 12 21z" /></svg>48.2k</div>
-                <div className="act"><svg width="25" height="25" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4L3 21l1.1-4.5A8.4 8.4 0 1 1 21 11.5z" /></svg>612</div>
-                <div className="act"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><path d="M5 3h14v18l-7-5-7 5z" /></svg>Save</div>
-              </div>
-              <div className="caption">
-                <div className="who">Mina Park <span>@minapark</span></div>
-                <span className="chip">JAPANESE · 25:00 · ●●●○</span>
-                <div className="title">Charred Miso<br />Eggplant</div>
-              </div>
-              <div className="progress" />
-              <div className="viewrec">↑ View recipe</div>
-            </div></div>
-            <div className="float saved">
-              <div className="mp">MP</div>
-              <div><div className="t1">Recipe saved</div><div className="t2">Charred Miso Eggplant</div><div className="t3">Japanese · 25 min · Easy</div></div>
+
+          <div className="scene" data-scene="1">
+            <div className="wrap">
+              <span className="eyebrow">02 · The tap</span>
+              <h2 className="serif">One tap to<br />the <span className="hot ital">recipe.</span></h2>
+              <p className="sub">Any video unfolds into a clean, structured recipe — ingredients with quantities, numbered steps, cuisine, time and difficulty. The whole thing, none of the life story.</p>
             </div>
-            <div className="float cook"><div className="lab">COOK MODE</div><div className="tm">06:30</div><div className="cbar" /></div>
           </div>
+
+          <div className="scene" data-scene="2">
+            <div className="wrap">
+              <span className="eyebrow">03 · The math</span>
+              <h2 className="serif">Scale it to<br /><span className="hot ital">any table.</span></h2>
+              <p className="sub">Set how many you're feeding and every quantity recalculates on the spot. Push the whole list — already scaled — straight to your shopping list.</p>
+            </div>
+          </div>
+
+          <div className="scene" data-scene="3">
+            <div className="wrap">
+              <span className="eyebrow">04 · The cook</span>
+              <h2 className="serif">Then <span className="hot ital">actually</span><br />cook it.</h2>
+              <p className="sub">A big step-by-step Cook Mode with built-in timers that keeps your screen awake — so you can cook along hands-free, from first sear to the plate.</p>
+            </div>
+          </div>
+
+          <div className="scrollcue" aria-hidden="true"><span>Keep scrolling</span><i /></div>
         </div>
-      </header>
-
-      {/* PROCESS (3D) */}
-      <section className="process" id="how">
-        <div className="intro wrap">
-          <span className="eyebrow">From scroll to supper</span>
-          <h2 className="serif intro-h">Video to real recipe, in one tap.</h2>
-          <div className="hint">Scroll to discover the flow ↓</div>
-        </div>
-        <div className="deck"><div className="stage">
-          <article className="step-card dark">
-            <div className="step-num">01</div>
-            <div className="step-inner">
-              <div>
-                <div className="step-lab">The crave</div>
-                <h3>Discover the dish.</h3>
-                <p>Swipe a full-screen feed tuned to your taste — a personalized For You and a Following feed of real home cooks. No blogs, no clutter.</p>
-              </div>
-              <div className="phone-stage"><div className="phone"><div className="screen">
-                <div className="feedbg" />
-                <div className="ftabs" style={{ top: 18 }}><span>Following</span><span className="on">For You</span></div>
-                <div className="play"><svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z" /></svg></div>
-                <div className="rail" style={{ bottom: 96 }}>
-                  <div className="av">MP<span className="plus">+</span></div>
-                  <div className="act"><svg width="24" height="24" viewBox="0 0 24 24" fill="#ff5a36"><path d="M12 21s-7-4.35-9.5-8.5C.8 9.4 2.3 6 5.5 6c2 0 3.2 1.2 3.9 2.3C10 7.2 11.2 6 13.2 6c3.2 0 4.7 3.4 3 6.5C19 16.65 12 21 12 21z" /></svg>48.2k</div>
-                  <div className="act"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4L3 21l1.1-4.5A8.4 8.4 0 1 1 21 11.5z" /></svg>612</div>
-                </div>
-                <div className="caption" style={{ bottom: 30 }}><div className="who">Mina Park <span>@minapark</span></div><span className="chip">JAPANESE · 25 MIN</span><div className="title">Charred Miso<br />Eggplant</div></div>
-              </div></div></div>
-            </div>
-          </article>
-
-          <article className="step-card cream">
-            <div className="step-num">02</div>
-            <div className="step-inner">
-              <div>
-                <div className="step-lab">The tap</div>
-                <h3>Open the recipe.</h3>
-                <p>One tap turns any video into a clean, structured recipe — ingredients with quantities, numbered steps, cuisine, time and difficulty.</p>
-              </div>
-              <div className="phone-stage"><div className="phone"><div className="screen"><div className="scr">
-                <div className="vid" />
-                <div className="sbody">
-                  <span className="mchip">JAPANESE</span>
-                  <h4>Charred Miso Eggplant</h4>
-                  <div className="meta3"><div className="m"><div className="kk">Time</div><div className="v">25 min</div></div><div className="m"><div className="kk">Serves</div><div className="v">2</div></div><div className="m"><div className="kk">Level</div><div className="v">Easy</div></div></div>
-                  <div className="ing-h">Ingredients</div>
-                  <div className="ing"><span className="idot" />2 globe eggplants</div>
-                  <div className="ing"><span className="idot" />3 tbsp white miso</div>
-                  <div className="ing"><span className="idot" />1 tbsp mirin · 1 tbsp sake</div>
-                  <div className="scta">Start Cook Mode</div>
-                </div>
-              </div></div></div></div>
-            </div>
-          </article>
-
-          <article className="step-card dark">
-            <div className="step-num">03</div>
-            <div className="step-inner">
-              <div>
-                <div className="step-lab">The math</div>
-                <h3>Scale it to any table.</h3>
-                <p>Type how many you're feeding and every quantity recalculates instantly. Push the whole list — already scaled — to your shopping list.</p>
-              </div>
-              <div className="phone-stage"><div className="phone"><div className="screen"><div className="scr dark">
-                <div className="sbody">
-                  <div className="sc-lab">Serving scaler</div>
-                  <div className="stepper"><button>−</button><div className="cnt"><b>6</b><span>servings</span></div><button className="plus">+</button></div>
-                  <div className="scr-row"><span>Globe eggplants</span><b>3</b></div>
-                  <div className="scr-row"><span>White miso</span><b>4½ tbsp</b></div>
-                  <div className="scr-row"><span>Mirin</span><b>1½ tbsp</b></div>
-                  <div className="scr-row"><span>Toasted sesame</span><b>3 tsp</b></div>
-                  <div className="scta accent">🛒 Add to shopping list</div>
-                </div>
-              </div></div></div></div>
-            </div>
-          </article>
-
-          <article className="step-card cream">
-            <div className="step-num">04</div>
-            <div className="step-inner">
-              <div>
-                <div className="step-lab">The cook</div>
-                <h3>Then cook it.</h3>
-                <p>A big step-by-step Cook Mode with built-in timers that keeps your screen awake — so you can cook along hands-free, start to plate.</p>
-              </div>
-              <div className="phone-stage"><div className="phone"><div className="screen"><div className="cook-scr">
-                <div className="cl">COOK MODE · STEP 4 OF 5</div>
-                <div className="ins">Flip, brush generously with glaze, and broil until lacquered.</div>
-                <div className="ring"><span>3:00</span></div>
-                <div className="note">Built-in timer · screen stays awake</div>
-                <div className="cook-btns"><div className="cb back">Back</div><div className="cb next">Next step</div></div>
-              </div></div></div></div>
-            </div>
-          </article>
-        </div></div>
       </section>
 
 
       {/* MANIFESTO + STATS */}
-      <section className="manifesto"><div className="wrap">
-        <span className="eyebrow">Why we built it</span>
-        <h2 className="serif">The feed got so good at <span className="hot ital">keeping you scrolling</span> it forgot to feed you. So we built one that does.</h2>
-        <div className="stats">
-          <div className="stat"><div className="n">12,408</div><div className="l">recipes &amp; counting</div></div>
-          <div className="stat"><div className="n">0</div><div className="l">ads, ever</div></div>
-          <div className="stat"><div className="n">22<span>min</span></div><div className="l">average cook</div></div>
-          <div className="stat"><div className="n">100<span>%</span></div><div className="l">real home cooks</div></div>
-        </div>
-      </div></section>
-
       {/* FEATURES */}
       <section className="sec" id="features"><div className="wrap">
         <div className="sec-head left">
@@ -388,6 +448,94 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
         </div>
       </div></section>
 
+      {/* ── SEE IT IN ACTION — auto-cycling app demo ─────────────────────
+          The real app screens resurrected as one looping phone, so visitors
+          see exactly how Sizzle works right before the call to action. */}
+      <section className="sec demo-sec" id="demo" ref={demoRef}><div className="wrap">
+        <div className="demo-grid">
+          <div className="demo-copy">
+            <span className="eyebrow">See it in action</span>
+            <h2 className="serif">The whole flow,<br /><span className="hot ital">in your hand.</span></h2>
+            <p>Feed to recipe to dinner — here's exactly how Sizzle works, start to plate.</p>
+            <div className="demo-steps">
+              {DEMO_STEPS.map((s, i) => (
+                <button key={i} className={'demo-step' + (demoStep === i ? ' on' : '')} onClick={() => setDemoStep(i)} aria-pressed={demoStep === i}>
+                  <span className="ds-n">{String(i + 1).padStart(2, '0')}</span>
+                  <span className="ds-txt"><b>{s.lab}</b><span>{s.t}</span></span>
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div className="demo-phone-wrap">
+            <div className="phone demo-phone">
+              <div className="screen">
+                {/* 0 — Feed */}
+                <div className={'demo-screen' + (demoStep === 0 ? ' on' : '')} aria-hidden={demoStep !== 0}>
+                  <div className="feedbg" />
+                  <div className="ftabs" style={{ top: 18 }}><span>Following</span><span className="on">For You</span></div>
+                  <div className="play"><svg width="18" height="18" viewBox="0 0 24 24" fill="#fff"><path d="M8 5v14l11-7z" /></svg></div>
+                  <div className="rail" style={{ bottom: 96 }}>
+                    <div className="av">MP<span className="plus">+</span></div>
+                    <div className="act"><svg width="24" height="24" viewBox="0 0 24 24" fill="#ff5a36"><path d="M12 21s-7-4.35-9.5-8.5C.8 9.4 2.3 6 5.5 6c2 0 3.2 1.2 3.9 2.3C10 7.2 11.2 6 13.2 6c3.2 0 4.7 3.4 3 6.5C19 16.65 12 21 12 21z" /></svg>48.2k</div>
+                    <div className="act"><svg width="23" height="23" viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth="2"><path d="M21 11.5a8.4 8.4 0 0 1-9 8.4L3 21l1.1-4.5A8.4 8.4 0 1 1 21 11.5z" /></svg>612</div>
+                  </div>
+                  <div className="caption" style={{ bottom: 30 }}><div className="who">Mina Park <span>@minapark</span></div><span className="chip">JAPANESE · 25 MIN</span><div className="title">Charred Miso<br />Eggplant</div></div>
+                </div>
+
+                {/* 1 — Recipe */}
+                <div className={'demo-screen' + (demoStep === 1 ? ' on' : '')} aria-hidden={demoStep !== 1}>
+                  <div className="scr">
+                    <div className="vid" />
+                    <div className="sbody">
+                      <span className="mchip">JAPANESE</span>
+                      <h4>Charred Miso Eggplant</h4>
+                      <div className="meta3"><div className="m"><div className="kk">Time</div><div className="v">25 min</div></div><div className="m"><div className="kk">Serves</div><div className="v">2</div></div><div className="m"><div className="kk">Level</div><div className="v">Easy</div></div></div>
+                      <div className="ing-h">Ingredients</div>
+                      <div className="ing"><span className="idot" />2 globe eggplants</div>
+                      <div className="ing"><span className="idot" />3 tbsp white miso</div>
+                      <div className="ing"><span className="idot" />1 tbsp mirin · 1 tbsp sake</div>
+                      <div className="scta">Start Cook Mode</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 2 — Serving scaler */}
+                <div className={'demo-screen' + (demoStep === 2 ? ' on' : '')} aria-hidden={demoStep !== 2}>
+                  <div className="scr dark">
+                    <div className="sbody">
+                      <div className="sc-lab">Serving scaler</div>
+                      <div className="stepper"><button>−</button><div className="cnt"><b>6</b><span>servings</span></div><button className="plus">+</button></div>
+                      <div className="scr-row"><span>Globe eggplants</span><b>3</b></div>
+                      <div className="scr-row"><span>White miso</span><b>4½ tbsp</b></div>
+                      <div className="scr-row"><span>Mirin</span><b>1½ tbsp</b></div>
+                      <div className="scr-row"><span>Toasted sesame</span><b>3 tsp</b></div>
+                      <div className="scta accent">🛒 Add to shopping list</div>
+                    </div>
+                  </div>
+                </div>
+
+                {/* 3 — Cook Mode */}
+                <div className={'demo-screen' + (demoStep === 3 ? ' on' : '')} aria-hidden={demoStep !== 3}>
+                  <div className="cook-scr">
+                    <div className="cl">COOK MODE · STEP 4 OF 5</div>
+                    <div className="ins">Flip, brush generously with glaze, and broil until lacquered.</div>
+                    <div className="ring"><span>3:00</span></div>
+                    <div className="note">Built-in timer · screen stays awake</div>
+                    <div className="cook-btns"><div className="cb back">Back</div><div className="cb next">Next step</div></div>
+                  </div>
+                </div>
+              </div>
+            </div>
+            <div className="demo-dots" role="tablist" aria-label="App demo steps">
+              {DEMO_STEPS.map((_, i) => (
+                <button key={i} className={demoStep === i ? 'on' : ''} onClick={() => setDemoStep(i)} aria-label={'Step ' + (i + 1)} />
+              ))}
+            </div>
+          </div>
+        </div>
+      </div></section>
+
       {/* FINAL CTA */}
       <section className="cta-sec"><div className="wrap"><div className="cta-card">
         <div className="b serif">Sizzle</div>
@@ -435,6 +583,39 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
 const CSS = `
 .szl{--bg:#0f0b08;--bg2:#17110c;--accent:#ff5a36;--saffron:#f4a52c;--herb:#9bbd6e;--on:#f6ede2;--soft:#c3b3a6;--faint:#8b7a6c;--line:rgba(255,255,255,.10);--serif:'Fraunces',Georgia,serif;--sans:'Hanken Grotesk',-apple-system,sans-serif;--mono:'Spline Sans Mono',ui-monospace,monospace;background:var(--bg);color:var(--on);font-family:var(--sans);overflow-x:hidden}
 .szl .grain{position:fixed;inset:0;z-index:80;pointer-events:none;opacity:.05;mix-blend-mode:overlay;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.82' numOctaves='2' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E")}
+/* Lenis smooth scroll (unscoped — only present while the landing is mounted). */
+html.lenis,html.lenis body{height:auto}
+.lenis.lenis-smooth{scroll-behavior:auto!important}
+.lenis.lenis-smooth [data-lenis-prevent]{overscroll-behavior:contain}
+.lenis.lenis-stopped{overflow:hidden}
+/* ── Scrollytelling story stage: pinned film backdrop + crossfading scenes ── */
+.szl .story{position:relative;background:#0a0807}
+.szl .story-stage{position:relative;height:100vh;width:100%;overflow:hidden}
+.szl .story-bg{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;display:block}
+.szl .story-veil{position:absolute;inset:0;pointer-events:none;background:linear-gradient(108deg,rgba(8,6,5,.88) 0%,rgba(8,6,5,.55) 40%,rgba(8,6,5,.16) 68%,rgba(8,6,5,.42) 100%)}
+.szl .scene{position:absolute;inset:0;display:flex;align-items:center;will-change:opacity,transform;z-index:3}
+.szl .scene .wrap{width:100%}
+.szl .scene .ticket,.szl .scene .eyebrow{display:inline-block;margin-bottom:6px}
+.szl .scene h1,.szl .scene h2{font-size:clamp(48px,7.4vw,104px);margin:14px 0 0;max-width:13ch;text-shadow:0 2px 40px rgba(0,0,0,.5)}
+.szl .scene .sub{margin:26px 0 0;max-width:440px;font-size:18px;line-height:1.6;color:#e6dccf;text-shadow:0 1px 20px rgba(0,0,0,.6)}
+.szl .scene .ctas{margin-top:32px}
+.szl .scene .weblink{margin-top:18px}
+.szl .scene-cta .wrap.center{text-align:center;max-width:720px;margin:0 auto}
+.szl .scene-cta h2{margin-left:auto;margin-right:auto}
+.szl .scene-cta .ctas{justify-content:center}
+.szl .scene-cta .weblink{justify-content:center;width:100%}
+.szl .scrollcue{position:absolute;left:50%;bottom:32px;transform:translateX(-50%);z-index:6;display:flex;flex-direction:column;align-items:center;gap:10px;font-family:var(--mono);font-size:11px;letter-spacing:.22em;text-transform:uppercase;color:var(--soft);pointer-events:none}
+.szl .scrollcue i{width:1px;height:46px;background:linear-gradient(var(--saffron),transparent);animation:sz-cue 1.9s ease-in-out infinite}
+@keyframes sz-cue{0%,100%{opacity:.25;transform:scaleY(.4);transform-origin:top}50%{opacity:1;transform:scaleY(1)}}
+/* Mobile / no-scrub fallback: the video is a fixed backdrop, scenes stack over it. */
+@media(max-width:759px){
+  .szl .story,.szl .story-stage{height:auto}
+  .szl .story-bg{position:fixed;z-index:0}
+  .szl .scene{position:relative;inset:auto;opacity:1!important;transform:none!important;min-height:94vh;padding:88px 0}
+  .szl .scene .wrap{position:relative;z-index:2}
+  .szl .scrollcue{display:none}
+}
+@media(prefers-reduced-motion:reduce){.szl .scrollcue i{animation:none}}
 .szl *{margin:0;padding:0;box-sizing:border-box}
 .szl a{color:inherit;text-decoration:none}
 .szl .linkbtn{background:none;border:none;color:inherit;font-family:inherit;cursor:pointer}
@@ -663,6 +844,30 @@ const CSS = `
 .szl .faq .a{max-height:0;overflow:hidden;transition:max-height .45s cubic-bezier(.16,1,.3,1)}
 .szl .faq.open .a{max-height:220px}
 .szl .faq .a p{color:var(--soft);font-size:16px;line-height:1.6;padding:0 4px 26px;max-width:640px}
+
+/* See it in action — auto-cycling app demo */
+.szl .demo-sec{padding:104px 0}
+.szl .demo-grid{display:grid;grid-template-columns:1fr 340px;gap:56px;align-items:center}
+.szl .demo-copy h2{font-size:clamp(34px,5vw,58px);margin:14px 0 16px}
+.szl .demo-copy>p{color:var(--soft);font-size:17px;line-height:1.6;max-width:440px;margin-bottom:26px}
+.szl .demo-steps{display:flex;flex-direction:column;gap:6px;max-width:440px}
+.szl .demo-step{display:flex;gap:14px;align-items:flex-start;text-align:left;background:none;border:1px solid transparent;cursor:pointer;font-family:inherit;color:inherit;padding:14px 16px;border-radius:14px;transition:background .3s,border-color .3s}
+.szl .demo-step .ds-n{font-family:var(--mono);font-size:12px;font-weight:600;color:var(--faint);padding-top:3px;transition:color .3s}
+.szl .demo-step .ds-txt{display:flex;flex-direction:column;gap:2px}
+.szl .demo-step .ds-txt b{font-size:16px;font-weight:700;color:var(--soft);transition:color .3s}
+.szl .demo-step .ds-txt span{font-size:13.5px;color:var(--faint);line-height:1.4}
+.szl .demo-step:hover{background:rgba(255,255,255,.03)}
+.szl .demo-step.on{background:rgba(255,90,54,.08);border-color:rgba(255,90,54,.28)}
+.szl .demo-step.on .ds-n{color:var(--accent)}
+.szl .demo-step.on .ds-txt b{color:var(--on)}
+.szl .demo-phone-wrap{display:flex;flex-direction:column;align-items:center;gap:22px;justify-self:center}
+.szl .demo-phone{box-shadow:0 50px 110px rgba(0,0,0,.6)}
+.szl .demo-screen{position:absolute;inset:0;opacity:0;transition:opacity .55s ease;pointer-events:none}
+.szl .demo-screen.on{opacity:1;pointer-events:auto}
+.szl .demo-dots{display:flex;gap:8px;justify-content:center}
+.szl .demo-dots button{width:7px;height:7px;padding:0;border:none;border-radius:50%;background:rgba(255,255,255,.22);cursor:pointer;transition:all .35s}
+.szl .demo-dots button.on{background:var(--accent);width:22px;border-radius:4px}
+@media(max-width:860px){.szl .demo-grid{grid-template-columns:1fr;gap:34px;justify-items:center;text-align:center}.szl .demo-copy{max-width:440px}.szl .demo-copy>p{margin-left:auto;margin-right:auto}.szl .demo-steps{text-align:left}}
 
 /* Footer — Nutrition Facts label */
 .szl .nutri-foot{border-top:1px solid var(--line);padding:72px 0 40px}
