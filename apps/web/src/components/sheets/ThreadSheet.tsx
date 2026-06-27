@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRequireAuth } from '../../auth/useRequireAuth';
-import { useSendMessage, useThread } from '../../data/queries';
+import { useDeleteConversation, useSendMessage, useThread } from '../../data/queries';
 import { useSizzle } from '../../store';
 import { theme } from '../../theme';
-import { ChevronLeftIcon, ShareIcon } from '../icons';
+import { ChevronLeftIcon, ShareIcon, TrashIcon } from '../icons';
 
 const accent = theme.accent;
 
@@ -17,11 +17,17 @@ export function ThreadSheet() {
 
   const { data: thread, isLoading } = useThread(threadWith);
   const send = useSendMessage(threadWith ?? '');
+  const deleteConv = useDeleteConversation();
   const [draft, setDraft] = useState('');
   const scrollRef = useRef<HTMLDivElement>(null);
   const qc = useQueryClient();
 
   const msgs = thread?.messages ?? [];
+  // Receipt for the last message the viewer sent: "Read" once the other side's
+  // last-read time has caught up to it, otherwise "Delivered" (it's on the server).
+  const lastMine = [...msgs].reverse().find((m) => m.fromMe);
+  const readByOther =
+    !!lastMine && !!thread?.otherLastReadAt && new Date(thread.otherLastReadAt).getTime() >= new Date(lastMine.createdAt).getTime();
   // Keep the newest message in view as the thread grows / loads.
   useEffect(() => {
     const el = scrollRef.current;
@@ -40,6 +46,11 @@ export function ThreadSheet() {
   const other = thread?.otherUser;
   const close = () => setThreadWith(null);
   const openProfile = () => { if (other) { setThreadWith(null); setOpenCook(other.id); } };
+  const removeChat = () => {
+    if (!threadWith || deleteConv.isPending) return;
+    if (typeof window !== 'undefined' && !window.confirm(`Delete this conversation with ${other?.name ?? 'them'}? It's removed from your inbox — they keep their copy.`)) return;
+    deleteConv.mutate(threadWith, { onSuccess: () => setThreadWith(null) });
+  };
 
   const submit = () => {
     if (!requireAuth()) return;
@@ -61,6 +72,9 @@ export function ThreadSheet() {
           </div>
           <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>{other?.name ?? 'Loading…'}</div>
         </button>
+        <button onClick={removeChat} aria-label="Delete conversation" disabled={!thread?.conversationId} style={{ width: 36, height: 36, flex: 'none', borderRadius: '50%', border: 'none', background: 'var(--surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: thread?.conversationId ? 'pointer' : 'default', opacity: thread?.conversationId ? 1 : 0.4 }}>
+          <TrashIcon size={18} />
+        </button>
       </div>
 
       <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '16px 16px 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -71,10 +85,17 @@ export function ThreadSheet() {
           </div>
         )}
         {msgs.map((m) => (
-          <div key={m.id} style={{ display: 'flex', justifyContent: m.fromMe ? 'flex-end' : 'flex-start' }}>
-            <div style={{ maxWidth: '76%', padding: '9px 14px', borderRadius: m.fromMe ? '18px 18px 5px 18px' : '18px 18px 18px 5px', background: m.fromMe ? accent : 'var(--surface)', color: m.fromMe ? '#fff' : 'var(--text)', border: m.fromMe ? 'none' : '1px solid var(--line)', fontSize: 15, lineHeight: 1.4, wordBreak: 'break-word' }}>
-              {m.text}
+          <div key={m.id}>
+            <div style={{ display: 'flex', justifyContent: m.fromMe ? 'flex-end' : 'flex-start' }}>
+              <div style={{ maxWidth: '76%', padding: '9px 14px', borderRadius: m.fromMe ? '18px 18px 5px 18px' : '18px 18px 18px 5px', background: m.fromMe ? accent : 'var(--surface)', color: m.fromMe ? '#fff' : 'var(--text)', border: m.fromMe ? 'none' : '1px solid var(--line)', fontSize: 15, lineHeight: 1.4, wordBreak: 'break-word' }}>
+                {m.text}
+              </div>
             </div>
+            {lastMine && m.id === lastMine.id && (
+              <div style={{ fontSize: 11, color: 'var(--text-faint-2)', marginTop: 3, textAlign: 'right', paddingRight: 4 }}>
+                {readByOther ? 'Read' : 'Delivered'}
+              </div>
+            )}
           </div>
         ))}
       </div>

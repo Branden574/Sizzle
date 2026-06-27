@@ -22,6 +22,8 @@ interface ConvRow {
   user_b: string;
   a_last_read_at: string;
   b_last_read_at: string;
+  a_cleared_at: string | null;
+  b_cleared_at: string | null;
   last_message_at: string | null;
   last_message_text: string | null;
   last_message_sender_id: string | null;
@@ -30,6 +32,14 @@ interface ConvRow {
 const isUnread = (r: ConvRow, viewer: string): boolean => {
   const myLastRead = r.user_a === viewer ? r.a_last_read_at : r.b_last_read_at;
   return !!r.last_message_at && r.last_message_at > myLastRead && r.last_message_sender_id !== viewer;
+};
+
+// A conversation the viewer "deleted": hidden from their inbox until the other
+// person sends something newer than the moment they cleared it. (last_message_at
+// and *_cleared_at are both JS-ISO strings, so a lexical compare is exact.)
+const clearedHidden = (r: ConvRow, viewer: string): boolean => {
+  const cleared = r.user_a === viewer ? r.a_cleared_at : r.b_cleared_at;
+  return !!cleared && (!r.last_message_at || r.last_message_at <= cleared);
 };
 
 /** GET /messages — the viewer's conversation inbox (newest activity first). */
@@ -54,8 +64,8 @@ messages.get('/', requireAuth, async (c) => {
   for (const r of list) {
     const otherId = r.user_a === userId ? r.user_b : r.user_a;
     const other = pMap.get(otherId);
-    // Hide conversations with a blocked or banned counterparty.
-    if (!other || blocked.has(otherId) || other.banned) continue;
+    // Hide conversations with a blocked/banned counterparty, or ones the viewer deleted.
+    if (!other || blocked.has(otherId) || other.banned || clearedHidden(r, userId)) continue;
     out.push({
       id: r.id,
       otherUser: cookSummary(other),
@@ -76,10 +86,10 @@ messages.get('/unread-count', requireAuth, async (c) => {
   const userId = c.get('userId')!;
   const { data: rows } = await supabaseAdmin
     .from('conversations')
-    .select('id, user_a, user_b, a_last_read_at, b_last_read_at, last_message_at, last_message_text, last_message_sender_id')
+    .select('id, user_a, user_b, a_last_read_at, b_last_read_at, a_cleared_at, b_cleared_at, last_message_at, last_message_text, last_message_sender_id')
     .or(`user_a.eq.${userId},user_b.eq.${userId}`)
     .not('last_message_at', 'is', null);
-  const unread = ((rows ?? []) as ConvRow[]).filter((r) => isUnread(r, userId));
+  const unread = ((rows ?? []) as ConvRow[]).filter((r) => isUnread(r, userId) && !clearedHidden(r, userId));
   if (unread.length === 0) return c.json({ count: 0 });
 
   const blocked = await loadBlockedIds(supabaseAdmin, userId);
@@ -108,13 +118,20 @@ messages.get('/with/:userId', requireAuth, async (c) => {
   const { data: conv } = await supabaseAdmin.from('conversations').select('*').eq('user_a', a).eq('user_b', b).maybeSingle();
 
   let msgs: MessageDTO[] = [];
+  let otherLastReadAt: string | null = null;
   if (conv) {
-    const { data: rows } = await supabaseAdmin
+    // The other side's read point drives the sender's Delivered/Read receipt.
+    otherLastReadAt = (userId === a ? conv.b_last_read_at : conv.a_last_read_at) as string;
+    // If the viewer deleted this thread, only show messages newer than that.
+    const myCleared = (userId === a ? conv.a_cleared_at : conv.b_cleared_at) as string | null;
+    let q = supabaseAdmin
       .from('messages')
       .select('*')
       .eq('conversation_id', conv.id)
       .order('created_at', { ascending: true })
       .limit(300);
+    if (myCleared) q = q.gt('created_at', myCleared);
+    const { data: rows } = await q;
     msgs = (rows ?? []).map((m) => ({
       id: m.id as string,
       fromMe: m.sender_id === userId,
@@ -127,7 +144,7 @@ messages.get('/with/:userId', requireAuth, async (c) => {
     await supabaseAdmin.from('conversations').update({ [col]: new Date().toISOString() }).eq('id', conv.id);
   }
 
-  return c.json<ThreadDTO>({ conversationId: conv?.id ?? '', otherUser: cookSummary(other as ProfileRow), messages: msgs });
+  return c.json<ThreadDTO>({ conversationId: conv?.id ?? '', otherUser: cookSummary(other as ProfileRow), messages: msgs, otherLastReadAt });
 });
 
 const sendSchema = z.object({ text: z.string().trim().min(1).max(2000) });
@@ -162,15 +179,36 @@ messages.post('/with/:userId', requireAuth, requireNotBanned, rateLimit({ window
     .single();
   if (error || !msg) throw dbFail(error?.message ?? 'Could not send message');
 
-  // Bump the denormalized summary + mark the sender's own side read.
+  // Bump the denormalized summary + mark the sender's own side read. Sending also
+  // un-deletes the thread for the sender (if they'd cleared it before).
   const senderCol = userId === a ? 'a_last_read_at' : 'b_last_read_at';
+  const senderClearedCol = userId === a ? 'a_cleared_at' : 'b_cleared_at';
   await supabaseAdmin
     .from('conversations')
-    .update({ last_message_at: now, last_message_text: parsed.data.text, last_message_sender_id: userId, [senderCol]: now })
+    .update({ last_message_at: now, last_message_text: parsed.data.text, last_message_sender_id: userId, [senderCol]: now, [senderClearedCol]: null })
     .eq('id', conv.id);
 
   return c.json<MessageDTO>(
     { id: msg.id as string, fromMe: true, text: msg.text as string, createdAt: msg.created_at as string, time: relativeTime(new Date(msg.created_at as string)) },
     201,
   );
+});
+
+/** DELETE /messages/with/:userId — delete the conversation from the viewer's
+ *  inbox only (sets their *_cleared_at). The other person's copy is untouched;
+ *  the thread returns for the viewer if the other side messages again. */
+messages.delete('/with/:userId', requireAuth, async (c) => {
+  const userId = c.get('userId')!;
+  const otherId = assertUuid(c.req.param('userId'), 'user');
+  if (otherId === userId) throw badRequest('You cannot message yourself');
+
+  const [a, b] = canonical(userId, otherId);
+  const { data: conv } = await supabaseAdmin.from('conversations').select('id').eq('user_a', a).eq('user_b', b).maybeSingle();
+  if (conv) {
+    const now = new Date().toISOString();
+    const clearedCol = userId === a ? 'a_cleared_at' : 'b_cleared_at';
+    const readCol = userId === a ? 'a_last_read_at' : 'b_last_read_at';
+    await supabaseAdmin.from('conversations').update({ [clearedCol]: now, [readCol]: now }).eq('id', conv.id);
+  }
+  return c.json({ ok: true });
 });

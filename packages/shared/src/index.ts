@@ -310,6 +310,9 @@ export interface ThreadDTO {
   conversationId: string;
   otherUser: CookSummary;
   messages: MessageDTO[];
+  /** The other participant's last-read time — drives the sender's Delivered/Read
+   *  receipt. Null when there's no conversation yet. */
+  otherLastReadAt: string | null;
 }
 
 export type ReportCategory = 'nudity' | 'harassment' | 'violence' | 'spam' | 'other';

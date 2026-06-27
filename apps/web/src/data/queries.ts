@@ -677,6 +677,19 @@ export function useSendMessage(otherId: string) {
   });
 }
 
+/** Delete a conversation from the viewer's inbox (per-user; the other side keeps theirs). */
+export function useDeleteConversation() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (otherId: string) => apiSend('DELETE', `/messages/with/${otherId}`),
+    onSuccess: (_d, otherId) => {
+      qc.removeQueries({ queryKey: ['thread', otherId] });
+      void qc.invalidateQueries({ queryKey: ['conversations'] });
+      void qc.invalidateQueries({ queryKey: ['messages-unread'] });
+    },
+  });
+}
+
 /** Unread-conversation count for the inbox badge (polled globally while signed in). */
 export function useUnreadMessages() {
   const authed = useAuth((s) => s.status === 'authed');
