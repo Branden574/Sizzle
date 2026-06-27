@@ -439,8 +439,11 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
 
 
       {/* MANIFESTO + STATS */}
-      {/* FEATURES */}
-      <section className="sec" id="features"><div className="wrap">
+      {/* FEATURES — interactive, over a dimmed food-film backdrop (not flat). */}
+      <section className="sec feat-sec" id="features">
+        <video className="feat-film" src="/landing/how-it-works-3d.mp4" poster="/landing/how-it-works-3d-poster.jpg" muted playsInline autoPlay loop preload="auto" aria-hidden="true" />
+        <div className="feat-film-veil" />
+        <div className="wrap">
         <div className="sec-head left">
           <span className="eyebrow">Built to actually cook</span>
           <h2 className="serif">More than a feed.<br />A kitchen companion.</h2>
@@ -905,6 +908,13 @@ html.lenis::-webkit-scrollbar{display:none}
 .szl .fcard h4{font-size:17px;font-weight:700;margin-bottom:8px}
 .szl .fcard p{font-size:14px;line-height:1.55;color:var(--soft)}
 @media(max-width:860px){.szl .fgrid{grid-template-columns:1fr 1fr}}
+/* Features over a dimmed food-film backdrop — depth + motion, still readable. */
+.szl .feat-sec{position:relative;overflow:hidden}
+.szl .feat-film{position:absolute;inset:0;width:100%;height:100%;object-fit:cover;opacity:.24;z-index:0;pointer-events:none}
+.szl .feat-film-veil{position:absolute;inset:0;z-index:0;pointer-events:none;background:linear-gradient(180deg,var(--bg) 0%,rgba(15,11,8,.72) 24%,rgba(15,11,8,.72) 76%,var(--bg) 100%)}
+.szl .feat-sec>.wrap{position:relative;z-index:1}
+.szl .feat-sec .fcard{background:rgba(23,17,12,.72);backdrop-filter:blur(8px);border-color:rgba(255,255,255,.09)}
+.szl .feat-sec .feat-try{backdrop-filter:blur(8px)}
 @media(max-width:560px){.szl .fgrid{grid-template-columns:1fr}}
 .szl .creators{position:relative}
 .szl .creators::before{content:"";position:absolute;top:0;right:0;width:560px;height:560px;background:radial-gradient(circle,rgba(244,165,44,.14),transparent 60%);pointer-events:none}
