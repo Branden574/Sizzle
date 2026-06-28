@@ -66,13 +66,15 @@ const CANDIDATES = 60;
 
 /** Load the viewer's engagement signals for ranking. */
 async function loadViewerSignals(userId: string): Promise<ViewerSignals> {
-  const [profile, follows, reactions, saves, views, impressions] = await Promise.all([
+  const [profile, follows, reactions, saves, views, impressions, boosted] = await Promise.all([
     supabaseAdmin.from('profiles').select('tastes').eq('id', userId).maybeSingle(),
     supabaseAdmin.from('follows').select('cook_id').eq('follower_id', userId),
     supabaseAdmin.from('reactions').select('recipe_id, kind').eq('user_id', userId),
     supabaseAdmin.from('saves').select('recipe_id').eq('user_id', userId),
     supabaseAdmin.from('recipe_views').select('recipe_id, skipped, completed').eq('user_id', userId).order('created_at', { ascending: false }).limit(200),
     supabaseAdmin.from('recipe_impressions').select('recipe_id').eq('user_id', userId).order('served_at', { ascending: false }).limit(200),
+    // Admin-boosted creators (tiny set — only those an admin has lifted).
+    supabaseAdmin.from('profiles').select('id, boost').gt('boost', 0),
   ]);
 
   // Resolve cook + tags for each engaged recipe.
@@ -123,6 +125,7 @@ async function loadViewerSignals(userId: string): Promise<ViewerSignals> {
     dislikedCooks,
     impressed: new Set((impressions.data ?? []).map((i) => i.recipe_id as string)),
     skips,
+    boosts: new Map((boosted.data ?? []).map((p) => [p.id as string, Number(p.boost)])),
   };
 }
 

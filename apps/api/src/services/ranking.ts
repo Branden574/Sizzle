@@ -20,6 +20,10 @@ export interface ViewerSignals {
   impressed: Set<string>;
   /** cook id -> number of fast-skips. */
   skips: Map<string, number>;
+  /** cook id -> admin boost factor (0 = none). A per-creator ranking lift set
+   *  from the admin dashboard; folded in as one more signal so a boosted creator
+   *  rises naturally rather than pinning to the top. */
+  boosts: Map<string, number>;
 }
 
 export const RANK_WEIGHTS = {
@@ -29,6 +33,8 @@ export const RANK_WEIGHTS = {
   affinity: 2.0,
   hashtag: 4.0,
   popular: 1.5,
+  // Admin boost: factor 1 ≈ the pull of a follow. Bounded to [0,3] in the DB.
+  boost: 5.0,
   seenPenalty: 4.0,
   dislikePenalty: 8.0,
   skipPenalty: 1.0,
@@ -57,6 +63,10 @@ export function scoreRecipe(r: RecipeRow, s: ViewerSignals, now: number): number
   for (const t of r.tags ?? []) tagPull += s.tagAffinity.get(t) ?? 0;
   if (tagPull > 0) score += W.hashtag * Math.min(1, tagPull / 5);
   score += W.popular * popularityScore(r.like_count);
+  // Admin boost — one more positive signal, so a boosted creator still competes
+  // with taste/follow/recency (and the diversity cap) instead of pinning to #1.
+  const boost = s.boosts.get(r.cook_id) ?? 0;
+  if (boost > 0) score += W.boost * boost;
   if (s.impressed.has(r.id)) score -= W.seenPenalty;
   if (s.dislikedCooks.has(r.cook_id)) score -= W.dislikePenalty;
   score -= W.skipPenalty * Math.min(3, s.skips.get(r.cook_id) ?? 0);

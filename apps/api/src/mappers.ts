@@ -65,6 +65,7 @@ export interface ProfileRow {
   tastes: string[] | null;
   verified_tier: 'blue' | 'gold' | null;
   role: 'user' | 'admin';
+  boost: number;
   banned: boolean;
   banned_reason: string | null;
   delete_at: string | null;

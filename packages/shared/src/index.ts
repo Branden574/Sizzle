@@ -390,6 +390,8 @@ export interface AdminUserDTO {
   banReason: string | null;
   banAppealStatus: AppealStatus;
   banAppealText: string | null;
+  /** Admin For You ranking lift for this creator (0 = none, 0.5 = light, 1 = strong). */
+  boost: number;
 }
 
 /** An entry in the admin moderation audit log. */

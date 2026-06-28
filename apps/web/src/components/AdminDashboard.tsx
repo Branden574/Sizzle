@@ -1,7 +1,7 @@
 import { useState, type CSSProperties } from 'react';
 import type { AdminAppealDTO, AdminReportGroupDTO, AdminUserDTO, ReportCategory, SupportRequestDTO, VerificationTier } from '@sizzle/shared';
 import {
-  useAdminAppeals, useAdminLog, useAdminReports, useAdminStats, useAdminSupportRequests, useAdminUsers, useBanUser, useDenyAppeal,
+  useAdminAppeals, useAdminLog, useAdminReports, useAdminStats, useAdminSupportRequests, useAdminUsers, useBanUser, useBoostUser, useDenyAppeal,
   useMarkFalseReport, usePurgeAccounts, useRemoveRecipe, useResolveSupportRequest, useRestoreRecipe, useVerifyUser,
 } from '../data/queries';
 import { useSizzle } from '../store';
@@ -215,11 +215,19 @@ function UsersTab() {
   const users = useAdminUsers(filter, q, true);
   const verify = useVerifyUser();
   const ban = useBanUser();
+  const boost = useBoostUser();
   const list = users.data ?? [];
 
   const tierBtn = (u: AdminUserDTO, tier: VerificationTier | null, label: string) => {
     const active = u.verifiedTier === tier || (tier === null && !u.verifiedTier);
     return <button key={label} onClick={() => verify.mutate({ id: u.id, tier })} style={{ flex: 1, height: 32, border: '1px solid var(--line)', borderRadius: 9, background: active ? 'var(--invert-bg)' : 'var(--surface)', color: active ? 'var(--invert-fg)' : 'var(--text-soft)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>{label}</button>;
+  };
+
+  // Per-creator For You ranking lift. Off=0, Light=0.5, Strong=1 (folded into the
+  // score as one signal, so it's a natural nudge — not an obvious always-#1 pin).
+  const boostBtn = (u: AdminUserDTO, val: number, label: string) => {
+    const active = Math.abs((u.boost ?? 0) - val) < 0.01;
+    return <button key={label} onClick={() => boost.mutate({ id: u.id, boost: val })} style={{ flex: 1, height: 30, border: '1px solid var(--line)', borderRadius: 9, background: active ? (val > 0 ? '#c98a1e' : 'var(--invert-bg)') : 'var(--surface)', color: active ? '#fff' : 'var(--text-soft)', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{label}</button>;
   };
 
   return (
@@ -256,6 +264,10 @@ function UsersTab() {
               </div>
             )}
             <div style={{ display: 'flex', gap: 6, marginTop: 12 }}>{tierBtn(u, null, 'None')}{tierBtn(u, 'blue', 'Blue')}{tierBtn(u, 'gold', 'Gold')}</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
+              <span style={{ width: 42, flex: 'none', fontSize: 11, fontWeight: 800, letterSpacing: '.04em', textTransform: 'uppercase', color: u.boost > 0 ? '#c98a1e' : 'var(--text-faint)' }}>Boost</span>
+              {boostBtn(u, 0, 'Off')}{boostBtn(u, 0.5, 'Light')}{boostBtn(u, 1, 'Strong')}
+            </div>
             <button
               disabled={u.role === 'admin' || ban.isPending}
               onClick={() => ban.mutate({ id: u.id, banned: !u.banned, reason: 'Repeated violations' })}

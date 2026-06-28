@@ -334,6 +334,8 @@ export function useBanUser() {
     },
   });
 }
+/** Admin: set a creator's For You ranking boost (0 = none, 0.5 = light, 1 = strong). */
+export const useBoostUser = adminMutation<{ id: string; boost: number }>(({ id, boost }) => apiSend('POST', `/admin/users/${id}/boost`, { boost }));
 
 export function useSearch(q: string) {
   return useQuery({

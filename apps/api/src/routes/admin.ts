@@ -250,6 +250,7 @@ admin.get('/users', async (c) => {
     banReason: p.banned_reason ?? null,
     banAppealStatus: p.ban_appeal_status ?? 'none',
     banAppealText: p.ban_appeal_text ?? null,
+    boost: p.boost ?? 0,
   }));
   if (filter === 'flagged') dto = dto.filter((u) => u.flagged || u.repeatOffender).sort((a, b) => (b.reportCount + b.removedCount * 50) - (a.reportCount + a.removedCount * 50));
   return c.json(dto);
@@ -298,6 +299,19 @@ admin.post('/users/:id/verify', async (c) => {
   const { error } = await supabaseAdmin.from('profiles').update({ verified_tier: body.data.tier }).eq('id', id);
   if (error) throw dbFail(error.message);
   await logModeration({ adminId: c.get('userId'), action: 'verify', targetUserId: id, detail: body.data.tier ?? 'none' });
+  return c.json({ ok: true });
+});
+
+const boostSchema = z.object({ boost: z.number().min(0).max(3) });
+
+/** POST /admin/users/:id/boost — set a creator's For You ranking lift (0 = none). */
+admin.post('/users/:id/boost', async (c) => {
+  const id = assertUuid(c.req.param('id'), 'user');
+  const body = boostSchema.safeParse(await c.req.json().catch(() => null));
+  if (!body.success) throw badRequest('Invalid boost');
+  const { error } = await supabaseAdmin.from('profiles').update({ boost: body.data.boost }).eq('id', id);
+  if (error) throw dbFail(error.message);
+  await logModeration({ adminId: c.get('userId'), action: 'boost', targetUserId: id, detail: String(body.data.boost) });
   return c.json({ ok: true });
 });
 
