@@ -312,14 +312,16 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
         <div className="story-stage">
           <video
             className="story-bg"
-            src="/landing/feed-to-plate-3d.mp4"
             poster="/landing/feed-to-plate-3d-poster.jpg"
             muted
             playsInline
             autoPlay
             loop
             preload="auto"
-          />
+          >
+            <source media="(max-width:759px)" src="/landing/feed-to-plate-3d-mobile.mp4" />
+            <source src="/landing/feed-to-plate-3d.mp4" />
+          </video>
           <div className="story-veil" />
 
           <div className="scene" data-scene="0">
@@ -378,14 +380,16 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
         <div className="story-stage">
           <video
             className="story-bg"
-            src="/landing/how-it-works-3d.mp4"
             poster="/landing/how-it-works-3d-poster.jpg"
             muted
             playsInline
             autoPlay
             loop
             preload="auto"
-          />
+          >
+            <source media="(max-width:759px)" src="/landing/how-it-works-3d-mobile.mp4" />
+            <source src="/landing/how-it-works-3d.mp4" />
+          </video>
           <div className="story-veil" />
 
           <div className="scene" data-scene="0">
@@ -428,7 +432,10 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
       {/* MANIFESTO + STATS */}
       {/* FEATURES — interactive, over a dimmed food-film backdrop (not flat). */}
       <section className="sec feat-sec" id="features">
-        <video className="feat-film" src="/landing/how-it-works-3d.mp4" poster="/landing/how-it-works-3d-poster.jpg" muted playsInline loop preload="none" aria-hidden="true" />
+        <video className="feat-film" poster="/landing/how-it-works-3d-poster.jpg" muted playsInline loop preload="none" aria-hidden="true">
+          <source media="(max-width:759px)" src="/landing/how-it-works-3d-mobile.mp4" />
+          <source src="/landing/how-it-works-3d.mp4" />
+        </video>
         <div className="feat-film-veil" />
         <div className="wrap">
         <div className="sec-head left">
@@ -473,14 +480,16 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
         <div className="story-stage">
           <video
             className="story-bg"
-            src="/landing/creators-3d.mp4"
             poster="/landing/creators-3d-poster.jpg"
             muted
             playsInline
             autoPlay
             loop
             preload="auto"
-          />
+          >
+            <source media="(max-width:759px)" src="/landing/creators-3d-mobile.mp4" />
+            <source src="/landing/creators-3d.mp4" />
+          </video>
           <div className="story-veil" />
 
           <div className="scene" data-scene="0">
@@ -511,7 +520,10 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
 
       {/* TRUST — a film "title card": the statement over the sizzling-pan footage. */}
       <section className="trust-sec">
-        <video className="trust-film" src="/landing/feed-to-plate-3d.mp4" poster="/landing/feed-to-plate-3d-poster.jpg" muted playsInline loop preload="none" aria-hidden="true" />
+        <video className="trust-film" poster="/landing/feed-to-plate-3d-poster.jpg" muted playsInline loop preload="none" aria-hidden="true">
+          <source media="(max-width:759px)" src="/landing/feed-to-plate-3d-mobile.mp4" />
+          <source src="/landing/feed-to-plate-3d.mp4" />
+        </video>
         <div className="trust-film-veil" />
         <div className="wrap">
           <h2 className="serif">No ads. No tracking.<br /><span className="hot ital">Just good food.</span></h2>
