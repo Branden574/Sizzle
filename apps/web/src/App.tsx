@@ -85,6 +85,9 @@ export default function App() {
     else if (authStatus === 'anon' || authStatus === 'guest') {
       resetToOnboarding();
       setWebEntered(false); // back to the marketing site on sign-out
+      // Wipe all cached user data (profile, saved/liked, DMs, notifications) so
+      // the next account on a shared device never sees the previous user's data.
+      queryClient.clear();
     }
   }, [authStatus, setPhase, resetToOnboarding]);
 

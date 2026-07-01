@@ -3,6 +3,7 @@ import { create } from 'zustand';
 import type { MeProfile } from '@sizzle/shared';
 import { apiGet } from '../lib/api';
 import { supabase } from '../lib/supabase';
+import { disablePush } from '../lib/push';
 import { biometricVerify, getBiometricToken, storeBiometricToken, clearBiometricToken } from '../lib/biometric';
 
 /**
@@ -153,6 +154,10 @@ export const useAuth = create<AuthState>((set, get) => ({
   },
 
   signOut: async () => {
+    // Unregister this device's push token FIRST, while the access token is still
+    // valid. If we signed out first, the DELETE /me/push-token would 401 and the
+    // token row would leak — a logged-out device would keep receiving pushes.
+    await disablePush().catch(() => {});
     await supabase.auth.signOut();
     // Drop the biometric-stashed token so a logged-out device can't restore.
     await clearBiometricToken();
