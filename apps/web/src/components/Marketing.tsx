@@ -242,6 +242,26 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
     };
   }, []);
 
+  // Decorative (non-scrubbed) landing videos only play while on screen — so they
+  // don't eagerly download or keep a decoder running off-screen all session.
+  useEffect(() => {
+    if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+    const vids = Array.from(root.current?.querySelectorAll<HTMLVideoElement>('.feat-film, .trust-film') ?? []);
+    if (!vids.length || typeof IntersectionObserver === 'undefined') return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          const v = e.target as HTMLVideoElement;
+          if (e.isIntersecting) void v.play().catch(() => {});
+          else v.pause();
+        }
+      },
+      { threshold: 0.15 },
+    );
+    vids.forEach((v) => io.observe(v));
+    return () => io.disconnect();
+  }, []);
+
   // serving scaler (base values are for 2 servings)
   const base = { egg: 1, miso: 1.5, mirin: 0.5, sesame: 1 };
   const frac = (x: number) => {
@@ -408,7 +428,7 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
       {/* MANIFESTO + STATS */}
       {/* FEATURES — interactive, over a dimmed food-film backdrop (not flat). */}
       <section className="sec feat-sec" id="features">
-        <video className="feat-film" src="/landing/how-it-works-3d.mp4" poster="/landing/how-it-works-3d-poster.jpg" muted playsInline autoPlay loop preload="auto" aria-hidden="true" />
+        <video className="feat-film" src="/landing/how-it-works-3d.mp4" poster="/landing/how-it-works-3d-poster.jpg" muted playsInline loop preload="none" aria-hidden="true" />
         <div className="feat-film-veil" />
         <div className="wrap">
         <div className="sec-head left">
@@ -491,7 +511,7 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
 
       {/* TRUST — a film "title card": the statement over the sizzling-pan footage. */}
       <section className="trust-sec">
-        <video className="trust-film" src="/landing/feed-to-plate-3d.mp4" poster="/landing/feed-to-plate-3d-poster.jpg" muted playsInline autoPlay loop preload="auto" aria-hidden="true" />
+        <video className="trust-film" src="/landing/feed-to-plate-3d.mp4" poster="/landing/feed-to-plate-3d-poster.jpg" muted playsInline loop preload="none" aria-hidden="true" />
         <div className="trust-film-veil" />
         <div className="wrap">
           <h2 className="serif">No ads. No tracking.<br /><span className="hot ital">Just good food.</span></h2>

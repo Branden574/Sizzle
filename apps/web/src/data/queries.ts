@@ -514,17 +514,22 @@ function useRecipeAction(action: 'like' | 'dislike' | 'save', patch: CardPatch) 
   return useMutation({
     mutationFn: (recipeId: string) => apiSend(`POST`, `/recipes/${recipeId}/${action}`),
     onMutate: async (recipeId: string) => {
-      await qc.cancelQueries();
+      // Only pause the feed queries we're about to patch — cancelling ALL queries
+      // aborted unrelated in-flight fetches (e.g. pagination) for no reason.
+      await qc.cancelQueries({ queryKey: ['feed'] });
       const snap = snapshot(qc);
       patchRecipeEverywhere(qc, recipeId, patch);
       return { snap };
     },
     onError: (_e, _v, ctx) => ctx && restore(qc, ctx.snap),
-    onSettled: (_data, _err, recipeId) => {
-      void qc.invalidateQueries({ queryKey: ['feed'] });
-      void qc.invalidateQueries({ queryKey: keys.saved });
-      void qc.invalidateQueries({ queryKey: keys.me });
-      void qc.invalidateQueries({ queryKey: keys.recipe(recipeId) });
+    onSuccess: () => {
+      // The optimistic patch is authoritative — do NOT invalidate ['feed'] on a
+      // like/dislike. That refetched + re-ranked the feed and tore down the video
+      // the user was watching. Only a save changes the saved LIST + profile count.
+      if (action === 'save') {
+        void qc.invalidateQueries({ queryKey: keys.saved });
+        void qc.invalidateQueries({ queryKey: keys.me });
+      }
     },
   });
 }

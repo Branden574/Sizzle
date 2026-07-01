@@ -2,6 +2,7 @@ import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import type { CommentDTO, RecipeDetail } from '@sizzle/shared';
 import { optionalAuth, requireAuth, requireNotBanned } from '../middleware/auth';
+import { env } from '../env';
 import { supabaseAdmin } from '../lib/supabase';
 import { badRequest, dbFail, forbidden, notFound } from '../lib/errors';
 import { assertUuid } from '../lib/validate';
@@ -102,9 +103,12 @@ recipes.post('/', requireAuth, requireNotBanned, rateLimit({ windowMs: 60_000, m
       .maybeSingle();
     if (!asset || asset.owner_id !== userId) throw badRequest('Unknown or unowned video asset');
   } else {
-    // Photo post: each image must live in our public storage under the user's
-    // own folder — blocks posting arbitrary or someone else's URLs.
-    const ok = (input.images ?? []).every((u) => u.includes(`/storage/v1/object/public/videos/${userId}/`));
+    // Photo post: each image must live in OUR public storage under the user's own
+    // folder. Anchor to the project host + a prefix (startsWith, not includes) —
+    // a substring check let any valid URL that merely contained the path through,
+    // so arbitrary external image URLs were accepted and served to every viewer.
+    const ownFolder = `${env.SUPABASE_URL.replace(/\/$/, '')}/storage/v1/object/public/videos/${userId}/`;
+    const ok = (input.images ?? []).every((u) => u.startsWith(ownFolder));
     if (!ok) throw badRequest('Invalid image upload');
   }
 

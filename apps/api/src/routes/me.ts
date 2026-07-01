@@ -421,6 +421,10 @@ me.patch('/', async (c) => {
  */
 me.delete('/', async (c) => {
   const userId = c.get('userId')!;
+  // Decrement other users' denormalized counters (followers, like/comment/save
+  // counts, total_likes) for this account's rows BEFORE the cascade removes them —
+  // otherwise those counters stay permanently inflated.
+  await supabaseAdmin.rpc('cleanup_user_counters', { uid: userId });
   const { error } = await supabaseAdmin.auth.admin.deleteUser(userId);
   if (error) {
     console.error('account delete:', error.message);

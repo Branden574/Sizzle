@@ -1,10 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { lazy, Suspense, useEffect, useRef, useState } from 'react';
 import { AdminDashboard } from './components/AdminDashboard';
 import { AppShell } from './components/AppShell';
 import { ChooseUsername } from './components/ChooseUsername';
 import { BannedScreen } from './components/BannedScreen';
 import { ErrorBoundary } from './components/ErrorBoundary';
-import { Marketing } from './components/Marketing';
+// Lazy — the landing pulls in GSAP/ScrollTrigger/Lenis (~195KB); only anon web
+// visitors ever render it, so keep it out of the main app/native bundle.
+const Marketing = lazy(() => import('./components/Marketing').then((m) => ({ default: m.Marketing })));
 import { Onboarding } from './components/Onboarding';
 import { HomeIndicator, Phone } from './components/Phone';
 import { ResetPasswordScreen } from './components/ResetPasswordScreen';
@@ -271,7 +273,9 @@ export default function App() {
   if (showMarketing) {
     return (
       <div className="sz-stage marketing" data-theme={scheme}>
-        <Marketing onGetStarted={() => enterApp('signup')} onLogin={() => enterApp('login')} />
+        <Suspense fallback={<div style={{ position: 'absolute', inset: 0, background: '#0f0b08' }} />}>
+          <Marketing onGetStarted={() => enterApp('signup')} onLogin={() => enterApp('login')} />
+        </Suspense>
       </div>
     );
   }

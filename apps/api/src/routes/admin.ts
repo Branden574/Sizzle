@@ -364,11 +364,14 @@ admin.post('/purge', async (c) => {
 
 /** GET /admin/support-requests — privacy/support requests from the contact form. */
 admin.get('/support-requests', async (c) => {
+  // Unresolved first (status 'open'/'in_progress' sort before 'resolved'), newest
+  // within each, and a wider window so spam can't bury a genuine request.
   const { data, error } = await supabaseAdmin
     .from('support_requests')
     .select('id, name, email, kind, message, status, created_at')
+    .order('status', { ascending: true })
     .order('created_at', { ascending: false })
-    .limit(200);
+    .limit(500);
   if (error) throw dbFail(error.message);
   const rows: SupportRequestDTO[] = (data ?? []).map((r) => ({
     id: r.id as string,

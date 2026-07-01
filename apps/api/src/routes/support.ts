@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { supabaseAdmin } from '../lib/supabase';
 import { badRequest, dbFail } from '../lib/errors';
+import { rateLimit } from '../middleware/rateLimit';
 import type { AppEnv } from '../types';
 
 export const support = new Hono<AppEnv>();
@@ -14,16 +15,18 @@ const requestSchema = z.object({
   email: z.string().trim().email().max(200),
   kind: z.enum(KINDS).default('general'),
   message: z.string().trim().min(1).max(5000),
-  // Honeypot — real users leave this empty; bots tend to fill every field.
-  company: z.string().max(0).optional(),
+  // Honeypot — real users leave this empty; bots tend to fill every field. Accept
+  // any value here (don't 400 on it) so the silent-drop below actually runs.
+  company: z.string().max(200).optional(),
 });
 
 /**
  * Public privacy / support request intake (getsizzle.app/contact). No auth —
- * anyone (user or not) may exercise a privacy right. The global rate limiter in
- * app.ts throttles abuse; the honeypot field silently drops obvious bots.
+ * anyone (user or not) may exercise a privacy right. A dedicated per-IP limit
+ * (plus the honeypot) keeps bots from flooding the compliance channel past the
+ * admin view's window.
  */
-support.post('/requests', async (c) => {
+support.post('/requests', rateLimit({ windowMs: 60_000, max: 4, name: 'support' }), async (c) => {
   const parsed = requestSchema.safeParse(await c.req.json().catch(() => ({})));
   if (!parsed.success) throw badRequest('Please provide your name, a valid email, and a message.');
   const { company, ...row } = parsed.data;
