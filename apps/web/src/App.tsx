@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { AdminDashboard } from './components/AdminDashboard';
 import { AppShell } from './components/AppShell';
 import { ChooseUsername } from './components/ChooseUsername';
@@ -41,6 +41,7 @@ import { biometricAvailability } from './lib/biometric';
 import { BiometricLock } from './components/BiometricLock';
 import { DesktopSidebar } from './components/DesktopSidebar';
 import { useMediaQuery } from './lib/useMediaQuery';
+import { parseRecipeDeepLink } from './lib/share';
 import { App as CapApp } from '@capacitor/app';
 import { useSizzle } from './store';
 
@@ -150,6 +151,39 @@ export default function App() {
     });
     return () => { void handle.then((l) => l.remove()); };
   }, [setAppUnlocked]);
+
+  // ── Shareable deep links (/r/:id) ──────────────────────────────────────────
+  // Open the shared recipe immediately if signed in; otherwise remember it and
+  // open it once the user authenticates.
+  const pendingRecipe = useRef<string | null>(null);
+  const openSharedRecipe = (id: string) => {
+    if (useAuth.getState().status === 'authed') useSizzle.getState().setOpenRecipe(id);
+    else pendingRecipe.current = id;
+  };
+  // Parse the URL the app booted with (web share links), then clean it.
+  useEffect(() => {
+    const id = parseRecipeDeepLink(window.location.pathname + window.location.search);
+    if (!id) return;
+    window.history.replaceState(null, '', '/');
+    openSharedRecipe(id);
+  }, []);
+  // Native: links that launch/foreground the app (universal link / custom scheme).
+  useEffect(() => {
+    if (!isNative) return;
+    const handle = CapApp.addListener('appUrlOpen', ({ url }) => {
+      const id = parseRecipeDeepLink(url);
+      if (id) openSharedRecipe(id);
+    });
+    return () => { void handle.then((l) => l.remove()); };
+  }, []);
+  // Flush a pending shared recipe once the user is authed.
+  useEffect(() => {
+    if (authStatus === 'authed' && pendingRecipe.current) {
+      const id = pendingRecipe.current;
+      pendingRecipe.current = null;
+      useSizzle.getState().setOpenRecipe(id);
+    }
+  }, [authStatus]);
 
   // Keep the keychain refresh token fresh while the lock is on, and re-lock for
   // the next sign-in once the user logs out.

@@ -1,6 +1,7 @@
 import { QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import type { AdminAppealDTO, AdminLogDTO, AdminReportGroupDTO, AdminStats, AdminUserDTO, CollectionDTO, CommentDTO, ConversationDTO, CookProfile, CookSummary, CreateRecipeInput, DirectUploadTicket, FeedResponse, MeProfile, MessageDTO, NotificationDTO, RecipeCard, RecipeDetail, ReportInput, SearchResults, SuggestedCook, SupportRequestDTO, ThreadDTO, TrendingTag, VerificationTier, VideoAssetStatus, VideoUploadConfig } from '@sizzle/shared';
 import { useAuth } from '../auth/useAuth';
+import { useSizzle } from '../store';
 import { apiGet, apiSend } from '../lib/api';
 import { removeOffline, saveOffline } from '../lib/offline';
 
@@ -414,6 +415,8 @@ function patchRecipeEverywhere(qc: QueryClient, recipeId: string, patch: CardPat
       qc.setQueryData<CookProfile>(key, { ...data, recipes: data.recipes.map((r) => (r.id === recipeId ? patch(r) : r)) });
     }
   }
+  // Also patch the full-screen viewer's snapshot (it renders from zustand, not the query cache).
+  useSizzle.getState().patchViewer((c) => (c.id === recipeId ? patch(c) : c));
 }
 
 /** Apply a follow-state change to every card by a cook + that cook's profile. */
@@ -424,6 +427,7 @@ function patchCookEverywhere(qc: QueryClient, cookId: string, following: boolean
     qc.setQueryData<FeedResponse>(key, (old) => (old ? { ...old, items: old.items.map(cardFix) } : old));
   }
   qc.setQueryData<CookProfile>(keys.cook(cookId), (old) => (old ? { ...old, viewer: { ...old.viewer, following } } : old));
+  useSizzle.getState().patchViewer((it) => (it.cook.id === cookId ? { ...it, viewer: { ...it.viewer, following } } : it));
 }
 
 function snapshot(qc: QueryClient) {

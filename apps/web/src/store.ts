@@ -157,6 +157,8 @@ export interface SizzleState {
   // sheets
   setOpenRecipe: (id: string | null) => void;
   setViewer: (v: { items: RecipeCard[]; index: number } | null) => void;
+  /** Apply an optimistic patch to the open viewer's cards (keeps likes/saves/follows live in the full-screen player). */
+  patchViewer: (fn: (c: RecipeCard) => RecipeCard) => void;
   setOpenCook: (id: string | null) => void;
   openCookFromSheet: () => void;
   setCommentsFor: (id: string | null) => void;
@@ -285,6 +287,7 @@ export const useSizzle = create<SizzleState>((set) => ({
 
   setOpenRecipe: (id) => set({ openRecipe: id }),
   setViewer: (v) => set({ viewer: v }),
+  patchViewer: (fn) => set((s) => (s.viewer ? { viewer: { ...s.viewer, items: s.viewer.items.map(fn) } } : {})),
   setOpenCook: (id) => set({ openCook: id }),
   // Jump from the recipe sheet to the recipe's cook profile.
   openCookFromSheet: () =>

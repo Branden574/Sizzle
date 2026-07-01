@@ -99,7 +99,9 @@ export function UploadSheet() {
   };
 
   const busy = prepping || upload.isPending;
-  const canPost = title.trim().length > 0 && !busy && (mediaKind === 'video' || photos.length > 0);
+  // Video mode REQUIRES a picked clip — posting with just a title would publish a
+  // permanently blank, unplayable card bound to an empty Cloudflare asset.
+  const canPost = title.trim().length > 0 && !busy && (mediaKind === 'video' ? !!videoFile : photos.length > 0);
 
   const submit = async () => {
     if (!requireAuth()) return;

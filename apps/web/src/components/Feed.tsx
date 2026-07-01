@@ -4,6 +4,7 @@ import { useAuth } from '../auth/useAuth';
 import { useRequireAuth } from '../auth/useRequireAuth';
 import { useForYouFeed, useFollowingFeed, useMe, useToggleDislike, useToggleFollow, useToggleLike, useToggleRepost, useToggleSave } from '../data/queries';
 import { apiSend } from '../lib/api';
+import { recipeShareUrl } from '../lib/share';
 import { useSizzle } from '../store';
 import { theme } from '../theme';
 import { formatCount } from '../lib/format';
@@ -354,7 +355,7 @@ export function FeedCard({ card, onClose }: { card: RecipeCard; onClose?: () => 
 
   // Native share sheet where available, otherwise copy the link to the clipboard.
   const onShare = () => {
-    const url = `${location.origin}/r/${card.id}`;
+    const url = recipeShareUrl(card.id);
     const title = card.title;
     if (navigator.share) {
       void navigator.share({ title, url }).catch(() => {});

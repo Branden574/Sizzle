@@ -13,12 +13,21 @@ export function VideoViewer() {
   const viewer = useSizzle((s) => s.viewer);
   const setViewer = useSizzle((s) => s.setViewer);
   const scrollRef = useRef<HTMLDivElement>(null);
+  const positioned = useRef(false);
 
-  // Jump to the tapped item when the viewer opens (before paint, no flash).
+  // Jump to the tapped item ONCE when the viewer opens (before paint, no flash).
+  // Guarded so optimistic patches to viewer.items (like/save/follow now update the
+  // snapshot live) don't re-fire this and yank the user back to the tapped index.
   // Clamp the index so a delete/refresh that shrank the list can't blank the view.
   useLayoutEffect(() => {
     const el = scrollRef.current;
-    if (el && viewer && viewer.items.length) {
+    if (!viewer || !viewer.items.length) {
+      positioned.current = false; // reset for the next time the viewer opens
+      return;
+    }
+    if (positioned.current) return;
+    positioned.current = true;
+    if (el) {
       const idx = Math.min(viewer.index, viewer.items.length - 1);
       el.scrollTop = idx * el.clientHeight;
     }
