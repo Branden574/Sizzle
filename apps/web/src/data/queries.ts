@@ -1,4 +1,4 @@
-import { QueryClient, useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { QueryClient, useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import type { AdminAppealDTO, AdminLogDTO, AdminReportGroupDTO, AdminStats, AdminUserDTO, CollectionDTO, CommentDTO, ConversationDTO, CookProfile, CookSummary, CreateRecipeInput, DirectUploadTicket, FeedResponse, MeProfile, MessageDTO, NotificationDTO, RecipeCard, RecipeDetail, ReportInput, SearchResults, SuggestedCook, SupportRequestDTO, ThreadDTO, TrendingTag, VerificationTier, VideoAssetStatus, VideoUploadConfig } from '@sizzle/shared';
 import { useAuth } from '../auth/useAuth';
 import { useSizzle } from '../store';
@@ -27,13 +27,29 @@ export function useMe() {
   return useQuery({ queryKey: keys.me, queryFn: () => apiGet<MeProfile>('/me'), enabled: authed });
 }
 
+const feedPage = (path: string) => (cursor: string | null) =>
+  apiGet<FeedResponse>(`${path}${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`);
+
 export function useForYouFeed() {
-  return useQuery({ queryKey: keys.forYou, queryFn: () => apiGet<FeedResponse>('/feed/for-you') });
+  const load = feedPage('/feed/for-you');
+  return useInfiniteQuery({
+    queryKey: keys.forYou,
+    queryFn: ({ pageParam }) => load(pageParam),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.nextCursor,
+  });
 }
 
 export function useFollowingFeed() {
   const authed = useAuth((s) => s.status === 'authed');
-  return useQuery({ queryKey: keys.following, queryFn: () => apiGet<FeedResponse>('/feed/following'), enabled: authed });
+  const load = feedPage('/feed/following');
+  return useInfiniteQuery({
+    queryKey: keys.following,
+    queryFn: ({ pageParam }) => load(pageParam),
+    initialPageParam: null as string | null,
+    getNextPageParam: (last) => last.nextCursor,
+    enabled: authed,
+  });
 }
 
 export function useSavedFeed() {
@@ -402,13 +418,19 @@ export function useSuggestedCooks(tastes: string[]) {
 
 type CardPatch = (card: RecipeCard) => RecipeCard;
 
-/** Apply a patch to a recipe everywhere it appears in the cache (feeds, saved, detail, cook grids). */
-function patchRecipeEverywhere(qc: QueryClient, recipeId: string, patch: CardPatch) {
-  for (const key of [keys.forYou, keys.following, keys.saved]) {
-    qc.setQueryData<FeedResponse>(key, (old) =>
-      old ? { ...old, items: old.items.map((it) => (it.id === recipeId ? patch(it) : it)) } : old,
+/** Map every card in the feed caches: for-you/following are infinite ({pages:[{items}]}), saved is a single flat page. */
+function mapFeedCaches(qc: QueryClient, mapper: CardPatch) {
+  for (const key of [keys.forYou, keys.following]) {
+    qc.setQueryData<InfiniteData<FeedResponse, string | null>>(key, (old) =>
+      old ? { ...old, pages: old.pages.map((p) => ({ ...p, items: p.items.map(mapper) })) } : old,
     );
   }
+  qc.setQueryData<FeedResponse>(keys.saved, (old) => (old ? { ...old, items: old.items.map(mapper) } : old));
+}
+
+/** Apply a patch to a recipe everywhere it appears in the cache (feeds, saved, detail, cook grids). */
+function patchRecipeEverywhere(qc: QueryClient, recipeId: string, patch: CardPatch) {
+  mapFeedCaches(qc, (it) => (it.id === recipeId ? patch(it) : it));
   qc.setQueryData<RecipeDetail>(keys.recipe(recipeId), (old) => (old ? (patch(old) as RecipeDetail) : old));
   for (const [key, data] of qc.getQueriesData<CookProfile>({ queryKey: ['cook'] })) {
     if (data?.recipes.some((r) => r.id === recipeId)) {
@@ -423,9 +445,7 @@ function patchRecipeEverywhere(qc: QueryClient, recipeId: string, patch: CardPat
 function patchCookEverywhere(qc: QueryClient, cookId: string, following: boolean) {
   const cardFix = (it: RecipeCard) =>
     it.cook.id === cookId ? { ...it, viewer: { ...it.viewer, following } } : it;
-  for (const key of [keys.forYou, keys.following, keys.saved]) {
-    qc.setQueryData<FeedResponse>(key, (old) => (old ? { ...old, items: old.items.map(cardFix) } : old));
-  }
+  mapFeedCaches(qc, cardFix);
   qc.setQueryData<CookProfile>(keys.cook(cookId), (old) => (old ? { ...old, viewer: { ...old.viewer, following } } : old));
   useSizzle.getState().patchViewer((it) => (it.cook.id === cookId ? { ...it, viewer: { ...it.viewer, following } } : it));
 }

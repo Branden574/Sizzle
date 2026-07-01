@@ -17,7 +17,7 @@ export function Discover() {
   const { data: results, isFetching } = useSearch(q);
   const { data: trending } = useTrendingTags();
 
-  const tiles = query ? results?.recipes ?? [] : feed?.items ?? [];
+  const tiles = query ? results?.recipes ?? [] : feed?.pages.flatMap((p) => p.items) ?? [];
   const cooks = query ? results?.cooks ?? [] : [];
 
   return (

@@ -164,7 +164,11 @@ feed.get('/for-you', optionalAuth, async (c) => {
       await supabaseAdmin.from('recipe_impressions').insert(ranked.map((r) => ({ user_id: userId, recipe_id: r.id })));
     }
     const items = await buildCards(supabaseAdmin, userId, ranked);
-    return c.json<FeedResponse>({ items, nextCursor: null });
+    // Continue by recency from just before the candidate window so the feed keeps
+    // loading past the ranked top-10 (page 2+ falls through to the recency branch).
+    const raw = (data ?? []) as RecipeRow[];
+    const nextCursor = raw.length >= CANDIDATES ? raw[raw.length - 1]!.created_at : null;
+    return c.json<FeedResponse>({ items, nextCursor });
   }
 
   // Guests / pagination: recency, cursor-paginated.

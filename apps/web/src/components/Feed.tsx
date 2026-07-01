@@ -43,8 +43,11 @@ export function Feed() {
 
   const fyActive = feedKind === 'foryou';
   const flActive = feedKind === 'following';
-  const items = active.data?.items ?? [];
+  const items = active.data?.pages.flatMap((p) => p.items) ?? [];
   const followingEmpty = feedKind === 'following' && !active.isLoading && items.length === 0;
+  const loadMore = () => {
+    if (active.hasNextPage && !active.isFetchingNextPage) void active.fetchNextPage();
+  };
 
   return (
     <div style={{ position: 'absolute', inset: 0, background: '#0c0a09' }}>
@@ -73,7 +76,7 @@ export function Feed() {
       ) : followingEmpty ? (
         <FollowingEmpty onExplore={() => setFeed('foryou')} />
       ) : (
-        <FeedList items={items} onRefresh={() => active.refetch()} />
+        <FeedList items={items} onRefresh={() => active.refetch()} onEndReached={loadMore} />
       )}
     </div>
   );
@@ -86,8 +89,11 @@ export function Feed() {
  * non-passively (so it can preventDefault and not fight native scroll), and the
  * whole scroller translates with the pull for a smooth, rubber-band settle.
  */
-function FeedList({ items, onRefresh }: { items: RecipeCard[]; onRefresh: () => Promise<unknown> }) {
+function FeedList({ items, onRefresh, onEndReached }: { items: RecipeCard[]; onRefresh: () => Promise<unknown>; onEndReached?: () => void }) {
   const scrollRef = useRef<HTMLDivElement>(null);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const onEndRef = useRef(onEndReached);
+  onEndRef.current = onEndReached;
   const [pull, setPull] = useState(0);
   const [refreshing, setRefreshing] = useState(false);
   const [dragging, setDragging] = useState(false);
@@ -149,6 +155,18 @@ function FeedList({ items, onRefresh }: { items: RecipeCard[]; onRefresh: () => 
     };
   }, []);
 
+  // Infinite scroll: load the next page when the sentinel nears the viewport.
+  useEffect(() => {
+    const el = sentinelRef.current;
+    if (!el || !onEndRef.current) return;
+    const io = new IntersectionObserver((entries) => { if (entries[0]?.isIntersecting) onEndRef.current?.(); }, {
+      root: scrollRef.current,
+      rootMargin: '800px',
+    });
+    io.observe(el);
+    return () => io.disconnect();
+  }, [items.length]);
+
   const offset = refreshing ? REST : pull;
   const showInd = pull > 0 || refreshing;
   const progress = Math.min(1, pull / THRESH);
@@ -178,6 +196,7 @@ function FeedList({ items, onRefresh }: { items: RecipeCard[]; onRefresh: () => 
             <FeedCard card={card} />
           </ErrorBoundary>
         ))}
+        <div ref={sentinelRef} style={{ height: 1 }} aria-hidden="true" />
       </div>
     </>
   );
