@@ -1,34 +1,35 @@
 import type { ReactNode } from 'react';
+import type { PostControls } from '@sizzle/shared';
+import { useRecipe, useUpdatePostControls } from '../../data/queries';
 import { useSizzle } from '../../store';
 import { theme } from '../../theme';
-import type { PostSettings } from '../../types';
 import { SettingCommentIcon, SettingCountsIcon, SettingHeartIcon } from '../icons';
 
 const accent = theme.accent;
 
 interface RowDef {
-  key: keyof PostSettings;
+  key: keyof PostControls;
   title: string;
   sub: string;
   icon: ReactNode;
 }
 
 const ROWS: RowDef[] = [
-  { key: 'likesOff', title: 'Like & dislike button', sub: 'Let people react to this recipe', icon: <SettingHeartIcon /> },
-  { key: 'commentsOff', title: 'Commenting', sub: 'Allow people to comment', icon: <SettingCommentIcon /> },
-  { key: 'hideCount', title: 'Show counts', sub: 'Display like and dislike totals', icon: <SettingCountsIcon /> },
+  { key: 'likesEnabled', title: 'Like & dislike button', sub: 'Let people react to this recipe', icon: <SettingHeartIcon /> },
+  { key: 'commentsEnabled', title: 'Commenting', sub: 'Allow people to comment', icon: <SettingCommentIcon /> },
+  { key: 'countsVisible', title: 'Show counts', sub: 'Display like and dislike totals', icon: <SettingCountsIcon /> },
 ];
 
 export function SettingsSheet() {
   const settingsFor = useSizzle((s) => s.settingsFor);
-  const postSettings = useSizzle((s) => s.postSettings);
-  const togglePostSetting = useSizzle((s) => s.togglePostSetting);
   const setSettingsFor = useSizzle((s) => s.setSettingsFor);
+  const { data: recipe } = useRecipe(settingsFor);
+  const update = useUpdatePostControls();
 
   if (!settingsFor) return null;
 
-  // Creator controls are local-only for now (not yet persisted server-side).
-  const flags = postSettings[settingsFor] || {};
+  // Persisted, enforced for every viewer (optimistically reflected on the card).
+  const controls: PostControls = recipe?.controls ?? { likesEnabled: true, commentsEnabled: true, countsVisible: true };
   const close = () => setSettingsFor(null);
 
   return (
@@ -43,11 +44,11 @@ export function SettingsSheet() {
 
         <div style={{ padding: '12px 22px 0', display: 'flex', flexDirection: 'column', gap: 4 }}>
           {ROWS.map((row) => {
-            const on = !flags[row.key]; // ON = feature enabled (flag is false)
+            const on = controls[row.key]; // ON = feature enabled
             return (
               <button
                 key={row.key}
-                onClick={() => togglePostSetting(settingsFor, row.key)}
+                onClick={() => update.mutate({ id: settingsFor, patch: { [row.key]: !on } })}
                 style={{ display: 'flex', alignItems: 'center', gap: 14, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 18, padding: 16, cursor: 'pointer', textAlign: 'left', marginBottom: 10 }}
               >
                 <div style={{ width: 42, height: 42, flex: 'none', borderRadius: 13, background: 'var(--surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{row.icon}</div>

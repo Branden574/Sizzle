@@ -1,5 +1,5 @@
 import { QueryClient, useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query';
-import type { AdminAppealDTO, AdminLogDTO, AdminReportGroupDTO, AdminStats, AdminUserDTO, CollectionDTO, CommentDTO, ConversationDTO, CookProfile, CookSummary, CreateRecipeInput, DirectUploadTicket, FeedResponse, MeProfile, MessageDTO, NotificationDTO, RecipeCard, RecipeDetail, ReportInput, SearchResults, SuggestedCook, SupportRequestDTO, ThreadDTO, TrendingTag, VerificationTier, VideoAssetStatus, VideoUploadConfig } from '@sizzle/shared';
+import type { AdminAppealDTO, AdminLogDTO, AdminReportGroupDTO, AdminStats, AdminUserDTO, CollectionDTO, CommentDTO, ConversationDTO, CookProfile, CookSummary, CreateRecipeInput, DirectUploadTicket, FeedResponse, MeProfile, MessageDTO, NotificationDTO, PostControls, RecipeCard, RecipeDetail, ReportInput, SearchResults, SuggestedCook, SupportRequestDTO, ThreadDTO, TrendingTag, VerificationTier, VideoAssetStatus, VideoUploadConfig } from '@sizzle/shared';
 import { useAuth } from '../auth/useAuth';
 import { useSizzle } from '../store';
 import { apiGet, apiSend } from '../lib/api';
@@ -411,6 +411,22 @@ export function useSuggestedCooks(tastes: string[]) {
   return useQuery({
     queryKey: ['cooks', 'suggested', sorted],
     queryFn: () => apiGet<SuggestedCook[]>(`/cooks/suggested?tastes=${encodeURIComponent(sorted.join(','))}&limit=5`),
+  });
+}
+
+/** Creator post controls — persisted server-side + optimistically reflected on every card. */
+export function useUpdatePostControls() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, patch }: { id: string; patch: Partial<PostControls> }) =>
+      apiSend('PATCH', `/recipes/${id}/controls`, patch),
+    onMutate: ({ id, patch }) => {
+      patchRecipeEverywhere(qc, id, (c) => ({ ...c, controls: { ...c.controls, ...patch } }));
+    },
+    onError: (_e, { id }) => {
+      void qc.invalidateQueries({ queryKey: keys.recipe(id) });
+      void qc.invalidateQueries({ queryKey: ['feed'] });
+    },
   });
 }
 

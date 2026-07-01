@@ -20,15 +20,18 @@ async function getRecipeDetail(viewerId: string | undefined, recipeId: string): 
   const { data: row, error } = await supabaseAdmin.from('recipes').select('*').eq('id', recipeId).maybeSingle();
   if (error) throw dbFail(error.message);
   if (!row) return null;
-  // Drafts / removed recipes are visible only to their owner — and to admins
-  // (so the moderation "view video" action works).
-  if (row.status !== 'published' && row.cook_id !== viewerId) {
-    if (!viewerId) return null;
+  // Drafts / removed / auto-hidden recipes are visible only to their owner — and
+  // to admins (so the moderation "view video" action works). Resolve admin once
+  // and pass it to buildCards, which otherwise drops the card and 404s the route.
+  const restricted = row.status !== 'published' || row.auto_hidden;
+  let viewerIsAdmin = false;
+  if (restricted && viewerId && row.cook_id !== viewerId) {
     const { data: viewer } = await supabaseAdmin.from('profiles').select('role').eq('id', viewerId).maybeSingle();
-    if (viewer?.role !== 'admin') return null;
+    viewerIsAdmin = viewer?.role === 'admin';
   }
+  if (row.status !== 'published' && row.cook_id !== viewerId && !viewerIsAdmin) return null;
 
-  const [card] = await buildCards(supabaseAdmin, viewerId, [row as RecipeRow]);
+  const [card] = await buildCards(supabaseAdmin, viewerId, [row as RecipeRow], viewerIsAdmin);
   if (!card) return null;
 
   const [{ data: ings }, { data: steps }] = await Promise.all([
@@ -246,6 +249,32 @@ recipes.delete('/:id/download', requireAuth, async (c) => {
   return c.json({ downloaded: false });
 });
 
+const controlsSchema = z.object({
+  likesEnabled: z.boolean().optional(),
+  commentsEnabled: z.boolean().optional(),
+  countsVisible: z.boolean().optional(),
+});
+
+/** PATCH /recipes/:id/controls — owner toggles likes/comments/count visibility (persisted, enforced for all viewers). */
+recipes.patch('/:id/controls', requireAuth, async (c) => {
+  const userId = c.get('userId')!;
+  const id = assertUuid(c.req.param('id'), 'recipe');
+  const parsed = controlsSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) throw badRequest('Invalid post controls');
+  const { data: rec } = await supabaseAdmin.from('recipes').select('cook_id').eq('id', id).maybeSingle();
+  if (!rec) throw notFound('Recipe not found');
+  if (rec.cook_id !== userId) throw forbidden('You can only change controls on your own posts');
+  const patch: Record<string, boolean> = {};
+  if (parsed.data.likesEnabled !== undefined) patch.likes_enabled = parsed.data.likesEnabled;
+  if (parsed.data.commentsEnabled !== undefined) patch.comments_enabled = parsed.data.commentsEnabled;
+  if (parsed.data.countsVisible !== undefined) patch.counts_visible = parsed.data.countsVisible;
+  if (Object.keys(patch).length) {
+    const { error } = await supabaseAdmin.from('recipes').update(patch).eq('id', id);
+    if (error) throw dbFail(error.message);
+  }
+  return c.json({ ok: true });
+});
+
 const viewSchema = z.object({
   dwellMs: z.number().int().min(0).max(3_600_000).default(0),
   completed: z.boolean().default(false),
@@ -280,7 +309,15 @@ recipes.get('/:id/comments', optionalAuth, async (c) => {
   const viewerId = c.get('userId');
   // Only expose comments on recipes the viewer can see.
   const { data: rec } = await supabaseAdmin.from('recipes').select('status, cook_id').eq('id', id).maybeSingle();
-  if (!rec || (rec.status !== 'published' && rec.cook_id !== viewerId)) throw notFound('Recipe not found');
+  if (!rec) throw notFound('Recipe not found');
+  // Owner or admin — needed both for the removed-post gate (so moderators can
+  // review comments on a removed post) and for hidden-comment visibility below.
+  let viewerIsModerator = !!viewerId && viewerId === rec.cook_id;
+  if (viewerId && !viewerIsModerator) {
+    const { data: vp } = await supabaseAdmin.from('profiles').select('role').eq('id', viewerId).maybeSingle();
+    viewerIsModerator = vp?.role === 'admin';
+  }
+  if (rec.status !== 'published' && rec.cook_id !== viewerId && !viewerIsModerator) throw notFound('Recipe not found');
 
   const { data: rows, error } = await supabaseAdmin
     .from('comments')
@@ -308,13 +345,8 @@ recipes.get('/:id/comments', optionalAuth, async (c) => {
   }
 
   // Comment moderation visibility: a hidden comment is shown only to the post
-  // owner / an admin (flagged so they can unhide) and to its own author (shadow
-  // — it looks normal, so they don't just re-post it). Everyone else never sees it.
-  let viewerIsModerator = !!viewerId && viewerId === rec.cook_id;
-  if (viewerId && !viewerIsModerator) {
-    const { data: vp } = await supabaseAdmin.from('profiles').select('role').eq('id', viewerId).maybeSingle();
-    viewerIsModerator = vp?.role === 'admin';
-  }
+  // owner / an admin (flagged so they can unhide, `viewerIsModerator` above) and
+  // to its own author (shadow — it looks normal, so they don't just re-post it).
   // Comments from blocked users (either direction) never reach the viewer.
   const blocked = await loadBlockedIds(supabaseAdmin, viewerId);
   const canSee = (r: CommentRow) => (!r.hidden || viewerIsModerator || r.author_id === viewerId) && !blocked.has(r.author_id);
@@ -394,6 +426,13 @@ recipes.post('/:id/comments', requireAuth, requireNotBanned, rateLimit({ windowM
   // Can't comment on a post by someone you've blocked or who has blocked you.
   const blockedFromOwner = await loadBlockedIds(supabaseAdmin, userId);
   if (blockedFromOwner.has(cookId)) throw notFound('Recipe not found');
+
+  // Enforce the creator's "commenting off" control server-side (owner exempt) so
+  // it can't be bypassed by a crafted request even though the UI hides the field.
+  if (cookId !== userId) {
+    const { data: rc } = await supabaseAdmin.from('recipes').select('comments_enabled').eq('id', id).maybeSingle();
+    if (rc && rc.comments_enabled === false) throw forbidden('Comments are turned off for this post');
+  }
 
   // A reply must target a top-level comment on the same recipe.
   let parentId: string | null = null;

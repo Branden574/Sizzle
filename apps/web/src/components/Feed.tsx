@@ -358,14 +358,14 @@ export function FeedCard({ card, onClose }: { card: RecipeCard; onClose?: () => 
   const openMore = useSizzle((s) => s.openMore);
   const setRepostFor = useSizzle((s) => s.setRepostFor);
   const myId = useMe().data?.id;
-  const local = useSizzle((s) => s.postSettings[card.id]) ?? {};
 
   const { cook, viewer, counts, controls } = card;
   const hasImages = card.images.length > 0;
   const videoSrc = !hasImages ? card.video?.mp4Url || card.video?.hlsUrl || null : null;
-  const showLikes = controls.likesEnabled && !local.likesOff;
-  const showComments = controls.commentsEnabled && !local.commentsOff;
-  const hideCount = !controls.countsVisible || !!local.hideCount;
+  // Controls are now persisted server-side + enforced for every viewer.
+  const showLikes = controls.likesEnabled;
+  const showComments = controls.commentsEnabled;
+  const hideCount = !controls.countsVisible;
 
   const gated = (fn: () => void) => () => {
     if (!requireAuth()) return;

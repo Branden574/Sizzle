@@ -1,5 +1,5 @@
 import type { SupabaseClient } from '@supabase/supabase-js';
-import type { CommentDTO, CookSummary, PostControls, ProfileLinks, RecipeCard, RecipeViewerState, VideoAssetDTO } from '@sizzle/shared';
+import type { CommentDTO, CookSummary, ProfileLinks, RecipeCard, RecipeViewerState, VideoAssetDTO } from '@sizzle/shared';
 import { formatTimeLabel, initialsOf, relativeTime } from './lib/format';
 
 /** Map a profile row's social-link columns to the ProfileLinks DTO. */
@@ -104,6 +104,9 @@ export interface RecipeRow {
   removal_reason: string | null;
   appeal_status: string | null;
   auto_hidden: boolean;
+  likes_enabled: boolean | null;
+  comments_enabled: boolean | null;
+  counts_visible: boolean | null;
   created_at: string;
 }
 
@@ -116,9 +119,6 @@ export interface VideoRow {
   duration_seconds: number | null;
 }
 
-// Counts are visible to everyone by default; a creator can still hide them on
-// their own post via the per-post "Show counts" control (client-local for now).
-const DEFAULT_CONTROLS: PostControls = { likesEnabled: true, commentsEnabled: true, countsVisible: true };
 
 export function cookSummary(p: ProfileRow): CookSummary {
   return {
@@ -209,7 +209,11 @@ function toCard(r: RecipeRow, cook: ProfileRow, video: VideoRow | null, ctx: Vie
     images: r.image_urls ?? [],
     counts: { likes: r.like_count, dislikes: r.dislike_count, comments: r.comment_count, saves: r.save_count, shares: r.share_count },
     viewer: viewerState(r.id, r.cook_id, ctx),
-    controls: DEFAULT_CONTROLS,
+    controls: {
+      likesEnabled: r.likes_enabled ?? true,
+      commentsEnabled: r.comments_enabled ?? true,
+      countsVisible: r.counts_visible ?? true,
+    },
     hashtags: r.tags ?? [],
     postType: (r.post_type as RecipeCard['postType']) ?? 'recipe',
     rating: r.rating ?? null,
@@ -251,7 +255,7 @@ export async function loadMutedIds(db: SupabaseClient, viewerId: string | undefi
   return new Set((data ?? []).map((r) => r.muted_id as string));
 }
 
-export async function buildCards(db: SupabaseClient, viewerId: string | undefined, rows: RecipeRow[]): Promise<RecipeCard[]> {
+export async function buildCards(db: SupabaseClient, viewerId: string | undefined, rows: RecipeRow[], viewerIsAdmin = false): Promise<RecipeCard[]> {
   if (rows.length === 0) return [];
 
   const cookIds = [...new Set(rows.map((r) => r.cook_id))];
@@ -276,8 +280,9 @@ export async function buildCards(db: SupabaseClient, viewerId: string | undefine
     const cook = cookMap.get(r.cook_id);
     if (!cook || cook.banned) continue; // banned creators' content is hidden everywhere
     if (blocked.has(r.cook_id)) continue; // blocked in either direction — hidden everywhere
-    // Auto-hidden (pending review) and removed posts are visible only to their owner.
-    if ((r.auto_hidden || r.status === 'removed') && r.cook_id !== viewerId) continue;
+    // Auto-hidden (pending review) and removed posts are visible only to their
+    // owner — and to admins, so moderators can open the exact content to review.
+    if ((r.auto_hidden || r.status === 'removed') && r.cook_id !== viewerId && !viewerIsAdmin) continue;
     cards.push(toCard(r, cook, r.video_asset_id ? videoMap.get(r.video_asset_id) ?? null : null, ctx));
   }
   return cards;

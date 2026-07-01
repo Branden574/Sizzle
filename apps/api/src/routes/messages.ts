@@ -124,15 +124,18 @@ messages.get('/with/:userId', requireAuth, async (c) => {
     otherLastReadAt = (userId === a ? conv.b_last_read_at : conv.a_last_read_at) as string;
     // If the viewer deleted this thread, only show messages newer than that.
     const myCleared = (userId === a ? conv.a_cleared_at : conv.b_cleared_at) as string | null;
+    // Take the NEWEST 300 (order desc + limit), then flip back to oldest→newest
+    // for display. Ordering ascending with a limit returned the OLDEST 300, so
+    // long threads hid every recent message on reload.
     let q = supabaseAdmin
       .from('messages')
       .select('*')
       .eq('conversation_id', conv.id)
-      .order('created_at', { ascending: true })
+      .order('created_at', { ascending: false })
       .limit(300);
     if (myCleared) q = q.gt('created_at', myCleared);
     const { data: rows } = await q;
-    msgs = (rows ?? []).map((m) => ({
+    msgs = (rows ?? []).slice().reverse().map((m) => ({
       id: m.id as string,
       fromMe: m.sender_id === userId,
       text: m.text as string,
