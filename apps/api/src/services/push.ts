@@ -121,13 +121,15 @@ export async function sendPushForNotification(opts: {
   if (!acct) return;
 
   try {
-    // Recipient opted out?
+    // Recipient opted out (master switch, or this specific category)?
     const { data: profile } = await supabaseAdmin
       .from('profiles')
-      .select('push_enabled')
+      .select('push_enabled, notif_prefs')
       .eq('id', opts.userId)
       .single();
     if (profile && profile.push_enabled === false) return;
+    const prefKey = ({ like: 'likes', comment: 'comments', follow: 'follows', repost: 'reposts', message: 'messages' } as const)[opts.type as 'like' | 'comment' | 'follow' | 'repost' | 'message'];
+    if (prefKey && (profile?.notif_prefs as Record<string, boolean> | undefined)?.[prefKey] === false) return;
 
     const { data: tokens } = await supabaseAdmin.from('push_tokens').select('token').eq('user_id', opts.userId);
     if (!tokens || tokens.length === 0) return;

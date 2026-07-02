@@ -1,5 +1,5 @@
 import { QueryClient, useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query';
-import type { AdminAppealDTO, AdminContentReportDTO, AdminLogDTO, AdminReportGroupDTO, AdminStats, AdminUserDTO, CollectionDTO, CommentDTO, ConversationDTO, CookProfile, CookSummary, CreateRecipeInput, DirectUploadTicket, FeedResponse, MeProfile, MessageDTO, NotificationDTO, PostControls, RecipeCard, RecipeDetail, ReportInput, SearchResults, SuggestedCook, SupportRequestDTO, ThreadDTO, TrendingTag, VerificationTier, VideoAssetStatus, VideoUploadConfig } from '@sizzle/shared';
+import type { AdminAppealDTO, AdminContentReportDTO, AdminLogDTO, AdminReportGroupDTO, AdminStats, AdminUserDTO, CollectionDTO, CommentDTO, ConversationDTO, CookProfile, CookSummary, CreateRecipeInput, DirectUploadTicket, FeedResponse, MeProfile, MessageDTO, NotificationDTO, NotifPrefKey, PostControls, RecipeCard, RecipeDetail, ReportInput, SearchResults, SuggestedCook, SupportRequestDTO, ThreadDTO, TrendingTag, VerificationTier, VideoAssetStatus, VideoUploadConfig } from '@sizzle/shared';
 import { useAuth } from '../auth/useAuth';
 import { useSizzle } from '../store';
 import { apiGet, apiSend } from '../lib/api';
@@ -25,6 +25,18 @@ export const keys = {
 export function useMe() {
   const authed = useAuth((s) => s.status === 'authed');
   return useQuery({ queryKey: keys.me, queryFn: () => apiGet<MeProfile>('/me'), enabled: authed });
+}
+
+/** Toggle a single push category (likes / comments / follows / reposts / messages). */
+export function useUpdateNotifPref() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { key: NotifPrefKey; enabled: boolean }) => apiSend('POST', '/me/notif-prefs', v),
+    onMutate: ({ key, enabled }) => {
+      qc.setQueryData<MeProfile>(keys.me, (old) => (old ? { ...old, notifPrefs: { ...old.notifPrefs, [key]: enabled } } : old));
+    },
+    onError: () => void qc.invalidateQueries({ queryKey: keys.me }),
+  });
 }
 
 const feedPage = (path: string) => (cursor: string | null) =>

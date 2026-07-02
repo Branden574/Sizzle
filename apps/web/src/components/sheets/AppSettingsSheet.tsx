@@ -3,7 +3,7 @@ import { useAuth } from '../../auth/useAuth';
 import { useSizzle, type FeedKindPref, type ThemePref, type UnitPref } from '../../store';
 import { clearOffline } from '../../lib/offline';
 import { apiSend } from '../../lib/api';
-import { queryClient, useBlockedList, useMe, useToggleBlock } from '../../data/queries';
+import { queryClient, useBlockedList, useMe, useToggleBlock, useUpdateNotifPref } from '../../data/queries';
 import { enablePush, disablePush } from '../../lib/push';
 import { biometricAvailability, biometricVerify, clearBiometricToken } from '../../lib/biometric';
 import { isNative } from '../../lib/native';
@@ -125,6 +125,7 @@ export function AppSettingsSheet() {
   const [pushLocal, setPushLocal] = useState<boolean | null>(null);
   const [pushBusy, setPushBusy] = useState(false);
   const pushOn = pushLocal ?? me.data?.pushEnabled ?? true;
+  const updatePref = useUpdateNotifPref();
 
   const togglePush = async () => {
     if (pushBusy) return;
@@ -278,11 +279,27 @@ export function AppSettingsSheet() {
           <SectionLabel>Notifications</SectionLabel>
           <ToggleRow
             title="Push notifications"
-            sub="Follows, likes & comments on your recipes"
+            sub="The master switch for all push alerts"
             icon={<span style={{ fontSize: 20 }}>🔔</span>}
             on={pushOn}
             onToggle={() => void togglePush()}
           />
+          {pushOn && ([
+            { key: 'likes', title: 'Likes', sub: 'When someone likes your recipe', icon: '❤️' },
+            { key: 'comments', title: 'Comments', sub: 'When someone comments on your recipe', icon: '💬' },
+            { key: 'follows', title: 'New followers', sub: 'When someone follows you', icon: '👤' },
+            { key: 'reposts', title: 'Reposts', sub: 'When someone reposts your recipe', icon: '🔁' },
+            { key: 'messages', title: 'Messages', sub: 'When you get a direct message', icon: '✉️' },
+          ] as const).map((row) => (
+            <ToggleRow
+              key={row.key}
+              title={row.title}
+              sub={row.sub}
+              icon={<span style={{ fontSize: 20 }}>{row.icon}</span>}
+              on={me.data?.notifPrefs?.[row.key] !== false}
+              onToggle={() => updatePref.mutate({ key: row.key, enabled: me.data?.notifPrefs?.[row.key] === false })}
+            />
+          ))}
 
           <SectionLabel>Security</SectionLabel>
           <ToggleRow

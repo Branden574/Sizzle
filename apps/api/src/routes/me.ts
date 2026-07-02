@@ -47,6 +47,7 @@ me.get('/', async (c) => {
     counts: { following: profile.following_count ?? 0, followers: profile.follower_count ?? 0, saved: savedCount ?? 0 },
     tastes: profile.tastes ?? [],
     pushEnabled: profile.push_enabled ?? true,
+    notifPrefs: (profile.notif_prefs ?? {}) as MeProfile['notifPrefs'],
     needsUsername: profile.handle_auto ?? false,
   };
   return c.json(dto);
@@ -146,6 +147,21 @@ me.post('/push-enabled', async (c) => {
     throw badRequest('Could not update push setting');
   }
   return c.json({ ok: true, enabled: body.data.enabled });
+});
+
+/** POST /me/notif-prefs — toggle a single push category (likes/comments/…). */
+me.post('/notif-prefs', async (c) => {
+  const userId = c.get('userId')!;
+  const body = z
+    .object({ key: z.enum(['likes', 'comments', 'follows', 'reposts', 'messages']), enabled: z.boolean() })
+    .safeParse(await c.req.json().catch(() => null));
+  if (!body.success) throw badRequest('Expected { key, enabled }');
+  // Merge into the jsonb map via the admin client (column-locked for users).
+  const { data: cur } = await supabaseAdmin.from('profiles').select('notif_prefs').eq('id', userId).maybeSingle();
+  const next = { ...((cur?.notif_prefs as Record<string, boolean>) ?? {}), [body.data.key]: body.data.enabled };
+  const { error } = await supabaseAdmin.from('profiles').update({ notif_prefs: next }).eq('id', userId);
+  if (error) throw badRequest('Could not update notification setting');
+  return c.json({ ok: true, notifPrefs: next });
 });
 
 /** GET /me/saved — the viewer's saved recipes (newest first). */

@@ -229,6 +229,10 @@ export interface CookProfile {
 }
 
 /** The signed-in user's own profile. */
+/** User-controllable push categories (account/moderation pushes always send). */
+export type NotifPrefKey = 'likes' | 'comments' | 'follows' | 'reposts' | 'messages';
+export type NotifPrefs = Partial<Record<NotifPrefKey, boolean>>;
+
 export interface MeProfile {
   id: string;
   name: string;
@@ -256,6 +260,8 @@ export interface MeProfile {
   tastes: string[];
   /** Master switch for device push notifications (mirrors the Settings toggle). */
   pushEnabled: boolean;
+  /** Per-type push preferences (likes/comments/follows/reposts/messages). Missing = on. */
+  notifPrefs: NotifPrefs;
   /** True when the handle was auto-derived (e.g. Google sign-up) and the user
    *  hasn't chosen one yet — the app shows a "pick a username" step. */
   needsUsername: boolean;
