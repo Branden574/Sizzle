@@ -1,6 +1,7 @@
 import { FirebaseMessaging } from '@capacitor-firebase/messaging';
 import { apiSend } from './api';
 import { isNative, platform } from './native';
+import { useSizzle } from '../store';
 
 /**
  * Native push notifications via Firebase Cloud Messaging.
@@ -39,10 +40,14 @@ function bindListeners(): void {
     console.debug('[push] received in foreground:', event?.notification?.title);
   });
 
-  // User tapped a notification. data.type / data.recipeId are set server-side
-  // (see api push.ts) for deep-linking once routing hooks are added.
+  // User tapped a notification — deep-link to the relevant surface. data.type /
+  // data.recipeId / data.actorId are set server-side (see api push.ts).
   void FirebaseMessaging.addListener('notificationActionPerformed', (event) => {
-    console.debug('[push] tapped:', event?.notification?.data);
+    const data = (event?.notification?.data ?? {}) as { type?: string; recipeId?: string; actorId?: string };
+    const store = useSizzle.getState();
+    if (data.type === 'message' && data.actorId) store.setThreadWith(data.actorId);
+    else if (data.recipeId) store.setOpenRecipe(data.recipeId);
+    else if (data.type === 'follow' && data.actorId) store.setOpenCook(data.actorId);
   });
 }
 

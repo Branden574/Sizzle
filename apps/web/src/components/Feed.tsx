@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { RecipeCard } from '@sizzle/shared';
 import { useAuth } from '../auth/useAuth';
 import { useRequireAuth } from '../auth/useRequireAuth';
-import { useForYouFeed, useFollowingFeed, useMe, useToggleDislike, useToggleFollow, useToggleLike, useToggleRepost, useToggleSave } from '../data/queries';
+import { useForYouFeed, useFollowingFeed, useMe, useShareRecipe, useToggleDislike, useToggleFollow, useToggleLike, useToggleRepost, useToggleSave } from '../data/queries';
 import { apiSend } from '../lib/api';
 import { recipeShareUrl } from '../lib/share';
 import { useSizzle } from '../store';
@@ -311,6 +311,7 @@ export function FeedCard({ card, onClose }: { card: RecipeCard; onClose?: () => 
   const save = useToggleSave();
   const follow = useToggleFollow();
   const repost = useToggleRepost();
+  const share = useShareRecipe();
 
   // Drive video playback (active when ≥60% on screen) and log a watch event
   // (dwell → completed/skipped) when the card is scrolled past.
@@ -377,9 +378,10 @@ export function FeedCard({ card, onClose }: { card: RecipeCard; onClose?: () => 
     const url = recipeShareUrl(card.id);
     const title = card.title;
     if (navigator.share) {
-      void navigator.share({ title, url }).catch(() => {});
+      void navigator.share({ title, url }).then(() => share.mutate(card.id)).catch(() => {});
     } else {
       void navigator.clipboard?.writeText(url).catch(() => {});
+      share.mutate(card.id);
     }
   };
 

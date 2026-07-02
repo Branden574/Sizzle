@@ -261,7 +261,7 @@ export interface MeProfile {
   needsUsername: boolean;
 }
 
-export type NotificationKind = 'follow' | 'like' | 'comment' | 'verified' | 'repost' | 'removed' | 'restored' | 'banned';
+export type NotificationKind = 'follow' | 'like' | 'comment' | 'verified' | 'repost' | 'removed' | 'restored' | 'banned' | 'message';
 
 export interface NotificationDTO {
   id: string;

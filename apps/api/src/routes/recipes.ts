@@ -253,6 +253,13 @@ recipes.delete('/:id/download', requireAuth, async (c) => {
   return c.json({ downloaded: false });
 });
 
+/** POST /recipes/:id/share — bump the share counter when a link is shared/copied. */
+recipes.post('/:id/share', requireAuth, rateLimit({ windowMs: 60_000, max: 60, name: 'share' }), async (c) => {
+  const id = assertUuid(c.req.param('id'), 'recipe');
+  await supabaseAdmin.rpc('increment_share', { rid: id });
+  return c.json({ ok: true });
+});
+
 const controlsSchema = z.object({
   likesEnabled: z.boolean().optional(),
   commentsEnabled: z.boolean().optional(),

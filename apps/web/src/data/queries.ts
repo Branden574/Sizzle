@@ -538,6 +538,17 @@ export const useToggleLike = () => useRecipeAction('like', likePatch);
 export const useToggleDislike = () => useRecipeAction('dislike', dislikePatch);
 export const useToggleSave = () => useRecipeAction('save', savePatch);
 
+/** Record a share (bumps the share counter). Fire-and-forget with an optimistic +1. */
+export function useShareRecipe() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (recipeId: string) => apiSend('POST', `/recipes/${recipeId}/share`),
+    onMutate: (recipeId: string) => {
+      patchRecipeEverywhere(qc, recipeId, (c) => ({ ...c, counts: { ...c.counts, shares: c.counts.shares + 1 } }));
+    },
+  });
+}
+
 /** Toggle offline download. Pass the *current* downloaded state to pick the verb. */
 export function useToggleDownload() {
   const qc = useQueryClient();

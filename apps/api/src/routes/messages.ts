@@ -9,6 +9,7 @@ import { assertUuid } from '../lib/validate';
 import { relativeTime } from '../lib/format';
 import { cookSummary, loadBlockedIds, type ProfileRow } from '../mappers';
 import { moderate } from '../services/moderation';
+import { sendPushForNotification } from '../services/push';
 import type { AppEnv } from '../types';
 
 export const messages = new Hono<AppEnv>();
@@ -190,6 +191,10 @@ messages.post('/with/:userId', requireAuth, requireNotBanned, rateLimit({ window
     .from('conversations')
     .update({ last_message_at: now, last_message_text: parsed.data.text, last_message_sender_id: userId, [senderCol]: now, [senderClearedCol]: null })
     .eq('id', conv.id);
+
+  // Push the recipient (best-effort, respects their prefs). DMs live in their own
+  // inbox with unread badges, so this is push-only — no activity-feed row.
+  await sendPushForNotification({ userId: otherId, type: 'message', actorId: userId }).catch(() => {});
 
   return c.json<MessageDTO>(
     { id: msg.id as string, fromMe: true, text: msg.text as string, createdAt: msg.created_at as string, time: relativeTime(new Date(msg.created_at as string)) },
