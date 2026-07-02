@@ -84,7 +84,7 @@ monetize.post('/tip', requireAuth, requireNotBanned, rateLimit({ windowMs: 60_00
     tipRecipeId = rec ? recipeId : null;
   }
 
-  // The ledger row records the exact split: gross = fee (5.5%, Sizzle) + net (creator).
+  // The ledger row records the exact split: gross = platform fee + creator net.
   const feeCents = platformFeeCents(amountCents);
   const netCents = amountCents - feeCents;
   const { data: tip, error } = await supabaseAdmin

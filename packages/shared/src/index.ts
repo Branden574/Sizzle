@@ -234,8 +234,9 @@ export interface CookProfile {
 /* ─────────────────────────── monetization ─────────────────────────── */
 
 /** Platform fee on creator earnings, in percent. Shown verbatim to users —
- *  Sizzle is transparent about its cut. */
-export const PLATFORM_FEE_PCT = 5.5;
+ *  Sizzle is transparent about its cut. Card processing (Stripe) comes OUT of
+ *  this fee, not out of the creator's share. */
+export const PLATFORM_FEE_PCT = 10;
 
 /** One-line version of the fee disclosure (tip sheet, receipts). */
 export const PLATFORM_FEE_SHORT = `Sizzle keeps ${PLATFORM_FEE_PCT}% to run the platform — creators keep the rest.`;
@@ -244,10 +245,10 @@ export const PLATFORM_FEE_SHORT = `Sizzle keeps ${PLATFORM_FEE_PCT}% to run the 
  *  earnings appear. Honest and specific, not marketing fluff. */
 export const PLATFORM_FEE_RATIONALE =
   `Sizzle keeps ${PLATFORM_FEE_PCT}% of each tip — you keep ${100 - PLATFORM_FEE_PCT}%. ` +
-  `For comparison: YouTube takes 30–45%, TikTok up to 50%, and Patreon 8–12%. ` +
-  `Our cut covers exactly what it costs to keep Sizzle running for you: video hosting and streaming, ` +
-  `payment processing, and moderation that keeps the feed worth being on — with zero ads and no selling anyone's data. ` +
-  `We only make money when you do.`;
+  `And card processing comes out of OUR ${PLATFORM_FEE_PCT}%, not yours: Stripe's ~3% + 30¢ per tip, ` +
+  `plus video hosting and streaming and the moderation that keeps the feed worth being on. ` +
+  `Compared to the rest — YouTube takes 30–45%, TikTok up to 50%, and Patreon 8–12% with payment fees on top of that. ` +
+  `Zero ads, we never sell your data, and we only make money when you do.`;
 
 /** Fee for a gross amount in cents. Rounds DOWN so rounding always favors the
  *  creator — the effective fee never exceeds the stated 5.5%. */

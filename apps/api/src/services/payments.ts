@@ -1,7 +1,8 @@
 /**
- * Creator payments (tips) via Stripe Connect. Sizzle keeps PLATFORM_FEE_PCT
- * (5.5%) of every tip as an application fee — disclosed to both sides in the
- * UI — and the rest transfers to the creator's connected account.
+ * Creator payments (tips) via Stripe Connect. Sizzle keeps PLATFORM_FEE_PCT of
+ * every tip as an application fee — disclosed to both sides in the UI — and the
+ * rest transfers to the creator's connected account. Card processing comes out
+ * of the platform fee (destination charge), not the creator's share.
  *
  * Provider selection mirrors video hosting: real Stripe when STRIPE_SECRET_KEY
  * is set, otherwise a mock that succeeds instantly (clearly labelled test mode)
