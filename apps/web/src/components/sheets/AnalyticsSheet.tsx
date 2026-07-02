@@ -1,11 +1,15 @@
-import { PLATFORM_FEE_PCT, PLATFORM_FEE_RATIONALE } from '@sizzle/shared';
-import { useAnalytics, useEarnings, useMonetizationStatus, useStartOnboarding } from '../../data/queries';
+import { useState } from 'react';
+import { PLATFORM_FEE_PCT, PLATFORM_FEE_RATIONALE, type EarningKind, type EarningsSummary } from '@sizzle/shared';
+import { useAnalytics, useEarnings, useMonetizationStatus, useSetSubPrice, useStartOnboarding } from '../../data/queries';
 import { useSizzle } from '../../store';
 import { formatCount } from '../../lib/format';
 import { theme } from '../../theme';
 import { CloseIcon } from '../icons';
 
 const usd = (cents: number) => `$${(cents / 100).toFixed(2)}`;
+
+/** Short label for a ledger row by earning type. */
+const KIND_LABEL: Record<EarningKind, string> = { support: 'Support', subscription: 'Subscription', unlock: 'Recipe unlock' };
 
 /** Creator insights — totals + per-post engagement. Opened from your profile. */
 export function AnalyticsSheet() {
@@ -78,9 +82,9 @@ function PostStat({ glyph, n }: { glyph: string; n: number }) {
 }
 
 /**
- * Earnings — tips received, with the 5.5% platform fee broken out on every
- * surface (totals AND each tip) plus the full why-this-is-fair rationale.
- * Creators should never have to wonder where a cent went.
+ * Earnings — support, subscriptions, and recipe unlocks, with the 10% platform
+ * fee broken out on every surface (totals AND each earning) plus the full
+ * why-this-is-fair rationale. Creators should never wonder where a cent went.
  */
 function Earnings() {
   const status = useMonetizationStatus(true);
@@ -103,7 +107,7 @@ function Earnings() {
         <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 16, padding: 16 }}>
           <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)' }}>Get paid for your cooking</div>
           <div style={{ fontSize: 13, color: 'var(--text-faint)', margin: '4px 0 10px', lineHeight: 1.5 }}>
-            Turn on tips so your followers can support you. You keep {100 - PLATFORM_FEE_PCT}% of every tip.
+            Turn on payouts to earn from monthly subscriptions, premium recipes, and one-off support. You keep {100 - PLATFORM_FEE_PCT}% of everything.
           </div>
           <div style={{ fontSize: 12.5, color: 'var(--text-faint-2)', lineHeight: 1.55, marginBottom: 12 }}>{PLATFORM_FEE_RATIONALE}</div>
           <button
@@ -122,11 +126,13 @@ function Earnings() {
               <span style={{ fontFamily: "'Instrument Serif',serif", fontSize: 30, color: 'var(--text)' }}>{usd(data?.totals.netCents ?? 0)}</span>
             </div>
             <div style={{ height: 1, background: 'var(--line)', margin: '10px 0' }} />
-            <Row label={`Tips received (${data?.totals.tipCount ?? 0})`} value={usd(data?.totals.grossCents ?? 0)} />
+            <Row label={`Payments received (${data?.totals.tipCount ?? 0})`} value={usd(data?.totals.grossCents ?? 0)} />
             <Row label={`Sizzle platform fee (${PLATFORM_FEE_PCT}%)`} value={`− ${usd(data?.totals.feeCents ?? 0)}`} faint />
             <Row label="You keep" value={usd(data?.totals.netCents ?? 0)} bold />
             <div style={{ fontSize: 12, color: 'var(--text-faint-2)', lineHeight: 1.55, marginTop: 10 }}>{PLATFORM_FEE_RATIONALE}</div>
           </div>
+
+          <SubPriceEditor data={data} />
 
           {(data?.tips ?? []).slice(0, 20).map((t) => (
             <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 4px', borderBottom: '1px solid var(--line)' }}>
@@ -134,12 +140,71 @@ function Earnings() {
                 <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {t.from?.name ?? 'Someone'}{t.recipeTitle ? ` · ${t.recipeTitle}` : ''}
                 </div>
-                <div style={{ fontSize: 12, color: 'var(--text-faint-2)' }}>{t.time} · {usd(t.amountCents)} tip − {usd(t.feeCents)} fee</div>
+                <div style={{ fontSize: 12, color: 'var(--text-faint-2)' }}>{KIND_LABEL[t.kind]} · {t.time} · {usd(t.amountCents)} − {usd(t.feeCents)} fee</div>
               </div>
               <div style={{ fontSize: 14.5, fontWeight: 800, color: '#1f9d55' }}>+{usd(t.netCents)}</div>
             </div>
           ))}
         </>
+      )}
+    </div>
+  );
+}
+
+/** Set (or clear) your monthly subscription price. $0/blank turns subscriptions off. */
+function SubPriceEditor({ data }: { data: EarningsSummary | undefined }) {
+  const setSubPrice = useSetSubPrice();
+  const current = data?.subPriceCents ?? null;
+  const [editing, setEditing] = useState(false);
+  const [dollars, setDollars] = useState('');
+
+  const open = () => { setDollars(current != null ? (current / 100).toFixed(2) : ''); setEditing(true); };
+  const save = () => {
+    const n = Math.round(parseFloat(dollars) * 100);
+    const priceCents = Number.isFinite(n) && n >= 100 ? Math.min(n, 50_000) : null;
+    setSubPrice.mutate(priceCents, { onSuccess: () => setEditing(false) });
+  };
+
+  return (
+    <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 16, padding: 16, marginBottom: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--text)' }}>Monthly subscription</div>
+          <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 2 }}>
+            {current != null ? `Fans can subscribe for ${usd(current)}/mo — you keep ${usd(current - Math.floor((current * PLATFORM_FEE_PCT) / 100))}.` : 'Off — set a price to let fans subscribe monthly.'}
+          </div>
+        </div>
+        {!editing && (
+          <button onClick={open} style={{ flex: 'none', height: 36, padding: '0 14px', border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 13.5, fontWeight: 800, cursor: 'pointer' }}>
+            {current != null ? 'Edit' : 'Set price'}
+          </button>
+        )}
+      </div>
+
+      {editing && (
+        <div style={{ marginTop: 12 }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', flex: 1, background: 'var(--bg)', border: '1.5px solid var(--line-2)', borderRadius: 12, padding: '0 12px' }}>
+              <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-faint)' }}>$</span>
+              <input
+                value={dollars}
+                onChange={(e) => setDollars(e.target.value.replace(/[^0-9.]/g, '').slice(0, 6))}
+                inputMode="decimal"
+                placeholder="4.99"
+                autoFocus
+                style={{ flex: 1, height: 44, border: 'none', background: 'transparent', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 800, outline: 'none', padding: '0 6px' }}
+              />
+              <span style={{ fontSize: 13, color: 'var(--text-faint-2)' }}>/mo</span>
+            </div>
+            <button onClick={save} disabled={setSubPrice.isPending} style={{ flex: 'none', height: 44, padding: '0 16px', border: 'none', borderRadius: 12, background: `linear-gradient(135deg,${theme.accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 14, fontWeight: 800, cursor: 'pointer', opacity: setSubPrice.isPending ? 0.7 : 1 }}>
+              {setSubPrice.isPending ? '…' : 'Save'}
+            </button>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
+            <button onClick={() => setSubPrice.mutate(null, { onSuccess: () => setEditing(false) })} style={{ background: 'none', border: 'none', color: 'var(--danger-fg)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', padding: 0 }}>Turn off subscriptions</button>
+            <button onClick={() => setEditing(false)} style={{ background: 'none', border: 'none', color: 'var(--text-faint)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', padding: 0 }}>Cancel</button>
+          </div>
+        </div>
       )}
     </div>
   );

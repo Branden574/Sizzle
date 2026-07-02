@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { useRequireAuth } from '../../auth/useRequireAuth';
-import { useAppealRecipe, useDeleteRecipe, useMe, useRecipe, useToggleDownload, useToggleSave } from '../../data/queries';
+import { useAppealRecipe, useDeleteRecipe, useMe, useRecipe, useToggleDownload, useToggleSave, useUnlockRecipe } from '../../data/queries';
 import { getOffline } from '../../lib/offline';
 import { formatCount } from '../../lib/format';
 import { scaleIngredient } from '../../lib/ingredients';
@@ -28,6 +28,7 @@ export function RecipeSheet() {
   const requireAuth = useRequireAuth();
   const save = useToggleSave();
   const download = useToggleDownload();
+  const unlock = useUnlockRecipe();
 
   const { data, isLoading } = useRecipe(openRecipe);
   const { data: me } = useMe();
@@ -174,7 +175,27 @@ export function RecipeSheet() {
                     <StatCard label="Level" value={r.level} />
                   </div>
 
-                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '26px 0 12px' }}>
+                  {r.locked && r.price != null && (
+                    <div style={{ marginTop: 22, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 18, padding: 20, textAlign: 'center' }}>
+                      <div style={{ fontSize: 30 }}>🔒</div>
+                      <div style={{ fontSize: 16.5, fontWeight: 800, color: 'var(--text)', marginTop: 6 }}>Premium recipe</div>
+                      <div style={{ fontSize: 13.5, color: 'var(--text-faint)', margin: '4px 0 14px', lineHeight: 1.5 }}>
+                        Unlock {r.cook.name}'s full recipe — video, ingredients & steps. {r.cook.name} keeps 90%.
+                      </div>
+                      <button
+                        onClick={() => { if (requireAuth()) unlock.mutate(r.id); }}
+                        disabled={unlock.isPending}
+                        style={{ width: '100%', height: 50, border: 'none', borderRadius: 14, background: `linear-gradient(135deg,${accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15.5, fontWeight: 800, cursor: 'pointer' }}
+                      >
+                        {unlock.isPending ? 'Starting…' : `Unlock · $${(r.price / 100).toFixed(2)}`}
+                      </button>
+                      <div style={{ fontSize: 12, color: 'var(--text-faint-2)', marginTop: 10 }}>…or subscribe to {r.cook.name} for all their premium recipes</div>
+                    </div>
+                  )}
+
+                  {!r.locked && (
+                  <>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '26px 0 12px' }} data-locked-gate="ingredients">
                     <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 26, color: 'var(--text)' }}>Ingredients</div>
                     {/* Type or step a target serving count; ingredients scale to it. */}
                     <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
@@ -245,6 +266,8 @@ export function RecipeSheet() {
                       </div>
                     ))}
                   </div>
+                  </>
+                  )}
                 </>
               )}
             </div>

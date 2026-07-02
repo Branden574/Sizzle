@@ -107,6 +107,7 @@ export interface RecipeRow {
   likes_enabled: boolean | null;
   comments_enabled: boolean | null;
   counts_visible: boolean | null;
+  price_cents: number | null;
   created_at: string;
 }
 
@@ -150,10 +151,14 @@ interface ViewerCtx {
   downloads: Set<string>;
   follows: Set<string>;
   reposts: Set<string>;
+  /** Premium recipes the viewer has unlocked (one-off purchase). */
+  unlocked: Set<string>;
+  /** Creators the viewer actively subscribes to (grants access to their premium recipes). */
+  subscribedTo: Set<string>;
 }
 
 function emptyViewer(): ViewerCtx {
-  return { likes: new Set(), dislikes: new Set(), saves: new Set(), downloads: new Set(), follows: new Set(), reposts: new Set() };
+  return { likes: new Set(), dislikes: new Set(), saves: new Set(), downloads: new Set(), follows: new Set(), reposts: new Set(), unlocked: new Set(), subscribedTo: new Set() };
 }
 
 /** Batch-load the viewer's like/dislike/save/follow state for a page of recipes. */
@@ -175,10 +180,14 @@ async function loadViewerCtx(
     for (const d of downloads ?? []) ctx.downloads.add(d.recipe_id as string);
     const { data: reposts } = await db.from('reposts').select('recipe_id').eq('user_id', viewerId).in('recipe_id', recipeIds);
     for (const rp of reposts ?? []) ctx.reposts.add(rp.recipe_id as string);
+    const { data: unlocks } = await db.from('recipe_unlocks').select('recipe_id').eq('user_id', viewerId).in('recipe_id', recipeIds);
+    for (const u of unlocks ?? []) ctx.unlocked.add(u.recipe_id as string);
   }
   if (cookIds.length) {
     const { data: follows } = await db.from('follows').select('cook_id').eq('follower_id', viewerId).in('cook_id', cookIds);
     for (const f of follows ?? []) ctx.follows.add(f.cook_id as string);
+    const { data: subs } = await db.from('subscriptions').select('creator_id').eq('subscriber_id', viewerId).eq('status', 'active').in('creator_id', cookIds);
+    for (const s of subs ?? []) ctx.subscribedTo.add(s.creator_id as string);
   }
   return ctx;
 }
@@ -194,7 +203,13 @@ function viewerState(recipeId: string, cookId: string, ctx: ViewerCtx): RecipeVi
   };
 }
 
-function toCard(r: RecipeRow, cook: ProfileRow, video: VideoRow | null, ctx: ViewerCtx): RecipeCard {
+function toCard(r: RecipeRow, cook: ProfileRow, video: VideoRow | null, ctx: ViewerCtx, viewerId?: string): RecipeCard {
+  // Premium gating: a priced recipe is locked unless you own it, unlocked it, or
+  // subscribe to the creator. Locked cards keep their poster but never expose the
+  // playable video or photos (the detail route also withholds ingredients/steps).
+  const price = r.price_cents ?? null;
+  const locked = price != null && r.cook_id !== viewerId && !ctx.unlocked.has(r.id) && !ctx.subscribedTo.has(r.cook_id);
+  const dto = videoDTO(video);
   return {
     id: r.id,
     title: r.title,
@@ -205,8 +220,8 @@ function toCard(r: RecipeRow, cook: ProfileRow, video: VideoRow | null, ctx: Vie
     level: r.level,
     bg: r.bg,
     cook: cookSummary(cook),
-    video: videoDTO(video),
-    images: r.image_urls ?? [],
+    video: locked && dto ? { ...dto, hlsUrl: null, mp4Url: null } : dto,
+    images: locked ? [] : r.image_urls ?? [],
     counts: { likes: r.like_count, dislikes: r.dislike_count, comments: r.comment_count, saves: r.save_count, shares: r.share_count },
     viewer: viewerState(r.id, r.cook_id, ctx),
     controls: {
@@ -222,6 +237,8 @@ function toCard(r: RecipeRow, cook: ProfileRow, video: VideoRow | null, ctx: Vie
     removalReason: r.removal_reason ?? null,
     appealStatus: (r.appeal_status as RecipeCard['appealStatus']) ?? 'none',
     autoHidden: r.auto_hidden ?? false,
+    price,
+    locked,
     repost: null,
   };
 }
@@ -283,7 +300,7 @@ export async function buildCards(db: SupabaseClient, viewerId: string | undefine
     // Auto-hidden (pending review) and removed posts are visible only to their
     // owner — and to admins, so moderators can open the exact content to review.
     if ((r.auto_hidden || r.status === 'removed') && r.cook_id !== viewerId && !viewerIsAdmin) continue;
-    cards.push(toCard(r, cook, r.video_asset_id ? videoMap.get(r.video_asset_id) ?? null : null, ctx));
+    cards.push(toCard(r, cook, r.video_asset_id ? videoMap.get(r.video_asset_id) ?? null : null, ctx, viewerId));
   }
   return cards;
 }

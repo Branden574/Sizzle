@@ -123,6 +123,11 @@ export interface RecipeCard {
   appealStatus: AppealStatus;
   /** Auto-hidden pending admin review (crossed the high report threshold). */
   autoHidden: boolean;
+  /** Premium price in cents (null = free). Set by the creator. */
+  price: number | null;
+  /** True when this is a premium recipe the viewer can't see yet (not the owner,
+   *  hasn't unlocked it, isn't subscribed) — the client shows an unlock CTA. */
+  locked: boolean;
   /** Set when this card appears in your feed because a mutual-follow friend reposted it. */
   repost: RepostInfo | null;
 }
@@ -224,9 +229,11 @@ export interface CookProfile {
     likes: number;
     recipes: number;
   };
-  viewer: { following: boolean; blocked: boolean; muted: boolean };
-  /** True when this creator has payouts set up and can receive tips. */
+  viewer: { following: boolean; blocked: boolean; muted: boolean; subscribed: boolean };
+  /** True when this creator has payouts set up and can receive support/tips. */
   acceptsTips: boolean;
+  /** Monthly subscription price in cents, or null if they don't offer subs. */
+  subPriceCents: number | null;
   recipes: RecipeCard[];
 }
 
@@ -256,10 +263,13 @@ export const platformFeeCents = (amountCents: number): number => Math.floor((amo
 
 export type MonetizationStatus = 'none' | 'pending' | 'active';
 
-/** One tip in a creator's earnings ledger (or a tipper's history). */
+export type EarningKind = 'support' | 'subscription' | 'unlock';
+
+/** One earning in a creator's ledger (support / subscription renewal / unlock). */
 export interface TipDTO {
   id: string;
-  /** Who sent it (for the creator's ledger) — summary of the tipper. */
+  kind: EarningKind;
+  /** Who sent it (for the creator's ledger) — summary of the payer. */
   from: CookSummary | null;
   recipeId: string | null;
   recipeTitle: string | null;
@@ -272,10 +282,20 @@ export interface TipDTO {
   time: string;
 }
 
+/** A viewer's subscription to a creator. */
+export interface SubscriptionDTO {
+  creatorId: string;
+  status: 'active' | 'canceled' | 'past_due';
+  priceCents: number;
+  currentPeriodEnd: string | null;
+}
+
 /** The creator's earnings dashboard payload. */
 export interface EarningsSummary {
   monetization: MonetizationStatus;
   feePct: number;
+  /** The creator's own monthly subscription price (null = subscriptions off). */
+  subPriceCents: number | null;
   totals: { grossCents: number; feeCents: number; netCents: number; tipCount: number };
   tips: TipDTO[];
 }

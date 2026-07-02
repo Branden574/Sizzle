@@ -74,6 +74,69 @@ export function useStartOnboarding() {
   });
 }
 
+/** Unlock a premium recipe (opens Stripe checkout, or settles instantly in test mode). */
+export function useUnlockRecipe() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (recipeId: string) => apiSend<{ url: string | null; status: string }>('POST', '/monetize/unlock', { recipeId }),
+    onSuccess: (res, recipeId) => {
+      if (res.url) window.open(res.url, '_blank', 'noopener');
+      else {
+        void qc.invalidateQueries({ queryKey: keys.recipe(recipeId) });
+        void qc.invalidateQueries({ queryKey: ['feed'] });
+        void qc.invalidateQueries({ queryKey: ['cook'] });
+      }
+    },
+  });
+}
+
+/** Subscribe to a creator (opens Stripe checkout, or activates instantly in test mode). */
+export function useSubscribe() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (creatorId: string) => apiSend<{ url: string | null; status: string }>('POST', '/monetize/subscribe', { creatorId }),
+    onSuccess: (res, creatorId) => {
+      if (res.url) window.open(res.url, '_blank', 'noopener');
+      else {
+        void qc.invalidateQueries({ queryKey: keys.cook(creatorId) });
+        void qc.invalidateQueries({ queryKey: ['feed'] });
+      }
+    },
+  });
+}
+
+/** Cancel a creator subscription (at period end). */
+export function useCancelSubscription() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (creatorId: string) => apiSend('POST', '/monetize/subscribe/cancel', { creatorId }),
+    onSuccess: (_d, creatorId) => void qc.invalidateQueries({ queryKey: keys.cook(creatorId) }),
+  });
+}
+
+/** Set (or clear) the creator's own monthly subscription price. */
+export function useSetSubPrice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (priceCents: number | null) => apiSend('POST', '/monetize/sub-price', { priceCents }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['monetize'] }),
+  });
+}
+
+/** Set (or clear) a premium price on the creator's own recipe. */
+export function useSetRecipePrice() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ recipeId, priceCents }: { recipeId: string; priceCents: number | null }) =>
+      apiSend('PATCH', `/recipes/${recipeId}/controls`, { priceCents }),
+    onSuccess: (_d, { recipeId }) => {
+      void qc.invalidateQueries({ queryKey: keys.recipe(recipeId) });
+      void qc.invalidateQueries({ queryKey: ['feed'] });
+      void qc.invalidateQueries({ queryKey: ['cook'] });
+    },
+  });
+}
+
 /** Toggle a single push category (likes / comments / follows / reposts / messages). */
 export function useUpdateNotifPref() {
   const qc = useQueryClient();

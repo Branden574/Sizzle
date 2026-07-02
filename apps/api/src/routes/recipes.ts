@@ -40,11 +40,13 @@ async function getRecipeDetail(viewerId: string | undefined, recipeId: string): 
     supabaseAdmin.from('recipe_steps').select('text,position').eq('recipe_id', recipeId).order('position'),
   ]);
 
+  // Premium gating: withhold the recipe body from a locked card (the client shows
+  // an unlock CTA). The card's media was already stripped in the mapper.
   return {
     ...card,
     caption: (row.caption as string | null) ?? null,
-    ingredients: (ings ?? []).map((i) => i.text as string),
-    steps: (steps ?? []).map((s) => s.text as string),
+    ingredients: card.locked ? [] : (ings ?? []).map((i) => i.text as string),
+    steps: card.locked ? [] : (steps ?? []).map((s) => s.text as string),
   };
 }
 
@@ -273,6 +275,8 @@ const controlsSchema = z.object({
   likesEnabled: z.boolean().optional(),
   commentsEnabled: z.boolean().optional(),
   countsVisible: z.boolean().optional(),
+  // Premium price in cents (≥ $1), or null to make it free again.
+  priceCents: z.number().int().min(100).max(50_000).nullable().optional(),
 });
 
 /** PATCH /recipes/:id/controls — owner toggles likes/comments/count visibility (persisted, enforced for all viewers). */
@@ -284,10 +288,17 @@ recipes.patch('/:id/controls', requireAuth, async (c) => {
   const { data: rec } = await supabaseAdmin.from('recipes').select('cook_id').eq('id', id).maybeSingle();
   if (!rec) throw notFound('Recipe not found');
   if (rec.cook_id !== userId) throw forbidden('You can only change controls on your own posts');
-  const patch: Record<string, boolean> = {};
+  const patch: Record<string, boolean | number | null> = {};
   if (parsed.data.likesEnabled !== undefined) patch.likes_enabled = parsed.data.likesEnabled;
   if (parsed.data.commentsEnabled !== undefined) patch.comments_enabled = parsed.data.commentsEnabled;
   if (parsed.data.countsVisible !== undefined) patch.counts_visible = parsed.data.countsVisible;
+  if (parsed.data.priceCents !== undefined) {
+    if (parsed.data.priceCents !== null) {
+      const { data: prof } = await supabaseAdmin.from('profiles').select('monetization_status').eq('id', userId).maybeSingle();
+      if (prof?.monetization_status !== 'active') throw badRequest('Set up payouts before pricing a recipe');
+    }
+    patch.price_cents = parsed.data.priceCents;
+  }
   if (Object.keys(patch).length) {
     const { error } = await supabaseAdmin.from('recipes').update(patch).eq('id', id);
     if (error) throw dbFail(error.message);

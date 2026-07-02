@@ -111,16 +111,17 @@ cooks.get('/:id', optionalAuth, async (c) => {
   const cards = blockedByMe ? [] : await buildCards(supabaseAdmin, viewerId, rows);
 
   let following = false;
+  let subscribed = false;
   if (viewerId) {
-    const { data: f } = await supabaseAdmin
-      .from('follows')
-      .select('cook_id')
-      .eq('follower_id', viewerId)
-      .eq('cook_id', id)
-      .maybeSingle();
+    const [{ data: f }, { data: sub }] = await Promise.all([
+      supabaseAdmin.from('follows').select('cook_id').eq('follower_id', viewerId).eq('cook_id', id).maybeSingle(),
+      supabaseAdmin.from('subscriptions').select('id').eq('subscriber_id', viewerId).eq('creator_id', id).eq('status', 'active').maybeSingle(),
+    ]);
     following = !!f;
+    subscribed = !!sub;
   }
 
+  const monetized = (p as { monetization_status?: string }).monetization_status === 'active';
   const summary = cookSummary(p);
   const res: CookProfile = {
     ...summary,
@@ -133,8 +134,9 @@ cooks.get('/:id', optionalAuth, async (c) => {
       likes: p.total_likes,
       recipes: rows.length,
     },
-    viewer: { following, blocked: blockedByMe, muted },
-    acceptsTips: (p as { monetization_status?: string }).monetization_status === 'active',
+    viewer: { following, blocked: blockedByMe, muted, subscribed },
+    acceptsTips: monetized,
+    subPriceCents: monetized ? ((p as { sub_price_cents?: number | null }).sub_price_cents ?? null) : null,
     recipes: cards,
   };
   return c.json(res);

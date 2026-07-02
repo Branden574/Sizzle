@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useCook, useMe, useToggleBlock, useToggleFollow, useToggleMute } from '../../data/queries';
+import { useCancelSubscription, useCook, useMe, useSubscribe, useToggleBlock, useToggleFollow, useToggleMute } from '../../data/queries';
 import { useRequireAuth } from '../../auth/useRequireAuth';
 import { useSizzle } from '../../store';
 import { VerifiedBadge } from '../VerifiedBadge';
@@ -23,6 +23,8 @@ export function CookSheet() {
   const follow = useToggleFollow();
   const block = useToggleBlock();
   const mute = useToggleMute();
+  const subscribe = useSubscribe();
+  const cancelSub = useCancelSubscription();
   const { data: me } = useMe();
   const [menuOpen, setMenuOpen] = useState(false);
 
@@ -104,7 +106,7 @@ export function CookSheet() {
                   title="Send a tip"
                   style={{ ...pressVars(0.94), padding: '12px 16px', borderRadius: 15, border: '1.5px solid var(--line-2)', background: 'var(--surface)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 700, cursor: 'pointer', transition: 'transform .2s cubic-bezier(.34,1.56,.64,1)' }}
                 >
-                  💝 Tip
+                  💝 Support
                 </button>
               )}
               <button
@@ -128,6 +130,24 @@ export function CookSheet() {
           </div>
           <p style={{ color: 'var(--text-muted)', fontSize: 15, lineHeight: 1.5, margin: '14px 0 0' }}>{ck.bio}</p>
           <SocialLinks links={ck.links} size={34} />
+
+          {!isOwn && ck.subPriceCents != null && (
+            ck.viewer.subscribed ? (
+              <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 10, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 16, padding: '12px 16px' }}>
+                <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', flex: 1 }}>⭐ Subscribed · unlocks {ck.name}'s premium recipes</span>
+                <button onClick={() => { if (window.confirm(`Cancel your subscription to ${ck.name}? You keep access until the month ends.`)) cancelSub.mutate(ck.id); }} disabled={cancelSub.isPending} style={{ background: 'none', border: 'none', color: 'var(--text-faint)', fontFamily: "'Hanken Grotesk'", fontSize: 13, fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}>Cancel</button>
+              </div>
+            ) : (
+              <button
+                onClick={() => { if (requireAuth()) subscribe.mutate(ck.id); }}
+                disabled={subscribe.isPending}
+                className="sz-press"
+                style={{ ...pressVars(0.97), width: '100%', marginTop: 16, height: 50, borderRadius: 15, border: 'none', background: `linear-gradient(135deg,${accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15.5, fontWeight: 800, cursor: 'pointer' }}
+              >
+                {subscribe.isPending ? 'Starting…' : `⭐ Subscribe · $${(ck.subPriceCents / 100).toFixed(2)}/mo`}
+              </button>
+            )
+          )}
 
           <div style={{ display: 'flex', marginTop: 18, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 18, overflow: 'hidden' }}>
             <CookStat value={formatCount(ck.counts.followers)} label="Followers" border onClick={() => setFollowList({ id: ck.id, mode: 'followers', name: ck.name })} />

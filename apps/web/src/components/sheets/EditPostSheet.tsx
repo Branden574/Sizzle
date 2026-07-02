@@ -1,5 +1,6 @@
 import { useEffect, useState, type CSSProperties } from 'react';
-import { useEditRecipe, useRecipe } from '../../data/queries';
+import { PLATFORM_FEE_PCT } from '@sizzle/shared';
+import { useEditRecipe, useMonetizationStatus, useRecipe, useSetRecipePrice } from '../../data/queries';
 import { useSizzle } from '../../store';
 import { theme } from '../../theme';
 
@@ -24,6 +25,9 @@ export function EditPostSheet() {
   const setEditPostFor = useSizzle((s) => s.setEditPostFor);
   const { data: r } = useRecipe(editPostFor);
   const edit = useEditRecipe();
+  const setRecipePrice = useSetRecipePrice();
+  const monetize = useMonetizationStatus(!!editPostFor);
+  const canMonetize = monetize.data?.status === 'active';
 
   const [title, setTitle] = useState('');
   const [cuisine, setCuisine] = useState('');
@@ -33,6 +37,8 @@ export function EditPostSheet() {
   const [ingredients, setIngredients] = useState('');
   const [steps, setSteps] = useState('');
   const [rating, setRating] = useState(0);
+  const [premium, setPremium] = useState(false);
+  const [price, setPrice] = useState('');
   const [ready, setReady] = useState(false);
 
   // Pre-fill from the recipe once it loads (keyed on id so switching posts re-fills).
@@ -46,6 +52,8 @@ export function EditPostSheet() {
     setIngredients(r.ingredients.join('\n'));
     setSteps(r.steps.join('\n'));
     setRating(r.rating ?? 0);
+    setPremium(r.price != null);
+    setPrice(r.price != null ? (r.price / 100).toFixed(2) : '');
     setReady(true);
   }, [r?.id]);
 
@@ -54,8 +62,22 @@ export function EditPostSheet() {
   const isReview = r?.postType === 'review';
   const canSave = !!r && title.trim().length > 0 && !edit.isPending;
 
+  // The premium price lives on a separate "controls" endpoint. Compute the
+  // desired value: only paid when this creator can monetize, it's a real recipe,
+  // premium is on, and the entered price is at least $1 (else clear it).
+  const desiredPriceCents = (): number | null => {
+    if (isReview || !canMonetize || !premium) return null;
+    const n = Math.round(parseFloat(price) * 100);
+    return Number.isFinite(n) && n >= 100 ? Math.min(n, 50_000) : null;
+  };
+
   const save = () => {
     if (!r || !canSave) return;
+    const nextPrice = desiredPriceCents();
+    // Persist the price only if it actually changed (avoids a needless PATCH).
+    if (nextPrice !== (r.price ?? null)) {
+      setRecipePrice.mutate({ recipeId: r.id, priceCents: nextPrice });
+    }
     edit.mutate(
       {
         recipeId: r.id,
@@ -134,9 +156,38 @@ export function EditPostSheet() {
                   <label style={labelStyle}>Method · one step per line</label>
                   <textarea value={steps} onChange={(e) => setSteps(e.target.value)} rows={5} style={{ ...field, resize: 'vertical', lineHeight: 1.5 }} />
                 </div>
+
+                {/* Premium: charge for the full recipe. Video, ingredients & steps
+                    stay locked until a fan unlocks or subscribes. */}
+                {canMonetize ? (
+                  <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 14, padding: 14 }}>
+                    <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}>
+                      <div style={{ minWidth: 0, paddingRight: 12 }}>
+                        <div style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--text)' }}>Premium recipe</div>
+                        <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 2, lineHeight: 1.45 }}>Lock the video, ingredients &amp; steps behind a one-time price.</div>
+                      </div>
+                      <input type="checkbox" checked={premium} onChange={(e) => setPremium(e.target.checked)} style={{ width: 20, height: 20, accentColor: accent, flex: 'none', cursor: 'pointer' }} />
+                    </label>
+                    {premium && (
+                      <div style={{ marginTop: 12 }}>
+                        <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg)', border: '1.5px solid var(--line-2)', borderRadius: 12, padding: '0 12px' }}>
+                          <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-faint)' }}>$</span>
+                          <input value={price} onChange={(e) => setPrice(e.target.value.replace(/[^0-9.]/g, '').slice(0, 6))} inputMode="decimal" placeholder="3.99" style={{ flex: 1, height: 44, border: 'none', background: 'transparent', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 800, outline: 'none', padding: '0 6px' }} />
+                        </div>
+                        <div style={{ fontSize: 12, color: 'var(--text-faint-2)', marginTop: 8, lineHeight: 1.45 }}>
+                          You keep {100 - PLATFORM_FEE_PCT}% of every unlock. Minimum $1.00.
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                ) : (
+                  <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 14, padding: 14, fontSize: 12.5, color: 'var(--text-faint)', lineHeight: 1.45 }}>
+                    💰 Want to charge for this recipe? Set up payouts in <b style={{ color: 'var(--text)' }}>your insights</b> first — then you can make it premium.
+                  </div>
+                )}
               </>
             )}
-            {edit.isError && <div style={{ color: 'var(--danger-fg)', fontSize: 13.5, fontWeight: 600 }}>Couldn’t save — please try again.</div>}
+            {(edit.isError || setRecipePrice.isError) && <div style={{ color: 'var(--danger-fg)', fontSize: 13.5, fontWeight: 600 }}>Couldn’t save — please try again.</div>}
           </div>
         </div>
       )}
