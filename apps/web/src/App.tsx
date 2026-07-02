@@ -14,6 +14,7 @@ import { Splash } from './components/Splash';
 import { VideoViewer } from './components/VideoViewer';
 import { AppSettingsSheet } from './components/sheets/AppSettingsSheet';
 import { AnalyticsSheet } from './components/sheets/AnalyticsSheet';
+import { TipSheet } from './components/sheets/TipSheet';
 import { RoadmapSheet } from './components/sheets/RoadmapSheet';
 import { CollectionPickerSheet } from './components/sheets/CollectionPickerSheet';
 import { CollectionSheet } from './components/sheets/CollectionSheet';
@@ -220,6 +221,7 @@ export default function App() {
   const showEditProfile = useSizzle((s) => s.showEditProfile);
   const showAppSettings = useSizzle((s) => s.showAppSettings);
   const showAnalytics = useSizzle((s) => s.showAnalytics);
+  const tipFor = useSizzle((s) => s.tipFor);
   const showRoadmap = useSizzle((s) => s.showRoadmap);
   const showAdmin = useSizzle((s) => s.showAdmin);
   const moreFor = useSizzle((s) => s.moreFor);
@@ -318,6 +320,7 @@ export default function App() {
           {showEditProfile && <EditProfileSheet />}
           {showAppSettings && <AppSettingsSheet />}
           {showAnalytics && <AnalyticsSheet />}
+          {tipFor && <TipSheet />}
           {showRoadmap && <RoadmapSheet />}
           {moreFor && <MoreSheet />}
           {reportFor && <ReportSheet />}

@@ -1,7 +1,11 @@
-import { useAnalytics } from '../../data/queries';
+import { PLATFORM_FEE_PCT, PLATFORM_FEE_RATIONALE } from '@sizzle/shared';
+import { useAnalytics, useEarnings, useMonetizationStatus, useStartOnboarding } from '../../data/queries';
 import { useSizzle } from '../../store';
 import { formatCount } from '../../lib/format';
+import { theme } from '../../theme';
 import { CloseIcon } from '../icons';
+
+const usd = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 
 /** Creator insights — totals + per-post engagement. Opened from your profile. */
 export function AnalyticsSheet() {
@@ -45,6 +49,8 @@ export function AnalyticsSheet() {
                 ))}
               </div>
 
+              <Earnings />
+
               <div style={{ fontSize: 12, color: 'var(--text-faint-2)', margin: '0 2px 8px', textTransform: 'uppercase', letterSpacing: '.06em' }}>Per post</div>
               {posts.length === 0 ? (
                 <div style={{ color: 'var(--text-faint-2)', fontSize: 14, padding: 16, textAlign: 'center' }}>Post a recipe to see its stats here.</div>
@@ -69,4 +75,80 @@ export function AnalyticsSheet() {
 
 function PostStat({ glyph, n }: { glyph: string; n: number }) {
   return <div style={{ minWidth: 46, textAlign: 'right', fontSize: 13, color: 'var(--text-faint)' }}>{glyph} {formatCount(n)}</div>;
+}
+
+/**
+ * Earnings — tips received, with the 5.5% platform fee broken out on every
+ * surface (totals AND each tip) plus the full why-this-is-fair rationale.
+ * Creators should never have to wonder where a cent went.
+ */
+function Earnings() {
+  const status = useMonetizationStatus(true);
+  const { data } = useEarnings(status.data?.status === 'active');
+  const onboard = useStartOnboarding();
+  const st = status.data?.status ?? 'none';
+
+  const startPayouts = () => {
+    if (onboard.isPending) return;
+    onboard.mutate(undefined, {
+      onSuccess: (res) => { if (res.url) window.open(res.url, '_blank', 'noopener'); },
+    });
+  };
+
+  return (
+    <div style={{ marginBottom: 22 }}>
+      <div style={{ fontSize: 12, color: 'var(--text-faint-2)', margin: '0 2px 8px', textTransform: 'uppercase', letterSpacing: '.06em' }}>Earnings</div>
+
+      {st !== 'active' ? (
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 16, padding: 16 }}>
+          <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)' }}>Get paid for your cooking</div>
+          <div style={{ fontSize: 13, color: 'var(--text-faint)', margin: '4px 0 10px', lineHeight: 1.5 }}>
+            Turn on tips so your followers can support you. You keep {100 - PLATFORM_FEE_PCT}% of every tip.
+          </div>
+          <div style={{ fontSize: 12.5, color: 'var(--text-faint-2)', lineHeight: 1.55, marginBottom: 12 }}>{PLATFORM_FEE_RATIONALE}</div>
+          <button
+            onClick={startPayouts}
+            disabled={onboard.isPending || st === 'pending'}
+            style={{ width: '100%', height: 48, border: 'none', borderRadius: 14, background: `linear-gradient(135deg,${theme.accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 800, cursor: 'pointer', opacity: onboard.isPending ? 0.7 : 1 }}
+          >
+            {st === 'pending' ? 'Finishing setup… (complete the Stripe form)' : onboard.isPending ? 'Starting…' : 'Set up payouts'}
+          </button>
+        </div>
+      ) : (
+        <>
+          <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 16, padding: 16, marginBottom: 10 }}>
+            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+              <span style={{ fontSize: 13, color: 'var(--text-faint)' }}>You've earned</span>
+              <span style={{ fontFamily: "'Instrument Serif',serif", fontSize: 30, color: 'var(--text)' }}>{usd(data?.totals.netCents ?? 0)}</span>
+            </div>
+            <div style={{ height: 1, background: 'var(--line)', margin: '10px 0' }} />
+            <Row label={`Tips received (${data?.totals.tipCount ?? 0})`} value={usd(data?.totals.grossCents ?? 0)} />
+            <Row label={`Sizzle platform fee (${PLATFORM_FEE_PCT}%)`} value={`− ${usd(data?.totals.feeCents ?? 0)}`} faint />
+            <Row label="You keep" value={usd(data?.totals.netCents ?? 0)} bold />
+            <div style={{ fontSize: 12, color: 'var(--text-faint-2)', lineHeight: 1.55, marginTop: 10 }}>{PLATFORM_FEE_RATIONALE}</div>
+          </div>
+
+          {(data?.tips ?? []).slice(0, 20).map((t) => (
+            <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 4px', borderBottom: '1px solid var(--line)' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                  {t.from?.name ?? 'Someone'}{t.recipeTitle ? ` · ${t.recipeTitle}` : ''}
+                </div>
+                <div style={{ fontSize: 12, color: 'var(--text-faint-2)' }}>{t.time} · {usd(t.amountCents)} tip − {usd(t.feeCents)} fee</div>
+              </div>
+              <div style={{ fontSize: 14.5, fontWeight: 800, color: '#1f9d55' }}>+{usd(t.netCents)}</div>
+            </div>
+          ))}
+        </>
+      )}
+    </div>
+  );
+}
+
+function Row({ label, value, faint, bold }: { label: string; value: string; faint?: boolean; bold?: boolean }) {
+  return (
+    <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13, padding: '3px 0', color: faint ? 'var(--text-faint)' : 'var(--text)', fontWeight: bold ? 800 : 500 }}>
+      <span>{label}</span><span>{value}</span>
+    </div>
+  );
 }

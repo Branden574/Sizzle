@@ -96,6 +96,8 @@ function copyFor(type: NotificationKind, who: string): { title: string; body: st
       return { title: 'Account action', body: 'Your account status has changed' };
     case 'message':
       return { title: 'New message', body: `${who} sent you a message` };
+    case 'tip':
+      return { title: 'You got a tip! 🎉', body: `${who} sent you a tip` };
     default:
       return { title: 'Sizzle', body: 'You have a new notification' };
   }

@@ -13,6 +13,7 @@ function text(n: NotificationDTO): string {
   if (n.type === 'removed') return n.recipeTitle ? `Your post “${n.recipeTitle}” was removed — you can appeal it` : 'One of your posts was removed';
   if (n.type === 'restored') return n.recipeTitle ? `Your post “${n.recipeTitle}” was restored` : 'Your account was restored';
   if (n.type === 'banned') return 'Your account was suspended — open settings to appeal';
+  if (n.type === 'tip') return n.recipeTitle ? `${who} sent you a tip on “${n.recipeTitle}” 🎉` : `${who} sent you a tip 🎉`;
   return n.recipeTitle ? `${who} commented on “${n.recipeTitle}”` : `${who} commented on your recipe`;
 }
 

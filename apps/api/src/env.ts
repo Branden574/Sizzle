@@ -37,6 +37,14 @@ const schema = z.object({
   // unset, email sending is a safe no-op. Key from resend.com → API Keys.
   RESEND_API_KEY: z.string().optional(),
   EMAIL_FROM: z.string().default('Sizzle <noreply@getsizzle.app>'),
+
+  // Creator payments (Stripe Connect). When unset, tipping runs on the mock
+  // provider (instant fake success, clearly labelled test mode) so the flow is
+  // testable without keys. Keys from dashboard.stripe.com → Developers.
+  STRIPE_SECRET_KEY: z.string().optional(),
+  STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  // Where Stripe Checkout returns the tipper after paying/cancelling.
+  APP_ORIGIN: z.string().default('https://getsizzle.app'),
 });
 
 const parsed = schema.safeParse(process.env);
@@ -68,3 +76,6 @@ if (!isLocalSupabase && (isLocalDemoKey(env.SUPABASE_SERVICE_ROLE_KEY) || isLoca
 /** True when the user opted into real Cloudflare Stream and supplied creds. */
 export const cloudflareConfigured =
   env.VIDEO_PROVIDER === 'cloudflare' && !!env.CLOUDFLARE_ACCOUNT_ID && !!env.CLOUDFLARE_STREAM_TOKEN;
+
+/** True when real Stripe payments are wired up (otherwise tipping runs the mock provider). */
+export const stripeConfigured = !!env.STRIPE_SECRET_KEY;

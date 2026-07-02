@@ -1,5 +1,5 @@
 import { QueryClient, useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query';
-import type { AdminAppealDTO, AdminContentReportDTO, AdminLogDTO, AdminReportGroupDTO, AdminStats, AdminUserDTO, CollectionDTO, CommentDTO, ConversationDTO, CookProfile, CookSummary, CreateRecipeInput, CreatorAnalytics, DirectUploadTicket, FeedResponse, MeProfile, MessageDTO, NotificationDTO, NotifPrefKey, PostControls, RecipeCard, RecipeDetail, ReportInput, SearchResults, SuggestedCook, SupportRequestDTO, ThreadDTO, TrendingTag, VerificationTier, VideoAssetStatus, VideoUploadConfig } from '@sizzle/shared';
+import type { AdminAppealDTO, AdminContentReportDTO, AdminLogDTO, AdminReportGroupDTO, AdminStats, AdminUserDTO, CollectionDTO, CommentDTO, ConversationDTO, CookProfile, CookSummary, CreateRecipeInput, CreatorAnalytics, DirectUploadTicket, EarningsSummary, FeedResponse, MeProfile, MessageDTO, MonetizationStatus, NotificationDTO, NotifPrefKey, PostControls, RecipeCard, RecipeDetail, ReportInput, SearchResults, SuggestedCook, SupportRequestDTO, ThreadDTO, TipConfig, TrendingTag, VerificationTier, VideoAssetStatus, VideoUploadConfig } from '@sizzle/shared';
 import { useAuth } from '../auth/useAuth';
 import { useSizzle } from '../store';
 import { apiGet, apiSend } from '../lib/api';
@@ -30,6 +30,48 @@ export function useMe() {
 /** Creator insights (own profile). */
 export function useAnalytics(enabled: boolean) {
   return useQuery({ queryKey: ['me', 'analytics'], queryFn: () => apiGet<CreatorAnalytics>('/me/analytics'), enabled });
+}
+
+/* ─────────────────────────── monetization ─────────────────────────── */
+
+/** Tip flow config (provider, fee %, presets). Rarely changes — cache long. */
+export function useTipConfig(enabled: boolean) {
+  return useQuery({ queryKey: ['monetize', 'config'], queryFn: () => apiGet<TipConfig>('/monetize/config'), enabled, staleTime: 3_600_000 });
+}
+
+/** Send a tip. Stripe → returns a checkout URL to open; mock → settles instantly. */
+export function useSendTip() {
+  return useMutation({
+    mutationFn: (v: { creatorId: string; recipeId?: string; amountCents: number }) =>
+      apiSend<{ url: string | null; status: 'pending' | 'succeeded' }>('POST', '/monetize/tip', v),
+  });
+}
+
+/** The creator's earnings ledger (totals + recent tips, fee split explicit). */
+export function useEarnings(enabled: boolean) {
+  return useQuery({ queryKey: ['monetize', 'earnings'], queryFn: () => apiGet<EarningsSummary>('/monetize/earnings'), enabled });
+}
+
+/** Payout status; polls while pending so finishing Stripe onboarding flips the UI. */
+export function useMonetizationStatus(enabled: boolean) {
+  return useQuery({
+    queryKey: ['monetize', 'status'],
+    queryFn: () => apiGet<{ status: MonetizationStatus }>('/monetize/status'),
+    enabled,
+    refetchInterval: (q) => (q.state.data?.status === 'pending' ? 8000 : false),
+  });
+}
+
+/** Start payout onboarding (Stripe link, or instant in test mode). */
+export function useStartOnboarding() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiSend<{ url: string | null; status: MonetizationStatus }>('POST', '/monetize/onboard'),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['monetize'] });
+      void qc.invalidateQueries({ queryKey: keys.me });
+    },
+  });
 }
 
 /** Toggle a single push category (likes / comments / follows / reposts / messages). */

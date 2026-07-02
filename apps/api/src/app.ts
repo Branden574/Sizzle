@@ -18,6 +18,7 @@ import { uploads } from './routes/uploads';
 import { admin } from './routes/admin';
 import { support } from './routes/support';
 import { reports } from './routes/reports';
+import { monetize } from './routes/monetize';
 
 export function createApp() {
   const app = new Hono<AppEnv>();
@@ -64,6 +65,7 @@ export function createApp() {
   app.route('/admin', admin);
   app.route('/support', support);
   app.route('/reports', reports);
+  app.route('/monetize', monetize);
 
   return app;
 }

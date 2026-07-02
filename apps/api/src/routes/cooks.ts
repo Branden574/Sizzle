@@ -134,6 +134,7 @@ cooks.get('/:id', optionalAuth, async (c) => {
       recipes: rows.length,
     },
     viewer: { following, blocked: blockedByMe, muted },
+    acceptsTips: (p as { monetization_status?: string }).monetization_status === 'active',
     recipes: cards,
   };
   return c.json(res);

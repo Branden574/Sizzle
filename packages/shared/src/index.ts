@@ -225,10 +225,69 @@ export interface CookProfile {
     recipes: number;
   };
   viewer: { following: boolean; blocked: boolean; muted: boolean };
+  /** True when this creator has payouts set up and can receive tips. */
+  acceptsTips: boolean;
   recipes: RecipeCard[];
 }
 
 /** The signed-in user's own profile. */
+/* ─────────────────────────── monetization ─────────────────────────── */
+
+/** Platform fee on creator earnings, in percent. Shown verbatim to users —
+ *  Sizzle is transparent about its cut. */
+export const PLATFORM_FEE_PCT = 5.5;
+
+/** One-line version of the fee disclosure (tip sheet, receipts). */
+export const PLATFORM_FEE_SHORT = `Sizzle keeps ${PLATFORM_FEE_PCT}% to run the platform — creators keep the rest.`;
+
+/** Why the fee exists and why we think it's fair — shown to creators wherever
+ *  earnings appear. Honest and specific, not marketing fluff. */
+export const PLATFORM_FEE_RATIONALE =
+  `Sizzle keeps ${PLATFORM_FEE_PCT}% of each tip — you keep ${100 - PLATFORM_FEE_PCT}%. ` +
+  `For comparison: YouTube takes 30–45%, TikTok up to 50%, and Patreon 8–12%. ` +
+  `Our cut covers exactly what it costs to keep Sizzle running for you: video hosting and streaming, ` +
+  `payment processing, and moderation that keeps the feed worth being on — with zero ads and no selling anyone's data. ` +
+  `We only make money when you do.`;
+
+/** Fee for a gross amount in cents. Rounds DOWN so rounding always favors the
+ *  creator — the effective fee never exceeds the stated 5.5%. */
+export const platformFeeCents = (amountCents: number): number => Math.floor((amountCents * PLATFORM_FEE_PCT) / 100);
+
+export type MonetizationStatus = 'none' | 'pending' | 'active';
+
+/** One tip in a creator's earnings ledger (or a tipper's history). */
+export interface TipDTO {
+  id: string;
+  /** Who sent it (for the creator's ledger) — summary of the tipper. */
+  from: CookSummary | null;
+  recipeId: string | null;
+  recipeTitle: string | null;
+  amountCents: number;
+  feeCents: number;
+  netCents: number;
+  status: 'pending' | 'succeeded' | 'refunded';
+  createdAt: string;
+  /** Relative label, e.g. "2h". */
+  time: string;
+}
+
+/** The creator's earnings dashboard payload. */
+export interface EarningsSummary {
+  monetization: MonetizationStatus;
+  feePct: number;
+  totals: { grossCents: number; feeCents: number; netCents: number; tipCount: number };
+  tips: TipDTO[];
+}
+
+/** Client config for the tip flow. */
+export interface TipConfig {
+  provider: 'stripe' | 'mock';
+  feePct: number;
+  minCents: number;
+  maxCents: number;
+  presetsCents: number[];
+}
+
 /** Creator insights (own profile). */
 export interface CreatorAnalytics {
   totals: { recipes: number; followers: number; likes: number; comments: number; saves: number; shares: number };
@@ -273,7 +332,7 @@ export interface MeProfile {
   needsUsername: boolean;
 }
 
-export type NotificationKind = 'follow' | 'like' | 'comment' | 'verified' | 'repost' | 'removed' | 'restored' | 'banned' | 'message';
+export type NotificationKind = 'follow' | 'like' | 'comment' | 'verified' | 'repost' | 'removed' | 'restored' | 'banned' | 'message' | 'tip';
 
 export interface NotificationDTO {
   id: string;

@@ -18,6 +18,7 @@ export function CookSheet() {
   const setFollowList = useSizzle((s) => s.setFollowList);
   const setThreadWith = useSizzle((s) => s.setThreadWith);
   const setReportFor = useSizzle((s) => s.setReportFor);
+  const setTipFor = useSizzle((s) => s.setTipFor);
   const requireAuth = useRequireAuth();
   const follow = useToggleFollow();
   const block = useToggleBlock();
@@ -96,6 +97,16 @@ export function CookSheet() {
               <div style={{ color: 'var(--text-faint)', fontSize: 14.5 }}>@{ck.handle}</div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+              {ck.acceptsTips && (
+                <button
+                  onClick={() => { if (requireAuth()) setTipFor({ creatorId: ck.id, name: ck.name }); }}
+                  className="sz-press"
+                  title="Send a tip"
+                  style={{ ...pressVars(0.94), padding: '12px 16px', borderRadius: 15, border: '1.5px solid var(--line-2)', background: 'var(--surface)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 700, cursor: 'pointer', transition: 'transform .2s cubic-bezier(.34,1.56,.64,1)' }}
+                >
+                  💝 Tip
+                </button>
+              )}
               <button
                 onClick={() => { if (requireAuth()) setThreadWith(ck.id); }}
                 className="sz-press"

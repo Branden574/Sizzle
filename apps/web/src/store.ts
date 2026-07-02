@@ -103,6 +103,8 @@ export interface SizzleState {
   moreIsOwn: boolean;
   /** Report sheet target — any user-generated thing (recipe / comment / profile). */
   reportFor: ReportTarget | null;
+  /** Tip sheet target (creator + optional recipe context). */
+  tipFor: { creatorId: string; recipeId?: string; name: string } | null;
   /** Repost sheet target (recipe id). */
   repostFor: string | null;
   /** Edit-post sheet target (recipe id). */
@@ -170,6 +172,7 @@ export interface SizzleState {
   openMore: (recipeId: string, isOwn: boolean) => void;
   setMoreFor: (id: string | null) => void;
   setReportFor: (t: ReportTarget | null) => void;
+  setTipFor: (t: { creatorId: string; recipeId?: string; name: string } | null) => void;
   setRepostFor: (id: string | null) => void;
   setEditPostFor: (id: string | null) => void;
   setCookFor: (v: { id: string; scale: number } | null) => void;
@@ -235,6 +238,7 @@ export const useSizzle = create<SizzleState>((set) => ({
   moreFor: null,
   moreIsOwn: false,
   reportFor: null,
+  tipFor: null,
   repostFor: null,
   editPostFor: null,
   cookFor: null,
@@ -303,6 +307,7 @@ export const useSizzle = create<SizzleState>((set) => ({
   openMore: (recipeId, isOwn) => set({ moreFor: recipeId, moreIsOwn: isOwn }),
   setMoreFor: (id) => set({ moreFor: id }),
   setReportFor: (id) => set({ reportFor: id }),
+  setTipFor: (t) => set({ tipFor: t }),
   setRepostFor: (id) => set({ repostFor: id }),
   setEditPostFor: (id) => set({ editPostFor: id }),
   setCookFor: (v) => set({ cookFor: v }),
