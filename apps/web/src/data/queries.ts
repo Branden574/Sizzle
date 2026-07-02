@@ -1,5 +1,5 @@
 import { QueryClient, useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query';
-import type { AdminAppealDTO, AdminLogDTO, AdminReportGroupDTO, AdminStats, AdminUserDTO, CollectionDTO, CommentDTO, ConversationDTO, CookProfile, CookSummary, CreateRecipeInput, DirectUploadTicket, FeedResponse, MeProfile, MessageDTO, NotificationDTO, PostControls, RecipeCard, RecipeDetail, ReportInput, SearchResults, SuggestedCook, SupportRequestDTO, ThreadDTO, TrendingTag, VerificationTier, VideoAssetStatus, VideoUploadConfig } from '@sizzle/shared';
+import type { AdminAppealDTO, AdminContentReportDTO, AdminLogDTO, AdminReportGroupDTO, AdminStats, AdminUserDTO, CollectionDTO, CommentDTO, ConversationDTO, CookProfile, CookSummary, CreateRecipeInput, DirectUploadTicket, FeedResponse, MeProfile, MessageDTO, NotificationDTO, PostControls, RecipeCard, RecipeDetail, ReportInput, SearchResults, SuggestedCook, SupportRequestDTO, ThreadDTO, TrendingTag, VerificationTier, VideoAssetStatus, VideoUploadConfig } from '@sizzle/shared';
 import { useAuth } from '../auth/useAuth';
 import { useSizzle } from '../store';
 import { apiGet, apiSend } from '../lib/api';
@@ -193,9 +193,10 @@ export function useHideComment(recipeId: string) {
   });
 }
 
-export function useReportRecipe(recipeId: string) {
+/** Report any user-generated target (recipe / comment / profile). */
+export function useReport() {
   return useMutation({
-    mutationFn: (input: ReportInput) => apiSend('POST', `/recipes/${recipeId}/report`, input),
+    mutationFn: (input: ReportInput) => apiSend('POST', '/reports', input),
   });
 }
 
@@ -295,6 +296,9 @@ export function useAdminReports(enabled: boolean) {
 export function useAdminAppeals(enabled: boolean) {
   return useQuery({ queryKey: ['admin', 'appeals'], queryFn: () => apiGet<AdminAppealDTO[]>('/admin/appeals'), enabled });
 }
+export function useAdminContentReports(enabled: boolean) {
+  return useQuery({ queryKey: ['admin', 'content-reports'], queryFn: () => apiGet<AdminContentReportDTO[]>('/admin/content-reports'), enabled });
+}
 export function useAdminLog(enabled: boolean) {
   return useQuery({ queryKey: ['admin', 'log'], queryFn: () => apiGet<AdminLogDTO[]>('/admin/log'), enabled });
 }
@@ -326,6 +330,7 @@ export const useMarkFalseReport = adminMutation<{ recipeId: string }>(({ recipeI
 export const useRemoveRecipe = adminMutation<{ recipeId: string; reason?: string }>(({ recipeId, reason }) => apiSend('POST', `/admin/recipes/${recipeId}/remove`, { reason }));
 export const useRestoreRecipe = adminMutation<{ recipeId: string }>(({ recipeId }) => apiSend('POST', `/admin/recipes/${recipeId}/restore`));
 export const useDenyAppeal = adminMutation<{ recipeId: string }>(({ recipeId }) => apiSend('POST', `/admin/recipes/${recipeId}/deny-appeal`));
+export const useResolveContentReport = adminMutation<{ targetType: 'comment' | 'profile'; targetId: string; action: 'dismiss' | 'hide' }>((v) => apiSend('POST', '/admin/content-reports/resolve', v));
 export const usePurgeAccounts = adminMutation<void>(() => apiSend<{ purged: number }>('POST', '/admin/purge'));
 export function useVerifyUser() {
   const qc = useQueryClient();

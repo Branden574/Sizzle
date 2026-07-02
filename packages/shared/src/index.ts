@@ -317,8 +317,13 @@ export interface ThreadDTO {
 
 export type ReportCategory = 'nudity' | 'harassment' | 'violence' | 'spam' | 'other';
 
-/** Body for reporting a recipe. */
+/** What kind of thing is being reported. */
+export type ReportTargetType = 'recipe' | 'comment' | 'profile';
+
+/** Body for filing a report against any user-generated target. */
 export interface ReportInput {
+  targetType: ReportTargetType;
+  targetId: string;
   category: ReportCategory;
   reason?: string;
 }
@@ -349,6 +354,20 @@ export interface AdminReportGroupDTO {
   cookName: string;
   reportCount: number;
   /** category → count. */
+  categories: Partial<Record<ReportCategory, number>>;
+  lastReportedAt: string;
+  time: string;
+}
+
+/** A flagged comment or profile, shown in the admin content-reports queue. */
+export interface AdminContentReportDTO {
+  targetType: 'comment' | 'profile';
+  targetId: string;
+  /** Comment text, or the profile's @handle. */
+  preview: string;
+  /** e.g. "by @author" (comment) or the display name (profile). */
+  subLabel: string;
+  reportCount: number;
   categories: Partial<Record<ReportCategory, number>>;
   lastReportedAt: string;
   time: string;

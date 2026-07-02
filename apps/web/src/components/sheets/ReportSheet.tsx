@@ -1,8 +1,10 @@
 import { useState } from 'react';
 import type { ReportCategory } from '@sizzle/shared';
-import { useReportRecipe } from '../../data/queries';
+import { useReport } from '../../data/queries';
 import { useRequireAuth } from '../../auth/useRequireAuth';
 import { useSizzle } from '../../store';
+
+const TARGET_NOUN = { recipe: 'post', comment: 'comment', profile: 'profile' } as const;
 
 const REASONS: { key: ReportCategory; label: string; sub: string }[] = [
   { key: 'nudity', label: 'Nudity or sexual content', sub: 'Explicit or suggestive material' },
@@ -16,16 +18,17 @@ export function ReportSheet() {
   const reportFor = useSizzle((s) => s.reportFor);
   const setReportFor = useSizzle((s) => s.setReportFor);
   const requireAuth = useRequireAuth();
-  const report = useReportRecipe(reportFor ?? '');
+  const report = useReport();
   const [done, setDone] = useState(false);
 
   if (!reportFor) return null;
+  const noun = TARGET_NOUN[reportFor.type];
   const close = () => { setReportFor(null); setDone(false); };
 
   const pick = (category: ReportCategory) => {
     if (!requireAuth()) return;
     if (report.isPending) return;
-    report.mutate({ category }, { onSuccess: () => setDone(true) });
+    report.mutate({ targetType: reportFor.type, targetId: reportFor.id, category }, { onSuccess: () => setDone(true) });
   };
 
   return (
@@ -34,7 +37,7 @@ export function ReportSheet() {
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, background: 'var(--bg)', borderRadius: '26px 26px 0 0', overflow: 'hidden', animation: 'sz-slideUp .4s cubic-bezier(.16,1,.3,1)', paddingBottom: 30 }}>
         <div style={{ textAlign: 'center', padding: '16px 0 6px', position: 'relative' }}>
           <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', width: 42, height: 5, borderRadius: 3, background: 'var(--track)' }} />
-          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginTop: 6 }}>{done ? 'Thanks for the report' : 'Report this post'}</div>
+          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginTop: 6 }}>{done ? 'Thanks for the report' : `Report this ${noun}`}</div>
           <div style={{ fontSize: 13, color: 'var(--text-faint)', marginTop: 2 }}>{done ? "Our team will review it shortly." : 'Why are you reporting it?'}</div>
         </div>
 

@@ -1,8 +1,8 @@
 import { useState, type CSSProperties } from 'react';
-import type { AdminAppealDTO, AdminReportGroupDTO, AdminUserDTO, ReportCategory, SupportRequestDTO, VerificationTier } from '@sizzle/shared';
+import type { AdminAppealDTO, AdminContentReportDTO, AdminReportGroupDTO, AdminUserDTO, ReportCategory, SupportRequestDTO, VerificationTier } from '@sizzle/shared';
 import {
-  useAdminAppeals, useAdminLog, useAdminReports, useAdminStats, useAdminSupportRequests, useAdminUsers, useBanUser, useBoostUser, useDenyAppeal,
-  useMarkFalseReport, usePurgeAccounts, useRemoveRecipe, useResolveSupportRequest, useRestoreRecipe, useVerifyUser,
+  useAdminAppeals, useAdminContentReports, useAdminLog, useAdminReports, useAdminStats, useAdminSupportRequests, useAdminUsers, useBanUser, useBoostUser, useDenyAppeal,
+  useMarkFalseReport, usePurgeAccounts, useRemoveRecipe, useResolveContentReport, useResolveSupportRequest, useRestoreRecipe, useVerifyUser,
 } from '../data/queries';
 import { useSizzle } from '../store';
 import { formatCount } from '../lib/format';
@@ -145,17 +145,21 @@ function RequestsTab() {
 
 function ReportsTab() {
   const reports = useAdminReports(true);
+  const content = useAdminContentReports(true);
   const setOpenRecipe = useSizzle((s) => s.setOpenRecipe);
+  const setOpenCook = useSizzle((s) => s.setOpenCook);
   const markFalse = useMarkFalseReport();
   const remove = useRemoveRecipe();
+  const resolveContent = useResolveContentReport();
   const list = reports.data ?? [];
+  const flags = content.data ?? [];
 
   if (reports.isLoading) return <Muted>Loading queue…</Muted>;
-  if (list.length === 0) return <Muted>Nothing to review — no post has hit 5 reports.</Muted>;
+  if (list.length === 0 && flags.length === 0) return <Muted>Nothing to review — no reports pending.</Muted>;
 
   return (
     <>
-      <div style={{ fontSize: 12, color: 'var(--text-faint-2)', margin: '0 2px 10px' }}>Posts surface here once 5+ people report them.</div>
+      {list.length > 0 && <div style={{ fontSize: 12, color: 'var(--text-faint-2)', margin: '0 2px 10px' }}>Posts surface here once 5+ people report them.</div>}
       {list.map((r: AdminReportGroupDTO) => (
         <div key={r.recipeId} style={card}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
@@ -173,6 +177,29 @@ function ReportsTab() {
           </div>
         </div>
       ))}
+
+      {flags.length > 0 && (
+        <>
+          <div style={{ fontSize: 12, color: 'var(--text-faint-2)', margin: '16px 2px 10px' }}>Flagged comments &amp; profiles</div>
+          {flags.map((f: AdminContentReportDTO) => (
+            <div key={`${f.targetType}:${f.targetId}`} style={card}>
+              <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
+                <span style={chip('var(--danger-bg)', '#d8521e')}>{f.reportCount} reports</span>
+                <span style={chip('var(--surface-3)', 'var(--text-soft)')}>{f.targetType}</span>
+                {Object.entries(f.categories).map(([cat, n]) => <span key={cat} style={chip('var(--surface-3)', 'var(--text-soft)')}>{CATEGORY_LABEL[cat] ?? cat}: {n}</span>)}
+                <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-faint-2)' }}>{f.time}</span>
+              </div>
+              <div style={{ fontSize: 14.5, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' }}>{f.preview}</div>
+              {f.subLabel && <div style={{ fontSize: 13, color: 'var(--text-faint)', marginTop: 2 }}>{f.subLabel}</div>}
+              <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
+                {f.targetType === 'profile' && <button onClick={() => setOpenCook(f.targetId)} style={pill('var(--invert-bg)', 'var(--invert-fg)')}>View profile</button>}
+                <button disabled={resolveContent.isPending} onClick={() => resolveContent.mutate({ targetType: f.targetType, targetId: f.targetId, action: 'dismiss' })} style={pill('var(--surface-3)', 'var(--text-soft)')}>Dismiss</button>
+                {f.targetType === 'comment' && <button disabled={resolveContent.isPending} onClick={() => resolveContent.mutate({ targetType: 'comment', targetId: f.targetId, action: 'hide' })} style={pill('#d8521e', '#fff')}>Hide</button>}
+              </div>
+            </div>
+          ))}
+        </>
+      )}
     </>
   );
 }

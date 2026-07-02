@@ -17,6 +17,7 @@ export function CookSheet() {
   const setOpenRecipe = useSizzle((s) => s.setOpenRecipe);
   const setFollowList = useSizzle((s) => s.setFollowList);
   const setThreadWith = useSizzle((s) => s.setThreadWith);
+  const setReportFor = useSizzle((s) => s.setReportFor);
   const requireAuth = useRequireAuth();
   const follow = useToggleFollow();
   const block = useToggleBlock();
@@ -61,6 +62,8 @@ export function CookSheet() {
           <div onClick={() => setMenuOpen(false)} style={{ position: 'absolute', inset: 0, zIndex: 5 }} />
           <div style={{ position: 'absolute', top: 98, right: 18, zIndex: 6, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 16, overflow: 'hidden', minWidth: 200, boxShadow: '0 12px 34px -10px rgba(0,0,0,.5)' }}>
             <button onClick={onMute} style={menuRow}>{ck.viewer.muted ? 'Unmute' : 'Mute'} <span style={menuHint}>{ck.viewer.muted ? 'show their posts again' : "hide their posts from your feed"}</span></button>
+            <div style={{ height: 1, background: 'var(--line)' }} />
+            <button onClick={() => { setMenuOpen(false); setReportFor({ type: 'profile', id: ck.id, name: ck.name }); }} style={{ ...menuRow, color: '#e0573a' }}>Report <span style={menuHint}>flag this profile for review</span></button>
             <div style={{ height: 1, background: 'var(--line)' }} />
             <button onClick={onBlock} style={{ ...menuRow, color: '#e0573a' }}>{ck.viewer.blocked ? 'Unblock' : 'Block'} <span style={menuHint}>{ck.viewer.blocked ? '' : 'hide each other everywhere'}</span></button>
           </div>

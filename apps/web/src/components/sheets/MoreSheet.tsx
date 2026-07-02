@@ -76,7 +76,7 @@ export function MoreSheet() {
             </button>
           )}
           {!isOwn && (
-            <button onClick={() => { setReportFor(moreFor); setMoreFor(null); }} style={rowStyle}>
+            <button onClick={() => { setReportFor({ type: 'recipe', id: moreFor }); setMoreFor(null); }} style={rowStyle}>
               <div style={iconBox}><FlagIcon size={20} stroke="#d8521e" /></div>
               <div style={{ flex: 1 }}>
                 <div style={{ fontSize: 15.5, fontWeight: 700, color: '#d8521e' }}>Report post</div>

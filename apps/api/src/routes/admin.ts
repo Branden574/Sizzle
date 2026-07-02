@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import type { AdminAppealDTO, AdminLogDTO, AdminReportGroupDTO, AdminStats, AdminUserDTO, ReportCategory, SupportRequestDTO } from '@sizzle/shared';
+import type { AdminAppealDTO, AdminContentReportDTO, AdminLogDTO, AdminReportGroupDTO, AdminStats, AdminUserDTO, ReportCategory, SupportRequestDTO } from '@sizzle/shared';
 import { requireAdmin, requireAuth, requireNotBanned } from '../middleware/auth';
 import { supabaseAdmin } from '../lib/supabase';
 import { badRequest, dbFail, notFound } from '../lib/errors';
@@ -132,6 +132,74 @@ admin.post('/reports/:recipeId/false', async (c) => {
   // False alarm → un-hide if it had been auto-hidden.
   await supabaseAdmin.from('recipes').update({ auto_hidden: false }).eq('id', recipeId);
   await logModeration({ adminId, action: 'mark_false', targetRecipeId: recipeId });
+  return c.json({ ok: true });
+});
+
+/** GET /admin/content-reports — flagged comments + profiles (grouped by target). */
+admin.get('/content-reports', async (c) => {
+  const { data: reps } = await supabaseAdmin
+    .from('reports')
+    .select('target_type, target_id, category, created_at')
+    .in('target_type', ['comment', 'profile'])
+    .eq('status', 'open');
+  const groups = new Map<string, { targetType: 'comment' | 'profile'; targetId: string; count: number; categories: Record<string, number>; last: string }>();
+  for (const r of reps ?? []) {
+    const key = `${r.target_type}:${r.target_id}`;
+    const g = groups.get(key) ?? { targetType: r.target_type as 'comment' | 'profile', targetId: r.target_id as string, count: 0, categories: {}, last: r.created_at as string };
+    g.count += 1;
+    g.categories[r.category as string] = (g.categories[r.category as string] ?? 0) + 1;
+    if ((r.created_at as string) > g.last) g.last = r.created_at as string;
+    groups.set(key, g);
+  }
+  const list = [...groups.values()];
+  if (list.length === 0) return c.json<AdminContentReportDTO[]>([]);
+
+  const commentIds = list.filter((g) => g.targetType === 'comment').map((g) => g.targetId);
+  const profileIds = list.filter((g) => g.targetType === 'profile').map((g) => g.targetId);
+  const [cRes, pRes] = await Promise.all([
+    commentIds.length ? supabaseAdmin.from('comments').select('id, text, author_id').in('id', commentIds) : Promise.resolve({ data: [] as { id: string; text: string; author_id: string }[] }),
+    profileIds.length ? supabaseAdmin.from('profiles').select('id, display_name, handle').in('id', profileIds) : Promise.resolve({ data: [] as { id: string; display_name: string; handle: string }[] }),
+  ]);
+  const cMap = new Map((cRes.data ?? []).map((r) => [r.id as string, r]));
+  const pMap = new Map((pRes.data ?? []).map((r) => [r.id as string, r]));
+  const authorIds = [...new Set((cRes.data ?? []).map((r) => r.author_id as string))];
+  const { data: authors } = authorIds.length ? await supabaseAdmin.from('profiles').select('id, handle').in('id', authorIds) : { data: [] as { id: string; handle: string }[] };
+  const authorMap = new Map((authors ?? []).map((a) => [a.id as string, a.handle as string]));
+
+  const dto: AdminContentReportDTO[] = list
+    .map((g): AdminContentReportDTO => {
+      if (g.targetType === 'comment') {
+        const cm = cMap.get(g.targetId);
+        return { targetType: 'comment', targetId: g.targetId, preview: cm?.text ?? '(deleted comment)', subLabel: cm ? `by @${authorMap.get(cm.author_id as string) ?? 'user'}` : '', reportCount: g.count, categories: g.categories as AdminContentReportDTO['categories'], lastReportedAt: g.last, time: relativeTime(new Date(g.last)) };
+      }
+      const p = pMap.get(g.targetId);
+      return { targetType: 'profile', targetId: g.targetId, preview: p ? `@${p.handle}` : '(deleted profile)', subLabel: (p?.display_name as string) ?? '', reportCount: g.count, categories: g.categories as AdminContentReportDTO['categories'], lastReportedAt: g.last, time: relativeTime(new Date(g.last)) };
+    })
+    .sort((a, b) => b.reportCount - a.reportCount);
+  return c.json(dto);
+});
+
+const contentResolveSchema = z.object({
+  targetType: z.enum(['comment', 'profile']),
+  targetId: z.string().uuid(),
+  action: z.enum(['dismiss', 'hide']),
+});
+
+/** POST /admin/content-reports/resolve — dismiss (keep) or hide (comments) a flagged target. */
+admin.post('/content-reports/resolve', async (c) => {
+  const adminId = c.get('userId')!;
+  const parsed = contentResolveSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) throw badRequest('Invalid');
+  const { targetType, targetId, action } = parsed.data;
+  await supabaseAdmin
+    .from('reports')
+    .update({ status: action === 'dismiss' ? 'dismissed' : 'resolved', resolved_by: adminId, resolved_at: new Date().toISOString() })
+    .eq('target_type', targetType)
+    .eq('target_id', targetId)
+    .eq('status', 'open');
+  if (action === 'hide' && targetType === 'comment') {
+    await supabaseAdmin.from('comments').update({ hidden: true, hidden_at: new Date().toISOString(), hidden_by: adminId }).eq('id', targetId);
+  }
   return c.json({ ok: true });
 });
 

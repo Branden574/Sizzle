@@ -63,5 +63,32 @@ export async function moderate(...parts: Array<string | string[]>): Promise<Mode
   }
 }
 
+/**
+ * Moderate uploaded images (photo posts, or a video's poster frame) with the
+ * same multimodal model. Publicly-reachable URLs only (our Supabase storage is
+ * public). No-op when no provider key is set; fails open on any provider error.
+ */
+export async function moderateImages(urls: string[]): Promise<ModerationResult> {
+  const clean = urls.filter((u) => /^https?:\/\//.test(u)).slice(0, 4);
+  if (!env.OPENAI_API_KEY || clean.length === 0) return { ok: true };
+  try {
+    const ctrl = new AbortController();
+    const timer = setTimeout(() => ctrl.abort(), 8000);
+    const res = await fetch('https://api.openai.com/v1/moderations', {
+      method: 'POST',
+      headers: { 'content-type': 'application/json', authorization: `Bearer ${env.OPENAI_API_KEY}` },
+      body: JSON.stringify({ model: 'omni-moderation-latest', input: clean.map((url) => ({ type: 'image_url', image_url: { url } })) }),
+      signal: ctrl.signal,
+    });
+    clearTimeout(timer);
+    if (!res.ok) return { ok: true }; // provider error → fail open
+    const data = (await res.json()) as { results?: Array<{ flagged?: boolean }> };
+    if (data.results?.some((r) => r.flagged)) return { ok: false, reason: GUIDELINES };
+    return { ok: true };
+  } catch {
+    return { ok: true }; // network/timeout → fail open
+  }
+}
+
 /** @deprecated Synchronous local-only check. Prefer the async `moderate`. */
 export const moderateText = moderateLocal;

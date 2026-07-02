@@ -13,6 +13,7 @@ export function CommentsSheet() {
   const commentsFor = useSizzle((s) => s.commentsFor);
   const setCommentsFor = useSizzle((s) => s.setCommentsFor);
   const setOpenCook = useSizzle((s) => s.setOpenCook);
+  const setReportFor = useSizzle((s) => s.setReportFor);
   const requireAuth = useRequireAuth();
 
   const { data: comments, isLoading } = useComments(commentsFor);
@@ -37,6 +38,10 @@ export function CommentsSheet() {
     if (!requireAuth()) return;
     if (typeof window !== 'undefined' && !window.confirm('Delete this comment?')) return;
     del.mutate(id);
+  };
+  const onReport = (id: string) => {
+    if (!requireAuth()) return;
+    setReportFor({ type: 'comment', id });
   };
   // As the post owner (or an admin) you can hide/unhide anyone's comment. No
   // in-flight guard — each mutation flips its own comment, so rapid moderation
@@ -88,7 +93,7 @@ export function CommentsSheet() {
           {isLoading && <div style={{ color: 'var(--text-faint-2)', fontSize: 14 }}>Loading comments…</div>}
           {!isLoading && list.length === 0 && <div style={{ color: 'var(--text-faint-2)', fontSize: 14, textAlign: 'center', marginTop: 30 }}>No comments yet — be the first.</div>}
           {list.map((cm) => (
-            <CommentItem key={cm.id} cm={cm} onLike={onLike} onReply={onReply} onAuthor={onAuthor} canDelete={canDelete} onDelete={onDelete} canModerate={isOwnerOrAdmin} onHide={onHide} />
+            <CommentItem key={cm.id} cm={cm} onLike={onLike} onReply={onReply} onAuthor={onAuthor} canDelete={canDelete} onDelete={onDelete} canModerate={isOwnerOrAdmin} onHide={onHide} onReport={onReport} myId={myId} />
           ))}
         </div>
 
@@ -122,7 +127,7 @@ export function CommentsSheet() {
 
 const actionBtn = { background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 12.5, color: 'var(--text-faint-2)', fontWeight: 600 } as const;
 
-function CommentItem({ cm, onLike, onReply, onAuthor, canDelete, onDelete, canModerate, onHide, isReply }: { cm: CommentDTO; onLike: (id: string) => void; onReply: (parentId: string, name: string) => void; onAuthor: (id: string) => void; canDelete: (cm: CommentDTO) => boolean; onDelete: (id: string) => void; canModerate: boolean; onHide: (id: string, hidden: boolean) => void; isReply?: boolean }) {
+function CommentItem({ cm, onLike, onReply, onAuthor, canDelete, onDelete, canModerate, onHide, onReport, myId, isReply }: { cm: CommentDTO; onLike: (id: string) => void; onReply: (parentId: string, name: string) => void; onAuthor: (id: string) => void; canDelete: (cm: CommentDTO) => boolean; onDelete: (id: string) => void; canModerate: boolean; onHide: (id: string, hidden: boolean) => void; onReport: (id: string) => void; myId?: string; isReply?: boolean }) {
   const size = isReply ? 30 : 38;
   // A hidden comment (only the owner/admin ever sees this flag) is dimmed and
   // tagged so it reads as moderated, with an Unhide action.
@@ -150,6 +155,9 @@ function CommentItem({ cm, onLike, onReply, onAuthor, canDelete, onDelete, canMo
             {canDelete(cm) && (
               <button onClick={() => onDelete(cm.id)} style={actionBtn}>Delete</button>
             )}
+            {!!myId && cm.authorId !== myId && (
+              <button onClick={() => onReport(cm.id)} style={actionBtn}>Report</button>
+            )}
           </div>
         </div>
         <button onClick={() => onLike(cm.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, paddingTop: 3 }}>
@@ -161,7 +169,7 @@ function CommentItem({ cm, onLike, onReply, onAuthor, canDelete, onDelete, canMo
       {cm.replies && cm.replies.length > 0 && (
         <div style={{ display: 'flex', flexDirection: 'column', gap: 14, paddingLeft: 30 }}>
           {cm.replies.map((rp) => (
-            <CommentItem key={rp.id} cm={rp} onLike={onLike} onReply={onReply} onAuthor={onAuthor} canDelete={canDelete} onDelete={onDelete} canModerate={canModerate} onHide={onHide} isReply />
+            <CommentItem key={rp.id} cm={rp} onLike={onLike} onReply={onReply} onAuthor={onAuthor} canDelete={canDelete} onDelete={onDelete} canModerate={canModerate} onHide={onHide} onReport={onReport} myId={myId} isReply />
           ))}
         </div>
       )}

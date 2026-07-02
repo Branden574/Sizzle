@@ -1,7 +1,10 @@
 import { create } from 'zustand';
-import type { RecipeCard } from '@sizzle/shared';
+import type { RecipeCard, ReportTargetType } from '@sizzle/shared';
 import { baseComments, recipeById } from './data';
 import type { Comment, FeedKind, Phase, PostSettings, Tab } from './types';
+
+/** A thing being reported (recipe / comment / profile) + an optional label for the sheet. */
+export type ReportTarget = { type: ReportTargetType; id: string; name?: string };
 
 /** Boolean sets keyed by id (taste labels, cook ids, recipe ids). */
 type BoolMap = Record<string, boolean>;
@@ -97,8 +100,8 @@ export interface SizzleState {
   /** Post "…" overflow menu (recipe id) + whether the viewer owns it. */
   moreFor: string | null;
   moreIsOwn: boolean;
-  /** Report sheet target (recipe id). */
-  reportFor: string | null;
+  /** Report sheet target — any user-generated thing (recipe / comment / profile). */
+  reportFor: ReportTarget | null;
   /** Repost sheet target (recipe id). */
   repostFor: string | null;
   /** Edit-post sheet target (recipe id). */
@@ -165,7 +168,7 @@ export interface SizzleState {
   setSettingsFor: (id: string | null) => void;
   openMore: (recipeId: string, isOwn: boolean) => void;
   setMoreFor: (id: string | null) => void;
-  setReportFor: (id: string | null) => void;
+  setReportFor: (t: ReportTarget | null) => void;
   setRepostFor: (id: string | null) => void;
   setEditPostFor: (id: string | null) => void;
   setCookFor: (v: { id: string; scale: number } | null) => void;

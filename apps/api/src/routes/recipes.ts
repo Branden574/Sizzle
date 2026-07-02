@@ -8,9 +8,9 @@ import { badRequest, dbFail, forbidden, notFound } from '../lib/errors';
 import { assertUuid } from '../lib/validate';
 import { buildCards, commentDTO, loadBlockedIds, type CommentRow, type ProfileRow, type RecipeRow } from '../mappers';
 import { rateLimit } from '../middleware/rateLimit';
-import { moderate } from '../services/moderation';
+import { moderate, moderateImages } from '../services/moderation';
+import { fileReport } from '../services/reports';
 import { parseHashtags } from '../services/hashtags';
-import { logModeration } from '../services/audit';
 import { notify } from '../services/notify';
 import type { AppEnv } from '../types';
 
@@ -98,10 +98,16 @@ recipes.post('/', requireAuth, requireNotBanned, rateLimit({ windowMs: 60_000, m
   if (input.videoAssetId) {
     const { data: asset } = await supabaseAdmin
       .from('video_assets')
-      .select('id, owner_id')
+      .select('id, owner_id, poster_url')
       .eq('id', input.videoAssetId)
       .maybeSingle();
     if (!asset || asset.owner_id !== userId) throw badRequest('Unknown or unowned video asset');
+    // Vision-moderate the video's poster/thumbnail (a cheap proxy for the clip;
+    // the recipe is only created once transcoding is done, so the poster exists).
+    if (asset.poster_url) {
+      const vidMod = await moderateImages([asset.poster_url as string]);
+      if (!vidMod.ok) throw badRequest(vidMod.reason!);
+    }
   } else {
     // Photo post: each image must live in OUR public storage under the user's own
     // folder. Anchor to the project host + a prefix (startsWith, not includes) —
@@ -110,6 +116,9 @@ recipes.post('/', requireAuth, requireNotBanned, rateLimit({ windowMs: 60_000, m
     const ownFolder = `${env.SUPABASE_URL.replace(/\/$/, '')}/storage/v1/object/public/videos/${userId}/`;
     const ok = (input.images ?? []).every((u) => u.startsWith(ownFolder));
     if (!ok) throw badRequest('Invalid image upload');
+    // Vision moderation on the uploaded photos (text was already moderated above).
+    const imgMod = await moderateImages(input.images ?? []);
+    if (!imgMod.ok) throw badRequest(imgMod.reason!);
   }
 
   const bg = POSTER_GRADIENTS[Math.abs(hash(input.title)) % POSTER_GRADIENTS.length]!;
@@ -546,51 +555,14 @@ const reportSchema = z.object({
   reason: z.string().trim().max(500).optional(),
 });
 
-/** Distinct reporters before a post is auto-hidden pending admin review. */
-const AUTOHIDE_THRESHOLD = 20;
-/** Dismissed-as-false reports before a user's reporting is throttled. */
-const REPORTER_ABUSE_THRESHOLD = 5;
-
-/** POST /recipes/:id/report — flag a recipe for moderation (one per user). */
+/** POST /recipes/:id/report — flag a recipe for moderation (one per user).
+ *  Kept for back-compat; the generic POST /reports handles all target types. */
 recipes.post('/:id/report', requireAuth, requireNotBanned, rateLimit({ windowMs: 60_000, max: 15, name: 'report' }), async (c) => {
-  const id = c.req.param('id');
+  const id = assertUuid(c.req.param('id'), 'recipe');
   const userId = c.get('userId')!;
   const parsed = reportSchema.safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) throw badRequest('Invalid report');
-  await recipeCookId(id); // 404s on a non-existent recipe + validates the id
-
-  // Reporter-abuse throttle: too many of this user's RECENT reports were
-  // dismissed as false. A 30-day rolling window keeps this genuinely temporary
-  // and lets old dismissals (incl. mass post-clears that weren't the reporter's
-  // fault) age out, rather than permanently barring good-faith reporters.
-  const since = new Date(Date.now() - 30 * 86_400_000).toISOString();
-  const { count: falseCount } = await supabaseAdmin
-    .from('reports')
-    .select('*', { count: 'exact', head: true })
-    .eq('reporter_id', userId)
-    .eq('status', 'dismissed')
-    .gte('resolved_at', since);
-  if ((falseCount ?? 0) >= REPORTER_ABUSE_THRESHOLD) throw forbidden('Reporting is temporarily disabled for your account');
-
-  // Idempotent: a repeat report by the same user is a no-op (unique constraint).
-  const { error } = await supabaseAdmin
-    .from('reports')
-    .upsert(
-      { recipe_id: id, reporter_id: userId, category: parsed.data.category, reason: parsed.data.reason ?? null },
-      { onConflict: 'recipe_id,reporter_id', ignoreDuplicates: true },
-    );
-  if (error) throw dbFail(error.message);
-
-  // Auto-hide once a post crosses the high report threshold (pending review).
-  const { count: distinct } = await supabaseAdmin
-    .from('reports')
-    .select('*', { count: 'exact', head: true })
-    .eq('recipe_id', id)
-    .eq('status', 'open');
-  if ((distinct ?? 0) >= AUTOHIDE_THRESHOLD) {
-    const { data: hid } = await supabaseAdmin.from('recipes').update({ auto_hidden: true }).eq('id', id).eq('auto_hidden', false).select('id');
-    if (hid && hid.length) await logModeration({ action: 'auto_hide', targetRecipeId: id, detail: `${distinct} reports` });
-  }
+  await fileReport({ targetType: 'recipe', targetId: id, reporterId: userId, category: parsed.data.category, reason: parsed.data.reason });
   return c.json({ ok: true });
 });
 
