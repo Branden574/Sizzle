@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import type { CollectionDTO, FeedResponse, MeProfile, NotificationDTO } from '@sizzle/shared';
+import type { CollectionDTO, CreatorAnalytics, FeedResponse, MeProfile, NotificationDTO } from '@sizzle/shared';
 import { requireAuth } from '../middleware/auth';
 import { supabaseAdmin, userClient } from '../lib/supabase';
 import { badRequest, notFound } from '../lib/errors';
@@ -162,6 +162,56 @@ me.post('/notif-prefs', async (c) => {
   const { error } = await supabaseAdmin.from('profiles').update({ notif_prefs: next }).eq('id', userId);
   if (error) throw badRequest('Could not update notification setting');
   return c.json({ ok: true, notifPrefs: next });
+});
+
+/** GET /me/analytics — creator insights: totals + per-post engagement. */
+me.get('/analytics', async (c) => {
+  const userId = c.get('userId')!;
+  const [recsRes, profRes] = await Promise.all([
+    supabaseAdmin.from('recipes').select('id, title, like_count, comment_count, save_count, share_count, created_at').eq('cook_id', userId).eq('status', 'published').order('created_at', { ascending: false }).limit(100),
+    supabaseAdmin.from('profiles').select('follower_count').eq('id', userId).maybeSingle(),
+  ]);
+  const posts = (recsRes.data ?? []).map((r) => ({
+    id: r.id as string,
+    title: r.title as string,
+    likes: (r.like_count as number) ?? 0,
+    comments: (r.comment_count as number) ?? 0,
+    saves: (r.save_count as number) ?? 0,
+    shares: (r.share_count as number) ?? 0,
+    createdAt: r.created_at as string,
+  }));
+  const sum = (k: 'likes' | 'comments' | 'saves' | 'shares') => posts.reduce((n, p) => n + p[k], 0);
+  return c.json<CreatorAnalytics>({
+    totals: { recipes: posts.length, followers: (profRes.data?.follower_count as number) ?? 0, likes: sum('likes'), comments: sum('comments'), saves: sum('saves'), shares: sum('shares') },
+    posts,
+  });
+});
+
+/** GET /me/export — a JSON copy of everything the user has on Sizzle (GDPR/CCPA
+ *  access). Their own data, so all columns are included. */
+me.get('/export', async (c) => {
+  const userId = c.get('userId')!;
+  const [profile, recipes, comments, saves, following, followers, reactions, sentMessages] = await Promise.all([
+    supabaseAdmin.from('profiles').select('*').eq('id', userId).maybeSingle(),
+    supabaseAdmin.from('recipes').select('*').eq('cook_id', userId),
+    supabaseAdmin.from('comments').select('*').eq('author_id', userId),
+    supabaseAdmin.from('saves').select('recipe_id, created_at').eq('user_id', userId),
+    supabaseAdmin.from('follows').select('cook_id, created_at').eq('follower_id', userId),
+    supabaseAdmin.from('follows').select('follower_id, created_at').eq('cook_id', userId),
+    supabaseAdmin.from('reactions').select('recipe_id, kind, created_at').eq('user_id', userId),
+    supabaseAdmin.from('messages').select('conversation_id, text, created_at').eq('sender_id', userId),
+  ]);
+  return c.json({
+    exportedAt: new Date().toISOString(),
+    profile: profile.data ?? null,
+    recipes: recipes.data ?? [],
+    comments: comments.data ?? [],
+    saves: saves.data ?? [],
+    following: following.data ?? [],
+    followers: followers.data ?? [],
+    reactions: reactions.data ?? [],
+    messagesSent: sentMessages.data ?? [],
+  });
 });
 
 /** GET /me/saved — the viewer's saved recipes (newest first). */

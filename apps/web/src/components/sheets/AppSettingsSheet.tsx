@@ -2,7 +2,7 @@ import { useState, useEffect, type ReactNode } from 'react';
 import { useAuth } from '../../auth/useAuth';
 import { useSizzle, type FeedKindPref, type ThemePref, type UnitPref } from '../../store';
 import { clearOffline } from '../../lib/offline';
-import { apiSend } from '../../lib/api';
+import { apiGet, apiSend } from '../../lib/api';
 import { queryClient, useBlockedList, useMe, useToggleBlock, useUpdateNotifPref } from '../../data/queries';
 import { enablePush, disablePush } from '../../lib/push';
 import { biometricAvailability, biometricVerify, clearBiometricToken } from '../../lib/biometric';
@@ -186,6 +186,28 @@ export function AppSettingsSheet() {
     else setPwMsg('Could not update password — try again.');
   };
 
+  const [exportBusy, setExportBusy] = useState(false);
+  const exportData = async () => {
+    if (exportBusy) return;
+    setExportBusy(true);
+    try {
+      const data = await apiGet<unknown>('/me/export');
+      const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'sizzle-data.json';
+      document.body.appendChild(a);
+      a.click();
+      a.remove();
+      URL.revokeObjectURL(url);
+    } catch {
+      /* ignore — surfaced by the button re-enabling */
+    } finally {
+      setExportBusy(false);
+    }
+  };
+
   // Deleting is irreversible, so require the user to type the exact phrase
   // "Delete <their username>" — guards against an accidental double-tap.
   const delPhrase = me.data?.handle ? `Delete ${me.data.handle}` : null;
@@ -347,6 +369,8 @@ export function AppSettingsSheet() {
             <RowButton label="Change password" hint="" onClick={() => { setPwMsg(null); setPwOpen(true); }} />
           )}
           {pwMsg && <div style={{ fontSize: 13, color: pwMsg.includes('updated') ? '#2c8a4a' : '#d8521e', fontWeight: 600, margin: '-4px 2px 10px' }}>{pwMsg}</div>}
+
+          <RowButton label={exportBusy ? 'Preparing…' : 'Download my data'} hint="A JSON copy of your account (GDPR)" onClick={() => void exportData()} />
 
           <button
             onClick={() => { void signOut(); close(); }}

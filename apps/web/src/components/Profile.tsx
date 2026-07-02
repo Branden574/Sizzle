@@ -30,6 +30,7 @@ export function Profile() {
   const setShowNotifications = useSizzle((s) => s.setShowNotifications);
   const setShowAppSettings = useSizzle((s) => s.setShowAppSettings);
   const setShowAdmin = useSizzle((s) => s.setShowAdmin);
+  const setShowAnalytics = useSizzle((s) => s.setShowAnalytics);
   const setFollowList = useSizzle((s) => s.setFollowList);
 
   const { data: me } = useMe();
@@ -100,6 +101,12 @@ export function Profile() {
             <GearIcon size={20} stroke="var(--text-muted)" />
           </button>
         </div>
+        <button
+          onClick={() => setShowAnalytics(true)}
+          style={{ width: '100%', height: 46, marginTop: 10, border: '1.5px solid var(--line-2)', borderRadius: 14, background: 'var(--surface)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 14.5, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+        >
+          📊 View insights
+        </button>
         {me?.role === 'admin' && (
           <button
             onClick={() => setShowAdmin(true)}

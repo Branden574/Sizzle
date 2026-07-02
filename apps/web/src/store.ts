@@ -89,6 +89,7 @@ export interface SizzleState {
   showNotifications: boolean;
   showEditProfile: boolean;
   showAppSettings: boolean;
+  showAnalytics: boolean;
   showRoadmap: boolean;
   showAdmin: boolean;
   /** Direct-messages inbox overlay. */
@@ -181,6 +182,7 @@ export interface SizzleState {
   setShowNotifications: (v: boolean) => void;
   setShowEditProfile: (v: boolean) => void;
   setShowAppSettings: (v: boolean) => void;
+  setShowAnalytics: (v: boolean) => void;
   setShowRoadmap: (v: boolean) => void;
   setShowAdmin: (v: boolean) => void;
   setMessagesOpen: (v: boolean) => void;
@@ -223,6 +225,7 @@ export const useSizzle = create<SizzleState>((set) => ({
   showNotifications: false,
   showEditProfile: false,
   showAppSettings: false,
+  showAnalytics: false,
   showRoadmap: false,
   showAdmin: false,
   messagesOpen: false,
@@ -312,6 +315,7 @@ export const useSizzle = create<SizzleState>((set) => ({
   setShowNotifications: (v) => set({ showNotifications: v }),
   setShowEditProfile: (v) => set({ showEditProfile: v }),
   setShowAppSettings: (v) => set({ showAppSettings: v }),
+  setShowAnalytics: (v) => set({ showAnalytics: v }),
   setShowRoadmap: (v) => set({ showRoadmap: v }),
   setShowAdmin: (v) => set({ showAdmin: v }),
   setMessagesOpen: (v) => set({ messagesOpen: v }),

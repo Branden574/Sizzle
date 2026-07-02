@@ -1,5 +1,5 @@
 import { QueryClient, useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query';
-import type { AdminAppealDTO, AdminContentReportDTO, AdminLogDTO, AdminReportGroupDTO, AdminStats, AdminUserDTO, CollectionDTO, CommentDTO, ConversationDTO, CookProfile, CookSummary, CreateRecipeInput, DirectUploadTicket, FeedResponse, MeProfile, MessageDTO, NotificationDTO, NotifPrefKey, PostControls, RecipeCard, RecipeDetail, ReportInput, SearchResults, SuggestedCook, SupportRequestDTO, ThreadDTO, TrendingTag, VerificationTier, VideoAssetStatus, VideoUploadConfig } from '@sizzle/shared';
+import type { AdminAppealDTO, AdminContentReportDTO, AdminLogDTO, AdminReportGroupDTO, AdminStats, AdminUserDTO, CollectionDTO, CommentDTO, ConversationDTO, CookProfile, CookSummary, CreateRecipeInput, CreatorAnalytics, DirectUploadTicket, FeedResponse, MeProfile, MessageDTO, NotificationDTO, NotifPrefKey, PostControls, RecipeCard, RecipeDetail, ReportInput, SearchResults, SuggestedCook, SupportRequestDTO, ThreadDTO, TrendingTag, VerificationTier, VideoAssetStatus, VideoUploadConfig } from '@sizzle/shared';
 import { useAuth } from '../auth/useAuth';
 import { useSizzle } from '../store';
 import { apiGet, apiSend } from '../lib/api';
@@ -25,6 +25,11 @@ export const keys = {
 export function useMe() {
   const authed = useAuth((s) => s.status === 'authed');
   return useQuery({ queryKey: keys.me, queryFn: () => apiGet<MeProfile>('/me'), enabled: authed });
+}
+
+/** Creator insights (own profile). */
+export function useAnalytics(enabled: boolean) {
+  return useQuery({ queryKey: ['me', 'analytics'], queryFn: () => apiGet<CreatorAnalytics>('/me/analytics'), enabled });
 }
 
 /** Toggle a single push category (likes / comments / follows / reposts / messages). */

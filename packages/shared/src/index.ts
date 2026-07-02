@@ -229,6 +229,12 @@ export interface CookProfile {
 }
 
 /** The signed-in user's own profile. */
+/** Creator insights (own profile). */
+export interface CreatorAnalytics {
+  totals: { recipes: number; followers: number; likes: number; comments: number; saves: number; shares: number };
+  posts: { id: string; title: string; likes: number; comments: number; saves: number; shares: number; createdAt: string }[];
+}
+
 /** User-controllable push categories (account/moderation pushes always send). */
 export type NotifPrefKey = 'likes' | 'comments' | 'follows' | 'reposts' | 'messages';
 export type NotifPrefs = Partial<Record<NotifPrefKey, boolean>>;
