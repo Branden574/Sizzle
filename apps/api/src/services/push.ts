@@ -130,7 +130,7 @@ export async function sendPushForNotification(opts: {
       .eq('id', opts.userId)
       .single();
     if (profile && profile.push_enabled === false) return;
-    const prefKey = ({ like: 'likes', comment: 'comments', follow: 'follows', repost: 'reposts', message: 'messages' } as const)[opts.type as 'like' | 'comment' | 'follow' | 'repost' | 'message'];
+    const prefKey = ({ like: 'likes', comment: 'comments', follow: 'follows', repost: 'reposts', message: 'messages', tip: 'tips' } as const)[opts.type as 'like' | 'comment' | 'follow' | 'repost' | 'message' | 'tip'];
     if (prefKey && (profile?.notif_prefs as Record<string, boolean> | undefined)?.[prefKey] === false) return;
 
     const { data: tokens } = await supabaseAdmin.from('push_tokens').select('token').eq('user_id', opts.userId);

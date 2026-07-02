@@ -312,6 +312,7 @@ export function AppSettingsSheet() {
             { key: 'follows', title: 'New followers', sub: 'When someone follows you', icon: '👤' },
             { key: 'reposts', title: 'Reposts', sub: 'When someone reposts your recipe', icon: '🔁' },
             { key: 'messages', title: 'Messages', sub: 'When you get a direct message', icon: '✉️' },
+            { key: 'tips', title: 'Tips', sub: 'When someone tips you', icon: '💝' },
           ] as const).map((row) => (
             <ToggleRow
               key={row.key}

@@ -295,7 +295,7 @@ export interface CreatorAnalytics {
 }
 
 /** User-controllable push categories (account/moderation pushes always send). */
-export type NotifPrefKey = 'likes' | 'comments' | 'follows' | 'reposts' | 'messages';
+export type NotifPrefKey = 'likes' | 'comments' | 'follows' | 'reposts' | 'messages' | 'tips';
 export type NotifPrefs = Partial<Record<NotifPrefKey, boolean>>;
 
 export interface MeProfile {

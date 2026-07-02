@@ -22,7 +22,7 @@ const PRESETS = [100, 300, 500, 1000];
 
 interface TipRow {
   id: string;
-  tipper_id: string;
+  tipper_id: string | null;
   creator_id: string;
   recipe_id: string | null;
   amount_cents: number;
@@ -71,6 +71,19 @@ monetize.post('/tip', requireAuth, requireNotBanned, rateLimit({ windowMs: 60_00
   if (!creator || creator.banned) throw notFound('User not found');
   if (creator.monetization_status !== 'active') throw badRequest("This creator hasn't set up payouts yet");
 
+  // The settle path is keyed STRICTLY on the running mode, never on the creator's
+  // per-row state — so real keys can never fall through to the instant-settle
+  // path and record a paid tip with no money moving.
+  const liveMode = stripeConfigured;
+  if (liveMode && !creator.stripe_account_id) throw badRequest("This creator hasn't finished setting up payouts");
+
+  // Only attribute a tip to a recipe that's actually this creator's.
+  let tipRecipeId: string | null = null;
+  if (recipeId) {
+    const { data: rec } = await supabaseAdmin.from('recipes').select('id').eq('id', recipeId).eq('cook_id', creatorId).maybeSingle();
+    tipRecipeId = rec ? recipeId : null;
+  }
+
   // The ledger row records the exact split: gross = fee (5.5%, Sizzle) + net (creator).
   const feeCents = platformFeeCents(amountCents);
   const netCents = amountCents - feeCents;
@@ -79,18 +92,18 @@ monetize.post('/tip', requireAuth, requireNotBanned, rateLimit({ windowMs: 60_00
     .insert({
       tipper_id: userId,
       creator_id: creatorId,
-      recipe_id: recipeId ?? null,
+      recipe_id: tipRecipeId,
       amount_cents: amountCents,
       fee_cents: feeCents,
       net_cents: netCents,
-      provider: paymentsProvider,
+      provider: liveMode ? 'stripe' : 'mock',
       status: 'pending',
     })
     .select('id')
     .single();
   if (error || !tip) throw dbFail(error?.message ?? 'Could not create tip');
 
-  if (stripeConfigured && creator.stripe_account_id) {
+  if (liveMode) {
     try {
       const { sessionId, url } = await createTipCheckout({
         tipId: tip.id as string,
@@ -109,16 +122,41 @@ monetize.post('/tip', requireAuth, requireNotBanned, rateLimit({ windowMs: 60_00
     }
   }
 
-  // Mock provider: settle instantly (test mode — no real money moves).
+  // Mock provider (no Stripe keys): settle instantly. The client shows a clear
+  // "test mode — no real money moves" banner because /config reports provider=mock.
   await supabaseAdmin
     .from('tips')
     .update({ status: 'succeeded', succeeded_at: new Date().toISOString(), provider_ref: `mock_${tip.id}` })
     .eq('id', tip.id);
-  await notify({ userId: creatorId, type: 'tip', actorId: userId, recipeId: recipeId ?? null }).catch(() => {});
+  await notify({ userId: creatorId, type: 'tip', actorId: userId, recipeId: tipRecipeId }).catch(() => {});
   return c.json({ url: null, status: 'succeeded' as const });
 });
 
-/** POST /monetize/webhook/stripe — checkout.session.completed settles the tip. */
+/** Mark a tip succeeded (idempotent — only a pending row settles) + notify. */
+async function settleTip(tipId: string, paymentIntent: string | null): Promise<void> {
+  const { data: settled, error } = await supabaseAdmin
+    .from('tips')
+    .update({ status: 'succeeded', succeeded_at: new Date().toISOString(), provider_ref: paymentIntent ?? undefined })
+    .eq('id', tipId)
+    .eq('status', 'pending')
+    .select('creator_id, tipper_id, recipe_id')
+    .maybeSingle();
+  if (error) throw error; // surfaced as 500 so Stripe retries
+  if (settled) {
+    await notify({
+      userId: settled.creator_id as string,
+      type: 'tip',
+      actorId: (settled.tipper_id as string | null) ?? settled.creator_id as string,
+      recipeId: (settled.recipe_id as string | null) ?? null,
+    }).catch(() => {});
+  }
+}
+
+/**
+ * POST /monetize/webhook/stripe — settle / void / refund tips from Stripe events.
+ * Signature + timestamp verified (replay window ±5 min). Returns 5xx on a DB
+ * failure so Stripe re-delivers (settlement is idempotent).
+ */
 monetize.post('/webhook/stripe', async (c) => {
   const secret = env.STRIPE_WEBHOOK_SECRET;
   if (!stripeConfigured || !secret) {
@@ -128,34 +166,57 @@ monetize.post('/webhook/stripe', async (c) => {
   // Stripe signs with header "Stripe-Signature: t=<ts>,v1=<hmac>[,v1=…]".
   const raw = await c.req.text();
   const header = c.req.header('stripe-signature') ?? '';
-  const parts = header.split(',').map((p) => p.split('=') as [string, string]);
-  const t = parts.find(([k]) => k === 't')?.[1] ?? '';
-  const sigs = parts.filter(([k]) => k === 'v1').map(([, v]) => v);
+  const parts = header.split(',').map((p) => p.split('='));
+  const t = parts.find((p) => p[0] === 't')?.[1] ?? '';
+  const sigs = parts.filter((p) => p[0] === 'v1').map((p) => p[1]).filter((v): v is string => !!v);
+  // Reject stale/forged timestamps (replay protection).
+  const ts = Number(t);
+  if (!Number.isFinite(ts) || Math.abs(Date.now() / 1000 - ts) > 300) {
+    return c.json({ error: { code: 'unauthorized', message: 'Stale or missing timestamp' } }, 401);
+  }
   const expected = createHmac('sha256', secret).update(`${t}.${raw}`).digest('hex');
   const valid = sigs.some((s) => s.length === expected.length && timingSafeEqual(Buffer.from(s), Buffer.from(expected)));
   if (!valid) return c.json({ error: { code: 'unauthorized', message: 'Bad signature' } }, 401);
 
-  const event = JSON.parse(raw) as { type?: string; data?: { object?: { id?: string; metadata?: { tip_id?: string } } } };
-  if (event.type === 'checkout.session.completed') {
-    const tipId = event.data?.object?.metadata?.tip_id;
-    if (tipId && /^[0-9a-f-]{36}$/i.test(tipId)) {
-      // Idempotent: only a pending row settles (Stripe retries webhooks).
-      const { data: settled } = await supabaseAdmin
-        .from('tips')
-        .update({ status: 'succeeded', succeeded_at: new Date().toISOString() })
-        .eq('id', tipId)
-        .eq('status', 'pending')
-        .select('creator_id, tipper_id, recipe_id')
-        .maybeSingle();
-      if (settled) {
-        await notify({
-          userId: settled.creator_id as string,
-          type: 'tip',
-          actorId: settled.tipper_id as string,
-          recipeId: (settled.recipe_id as string | null) ?? null,
-        }).catch(() => {});
-      }
+  const event = JSON.parse(raw) as {
+    type?: string;
+    data?: { object?: { id?: string; payment_status?: string; payment_intent?: string; metadata?: { tip_id?: string } } };
+  };
+  const obj = event.data?.object;
+  const tipId = obj?.metadata?.tip_id;
+  const validTipId = tipId && /^[0-9a-f-]{36}$/i.test(tipId) ? tipId : null;
+
+  try {
+    switch (event.type) {
+      case 'checkout.session.completed':
+        // Only settle a genuinely PAID session (async methods complete later).
+        if (validTipId && obj?.payment_status === 'paid') await settleTip(validTipId, obj?.payment_intent ?? null);
+        break;
+      case 'checkout.session.async_payment_succeeded':
+        if (validTipId) await settleTip(validTipId, obj?.payment_intent ?? null);
+        break;
+      case 'checkout.session.async_payment_failed':
+      case 'checkout.session.expired':
+        // Never paid → drop the pending row so it can't linger or mis-count.
+        if (validTipId) await supabaseAdmin.from('tips').delete().eq('id', validTipId).eq('status', 'pending');
+        break;
+      case 'charge.refunded':
+      case 'charge.dispute.created':
+        // Map back via the payment_intent we stored at settle time.
+        if (obj?.payment_intent) {
+          await supabaseAdmin
+            .from('tips')
+            .update({ status: 'refunded' })
+            .eq('provider_ref', obj.payment_intent)
+            .eq('status', 'succeeded');
+        }
+        break;
+      default:
+        break;
     }
+  } catch (err) {
+    console.error('[monetize] webhook error:', (err as Error).message);
+    return c.json({ error: { code: 'db_error', message: 'retry' } }, 500);
   }
   return c.json({ received: true });
 });
@@ -198,6 +259,9 @@ monetize.get('/status', requireAuth, async (c) => {
     .maybeSingle();
   if (!me) throw notFound('Profile not found');
   let status = (me.monetization_status as string) ?? 'none';
+  // In live mode an 'active' status with no connected account is stale (e.g. it
+  // was activated in mock mode before keys were added) — treat as not set up.
+  if (stripeConfigured && status === 'active' && !me.stripe_account_id) status = 'none';
   // A pending Stripe account may have finished onboarding since we last looked.
   if (status === 'pending' && stripeConfigured && me.stripe_account_id) {
     try {
@@ -215,7 +279,7 @@ monetize.get('/status', requireAuth, async (c) => {
 /** GET /monetize/earnings — the creator's ledger: totals + recent tips, fee split explicit. */
 monetize.get('/earnings', requireAuth, async (c) => {
   const userId = c.get('userId')!;
-  const [{ data: me }, { data: rows }] = await Promise.all([
+  const [{ data: me }, { data: rows }, { data: agg }] = await Promise.all([
     supabaseAdmin.from('profiles').select('monetization_status').eq('id', userId).maybeSingle(),
     supabaseAdmin
       .from('tips')
@@ -224,10 +288,13 @@ monetize.get('/earnings', requireAuth, async (c) => {
       .eq('status', 'succeeded')
       .order('created_at', { ascending: false })
       .limit(100),
+    // Lifetime totals over ALL succeeded tips, not just the newest 100.
+    supabaseAdmin.rpc('creator_earnings', { uid: userId }),
   ]);
   const tips = (rows ?? []) as TipRow[];
+  const totalsRow = (Array.isArray(agg) ? agg[0] : agg) as { gross_cents: number; fee_cents: number; net_cents: number; tip_count: number } | null;
 
-  const tipperIds = [...new Set(tips.map((t) => t.tipper_id))];
+  const tipperIds = [...new Set(tips.map((t) => t.tipper_id).filter((x): x is string => !!x))];
   const recipeIds = [...new Set(tips.map((t) => t.recipe_id).filter((x): x is string => !!x))];
   const [{ data: tippers }, { data: recipes }] = await Promise.all([
     tipperIds.length ? supabaseAdmin.from('profiles').select('*').in('id', tipperIds) : Promise.resolve({ data: [] }),
@@ -237,7 +304,7 @@ monetize.get('/earnings', requireAuth, async (c) => {
   const titleMap = new Map((recipes ?? []).map((r) => [r.id as string, r.title as string]));
 
   const dto: TipDTO[] = tips.map((t) => {
-    const from = tipperMap.get(t.tipper_id);
+    const from = t.tipper_id ? tipperMap.get(t.tipper_id) : undefined;
     return {
       id: t.id,
       from: from ? cookSummary(from) : null,
@@ -251,11 +318,15 @@ monetize.get('/earnings', requireAuth, async (c) => {
       time: relativeTime(new Date(t.created_at)),
     };
   });
-  const sum = (k: 'amount_cents' | 'fee_cents' | 'net_cents') => tips.reduce((n, t) => n + t[k], 0);
   return c.json<EarningsSummary>({
     monetization: ((me?.monetization_status as string) ?? 'none') as EarningsSummary['monetization'],
     feePct: PLATFORM_FEE_PCT,
-    totals: { grossCents: sum('amount_cents'), feeCents: sum('fee_cents'), netCents: sum('net_cents'), tipCount: tips.length },
+    totals: {
+      grossCents: totalsRow?.gross_cents ?? 0,
+      feeCents: totalsRow?.fee_cents ?? 0,
+      netCents: totalsRow?.net_cents ?? 0,
+      tipCount: totalsRow?.tip_count ?? 0,
+    },
     tips: dto,
   });
 });

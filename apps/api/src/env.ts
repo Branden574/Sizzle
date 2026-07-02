@@ -77,5 +77,11 @@ if (!isLocalSupabase && (isLocalDemoKey(env.SUPABASE_SERVICE_ROLE_KEY) || isLoca
 export const cloudflareConfigured =
   env.VIDEO_PROVIDER === 'cloudflare' && !!env.CLOUDFLARE_ACCOUNT_ID && !!env.CLOUDFLARE_STREAM_TOKEN;
 
+// A secret key with no webhook secret can charge money but never settle the
+// ledger (the webhook 403s) — refuse to start rather than silently strand tips.
+if (env.STRIPE_SECRET_KEY && !env.STRIPE_WEBHOOK_SECRET) {
+  throw new Error('STRIPE_SECRET_KEY is set but STRIPE_WEBHOOK_SECRET is missing — tips would be charged but never settle. Set both, or neither (mock mode).');
+}
+
 /** True when real Stripe payments are wired up (otherwise tipping runs the mock provider). */
 export const stripeConfigured = !!env.STRIPE_SECRET_KEY;
