@@ -20,7 +20,9 @@ export function BottomNav() {
   if (isDesktop) return null;
 
   const navDark = tab === 'feed';
-  const navIdle = navDark ? 'rgba(255,255,255,.5)' : 'var(--text-faint-2)';
+  // Light-mode idle uses --text-muted (~7:1) not --text-faint-2 (~3.7:1): the 10px
+  // nav labels are small text and must clear WCAG AA 4.5:1.
+  const navIdle = navDark ? 'rgba(255,255,255,.6)' : 'var(--text-muted)';
   const col = (active: boolean) => (active ? accent : navIdle);
 
   const go = (t: Tab) => () => setTab(t);
@@ -32,12 +34,15 @@ export function BottomNav() {
         bottom: 0,
         left: 0,
         right: 0,
-        height: 88,
+        // Grow by the bottom safe-area inset so the tab row sits above the home
+        // indicator (0 on the web phone-frame; real inset on native / mobile-web).
+        height: 'calc(88px + var(--sab, 0px))',
         zIndex: 50,
         display: 'flex',
         alignItems: 'flex-start',
         justifyContent: 'space-around',
         padding: '12px 16px 0',
+        paddingBottom: 'var(--sab, 0px)',
         background: navDark ? 'rgba(12,10,9,.82)' : 'var(--nav-bg)',
         borderTop: `1px solid ${navDark ? 'rgba(255,255,255,.08)' : 'var(--line)'}`,
         backdropFilter: 'blur(20px)',

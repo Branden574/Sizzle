@@ -1,6 +1,8 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
-import { AdminDashboard } from './components/AdminDashboard';
-import { AppShell } from './components/AppShell';
+// Lazy — the authenticated app + admin console are never rendered for logged-out
+// web visitors (who see the marketing site), so keep them out of the entry chunk.
+const AdminDashboard = lazy(() => import('./components/AdminDashboard').then((m) => ({ default: m.AdminDashboard })));
+const AppShell = lazy(() => import('./components/AppShell').then((m) => ({ default: m.AppShell })));
 import { ChooseUsername } from './components/ChooseUsername';
 import { BannedScreen } from './components/BannedScreen';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -64,6 +66,43 @@ function useResolvedScheme(): 'light' | 'dark' {
     return () => mq.removeEventListener('change', onChange);
   }, []);
   return pref === 'dark' || (pref === 'system' && systemDark) ? 'dark' : 'light';
+}
+
+/** Close the topmost open overlay — every sheet/modal is Zustand state, layered
+ *  by z-index, so we close the deepest one first. Returns true if it closed one.
+ *  Shared by the Android hardware Back button and the Escape key. */
+function closeTopmostOverlay(): boolean {
+  const s = useSizzle.getState();
+  const overlays: Array<[unknown, () => void]> = [
+    [s.tipFor, () => s.setTipFor(null)],
+    [s.reportFor, () => s.setReportFor(null)],
+    [s.moreFor, () => s.setMoreFor(null)],
+    [s.repostFor, () => s.setRepostFor(null)],
+    [s.collectionPickerFor, () => s.setCollectionPickerFor(null)],
+    [s.cookFor, () => s.setCookFor(null)],
+    [s.followList, () => s.setFollowList(null)],
+    [s.editPostFor, () => s.setEditPostFor(null)],
+    [s.showShopping, () => s.setShowShopping(false)],
+    [s.commentsFor, () => s.setCommentsFor(null)],
+    [s.settingsFor, () => s.setSettingsFor(null)],
+    [s.openCollection, () => s.setOpenCollection(null)],
+    [s.openTag, () => s.setOpenTag(null)],
+    [s.threadWith, () => s.setThreadWith(null)],
+    [s.messagesOpen, () => s.setMessagesOpen(false)],
+    [s.showNotifications, () => s.setShowNotifications(false)],
+    [s.showAnalytics, () => s.setShowAnalytics(false)],
+    [s.showRoadmap, () => s.setShowRoadmap(false)],
+    [s.showAdmin, () => s.setShowAdmin(false)],
+    [s.showEditProfile, () => s.setShowEditProfile(false)],
+    [s.showAppSettings, () => s.setShowAppSettings(false)],
+    [s.showUpload, () => s.setShowUpload(false)],
+    [s.viewer, () => s.setViewer(null)],
+    [s.openCook, () => s.setOpenCook(null)],
+    [s.openRecipe, () => s.setOpenRecipe(null)],
+  ];
+  const hit = overlays.find(([open]) => !!open);
+  if (hit) { hit[1](); return true; }
+  return false;
 }
 
 export default function App() {
@@ -189,6 +228,31 @@ export default function App() {
     }
   }, [authStatus]);
 
+  // Android hardware/gesture Back: close the topmost open sheet/overlay instead of
+  // exiting the app (every overlay is Zustand state with no WebView history to pop,
+  // so the default back would background the app and lose the user's place). Only
+  // quit from the root feed with nothing open; from another tab, go to the feed.
+  useEffect(() => {
+    if (!isNative) return;
+    const handle = CapApp.addListener('backButton', () => {
+      if (closeTopmostOverlay()) return;
+      const s = useSizzle.getState();
+      if (s.tab !== 'feed') { s.setTab('feed'); return; }
+      void CapApp.exitApp();
+    });
+    return () => { void handle.then((l) => l.remove()); };
+  }, []);
+
+  // Desktop/web accessibility: Escape closes the topmost open sheet/modal (same
+  // z-index order as the Android Back button), so keyboard users aren't trapped.
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape' && closeTopmostOverlay()) e.preventDefault();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
+
   // Keep the keychain refresh token fresh while the lock is on, and re-lock for
   // the next sign-in once the user logs out.
   useEffect(() => {
@@ -239,10 +303,13 @@ export default function App() {
   const isDark = scheme === 'dark';
   const online = useOnlineStatus();
 
-  // Keep the mobile browser chrome in step with the resolved scheme.
+  // Keep the mobile browser chrome in step with the frontmost surface: the feed is
+  // always dark (full-bleed video), but every other tab follows the theme — so in
+  // light mode the browser chrome must go light too, not stay near-black.
   useEffect(() => {
-    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', isDark ? '#0c0a09' : '#0e0b09');
-  }, [isDark]);
+    const color = tab !== 'feed' && !isDark ? '#faf3ea' : '#0c0a09';
+    document.querySelector('meta[name="theme-color"]')?.setAttribute('content', color);
+  }, [isDark, tab]);
 
   const isOnboarding = phase === 'onboarding';
   const isApp = phase === 'app';
@@ -304,7 +371,7 @@ export default function App() {
           )}
           {authStatus !== 'loading' && isApp && (
             <ErrorBoundary fallback={<CrashFallback />}>
-              {needsUsername ? <ChooseUsername /> : <AppShell />}
+              {needsUsername ? <ChooseUsername /> : <Suspense fallback={<Splash />}><AppShell /></Suspense>}
             </ErrorBoundary>
           )}
 
@@ -332,7 +399,7 @@ export default function App() {
           {showShopping && <ShoppingListSheet />}
           {openCollection && <CollectionSheet />}
           {collectionPickerFor && <CollectionPickerSheet />}
-          {showAdmin && <AdminDashboard />}
+          {showAdmin && <Suspense fallback={null}><AdminDashboard /></Suspense>}
 
           {recovery && <ResetPasswordScreen />}
           {banned && authStatus === 'authed' && <BannedScreen />}

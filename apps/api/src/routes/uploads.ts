@@ -42,10 +42,12 @@ uploads.post('/video', requireAuth, rateLimit({ windowMs: 60_000, max: 20, name:
     // Only accept URLs that live under THIS project's Supabase Storage — the URL
     // is later served to every viewer, so a client must not be able to register
     // an arbitrary off-site link (phishing / serving attacker-controlled content).
-    const storagePrefix = `${env.SUPABASE_URL.replace(/\/$/, '')}/storage/v1/object/`;
-    const allowed = (u?: string) => !u || u.startsWith(storagePrefix);
+    // Anchor to the caller's OWN folder (videos/<userId>/…), not just the project —
+    // otherwise a user could register a URL pointing at someone else's upload.
+    const ownFolder = `${env.SUPABASE_URL.replace(/\/$/, '')}/storage/v1/object/public/videos/${userId}/`;
+    const allowed = (u?: string) => !u || u.startsWith(ownFolder);
     if (!allowed(provided.uploadedUrl) || !allowed(provided.posterUrl)) {
-      throw badRequest('Video/poster URL must be a Supabase Storage URL for this project');
+      throw badRequest('Video/poster URL must be in your own Supabase Storage folder for this project');
     }
 
     const { data: asset, error } = await supabaseAdmin

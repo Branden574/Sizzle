@@ -51,7 +51,7 @@ export function Feed() {
 
   return (
     <div style={{ position: 'absolute', inset: 0, background: '#0c0a09' }}>
-      <div style={{ position: 'absolute', top: 54, left: 0, right: 0, zIndex: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 24, opacity: immersive ? 0 : 1, pointerEvents: immersive ? 'none' : 'auto', transition: 'opacity .28s ease' }}>
+      <div style={{ position: 'absolute', top: 'calc(54px + var(--sat, 0px))', left: 0, right: 0, zIndex: 40, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 24, opacity: immersive ? 0 : 1, pointerEvents: immersive ? 'none' : 'auto', transition: 'opacity .28s ease' }}>
         <button
           onClick={() => setFeed('foryou')}
           style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '6px 2px', fontFamily: "'Hanken Grotesk'", fontSize: 17, fontWeight: 700, color: fyActive ? '#fff' : 'rgba(255,255,255,.55)' }}

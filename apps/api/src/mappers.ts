@@ -78,6 +78,8 @@ export interface ProfileRow {
   discord_url: string | null;
   youtube_url: string | null;
   website_url: string | null;
+  monetization_status: string | null;
+  sub_price_cents: number | null;
 }
 
 export interface RecipeRow {
@@ -130,6 +132,7 @@ export function cookSummary(p: ProfileRow): CookSummary {
     avatarColor: p.avatar_color,
     avatarUrl: p.avatar_url,
     verifiedTier: p.verified_tier,
+    subPriceCents: p.monetization_status === 'active' ? (p.sub_price_cents ?? null) : null,
   };
 }
 

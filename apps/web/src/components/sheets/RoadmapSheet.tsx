@@ -37,14 +37,14 @@ const PHASES: Phase[] = [
     title: 'Community',
     tagline: 'Go deeper with your audience — build a community around your kitchen.',
     status: 'planned',
-    points: ['Creator communities & group chats', 'Subscriber-only posts', 'Live cooking & weekly challenges'],
+    points: ['Creator communities & group chats', 'Live cooking & weekly challenges', 'Brand collabs'],
   },
   {
     n: 5,
     title: 'Get Paid',
-    tagline: 'Creators earn — this is where your recipes start making money.',
-    status: 'planned',
-    points: ['Fan subscriptions (monthly support)', 'Sell premium recipes you choose', 'Tips on videos & brand collabs', 'Simple, transparent payouts'],
+    tagline: 'Creators earn — your recipes make money, with a transparent 90/10 split.',
+    status: 'shipped',
+    points: ['Fan subscriptions (monthly support)', 'Sell premium recipes you price', 'One-off support (tips)', 'Transparent payouts — you keep 90%'],
   },
 ];
 

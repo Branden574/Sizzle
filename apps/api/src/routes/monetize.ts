@@ -368,7 +368,19 @@ monetize.post('/webhook/stripe', async (c) => {
         // and charge.refunded also carries the invoice id, so match either ref.
         const refs = [obj.payment_intent, obj.invoice].filter((x): x is string => !!x);
         if (refs.length) {
-          await supabaseAdmin.from('tips').update({ status: 'refunded' }).in('provider_ref', refs).eq('status', 'succeeded');
+          const { data: reversed } = await supabaseAdmin
+            .from('tips')
+            .update({ status: 'refunded' })
+            .in('provider_ref', refs)
+            .eq('status', 'succeeded')
+            .select('tipper_id, recipe_id, kind');
+          // Withdraw premium access alongside the ledger reversal: a refunded or
+          // charged-back unlock must no longer grant the recipe.
+          for (const row of reversed ?? []) {
+            if (row.kind === 'unlock' && row.tipper_id && row.recipe_id) {
+              await supabaseAdmin.from('recipe_unlocks').delete().eq('user_id', row.tipper_id).eq('recipe_id', row.recipe_id);
+            }
+          }
         }
         break;
       }

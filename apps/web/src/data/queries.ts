@@ -39,6 +39,20 @@ export function useTipConfig(enabled: boolean) {
   return useQuery({ queryKey: ['monetize', 'config'], queryFn: () => apiGet<TipConfig>('/monetize/config'), enabled, staleTime: 3_600_000 });
 }
 
+/** After sending the user to an external checkout (Stripe) in a new tab, refresh
+ *  the affected queries once they return to the app — so a freshly unlocked recipe
+ *  or new subscription stops showing as locked without a manual reload. One-shot. */
+function invalidateOnReturn(qc: QueryClient, queryKeys: readonly (readonly unknown[])[]) {
+  const handler = () => {
+    if (document.visibilityState !== 'visible') return;
+    for (const key of queryKeys) void qc.invalidateQueries({ queryKey: key });
+    document.removeEventListener('visibilitychange', handler);
+    window.removeEventListener('focus', handler);
+  };
+  document.addEventListener('visibilitychange', handler);
+  window.addEventListener('focus', handler);
+}
+
 /** Send a tip. Stripe → returns a checkout URL to open; mock → settles instantly. */
 export function useSendTip() {
   return useMutation({
@@ -80,8 +94,10 @@ export function useUnlockRecipe() {
   return useMutation({
     mutationFn: (recipeId: string) => apiSend<{ url: string | null; status: string }>('POST', '/monetize/unlock', { recipeId }),
     onSuccess: (res, recipeId) => {
-      if (res.url) window.open(res.url, '_blank', 'noopener');
-      else {
+      if (res.url) {
+        window.open(res.url, '_blank', 'noopener');
+        invalidateOnReturn(qc, [keys.recipe(recipeId), ['feed'], ['cook']]);
+      } else {
         void qc.invalidateQueries({ queryKey: keys.recipe(recipeId) });
         void qc.invalidateQueries({ queryKey: ['feed'] });
         void qc.invalidateQueries({ queryKey: ['cook'] });
@@ -96,10 +112,13 @@ export function useSubscribe() {
   return useMutation({
     mutationFn: (creatorId: string) => apiSend<{ url: string | null; status: string }>('POST', '/monetize/subscribe', { creatorId }),
     onSuccess: (res, creatorId) => {
-      if (res.url) window.open(res.url, '_blank', 'noopener');
-      else {
+      if (res.url) {
+        window.open(res.url, '_blank', 'noopener');
+        invalidateOnReturn(qc, [keys.cook(creatorId), ['feed'], ['recipe']]);
+      } else {
         void qc.invalidateQueries({ queryKey: keys.cook(creatorId) });
         void qc.invalidateQueries({ queryKey: ['feed'] });
+        void qc.invalidateQueries({ queryKey: ['recipe'] });
       }
     },
   });
@@ -329,7 +348,13 @@ export function useToggleRepost() {
     mutationFn: ({ recipeId, reposted, comment }: { recipeId: string; reposted: boolean; comment?: string }) =>
       reposted ? apiSend('DELETE', `/recipes/${recipeId}/repost`) : apiSend('POST', `/recipes/${recipeId}/repost`, { comment }),
     onMutate: async ({ recipeId, reposted }) => {
-      await qc.cancelQueries();
+      // Cancel only the point-queries we patch — NOT the infinite ['feed'] query,
+      // whose in-flight next-page fetch would otherwise be aborted (stalling
+      // scroll) and whose optimistic patch self-heals via onSettled invalidation.
+      await Promise.all([
+        qc.cancelQueries({ queryKey: keys.recipe(recipeId) }),
+        qc.cancelQueries({ queryKey: ['cook'] }),
+      ]);
       const snap = snapshot(qc);
       patchRecipeEverywhere(qc, recipeId, (card) => ({ ...card, viewer: { ...card.viewer, reposted: !reposted } }));
       return { snap };
@@ -671,8 +696,14 @@ export function useShareRecipe() {
   return useMutation({
     mutationFn: (recipeId: string) => apiSend('POST', `/recipes/${recipeId}/share`),
     onMutate: (recipeId: string) => {
+      const snap = snapshot(qc);
       patchRecipeEverywhere(qc, recipeId, (c) => ({ ...c, counts: { ...c.counts, shares: c.counts.shares + 1 } }));
+      return { snap };
     },
+    // Roll back the optimistic bump if the share POST fails, then reconcile to the
+    // server's authoritative count.
+    onError: (_e, _v, ctx) => ctx && restore(qc, ctx.snap),
+    onSettled: (_d, _e, recipeId) => void qc.invalidateQueries({ queryKey: keys.recipe(recipeId) }),
   });
 }
 
@@ -683,7 +714,11 @@ export function useToggleDownload() {
     mutationFn: ({ recipeId, downloaded }: { recipeId: string; downloaded: boolean }) =>
       apiSend(downloaded ? 'DELETE' : 'POST', `/recipes/${recipeId}/download`),
     onMutate: async ({ recipeId, downloaded }) => {
-      await qc.cancelQueries();
+      await Promise.all([
+        qc.cancelQueries({ queryKey: keys.recipe(recipeId) }),
+        qc.cancelQueries({ queryKey: ['cook'] }),
+        qc.cancelQueries({ queryKey: keys.saved }),
+      ]);
       const snap = snapshot(qc);
       patchRecipeEverywhere(qc, recipeId, (card) => ({ ...card, viewer: { ...card.viewer, downloaded: !downloaded } }));
       const detail = qc.getQueryData<RecipeDetail>(keys.recipe(recipeId));
@@ -769,7 +804,9 @@ export function useToggleFollow() {
     mutationFn: ({ cookId, following }: { cookId: string; following: boolean }) =>
       apiSend(following ? 'DELETE' : 'POST', `/cooks/${cookId}/follow`),
     onMutate: async ({ cookId, following }) => {
-      await qc.cancelQueries();
+      // Scope to cook queries (the feed's following flags self-heal via the
+      // onSettled feed invalidation); don't cancel the whole client.
+      await qc.cancelQueries({ queryKey: ['cook'] });
       const snap = snapshot(qc);
       patchCookEverywhere(qc, cookId, !following);
       return { snap };
@@ -920,6 +957,18 @@ export function useDeleteCollection() {
   return useMutation({
     mutationFn: (id: string) => apiSend('DELETE', `/me/collections/${id}`),
     onSuccess: () => void qc.invalidateQueries({ queryKey: keys.collections }),
+  });
+}
+
+/** Rename a collection (owner only). */
+export function useRenameCollection() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, name }: { id: string; name: string }) => apiSend('PATCH', `/me/collections/${id}`, { name }),
+    onSuccess: (_d, { id }) => {
+      void qc.invalidateQueries({ queryKey: keys.collections });
+      void qc.invalidateQueries({ queryKey: keys.collection(id) });
+    },
   });
 }
 

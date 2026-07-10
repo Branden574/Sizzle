@@ -176,6 +176,14 @@ async function setReaction(recipeId: string, userId: string, target: 'like' | 'd
   return (data ?? null) as 'like' | 'dislike' | null;
 }
 
+/** Enforce the creator's "likes off" control server-side (owner exempt), so it
+ * can't be bypassed by a crafted request even though the UI hides the button. */
+async function assertLikesEnabled(recipeId: string, cookId: string, userId: string): Promise<void> {
+  if (cookId === userId) return;
+  const { data: rc } = await supabaseAdmin.from('recipes').select('likes_enabled').eq('id', recipeId).maybeSingle();
+  if (rc && rc.likes_enabled === false) throw forbidden('Likes are turned off for this post');
+}
+
 async function reactionResponse(c: Context<AppEnv>, recipeId: string, userId: string) {
   const [{ data: r }, { data: reaction }] = await Promise.all([
     supabaseAdmin.from('recipes').select('like_count,dislike_count').eq('id', recipeId).maybeSingle(),
@@ -188,10 +196,15 @@ async function reactionResponse(c: Context<AppEnv>, recipeId: string, userId: st
   });
 }
 
-async function recipeCookId(recipeId: string): Promise<string> {
+async function recipeCookId(recipeId: string, viewerId?: string): Promise<string> {
   assertUuid(recipeId, 'recipe');
-  const { data } = await supabaseAdmin.from('recipes').select('cook_id').eq('id', recipeId).maybeSingle();
+  const { data } = await supabaseAdmin.from('recipes').select('cook_id, status, auto_hidden').eq('id', recipeId).maybeSingle();
   if (!data) throw notFound('Recipe not found');
+  // Non-owners can only interact with publicly-visible recipes — a draft, removed,
+  // or auto-hidden post must 404 for everyone but its owner, matching the feed gate.
+  if (viewerId && data.cook_id !== viewerId && (data.status !== 'published' || data.auto_hidden)) {
+    throw notFound('Recipe not found');
+  }
   return data.cook_id as string;
 }
 
@@ -211,6 +224,7 @@ recipes.post('/:id/like', requireAuth, requireNotBanned, async (c) => {
   const id = c.req.param('id');
   const userId = c.get('userId')!;
   const cookId = await recipeCookIdUnblocked(id, userId);
+  await assertLikesEnabled(id, cookId, userId);
   const result = await setReaction(id, userId, 'like');
   if (result === 'like') await notify({ userId: cookId, type: 'like', actorId: userId, recipeId: id });
   return reactionResponse(c, id, userId);
@@ -219,39 +233,27 @@ recipes.post('/:id/like', requireAuth, requireNotBanned, async (c) => {
 recipes.post('/:id/dislike', requireAuth, requireNotBanned, async (c) => {
   const id = c.req.param('id');
   const userId = c.get('userId')!;
-  await recipeCookIdUnblocked(id, userId);
+  const cookId = await recipeCookIdUnblocked(id, userId);
+  await assertLikesEnabled(id, cookId, userId);
   await setReaction(id, userId, 'dislike');
   return reactionResponse(c, id, userId);
 });
 
-/** POST /recipes/:id/save — toggle saved. */
+/** POST /recipes/:id/save — toggle saved (atomic in the DB to avoid counter drift). */
 recipes.post('/:id/save', requireAuth, requireNotBanned, async (c) => {
   const id = c.req.param('id');
   const userId = c.get('userId')!;
-  await recipeCookId(id);
-
-  const { data: existing } = await supabaseAdmin
-    .from('saves')
-    .select('recipe_id')
-    .eq('user_id', userId)
-    .eq('recipe_id', id)
-    .maybeSingle();
-
-  if (existing) {
-    await supabaseAdmin.from('saves').delete().eq('user_id', userId).eq('recipe_id', id);
-    await supabaseAdmin.rpc('adjust_save_count', { rid: id, delta: -1 });
-    return c.json({ saved: false });
-  }
-  await supabaseAdmin.from('saves').insert({ user_id: userId, recipe_id: id });
-  await supabaseAdmin.rpc('adjust_save_count', { rid: id, delta: 1 });
-  return c.json({ saved: true });
+  await recipeCookId(id, userId);
+  const { data, error } = await supabaseAdmin.rpc('toggle_save', { p_user: userId, p_recipe: id });
+  if (error) throw dbFail(error.message);
+  return c.json({ saved: data === true });
 });
 
 /** POST /recipes/:id/download — mark for offline. */
 recipes.post('/:id/download', requireAuth, async (c) => {
   const id = c.req.param('id');
   const userId = c.get('userId')!;
-  await recipeCookId(id);
+  await recipeCookId(id, userId);
   await supabaseAdmin.from('downloads').upsert({ user_id: userId, recipe_id: id }, { onConflict: 'user_id,recipe_id' });
   return c.json({ downloaded: true });
 });
@@ -266,7 +268,9 @@ recipes.delete('/:id/download', requireAuth, async (c) => {
 
 /** POST /recipes/:id/share — bump the share counter when a link is shared/copied. */
 recipes.post('/:id/share', requireAuth, rateLimit({ windowMs: 60_000, max: 60, name: 'share' }), async (c) => {
-  const id = assertUuid(c.req.param('id'), 'recipe');
+  const id = c.req.param('id');
+  const userId = c.get('userId')!;
+  await recipeCookId(id, userId); // validates id + 404s a draft/removed/hidden post for non-owners
   await supabaseAdmin.rpc('increment_share', { rid: id });
   return c.json({ ok: true });
 });
@@ -452,7 +456,7 @@ recipes.post('/:id/comments', requireAuth, requireNotBanned, rateLimit({ windowM
   if (!parsed.success) throw badRequest('Comment text required');
   const mod = await moderate(parsed.data.text);
   if (!mod.ok) throw badRequest(mod.reason!);
-  const cookId = await recipeCookId(id);
+  const cookId = await recipeCookId(id, userId);
 
   // Can't comment on a post by someone you've blocked or who has blocked you.
   const blockedFromOwner = await loadBlockedIds(supabaseAdmin, userId);

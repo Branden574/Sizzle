@@ -40,4 +40,22 @@ export default defineConfig({
     // Don't trigger HMR reloads when `tsc -b` / `vite build` write these.
     watch: { ignored: ['**/*.tsbuildinfo', '**/dist/**'] },
   },
+  build: {
+    // Split long-lived vendor code into its own cacheable chunks so app changes
+    // don't bust the whole bundle, and the initial payload is smaller. Match by
+    // module path (not bare package name) — firebase has no root entry to resolve.
+    rollupOptions: {
+      output: {
+        manualChunks(id) {
+          if (!id.includes('node_modules')) return undefined;
+          if (/node_modules\/(react|react-dom|scheduler)\//.test(id)) return 'vendor-react';
+          if (/node_modules\/(@tanstack|zustand|@supabase)\//.test(id)) return 'vendor-data';
+          if (id.includes('node_modules/hls.js')) return 'vendor-media';
+          if (/node_modules\/(gsap|@gsap|lenis)\//.test(id)) return 'vendor-anim';
+          if (/node_modules\/(firebase|@firebase|@capacitor-firebase)\//.test(id)) return 'vendor-firebase';
+          return undefined;
+        },
+      },
+    },
+  },
 });

@@ -189,7 +189,14 @@ export function RecipeSheet() {
                       >
                         {unlock.isPending ? 'Starting…' : `Unlock · $${(r.price / 100).toFixed(2)}`}
                       </button>
-                      <div style={{ fontSize: 12, color: 'var(--text-faint-2)', marginTop: 10 }}>…or subscribe to {r.cook.name} for all their premium recipes</div>
+                      {r.cook.subPriceCents != null && (
+                        <button
+                          onClick={() => setOpenCook(r.cook.id)}
+                          style={{ marginTop: 10, background: 'none', border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 700, color: 'var(--text-faint)', textDecoration: 'underline', padding: 0 }}
+                        >
+                          …or subscribe to {r.cook.name} for all their premium recipes
+                        </button>
+                      )}
                     </div>
                   )}
 

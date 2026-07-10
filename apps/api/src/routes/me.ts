@@ -8,6 +8,8 @@ import { assertUuid } from '../lib/validate';
 import { initialsOf, relativeTime } from '../lib/format';
 import { buildCards, cookSummary, loadBlockedIds, profileLinks, type ProfileRow, type RecipeRow } from '../mappers';
 import { normalizeLink, PROFILE_LINK_KEYS } from '../services/links';
+import { moderateImages } from '../services/moderation';
+import { env } from '../env';
 import type { AppEnv } from '../types';
 
 export const me = new Hono<AppEnv>();
@@ -19,7 +21,11 @@ me.get('/', async (c) => {
   const userId = c.get('userId')!;
   const db = userClient(c.get('accessToken')!);
 
-  const { data: profile, error } = await db.from('profiles').select('*').eq('id', userId).single();
+  // Read the owner's own row via the service role: after the profiles PII
+  // lockdown, the authenticated role no longer has column privilege on
+  // sensitive fields (phone, role, notif_prefs…), so select('*') under the
+  // caller JWT would fail. The user is already authenticated (userId from JWT).
+  const { data: profile, error } = await supabaseAdmin.from('profiles').select('*').eq('id', userId).single();
   if (error || !profile) throw notFound('Profile not found');
 
   // Use the denormalized follower/following counters (seeded + maintained by
@@ -317,6 +323,18 @@ me.post('/collections', async (c) => {
   return c.json<CollectionDTO>({ id: data.id as string, name: data.name as string, count: 0, coverBg: null, createdAt: data.created_at as string }, 201);
 });
 
+/** PATCH /me/collections/:id {name} — rename a collection. */
+me.patch('/collections/:id', async (c) => {
+  const userId = c.get('userId')!;
+  const id = c.req.param('id');
+  await ownCollection(id, userId);
+  const parsed = collectionSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) throw badRequest('Invalid collection name');
+  const { error } = await supabaseAdmin.from('collections').update({ name: parsed.data.name }).eq('id', id).eq('user_id', userId);
+  if (error) throw badRequest(error.message ?? 'Failed to rename collection');
+  return c.json({ ok: true });
+});
+
 /** DELETE /me/collections/:id — delete a collection (rows cascade). */
 me.delete('/collections/:id', async (c) => {
   const userId = c.get('userId')!;
@@ -443,6 +461,23 @@ me.patch('/', async (c) => {
   const userId = c.get('userId')!;
   const body = patchSchema.safeParse(await c.req.json().catch(() => null));
   if (!body.success) throw badRequest('Invalid profile update', body.error.flatten());
+
+  // Avatar/banner must live in the caller's OWN storage folder (not an arbitrary
+  // origin or another user's upload — these URLs are served to everyone), and any
+  // newly-set image is vision-moderated before it's persisted.
+  const storageBase = `${env.SUPABASE_URL.replace(/\/$/, '')}/storage/v1/object/public`;
+  const toModerate: string[] = [];
+  const requireOwnFolder = (url: string | null | undefined, bucket: 'avatars' | 'banners') => {
+    if (!url) return; // null clears the image; undefined leaves it unchanged
+    if (!url.startsWith(`${storageBase}/${bucket}/${userId}/`)) throw badRequest(`Invalid ${bucket === 'avatars' ? 'avatar' : 'banner'} image`);
+    toModerate.push(url);
+  };
+  requireOwnFolder(body.data.avatarUrl, 'avatars');
+  requireOwnFolder(body.data.bannerUrl, 'banners');
+  if (toModerate.length) {
+    const mod = await moderateImages(toModerate);
+    if (!mod.ok) throw badRequest(mod.reason!);
+  }
 
   const updates: Record<string, unknown> = {};
   if (body.data.displayName !== undefined) updates.display_name = body.data.displayName;

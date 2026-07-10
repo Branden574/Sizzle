@@ -39,6 +39,8 @@ export interface CookSummary {
   avatarUrl: string | null;
   /** Verification badge tier, or null if unverified. */
   verifiedTier: VerificationTier | null;
+  /** The creator's monthly subscription price in cents, or null if they don't offer one. */
+  subPriceCents: number | null;
 }
 
 export interface VideoAssetDTO {

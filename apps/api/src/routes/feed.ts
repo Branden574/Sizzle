@@ -196,9 +196,18 @@ feed.get('/for-you', optionalAuth, async (c) => {
   return c.json(res);
 });
 
-/** GET /feed/trending-tags — most-used hashtags across published recipes. */
+/** GET /feed/trending-tags — most-used hashtags across recent published recipes.
+ * Bounded to the last 30 days + a row cap so it can't grow into a full-table scan
+ * as the catalog grows, and cached briefly so repeated Discover visits don't re-scan. */
 feed.get('/trending-tags', optionalAuth, async (c) => {
-  const { data, error } = await supabaseAdmin.from('recipes').select('tags').eq('status', 'published');
+  const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
+  const { data, error } = await supabaseAdmin
+    .from('recipes')
+    .select('tags')
+    .eq('status', 'published')
+    .gt('created_at', since)
+    .order('created_at', { ascending: false })
+    .limit(2000);
   if (error) throw dbFail(error.message);
   const counts = new Map<string, number>();
   for (const r of data ?? []) for (const t of (r.tags ?? []) as string[]) counts.set(t, (counts.get(t) ?? 0) + 1);
@@ -206,6 +215,7 @@ feed.get('/trending-tags', optionalAuth, async (c) => {
     .map(([tag, count]) => ({ tag, count }))
     .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag))
     .slice(0, 12);
+  c.header('Cache-Control', 'public, max-age=300');
   return c.json(top);
 });
 

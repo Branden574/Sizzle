@@ -109,6 +109,11 @@ body {
 .sz-stage {
   --app-w: 393px;
   --app-h: 852px;
+  /* Safe-area insets — 0 in the centered web phone-frame; real device insets on
+     native / mobile-web (viewport-fit=cover) so chrome clears the notch, Dynamic
+     Island and home indicator. */
+  --sat: 0px;
+  --sab: 0px;
   min-height: 100vh;
   width: 100%;
   background: radial-gradient(120% 120% at 50% 0%, #2a221c 0%, #181410 55%, #0e0b09 100%);
@@ -126,6 +131,8 @@ body {
 .sz-stage.fill {
   --app-w: 100vw;
   --app-h: 100dvh;
+  --sat: env(safe-area-inset-top, 0px);
+  --sab: env(safe-area-inset-bottom, 0px);
   min-height: 100dvh;
   padding: 0;
   background: var(--feed-bg);

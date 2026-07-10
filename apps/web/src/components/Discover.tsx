@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { RecipeCard } from '@sizzle/shared';
 import { discoverHeights } from '../data';
 import { useForYouFeed, useSearch, useTrendingTags } from '../data/queries';
@@ -13,12 +13,27 @@ export function Discover() {
 
   const [q, setQ] = useState('');
   const query = q.trim();
-  const { data: feed } = useForYouFeed();
+  const { data: feed, hasNextPage, isFetchingNextPage, fetchNextPage } = useForYouFeed();
   const { data: results, isFetching } = useSearch(q);
   const { data: trending } = useTrendingTags();
 
   const tiles = query ? results?.recipes ?? [] : feed?.pages.flatMap((p) => p.items) ?? [];
   const cooks = query ? results?.cooks ?? [] : [];
+
+  // Infinite scroll for the default (non-search) grid — load the next page when
+  // the sentinel nears the viewport, mirroring the Feed. Search results aren't paged.
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  useEffect(() => {
+    if (query) return;
+    const el = sentinelRef.current;
+    if (!el) return;
+    const io = new IntersectionObserver(
+      (entries) => { if (entries[0]?.isIntersecting && hasNextPage && !isFetchingNextPage) void fetchNextPage(); },
+      { rootMargin: '600px' },
+    );
+    io.observe(el);
+    return () => io.disconnect();
+  }, [query, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   return (
     <div style={{ position: 'absolute', inset: 0, background: 'var(--bg)', overflowY: 'auto', animation: 'sz-fadeIn .35s' }}>
@@ -70,6 +85,10 @@ export function Discover() {
         </div>
       )}
 
+      {query && isFetching && tiles.length === 0 && cooks.length === 0 && (
+        <div style={{ padding: '40px 22px', textAlign: 'center', color: 'var(--text-faint-2)', fontSize: 15 }}>Searching…</div>
+      )}
+
       {query && tiles.length === 0 && cooks.length === 0 && !isFetching && (
         <div style={{ padding: '40px 22px', textAlign: 'center', color: 'var(--text-faint-2)', fontSize: 15 }}>No results for “{query}”.</div>
       )}
@@ -95,6 +114,8 @@ export function Discover() {
           </button>
         ))}
       </div>
+      {/* Infinite-scroll sentinel for the default grid. */}
+      {!query && <div ref={sentinelRef} aria-hidden="true" style={{ height: 1 }} />}
     </div>
   );
 }

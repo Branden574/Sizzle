@@ -19,6 +19,9 @@ export function VideoPlayer({ src, poster, active, immersive = false }: { src: s
   const ref = useRef<HTMLVideoElement>(null);
   const barRef = useRef<HTMLDivElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
+  // True once the user manually pauses this clip, so a later 'canplay' (from a
+  // buffer stall or seek) doesn't silently resume it against their intent.
+  const userPausedRef = useRef(false);
   const [paused, setPaused] = useState(true);
   const [progress, setProgress] = useState(0); // 0..1
   const [duration, setDuration] = useState(0);
@@ -84,9 +87,10 @@ export function VideoPlayer({ src, poster, active, immersive = false }: { src: s
       v.pause();
       return;
     }
+    userPausedRef.current = false; // a freshly-active clip (or new src) autoplays
     // muted is kept in sync by its own effect; don't depend on it here, or
     // toggling sound would re-run this and resume a manually-paused clip.
-    const tryPlay = () => { void v.play().catch(() => {}); };
+    const tryPlay = () => { if (!userPausedRef.current) void v.play().catch(() => {}); };
     tryPlay();
     v.addEventListener('canplay', tryPlay);
     return () => v.removeEventListener('canplay', tryPlay);
@@ -113,8 +117,8 @@ export function VideoPlayer({ src, poster, active, immersive = false }: { src: s
   const togglePlay = () => {
     const v = ref.current;
     if (!v) return;
-    if (v.paused) void v.play().catch(() => {});
-    else v.pause();
+    if (v.paused) { userPausedRef.current = false; void v.play().catch(() => {}); }
+    else { userPausedRef.current = true; v.pause(); }
   };
 
   // Seek from a pointer x within the progress bar.
