@@ -1,4 +1,5 @@
 import { useSizzle } from '../../store';
+import { useSwipeDismiss } from '../../lib/useSwipeDismiss';
 import { useShopping, type ShoppingItem } from '../../lib/shopping';
 import { CloseIcon } from '../icons';
 
@@ -11,6 +12,7 @@ export function ShoppingListSheet() {
   const clearChecked = useShopping((s) => s.clearChecked);
   const clearAll = useShopping((s) => s.clearAll);
 
+  const swipe = useSwipeDismiss(() => setOpen(false));
   if (!open) return null;
   const close = () => setOpen(false);
 
@@ -26,8 +28,8 @@ export function ShoppingListSheet() {
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 92 }}>
       <div onClick={close} style={{ position: 'absolute', inset: 0, background: 'var(--scrim)', animation: 'sz-fadeIn .3s' }} />
-      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, top: 70, background: 'var(--bg)', borderRadius: '26px 26px 0 0', overflow: 'hidden', animation: 'sz-slideUp .4s cubic-bezier(.16,1,.3,1)', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ padding: '16px 22px 12px', borderBottom: '1px solid var(--line)', position: 'relative', flex: 'none' }}>
+      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, top: 70, background: 'var(--bg)', borderRadius: '26px 26px 0 0', overflow: 'hidden', animation: 'sz-slideUp .4s cubic-bezier(.16,1,.3,1)', display: 'flex', flexDirection: 'column', ...swipe.sheetStyle }}>
+        <div {...swipe.handlers} style={{ padding: '16px 22px 12px', borderBottom: '1px solid var(--line)', position: 'relative', flex: 'none' , ...swipe.handlers.style}}>
           <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', width: 42, height: 5, borderRadius: 3, background: 'var(--track)' }} />
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginTop: 6 }}>
             <div>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useSwipeDismiss } from '../../lib/useSwipeDismiss';
 import type { CSSProperties } from 'react';
 import { PROFILE_LINK_KEYS, type ProfileLinkKey } from '@sizzle/shared';
 import { useMe, useUpdateProfile } from '../../data/queries';
@@ -72,6 +73,7 @@ export function EditProfileSheet() {
   }, [me]);
 
   const close = () => setShowEditProfile(false);
+  const swipe = useSwipeDismiss(close);
 
   // Picking a file opens the cropper; the upload happens on "Use photo".
   const pick = (bucket: 'avatars' | 'banners', file: File | undefined) => {
@@ -129,8 +131,8 @@ export function EditProfileSheet() {
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 93 }}>
       <div onClick={close} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.5)', animation: 'sz-fadeIn .3s' }} />
-      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, top: 60, background: 'var(--bg)', borderRadius: '26px 26px 0 0', overflow: 'hidden', animation: 'sz-slideUp .4s cubic-bezier(.16,1,.3,1)', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 22px 10px', flex: 'none', position: 'relative' }}>
+      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, top: 60, background: 'var(--bg)', borderRadius: '26px 26px 0 0', overflow: 'hidden', animation: 'sz-slideUp .4s cubic-bezier(.16,1,.3,1)', display: 'flex', flexDirection: 'column', ...swipe.sheetStyle }}>
+        <div {...swipe.handlers} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 22px 10px', flex: 'none', position: 'relative' , ...swipe.handlers.style}}>
           <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', width: 42, height: 5, borderRadius: 3, background: 'var(--track)' }} />
           <button onClick={close} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-faint)', fontSize: 15, fontWeight: 600 }}>Cancel</button>
           <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>Edit profile</div>

@@ -1,4 +1,5 @@
 import { useSizzle } from '../../store';
+import { useSwipeDismiss } from '../../lib/useSwipeDismiss';
 
 type PhaseStatus = 'shipped' | 'current' | 'planned';
 interface Phase {
@@ -57,14 +58,15 @@ const STATUS_META: Record<PhaseStatus, { label: string; color: string; bg: strin
 export function RoadmapSheet() {
   const open = useSizzle((s) => s.showRoadmap);
   const setOpen = useSizzle((s) => s.setShowRoadmap);
+  const swipe = useSwipeDismiss(() => setOpen(false));
   if (!open) return null;
   const close = () => setOpen(false);
 
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 94 }}>
       <div onClick={close} style={{ position: 'absolute', inset: 0, background: 'var(--scrim)', animation: 'sz-fadeIn .3s' }} />
-      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, top: 56, background: 'var(--bg)', borderRadius: '26px 26px 0 0', overflow: 'hidden', animation: 'sz-slideUp .4s cubic-bezier(.16,1,.3,1)', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ textAlign: 'center', padding: '16px 0 10px', position: 'relative', flex: 'none' }}>
+      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, top: 56, background: 'var(--bg)', borderRadius: '26px 26px 0 0', overflow: 'hidden', animation: 'sz-slideUp .4s cubic-bezier(.16,1,.3,1)', display: 'flex', flexDirection: 'column', ...swipe.sheetStyle }}>
+        <div {...swipe.handlers} style={{ textAlign: 'center', padding: '16px 0 10px', position: 'relative', flex: 'none' , ...swipe.handlers.style}}>
           <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', width: 42, height: 5, borderRadius: 3, background: 'var(--track)' }} />
           <button onClick={close} style={{ position: 'absolute', right: 18, top: 14, background: 'none', border: 'none', color: 'var(--text-faint)', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>Done</button>
           <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 26, color: 'var(--text)', marginTop: 8 }}>Where Sizzle is headed</div>

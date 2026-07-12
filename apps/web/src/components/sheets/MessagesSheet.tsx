@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSwipeDismiss } from '../../lib/useSwipeDismiss';
 import { useConversations, useFollowList, useMe } from '../../data/queries';
 import { useSizzle } from '../../store';
 import { CloseIcon, SearchIcon } from '../icons';
@@ -14,6 +15,7 @@ export function MessagesSheet() {
   const [q, setQ] = useState('');
   const list = convos ?? [];
   const close = () => setMessagesOpen(false);
+  const swipe = useSwipeDismiss(() => setMessagesOpen(false));
 
   const query = q.trim().toLowerCase();
   // Instagram-style: typing searches the people you follow to start a new chat.
@@ -29,8 +31,8 @@ export function MessagesSheet() {
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 90 }}>
       <div onClick={close} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.5)', animation: 'sz-fadeIn .3s' }} />
-      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '82%', background: 'var(--bg)', borderRadius: '26px 26px 0 0', overflow: 'hidden', animation: 'sz-slideUp .4s cubic-bezier(.16,1,.3,1)', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ padding: '14px 22px 12px', borderBottom: '1px solid var(--line)', position: 'relative' }}>
+      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '82%', background: 'var(--bg)', borderRadius: '26px 26px 0 0', overflow: 'hidden', animation: 'sz-slideUp .4s cubic-bezier(.16,1,.3,1)', display: 'flex', flexDirection: 'column', ...swipe.sheetStyle }}>
+        <div {...swipe.handlers} style={{ padding: '14px 22px 12px', borderBottom: '1px solid var(--line)', position: 'relative' , ...swipe.handlers.style}}>
           <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', width: 42, height: 5, borderRadius: 3, background: 'var(--track)' }} />
           <div style={{ textAlign: 'center', fontSize: 15, fontWeight: 700, color: 'var(--text)', marginTop: 6 }}>Messages</div>
           <button onClick={close} style={{ position: 'absolute', top: 14, right: 16, background: 'none', border: 'none', cursor: 'pointer' }}>

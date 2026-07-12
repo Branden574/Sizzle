@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { useSwipeDismiss } from '../../lib/useSwipeDismiss';
 import type { PostControls } from '@sizzle/shared';
 import { useRecipe, useUpdatePostControls } from '../../data/queries';
 import { useSizzle } from '../../store';
@@ -26,6 +27,7 @@ export function SettingsSheet() {
   const { data: recipe } = useRecipe(settingsFor);
   const update = useUpdatePostControls();
 
+  const swipe = useSwipeDismiss(() => setSettingsFor(null));
   if (!settingsFor) return null;
 
   // Persisted, enforced for every viewer (optimistically reflected on the card).
@@ -35,8 +37,8 @@ export function SettingsSheet() {
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 92 }}>
       <div onClick={close} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.5)', animation: 'sz-fadeIn .3s' }} />
-      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, background: 'var(--bg)', borderRadius: '26px 26px 0 0', overflow: 'hidden', animation: 'sz-slideUp .4s cubic-bezier(.16,1,.3,1)', paddingBottom: 30 }}>
-        <div style={{ textAlign: 'center', padding: '16px 0 6px', position: 'relative' }}>
+      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, background: 'var(--bg)', borderRadius: '26px 26px 0 0', overflow: 'hidden', animation: 'sz-slideUp .4s cubic-bezier(.16,1,.3,1)', paddingBottom: 30, ...swipe.sheetStyle }}>
+        <div {...swipe.handlers} style={{ textAlign: 'center', padding: '16px 0 6px', position: 'relative' , ...swipe.handlers.style}}>
           <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', width: 42, height: 5, borderRadius: 3, background: 'var(--track)' }} />
           <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginTop: 6 }}>Post controls</div>
           <div style={{ fontSize: 13, color: 'var(--text-faint)', marginTop: 2 }}>Who can react &amp; comment</div>

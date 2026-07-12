@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSwipeDismiss } from '../../lib/useSwipeDismiss';
 import { useRequireAuth } from '../../auth/useRequireAuth';
 import { useToggleRepost } from '../../data/queries';
 import { useSizzle } from '../../store';
@@ -15,6 +16,7 @@ export function RepostSheet() {
   const [comment, setComment] = useState('');
   const [done, setDone] = useState(false);
 
+  const swipe = useSwipeDismiss(() => setRepostFor(null));
   if (!repostFor) return null;
   const close = () => { setRepostFor(null); setComment(''); setDone(false); };
 
@@ -27,8 +29,8 @@ export function RepostSheet() {
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 94 }}>
       <div onClick={close} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.5)', animation: 'sz-fadeIn .3s' }} />
-      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, background: 'var(--bg)', borderRadius: '26px 26px 0 0', overflow: 'hidden', animation: 'sz-slideUp .4s cubic-bezier(.16,1,.3,1)', paddingBottom: 30 }}>
-        <div style={{ textAlign: 'center', padding: '16px 0 6px', position: 'relative' }}>
+      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, background: 'var(--bg)', borderRadius: '26px 26px 0 0', overflow: 'hidden', animation: 'sz-slideUp .4s cubic-bezier(.16,1,.3,1)', paddingBottom: 30, ...swipe.sheetStyle }}>
+        <div {...swipe.handlers} style={{ textAlign: 'center', padding: '16px 0 6px', position: 'relative' , ...swipe.handlers.style}}>
           <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', width: 42, height: 5, borderRadius: 3, background: 'var(--track)' }} />
           <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 6 }}>
             <RepostIcon size={20} stroke="var(--text)" />

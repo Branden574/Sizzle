@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSwipeDismiss } from '../../lib/useSwipeDismiss';
 import { useCollections, useCreateCollection, useToggleCollectionRecipe } from '../../data/queries';
 import { useSizzle } from '../../store';
 import { CheckIcon } from '../icons';
@@ -11,6 +12,7 @@ export function CollectionPickerSheet() {
   const create = useCreateCollection();
   const [newName, setNewName] = useState('');
 
+  const swipe = useSwipeDismiss(() => setRecipeId(null));
   if (!recipeId) return null;
   const close = () => { setRecipeId(null); setNewName(''); };
 
@@ -28,8 +30,8 @@ export function CollectionPickerSheet() {
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 100 }}>
       <div onClick={close} style={{ position: 'absolute', inset: 0, background: 'var(--scrim)', animation: 'sz-fadeIn .3s' }} />
-      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, background: 'var(--bg)', borderRadius: '26px 26px 0 0', overflow: 'hidden', animation: 'sz-slideUp .4s cubic-bezier(.16,1,.3,1)', paddingBottom: 30, maxHeight: '80%', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ textAlign: 'center', padding: '16px 0 8px', position: 'relative', flex: 'none' }}>
+      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, background: 'var(--bg)', borderRadius: '26px 26px 0 0', overflow: 'hidden', animation: 'sz-slideUp .4s cubic-bezier(.16,1,.3,1)', paddingBottom: 30, maxHeight: '80%', display: 'flex', flexDirection: 'column', ...swipe.sheetStyle }}>
+        <div {...swipe.handlers} style={{ textAlign: 'center', padding: '16px 0 8px', position: 'relative', flex: 'none' , ...swipe.handlers.style}}>
           <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', width: 42, height: 5, borderRadius: 3, background: 'var(--track)' }} />
           <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--text)', marginTop: 6 }}>Save to collection</div>
         </div>

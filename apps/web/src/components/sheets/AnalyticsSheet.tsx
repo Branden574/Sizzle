@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useSwipeDismiss } from '../../lib/useSwipeDismiss';
 import { PLATFORM_FEE_PCT, PLATFORM_FEE_RATIONALE, type CreatorAnalytics, type EarningKind, type EarningsSummary } from '@sizzle/shared';
 import { useAnalytics, useBroadcast, useCreateProduct, useCreateTier, useDeleteProduct, useDeleteTier, useEarnings, useMonetizationStatus, useMyProducts, useMyTiers, usePayout, useSetGoal, useSetSubPrice, useSetWelcomeDm, useStartOnboarding } from '../../data/queries';
 import { useSizzle } from '../../store';
@@ -21,6 +22,7 @@ export function AnalyticsSheet() {
   const setShowAnalytics = useSizzle((s) => s.setShowAnalytics);
   const { data, isLoading } = useAnalytics(true);
   const close = () => setShowAnalytics(false);
+  const swipe = useSwipeDismiss(close);
   const t = data?.totals;
   // Watch metrics lead — they're what a video creator optimizes against.
   const cards = [
@@ -39,8 +41,8 @@ export function AnalyticsSheet() {
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 92 }}>
       <div onClick={close} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.5)', animation: 'sz-fadeIn .3s' }} />
-      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '86%', background: 'var(--bg)', borderRadius: '26px 26px 0 0', overflow: 'hidden', animation: 'sz-slideUp .4s cubic-bezier(.16,1,.3,1)', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ padding: '14px 22px 12px', borderBottom: '1px solid var(--line)', position: 'relative' }}>
+      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '86%', background: 'var(--bg)', borderRadius: '26px 26px 0 0', overflow: 'hidden', animation: 'sz-slideUp .4s cubic-bezier(.16,1,.3,1)', display: 'flex', flexDirection: 'column', ...swipe.sheetStyle }}>
+        <div {...swipe.handlers} style={{ padding: '14px 22px 12px', borderBottom: '1px solid var(--line)', position: 'relative' , ...swipe.handlers.style}}>
           <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', width: 42, height: 5, borderRadius: 3, background: 'var(--track)' }} />
           <div style={{ textAlign: 'center', fontSize: 15, fontWeight: 700, color: 'var(--text)', marginTop: 6 }}>Your insights</div>
           <button onClick={close} aria-label="Close" style={{ position: 'absolute', top: 14, right: 16, background: 'none', border: 'none', cursor: 'pointer' }}>
