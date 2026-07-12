@@ -173,12 +173,17 @@ me.post('/notif-prefs', async (c) => {
 /** GET /me/analytics — creator insights: totals + per-post engagement. */
 me.get('/analytics', async (c) => {
   const userId = c.get('userId')!;
-  const [recsRes, profRes, viewRes] = await Promise.all([
+  const [recsRes, profRes, viewRes, trendRes, bestRes] = await Promise.all([
     supabaseAdmin.from('recipes').select('id, title, like_count, comment_count, save_count, share_count, created_at').eq('cook_id', userId).eq('status', 'published').order('created_at', { ascending: false }).limit(100),
     supabaseAdmin.from('profiles').select('follower_count').eq('id', userId).maybeSingle(),
     // Watch-time & completion, aggregated per recipe (data already logged in recipe_views).
     supabaseAdmin.rpc('creator_view_stats', { p_creator: userId }),
+    supabaseAdmin.rpc('creator_view_trend', { uid: userId, days: 28 }),
+    supabaseAdmin.rpc('creator_best_time', { uid: userId }),
   ]);
+  const trend = ((trendRes.data ?? []) as { day: string; views: number }[]).map((t) => ({ day: t.day, views: Number(t.views) }));
+  const bestRow = (Array.isArray(bestRes.data) ? bestRes.data[0] : null) as { dow: number; hour: number; views: number } | null;
+  const bestTime = bestRow ? { dow: Number(bestRow.dow), hour: Number(bestRow.hour), views: Number(bestRow.views) } : null;
   type ViewStat = { recipe_id: string; views: number; avg_dwell_ms: number; completed_count: number; skipped_count: number };
   const viewMap = new Map<string, ViewStat>();
   for (const v of (viewRes.data ?? []) as ViewStat[]) viewMap.set(v.recipe_id, v);
@@ -215,6 +220,8 @@ me.get('/analytics', async (c) => {
       completionPct: totalViews ? Math.round((totalCompleted / totalViews) * 100) : 0,
     },
     posts,
+    trend,
+    bestTime,
   });
 });
 

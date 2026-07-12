@@ -338,6 +338,10 @@ export interface CreatorAnalytics {
     views: number; avgWatchMs: number; completionPct: number; skipPct: number;
     likes: number; comments: number; saves: number; shares: number;
   }[];
+  /** Daily views over the trailing window (for a sparkline). */
+  trend: { day: string; views: number }[];
+  /** The single best day-of-week (0=Sun) + hour to post, by past views. */
+  bestTime: { dow: number; hour: number; views: number } | null;
 }
 
 /** User-controllable push categories (account/moderation pushes always send). */

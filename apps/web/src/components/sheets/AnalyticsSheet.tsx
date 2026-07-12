@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { PLATFORM_FEE_PCT, PLATFORM_FEE_RATIONALE, type EarningKind, type EarningsSummary } from '@sizzle/shared';
+import { PLATFORM_FEE_PCT, PLATFORM_FEE_RATIONALE, type CreatorAnalytics, type EarningKind, type EarningsSummary } from '@sizzle/shared';
 import { useAnalytics, useBroadcast, useEarnings, useMonetizationStatus, usePayout, useSetGoal, useSetSubPrice, useSetWelcomeDm, useStartOnboarding } from '../../data/queries';
 import { useSizzle } from '../../store';
 import { formatCount } from '../../lib/format';
@@ -61,6 +61,8 @@ export function AnalyticsSheet() {
                   </div>
                 ))}
               </div>
+
+              <TrendSparkline data={data} />
 
               <Earnings />
 
@@ -255,6 +257,33 @@ function SubPriceEditor({ data }: { data: EarningsSummary | undefined }) {
             <button onClick={() => setEditing(false)} style={{ background: 'none', border: 'none', color: 'var(--text-faint)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', padding: 0 }}>Cancel</button>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+const DOW = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+const hourLabel = (h: number) => `${((h + 11) % 12) + 1}${h < 12 ? 'am' : 'pm'}`;
+
+/** 28-day view trend as a mini bar chart + best-time-to-post callout. */
+function TrendSparkline({ data }: { data: CreatorAnalytics | undefined }) {
+  const trend = data?.trend ?? [];
+  if (trend.length === 0) return null;
+  const max = Math.max(1, ...trend.map((t) => t.views));
+  const best = data?.bestTime ?? null;
+  return (
+    <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 16, padding: 16, marginBottom: 20 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 10 }}>
+        <span style={{ fontSize: 13, fontWeight: 800, color: 'var(--text)' }}>Views · last 28 days</span>
+        <span style={{ fontSize: 12, color: 'var(--text-faint)' }}>{formatCount(trend.reduce((n, t) => n + t.views, 0))} total</span>
+      </div>
+      <div style={{ display: 'flex', alignItems: 'flex-end', gap: 2, height: 48 }}>
+        {trend.map((t) => (
+          <div key={t.day} title={`${t.day}: ${t.views}`} style={{ flex: 1, height: `${Math.max(4, (t.views / max) * 100)}%`, background: `linear-gradient(180deg,${theme.accent},#e23a18)`, borderRadius: 2, opacity: t.views ? 1 : 0.25 }} />
+        ))}
+      </div>
+      {best && best.views > 0 && (
+        <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 10 }}>⏰ Best time to post: <b style={{ color: 'var(--text)' }}>{DOW[best.dow]} around {hourLabel(best.hour)}</b></div>
       )}
     </div>
   );
