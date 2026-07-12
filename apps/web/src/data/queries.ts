@@ -1,5 +1,5 @@
 import { QueryClient, useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query';
-import type { AdminAppealDTO, AdminContentReportDTO, AdminLogDTO, AdminReportGroupDTO, AdminStats, AdminUserDTO, CollectionDTO, CommentDTO, ConversationDTO, CookProfile, CookSummary, CreateRecipeInput, CreatorAnalytics, DirectUploadTicket, DraftCard, EarningsSummary, FeedResponse, MeProfile, MessageDTO, MonetizationStatus, NotificationDTO, NotifPrefKey, PostControls, RecipeCard, RecipeDetail, ReportInput, SearchResults, SuggestedCook, SupportRequestDTO, ThreadDTO, TipConfig, TrendingTag, VerificationTier, VideoAssetStatus, VideoUploadConfig } from '@sizzle/shared';
+import type { AdminAppealDTO, AdminContentReportDTO, AdminLogDTO, AdminReportGroupDTO, AdminStats, AdminUserDTO, CollectionDTO, CommentDTO, ConversationDTO, CookProfile, CookSummary, CreateRecipeInput, CreatorAnalytics, DirectUploadTicket, DraftCard, EarningsSummary, FeedResponse, MeProfile, MessageDTO, MonetizationStatus, NotificationDTO, NotifPrefKey, PostControls, ProductDTO, RecipeCard, RecipeDetail, ReportInput, SearchResults, SuggestedCook, SupportRequestDTO, ThreadDTO, TipConfig, TrendingTag, VerificationTier, VideoAssetStatus, VideoUploadConfig } from '@sizzle/shared';
 import { useAuth } from '../auth/useAuth';
 import { useSizzle } from '../store';
 import { apiGet, apiSend } from '../lib/api';
@@ -148,6 +148,46 @@ export function useSetGoal() {
   return useMutation({
     mutationFn: (v: { label: string | null; targetCents: number | null }) => apiSend('POST', '/monetize/goal', v),
     onSuccess: () => { void qc.invalidateQueries({ queryKey: ['monetize'] }); void qc.invalidateQueries({ queryKey: ['cook'] }); },
+  });
+}
+
+/** The creator's own digital products. */
+export function useMyProducts(enabled: boolean) {
+  return useQuery({ queryKey: ['monetize', 'products'], queryFn: () => apiGet<{ products: ProductDTO[] }>('/monetize/products'), enabled });
+}
+
+/** A creator's public digital products (with an `owned` flag for the viewer). */
+export function useCookProducts(cookId: string | null) {
+  return useQuery({ queryKey: ['cook', cookId, 'products'], queryFn: () => apiGet<ProductDTO[]>(`/cooks/${cookId}/products`), enabled: !!cookId });
+}
+
+/** Create a digital product. */
+export function useCreateProduct() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { title: string; description?: string | null; priceCents: number; fileUrl?: string | null }) => apiSend('POST', '/monetize/products', v),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['monetize', 'products'] }),
+  });
+}
+
+/** Delete (deactivate) a digital product. */
+export function useDeleteProduct() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiSend('DELETE', `/monetize/products/${id}`),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['monetize', 'products'] }),
+  });
+}
+
+/** Buy a creator's digital product (Stripe checkout, or instant in test mode). */
+export function useBuyProduct(cookId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (productId: string) => apiSend<{ url: string | null; status: string }>('POST', `/monetize/products/${productId}/buy`, {}),
+    onSuccess: (res) => {
+      if (res.url) { window.open(res.url, '_blank', 'noopener'); invalidateOnReturn(qc, [['cook', cookId, 'products']]); }
+      else void qc.invalidateQueries({ queryKey: ['cook', cookId, 'products'] });
+    },
   });
 }
 

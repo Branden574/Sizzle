@@ -272,7 +272,7 @@ export const platformFeeCents = (amountCents: number): number => Math.floor((amo
 
 export type MonetizationStatus = 'none' | 'pending' | 'active';
 
-export type EarningKind = 'support' | 'subscription' | 'unlock';
+export type EarningKind = 'support' | 'subscription' | 'unlock' | 'product';
 
 /** One earning in a creator's ledger (support / subscription renewal / unlock). */
 export interface TipDTO {
@@ -300,6 +300,18 @@ export interface SubscriptionDTO {
 }
 
 /** The creator's earnings dashboard payload. */
+/** A creator's digital product (cookbook, meal plan, guide). */
+export interface ProductDTO {
+  id: string;
+  title: string;
+  description: string | null;
+  priceCents: number;
+  /** Download URL — only returned to the owner or a buyer. */
+  fileUrl: string | null;
+  /** True when the viewer already bought it (or owns it). */
+  owned: boolean;
+}
+
 export interface EarningsSummary {
   monetization: MonetizationStatus;
   feePct: number;

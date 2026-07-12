@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useCancelSubscription, useCook, useMe, useSubscribe, useToggleBlock, useToggleFollow, useToggleMute } from '../../data/queries';
+import { useBuyProduct, useCancelSubscription, useCook, useCookProducts, useMe, useSubscribe, useToggleBlock, useToggleFollow, useToggleMute } from '../../data/queries';
 import { useRequireAuth } from '../../auth/useRequireAuth';
 import { useSizzle } from '../../store';
 import { VerifiedBadge } from '../VerifiedBadge';
@@ -149,6 +149,8 @@ export function CookSheet() {
             )
           )}
 
+          {!isOwn && <ProductShelf cookId={ck.id} />}
+
           {ck.goal && ck.goal.targetCents > 0 && (
             <div style={{ marginTop: 16, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 16, padding: '13px 16px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
@@ -215,4 +217,36 @@ function CookStat({ value, label, border, onClick }: { value: string; label: str
   );
   if (!onClick) return <div style={style}>{inner}</div>;
   return <button onClick={onClick} style={{ ...style, background: 'none', border: 'none', borderRight: style.borderRight, cursor: 'pointer' }}>{inner}</button>;
+}
+
+/** A creator's digital products, with buy / download. */
+function ProductShelf({ cookId }: { cookId: string }) {
+  const requireAuth = useRequireAuth();
+  const { data: products } = useCookProducts(cookId);
+  const buy = useBuyProduct(cookId);
+  if (!products || products.length === 0) return null;
+  return (
+    <div style={{ marginTop: 16 }}>
+      <div style={{ fontSize: 12, color: 'var(--text-faint-2)', margin: '0 2px 8px', textTransform: 'uppercase', letterSpacing: '.06em' }}>Shop</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {products.map((p) => (
+          <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 14, padding: '11px 14px' }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</div>
+              {p.description && <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.description}</div>}
+            </div>
+            {p.owned ? (
+              p.fileUrl
+                ? <button onClick={() => window.open(p.fileUrl!, '_blank', 'noopener')} style={{ flex: 'none', height: 38, padding: '0 16px', border: 'none', borderRadius: 12, background: 'var(--invert-bg)', color: 'var(--invert-fg)', fontFamily: "'Hanken Grotesk'", fontSize: 13.5, fontWeight: 800, cursor: 'pointer' }}>Download</button>
+                : <span style={{ flex: 'none', fontSize: 13, fontWeight: 800, color: '#1f9d55' }}>✓ Owned</span>
+            ) : (
+              <button onClick={() => { if (requireAuth()) buy.mutate(p.id); }} disabled={buy.isPending} style={{ flex: 'none', height: 38, padding: '0 16px', border: 'none', borderRadius: 12, background: `linear-gradient(135deg,${accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 13.5, fontWeight: 800, cursor: 'pointer', opacity: buy.isPending ? 0.7 : 1 }}>
+                {`Buy · $${(p.priceCents / 100).toFixed(2)}`}
+              </button>
+            )}
+          </div>
+        ))}
+      </div>
+    </div>
+  );
 }

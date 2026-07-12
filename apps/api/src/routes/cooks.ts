@@ -148,6 +148,24 @@ cooks.get('/:id', optionalAuth, async (c) => {
   return c.json(res);
 });
 
+/** GET /cooks/:id/products — a creator's digital products (public; file URL only if owned). */
+cooks.get('/:id/products', optionalAuth, async (c) => {
+  const id = assertUuid(c.req.param('id'), 'cook');
+  const viewerId = c.get('userId');
+  const { data: rows } = await supabaseAdmin.from('creator_products').select('*').eq('creator_id', id).eq('active', true).order('created_at', { ascending: false });
+  const products = rows ?? [];
+  let owned = new Set<string>();
+  if (viewerId && products.length) {
+    const { data: purchases } = await supabaseAdmin.from('product_purchases').select('product_id').eq('user_id', viewerId).in('product_id', products.map((p) => p.id));
+    owned = new Set((purchases ?? []).map((p) => p.product_id as string));
+  }
+  return c.json(products.map((p) => {
+    const isOwner = viewerId === id;
+    const has = isOwner || owned.has(p.id as string);
+    return { id: p.id, title: p.title, description: p.description, priceCents: p.price_cents, fileUrl: has ? p.file_url : null, owned: has };
+  }));
+});
+
 /** GET /cooks/:id/followers — the people who follow this cook (blocked hidden). */
 cooks.get('/:id/followers', optionalAuth, async (c) => {
   const id = assertUuid(c.req.param('id'), 'cook');

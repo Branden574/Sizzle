@@ -293,6 +293,72 @@ monetize.post('/goal', requireAuth, async (c) => {
   return c.json({ ok: true });
 });
 
+const productSchema = z.object({
+  title: z.string().trim().min(1).max(120),
+  description: z.string().trim().max(1000).nullable().optional(),
+  priceCents: z.number().int().min(100).max(50_000_00),
+  fileUrl: z.string().url().max(1000).nullable().optional(),
+});
+
+/** POST /monetize/products — create a digital product (creator, payouts active). */
+monetize.post('/products', requireAuth, requireNotBanned, async (c) => {
+  const userId = c.get('userId')!;
+  const parsed = productSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) throw badRequest('Invalid product');
+  const { data: me } = await supabaseAdmin.from('profiles').select('monetization_status').eq('id', userId).maybeSingle();
+  if (me?.monetization_status !== 'active') throw badRequest('Set up payouts first');
+  const { data, error } = await supabaseAdmin
+    .from('creator_products')
+    .insert({ creator_id: userId, title: parsed.data.title, description: parsed.data.description ?? null, price_cents: parsed.data.priceCents, file_url: parsed.data.fileUrl ?? null })
+    .select('id').single();
+  if (error || !data) throw dbFail(error?.message ?? 'Failed to create product');
+  return c.json({ id: data.id }, 201);
+});
+
+/** GET /monetize/products — the creator's own products (with file URLs). */
+monetize.get('/products', requireAuth, async (c) => {
+  const userId = c.get('userId')!;
+  const { data } = await supabaseAdmin.from('creator_products').select('*').eq('creator_id', userId).eq('active', true).order('created_at', { ascending: false });
+  return c.json({ products: (data ?? []).map((p) => ({ id: p.id, title: p.title, description: p.description, priceCents: p.price_cents, fileUrl: p.file_url, owned: true })) });
+});
+
+/** DELETE /monetize/products/:id — deactivate a product (soft delete). */
+monetize.delete('/products/:id', requireAuth, async (c) => {
+  const userId = c.get('userId')!;
+  const id = c.req.param('id');
+  await supabaseAdmin.from('creator_products').update({ active: false }).eq('id', id).eq('creator_id', userId);
+  return c.json({ ok: true });
+});
+
+/** POST /monetize/products/:id/buy — purchase a product (Stripe checkout, or mock instant). */
+monetize.post('/products/:id/buy', requireAuth, requireNotBanned, rateLimit({ windowMs: 60_000, max: 15, name: 'buy-product' }), async (c) => {
+  const userId = c.get('userId')!;
+  const id = c.req.param('id');
+  const { data: prod } = await supabaseAdmin.from('creator_products').select('*').eq('id', id).eq('active', true).maybeSingle();
+  if (!prod) throw notFound('Product not found');
+  if (prod.creator_id === userId) throw badRequest("You can't buy your own product");
+  const { data: already } = await supabaseAdmin.from('product_purchases').select('product_id').eq('user_id', userId).eq('product_id', id).maybeSingle();
+  if (already) return c.json({ url: null, status: 'succeeded' as const });
+
+  const priceCents = prod.price_cents as number;
+  const feeCents = platformFeeCents(priceCents);
+  if (!stripeConfigured) {
+    // Mock: grant + record instantly.
+    await supabaseAdmin.from('product_purchases').upsert({ user_id: userId, product_id: id }, { onConflict: 'user_id,product_id' });
+    await supabaseAdmin.from('tips').insert({ tipper_id: userId, creator_id: prod.creator_id, product_id: id, amount_cents: priceCents, fee_cents: feeCents, net_cents: priceCents - feeCents, provider: 'mock', status: 'succeeded', succeeded_at: new Date().toISOString(), kind: 'product' });
+    await bumpGoal(prod.creator_id as string, priceCents - feeCents);
+    await notify({ userId: prod.creator_id as string, type: 'tip', actorId: userId }).catch(() => {});
+    return c.json({ url: null, status: 'succeeded' as const });
+  }
+  // Live: pending ledger row + checkout (settled by webhook).
+  const { data: creator } = await supabaseAdmin.from('profiles').select('stripe_account_id').eq('id', prod.creator_id).maybeSingle();
+  if (!creator?.stripe_account_id) throw badRequest('This creator can’t accept payments yet');
+  const { data: row, error } = await supabaseAdmin.from('tips').insert({ tipper_id: userId, creator_id: prod.creator_id, product_id: id, amount_cents: priceCents, fee_cents: feeCents, net_cents: priceCents - feeCents, provider: 'stripe', status: 'pending', kind: 'product' }).select('id').single();
+  if (error || !row) throw dbFail(error?.message ?? 'Failed to start purchase');
+  const { url } = await createOneOffCheckout({ ledgerId: row.id, amountCents: priceCents, feeCents, creatorAccountId: creator.stripe_account_id as string, productName: prod.title as string });
+  return c.json({ url, status: 'pending' as const });
+});
+
 const broadcastSchema = z.object({ text: z.string().trim().min(1).max(1000) });
 
 /** POST /monetize/broadcast — send one DM to all of the creator's active subscribers.
@@ -403,12 +469,15 @@ async function settleTip(tipId: string, paymentIntent: string | null): Promise<v
     .update({ status: 'succeeded', succeeded_at: new Date().toISOString(), provider_ref: paymentIntent ?? undefined })
     .eq('id', tipId)
     .eq('status', 'pending')
-    .select('creator_id, tipper_id, recipe_id, kind, net_cents')
+    .select('creator_id, tipper_id, recipe_id, kind, net_cents, product_id')
     .maybeSingle();
   if (error) throw error; // surfaced as 500 so Stripe retries
   if (!settled) return;
   if (settled.kind === 'unlock' && settled.recipe_id && settled.tipper_id) {
     await supabaseAdmin.from('recipe_unlocks').upsert({ user_id: settled.tipper_id, recipe_id: settled.recipe_id }, { onConflict: 'user_id,recipe_id', ignoreDuplicates: true });
+  }
+  if (settled.kind === 'product' && settled.product_id && settled.tipper_id) {
+    await supabaseAdmin.from('product_purchases').upsert({ user_id: settled.tipper_id, product_id: settled.product_id }, { onConflict: 'user_id,product_id', ignoreDuplicates: true });
   }
   await bumpGoal(settled.creator_id as string, (settled.net_cents as number) ?? 0);
   await notify({
