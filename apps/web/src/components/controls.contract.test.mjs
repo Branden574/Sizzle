@@ -62,3 +62,34 @@ test('semantic tokens and preference fallbacks remain complete', async () => {
   assert.match(css, /prefers-contrast: more/);
   assert.match(css, /@supports not \(\(backdrop-filter:/);
 });
+
+test('glow CTA stays decorative, restrained, and preference-aware', async () => {
+  const glow = await readFile(path.join(here, 'glow.tsx'), 'utf8');
+  const css = await readFile(cssPath, 'utf8');
+  // The halo is decorative: hidden from AT, never interactive, behind the button.
+  assert.match(glow, /sz-glow__halo" aria-hidden="true"/);
+  assert.match(css, /\.sz-glow__halo[\s\S]*?pointer-events: none/);
+  assert.match(css, /\.sz-glow \{[^}]*isolation: isolate/);
+  // Reduced motion and disabled/loading freeze the halo (JS guard + CSS backstop).
+  assert.match(glow, /prefers-reduced-motion: reduce/);
+  assert.match(glow, /reduceMotion \|\| inert \? 'static'/);
+  assert.match(css, /\.sz-glow\[data-inert\] \.sz-glow__halo \{ opacity: [.\d]+; animation: none; \}/);
+  // Sizzle ember palette, not a generic rainbow; blur is an inline filter (no
+  // dynamically-generated class names).
+  assert.match(glow, /SIZZLE_GLOW_COLORS = \[\s*'var\(--accent/);
+  assert.match(glow, /filter: `blur\(\$\{blurPx\}px\)`/);
+  // The forwarded ref reaches the real button primitive.
+  assert.match(glow, /<Button \{\.\.\.props\} ref=\{ref\}/);
+});
+
+test('compact controls keep honest 44px touch targets', async () => {
+  const css = await readFile(cssPath, 'utf8');
+  // Visible chrome may shrink below 44px only alongside the ::after hit extension.
+  assert.match(css, /\.sz-icon-button::after,\s*\n\.sz-filter-chip::after,\s*\n\.sz-follow--compact::after/);
+  assert.match(css, /inset: min\(0px, calc\(\(100% - var\(--button-touch-target\)\) \/ 2\)\)/);
+  // Buttons opt out of implicit form submission unless a caller passes type="submit".
+  const source = await readFile(controlsPath, 'utf8');
+  assert.match(source, /type=\{type \?\? 'button'\}/);
+  // Busy buttons stay focusable (aria-disabled, not hard-disabled).
+  assert.match(source, /aria-disabled=\{unavailable \|\| undefined\}/);
+});

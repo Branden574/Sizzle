@@ -11,6 +11,7 @@ import {
   SegmentedControl,
   type FollowState,
 } from './controls';
+import { GlowButton } from './glow';
 import { BookmarkIcon, ChevronLeftIcon, DotsIcon, NavPlusIcon, ShareIcon } from './icons';
 
 const filters = ['Nearby', 'Trending', 'Under 30 min'] as const;
@@ -40,6 +41,16 @@ function ThemeBoard({ theme }: { theme: 'light' | 'dark' }) {
           <Button variant="outline">Preview</Button>
           <Button variant="text">Not now</Button>
           <Button variant="danger">Delete post</Button>
+        </ButtonGroup>
+      </div>
+
+      <div className="sz-showcase-section">
+        <h3>Rare moments · glow CTA</h3>
+        <ButtonGroup className="sz-showcase-wrap" label="Glow call to action">
+          <GlowButton size="lg" haptic="success">Create your first Sizzle</GlowButton>
+          <GlowButton size="lg" mode="static" blur="soft" glowScale={1.03}>Get started</GlowButton>
+          <GlowButton size="lg" loading loadingLabel="Publishing…">Publish</GlowButton>
+          <GlowButton size="lg" disabled>Get started</GlowButton>
         </ButtonGroup>
       </div>
 

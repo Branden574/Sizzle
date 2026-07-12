@@ -65,7 +65,7 @@ export function CookSheet() {
     <div style={{ position: 'absolute', inset: 0, zIndex: 85, background: 'var(--bg)', overflowY: 'auto', animation: 'sz-slideUp .42s cubic-bezier(.16,1,.3,1)' }}>
       <div style={{ height: 170, background: ck?.bannerUrl ? `url(${ck.bannerUrl}) center/cover no-repeat` : ck?.avatarColor ?? 'linear-gradient(135deg,#3a2a22,#1b1512)', position: 'relative' }}>
         {!ck?.bannerUrl && <div style={{ position: 'absolute', inset: 0, opacity: 0.12, background: 'repeating-linear-gradient(115deg,#000 0 2px, transparent 2px 7px)' }} />}
-        <Button onClick={close} style={{ position: 'absolute', top: 54, left: 18, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.3)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+        <Button onClick={close} aria-label="Back" style={{ position: 'absolute', top: 54, left: 18, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.3)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
           <ChevronLeftIcon size={20} stroke="#fff" strokeWidth={2.2} />
         </Button>
         {ck && (
@@ -128,7 +128,7 @@ export function CookSheet() {
                   onClick={() => { if (requireAuth()) setTipFor({ creatorId: ck.id, name: ck.name }); }}
                   className="sz-press"
                   title="Send a tip"
-                  style={{ ...pressVars(0.94), padding: '12px 16px', borderRadius: 15, border: '1.5px solid var(--line-2)', background: 'var(--surface)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 700, cursor: 'pointer', transition: 'transform .2s cubic-bezier(.34,1.56,.64,1)' }}
+                  style={{ ...pressVars(0.94), padding: '9px 14px', minHeight: 38, borderRadius: 15, border: '1.5px solid var(--line-2)', background: 'var(--surface)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 700, cursor: 'pointer', transition: 'transform .2s cubic-bezier(.34,1.56,.64,1)' }}
                 >
                   💝 Support
                 </Button>
@@ -136,17 +136,20 @@ export function CookSheet() {
               <Button
                 onClick={() => { if (requireAuth()) setThreadWith(ck.id); }}
                 className="sz-press"
-                style={{ ...pressVars(0.94), padding: '12px 18px', borderRadius: 15, border: '1.5px solid var(--line-2)', background: 'var(--surface)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 700, cursor: 'pointer', transition: 'transform .2s cubic-bezier(.34,1.56,.64,1)' }}
+                style={{ ...pressVars(0.94), padding: '9px 16px', minHeight: 38, borderRadius: 15, border: '1.5px solid var(--line-2)', background: 'var(--surface)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 700, cursor: 'pointer', transition: 'transform .2s cubic-bezier(.34,1.56,.64,1)' }}
               >
                 Message
               </Button>
               <Button
                 onClick={() => {
                   if (!requireAuth()) return;
+                  if (follow.isPending) return; // one toggle in flight at a time
                   follow.mutate({ cookId: ck.id, following: ck.viewer.following, requested: ck.viewer.requested });
                 }}
+                aria-pressed={ck.viewer.following || ck.viewer.requested}
+                aria-busy={follow.isPending || undefined}
                 className="sz-press"
-                style={{ ...pressVars(0.94), padding: '12px 24px', borderRadius: 15, border: `1.5px solid ${ck.viewer.following || ck.viewer.requested ? 'var(--invert-bg)' : accent}`, background: ck.viewer.following || ck.viewer.requested ? 'var(--invert-bg)' : accent, color: ck.viewer.following || ck.viewer.requested ? 'var(--invert-fg)' : '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 700, cursor: 'pointer', transition: 'transform .2s cubic-bezier(.34,1.56,.64,1)' }}
+                style={{ ...pressVars(0.94), padding: '9px 22px', minHeight: 38, borderRadius: 15, border: `1.5px solid ${ck.viewer.following || ck.viewer.requested ? 'var(--invert-bg)' : accent}`, background: ck.viewer.following || ck.viewer.requested ? 'var(--invert-bg)' : accent, color: ck.viewer.following || ck.viewer.requested ? 'var(--invert-fg)' : '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 700, cursor: 'pointer', opacity: follow.isPending ? 0.72 : 1, transition: 'transform .2s cubic-bezier(.34,1.56,.64,1)' }}
               >
                 {ck.viewer.following ? 'Following' : ck.viewer.requested ? 'Requested' : ck.isPrivate ? 'Request' : 'Follow'}
               </Button>

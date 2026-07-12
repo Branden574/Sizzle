@@ -6,6 +6,7 @@ import {
   useState,
   type ButtonHTMLAttributes,
   type CSSProperties,
+  type KeyboardEvent as ReactKeyboardEvent,
   type MouseEvent,
   type ReactNode,
 } from 'react';
@@ -98,8 +99,14 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
     <button
       {...props}
       ref={ref}
-      type={type}
-      disabled={unavailable}
+      // Buttons never submit forms unless a caller opts in with type="submit" —
+      // the browser default ("submit") turns every button inside a <form> into
+      // an accidental Enter-key submitter.
+      type={type ?? 'button'}
+      // A busy button stays focusable (hard-disabling would dump keyboard/SR
+      // focus to <body> mid-action); the click guard makes it inert instead.
+      disabled={disabled}
+      aria-disabled={unavailable || undefined}
       aria-busy={busy || undefined}
       data-status={status}
       data-variant={variant}
@@ -114,6 +121,12 @@ export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button
             <span className="sz-button__label">{children}</span>
             {trailingIcon && <span className="sz-button__icon" aria-hidden="true">{trailingIcon}</span>}
           </span>
+          {/* Invisible ghosts of every announced state label, stacked in the same
+              grid cell: the button is sized for its widest state from mount, so
+              entering loading/success/error can never change its width. */}
+          {[loadingLabel, successLabel, errorLabel].filter(Boolean).map((ghost, i) => (
+            <span key={i} className="sz-button__ghost" aria-hidden="true">{ghost}</span>
+          ))}
           {status !== 'idle' && (
             <span className="sz-button__state" role={status === 'error' ? 'alert' : 'status'} aria-live="polite">
               {status === 'loading' && <span className="sz-spinner" aria-hidden="true" />}
@@ -313,14 +326,27 @@ export function SegmentedControl<T extends string>({
   disabled?: boolean;
 }) {
   const ids = useMemo(() => options.map((option) => `${label}-${option.value}`.toLowerCase().replace(/[^a-z0-9-]/g, '-')), [label, options]);
+  // WAI-ARIA radio-group keyboard pattern: one tab stop (the checked segment),
+  // arrows move + select. Without this the radio roles advertise behavior the
+  // control doesn't have.
+  const onKeyDown = (event: ReactKeyboardEvent<HTMLDivElement>) => {
+    const delta = event.key === 'ArrowRight' || event.key === 'ArrowDown' ? 1 : event.key === 'ArrowLeft' || event.key === 'ArrowUp' ? -1 : 0;
+    if (!delta || disabled) return;
+    event.preventDefault();
+    const current = options.findIndex((option) => option.value === value);
+    const next = options[(current + delta + options.length) % options.length];
+    onChange(next.value);
+    document.getElementById(ids[options.indexOf(next)])?.focus();
+  };
   return (
-    <div className="sz-segmented" role="radiogroup" aria-label={label}>
+    <div className="sz-segmented" role="radiogroup" aria-label={label} onKeyDown={onKeyDown}>
       {options.map((option, index) => (
         <Button
           key={option.value}
           id={ids[index]}
           role="radio"
           aria-checked={value === option.value}
+          tabIndex={value === option.value ? 0 : -1}
           disabled={disabled}
           variant="plain"
           size="sm"

@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button, GlassButton, IconButton, ReactionButton } from './controls';
+import { GlowButton } from './glow';
 import type { RecipeCard } from '@sizzle/shared';
 import { useAuth } from '../auth/useAuth';
 import { useRequireAuth } from '../auth/useRequireAuth';
@@ -53,7 +54,7 @@ export function Feed() {
           onClick={() => setFeed('foryou')}
           aria-pressed={fyActive}
           className="sz-feed-tab"
-          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '6px 2px', fontFamily: "'Hanken Grotesk'", fontSize: 17, fontWeight: 700, color: fyActive ? '#fff' : 'rgba(255,255,255,.55)' }}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '6px 2px', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 700, color: fyActive ? '#fff' : 'rgba(255,255,255,.55)' }}
         >
           For You
           <div style={{ height: 3, borderRadius: 2, marginTop: 5, background: fyActive ? accent : 'transparent' }} />
@@ -63,7 +64,7 @@ export function Feed() {
           onClick={() => setFeed('following')}
           aria-pressed={flActive}
           className="sz-feed-tab"
-          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '6px 2px', fontFamily: "'Hanken Grotesk'", fontSize: 17, fontWeight: 700, color: flActive ? '#fff' : 'rgba(255,255,255,.55)' }}
+          style={{ background: 'none', border: 'none', cursor: 'pointer', padding: '6px 2px', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 700, color: flActive ? '#fff' : 'rgba(255,255,255,.55)' }}
         >
           Following
           <div style={{ height: 3, borderRadius: 2, marginTop: 5, background: flActive ? accent : 'transparent' }} />
@@ -231,9 +232,9 @@ function FollowingEmpty({ onExplore }: { onExplore: () => void }) {
       </div>
       <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 30, color: '#fff' }}>No cooks yet</div>
       <p style={{ color: 'rgba(255,255,255,.55)', fontSize: 15, margin: '10px 0 22px', maxWidth: 240 }}>Follow a few cooks and their recipes show up right here.</p>
-      <Button variant="primary" size="lg" onClick={onExplore}>
+      <GlowButton size="lg" onClick={onExplore}>
         Explore For You
-      </Button>
+      </GlowButton>
     </div>
   );
 }
@@ -477,7 +478,7 @@ export function FeedCard({ card, onClose }: { card: RecipeCard; onClose?: () => 
         {showLikes && (
           <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 18 }}>
             <ReactionButton reaction="like" active={viewer.liked} count={hideCount ? 'Like' : formatCount(counts.likes)} onMedia onClick={gated(() => like.mutate(card.id))} />
-            <Button aria-label={`Dislike post, ${viewer.disliked ? 'selected' : 'not selected'}`} aria-pressed={viewer.disliked} className="sz-reaction sz-reaction--media" onClick={gated(() => dislike.mutate(card.id))}>
+            <Button aria-label={`Dislike post, ${viewer.disliked ? 'selected' : 'not selected'}${hideCount ? '' : `, ${formatCount(counts.dislikes)} dislikes`}`} aria-pressed={viewer.disliked} className="sz-reaction sz-reaction--media" onClick={gated(() => dislike.mutate(card.id))}>
               <div style={{ transition: 'transform .3s cubic-bezier(.34,1.56,.64,1)', transform: viewer.disliked ? 'scale(1.12)' : 'scale(1)' }}>
                 <DislikeIcon size={30} fill={viewer.disliked ? '#fff' : 'none'} stroke="#fff" strokeWidth={1.7} />
               </div>

@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { Button, FilterChip, FollowButton, IconButton } from './controls';
+import { GlowButton } from './glow';
 import { useAuth } from '../auth/useAuth';
 import { tasteDefs } from '../data';
 import { useSuggestedCooks } from '../data/queries';
@@ -144,14 +145,14 @@ function StepHero({ next, onLogin }: { next: () => void; onLogin: () => void }) 
         <p style={{ margin: '0 0 22px', color: 'var(--text-muted)', fontSize: 16, lineHeight: 1.5, maxWidth: 300 }}>
           A full-screen video feed of real recipes from real home cooks. Swipe, save, cook.
         </p>
-        <Button
+        <GlowButton
           onClick={next}
-          variant="primary"
           size="lg"
           fullWidth
+          haptic="selection"
         >
           Get started
-        </Button>
+        </GlowButton>
         <Button
           onClick={onLogin}
           variant="text"
