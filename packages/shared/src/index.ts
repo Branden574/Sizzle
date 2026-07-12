@@ -299,6 +299,12 @@ export interface EarningsSummary {
   /** The creator's own monthly subscription price (null = subscriptions off). */
   subPriceCents: number | null;
   totals: { grossCents: number; feeCents: number; netCents: number; tipCount: number };
+  /** Monthly recurring revenue from active subscriptions, net of the platform fee. */
+  mrrCents: number;
+  /** Number of active subscribers. */
+  activeSubs: number;
+  /** Net earnings attributed to each recipe (unlocks + recipe-tied support), best-first. */
+  byPost: { recipeId: string; title: string; netCents: number; count: number }[];
   tips: TipDTO[];
 }
 

@@ -141,10 +141,30 @@ function Earnings() {
             <Row label={`Payments received (${data?.totals.tipCount ?? 0})`} value={usd(data?.totals.grossCents ?? 0)} />
             <Row label={`Sizzle platform fee (${PLATFORM_FEE_PCT}%)`} value={`− ${usd(data?.totals.feeCents ?? 0)}`} faint />
             <Row label="You keep" value={usd(data?.totals.netCents ?? 0)} bold />
+            {(data?.activeSubs ?? 0) > 0 && (
+              <>
+                <div style={{ height: 1, background: 'var(--line)', margin: '10px 0' }} />
+                <Row label={`Recurring / month (${data?.activeSubs} subscriber${data?.activeSubs === 1 ? '' : 's'})`} value={usd(data?.mrrCents ?? 0)} bold />
+                <div style={{ fontSize: 11.5, color: 'var(--text-faint-2)', marginTop: 2 }}>≈ {usd((data?.mrrCents ?? 0) * 12)}/yr at today's subscriber count</div>
+              </>
+            )}
             <div style={{ fontSize: 12, color: 'var(--text-faint-2)', lineHeight: 1.55, marginTop: 10 }}>{PLATFORM_FEE_RATIONALE}</div>
           </div>
 
           <SubPriceEditor data={data} />
+
+          {(data?.byPost.length ?? 0) > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 12, color: 'var(--text-faint-2)', margin: '2px 2px 8px', textTransform: 'uppercase', letterSpacing: '.06em' }}>Top earning recipes</div>
+              {data!.byPost.slice(0, 8).map((p) => (
+                <div key={p.recipeId} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 4px', borderBottom: '1px solid var(--line)' }}>
+                  <div style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-faint-2)' }}>{p.count}×</div>
+                  <div style={{ fontSize: 14.5, fontWeight: 800, color: '#1f9d55', minWidth: 60, textAlign: 'right' }}>{usd(p.netCents)}</div>
+                </div>
+              ))}
+            </div>
+          )}
 
           {(data?.tips ?? []).slice(0, 20).map((t) => (
             <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 4px', borderBottom: '1px solid var(--line)' }}>

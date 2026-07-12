@@ -512,7 +512,7 @@ monetize.get('/status', requireAuth, async (c) => {
 /** GET /monetize/earnings — the creator's ledger: totals + recent tips, fee split explicit. */
 monetize.get('/earnings', requireAuth, async (c) => {
   const userId = c.get('userId')!;
-  const [{ data: me }, { data: rows }, { data: agg }] = await Promise.all([
+  const [{ data: me }, { data: rows }, { data: agg }, { data: byPostRows }, { data: activeSubRows }] = await Promise.all([
     supabaseAdmin.from('profiles').select('monetization_status, sub_price_cents').eq('id', userId).maybeSingle(),
     supabaseAdmin
       .from('tips')
@@ -523,12 +523,22 @@ monetize.get('/earnings', requireAuth, async (c) => {
       .limit(100),
     // Lifetime totals over ALL succeeded tips, not just the newest 100.
     supabaseAdmin.rpc('creator_earnings', { uid: userId }),
+    // Net earnings attributed to each recipe (which content actually earns).
+    supabaseAdmin.rpc('creator_revenue_by_post', { uid: userId }),
+    // Active subscriptions → MRR + subscriber count.
+    supabaseAdmin.from('subscriptions').select('price_cents').eq('creator_id', userId).eq('status', 'active'),
   ]);
   const tips = (rows ?? []) as TipRow[];
   const totalsRow = (Array.isArray(agg) ? agg[0] : agg) as { gross_cents: number; fee_cents: number; net_cents: number; tip_count: number } | null;
 
+  // MRR net of the platform fee, computed per-sub (matches how each charge is split).
+  const activeSubList = (activeSubRows ?? []) as { price_cents: number }[];
+  const activeSubs = activeSubList.length;
+  const mrrCents = activeSubList.reduce((n, s) => n + (s.price_cents - Math.floor((s.price_cents * PLATFORM_FEE_PCT) / 100)), 0);
+  const byPostRaw = (byPostRows ?? []) as { recipe_id: string; net_cents: number; earn_count: number }[];
+
   const tipperIds = [...new Set(tips.map((t) => t.tipper_id).filter((x): x is string => !!x))];
-  const recipeIds = [...new Set(tips.map((t) => t.recipe_id).filter((x): x is string => !!x))];
+  const recipeIds = [...new Set([...tips.map((t) => t.recipe_id), ...byPostRaw.map((b) => b.recipe_id)].filter((x): x is string => !!x))];
   const [{ data: tippers }, { data: recipes }] = await Promise.all([
     tipperIds.length ? supabaseAdmin.from('profiles').select('*').in('id', tipperIds) : Promise.resolve({ data: [] }),
     recipeIds.length ? supabaseAdmin.from('recipes').select('id, title').in('id', recipeIds) : Promise.resolve({ data: [] }),
@@ -562,6 +572,11 @@ monetize.get('/earnings', requireAuth, async (c) => {
       netCents: totalsRow?.net_cents ?? 0,
       tipCount: totalsRow?.tip_count ?? 0,
     },
+    mrrCents,
+    activeSubs,
+    byPost: byPostRaw
+      .map((b) => ({ recipeId: b.recipe_id, title: titleMap.get(b.recipe_id) ?? 'Untitled', netCents: Number(b.net_cents), count: Number(b.earn_count) }))
+      .sort((a, b) => b.netCents - a.netCents),
     tips: dto,
   });
 });
