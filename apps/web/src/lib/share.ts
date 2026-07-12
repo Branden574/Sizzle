@@ -9,14 +9,21 @@ export const SITE_ORIGIN =
 /** Canonical link to a recipe (opens the app / feed to that recipe). */
 export const recipeShareUrl = (id: string): string => `${SITE_ORIGIN}/r/${id}`;
 
-/** Extract a recipe id from a `/r/:id` path or full URL, or null if it isn't one. */
+const UUID = /^[0-9a-fA-F-]{36}$/;
+
+/** Extract a recipe id from a `/r/:id` path, a `?r=:id` query (the SEO page's
+ *  "open in app" CTA links here so the crawlable page can hand off to the SPA),
+ *  or a full URL — or null if it isn't one. */
 export function parseRecipeDeepLink(input: string): string | null {
-  let path = input;
   try {
-    path = new URL(input, SITE_ORIGIN).pathname;
+    const u = new URL(input, SITE_ORIGIN);
+    const m = u.pathname.match(/^\/r\/([0-9a-fA-F-]{36})\/?$/);
+    if (m) return m[1];
+    const q = u.searchParams.get('r');
+    if (q && UUID.test(q)) return q;
+    return null;
   } catch {
-    /* input was already a bare path */
+    const m = input.match(/^\/r\/([0-9a-fA-F-]{36})\/?$/);
+    return m ? m[1] : null;
   }
-  const m = path.match(/^\/r\/([0-9a-fA-F-]{36})\/?$/);
-  return m ? m[1] : null;
 }

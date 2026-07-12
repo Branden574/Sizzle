@@ -1,6 +1,6 @@
 {
   "rewrites": [
-    { "source": "/r/:id", "destination": "/index.html" }
+    { "source": "/r/:id", "destination": "https://sizzle-chi.vercel.app/r/:id" }
   ],
   "headers": [
     {

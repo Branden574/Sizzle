@@ -19,6 +19,7 @@ import { admin } from './routes/admin';
 import { support } from './routes/support';
 import { reports } from './routes/reports';
 import { monetize } from './routes/monetize';
+import { seo } from './routes/seo';
 
 export function createApp() {
   const app = new Hono<AppEnv>();
@@ -66,6 +67,7 @@ export function createApp() {
   app.route('/support', support);
   app.route('/reports', reports);
   app.route('/monetize', monetize);
+  app.route('/r', seo); // crawlable server-rendered recipe pages (SEO)
 
   return app;
 }
