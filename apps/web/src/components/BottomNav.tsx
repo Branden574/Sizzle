@@ -34,15 +34,16 @@ export function BottomNav() {
         bottom: 0,
         left: 0,
         right: 0,
-        // Grow by the bottom safe-area inset so the tab row sits above the home
-        // indicator (0 on the web phone-frame; real inset on native / mobile-web).
-        height: 'calc(88px + var(--sab, 0px))',
+        // 64px of tab-row content + room below it: 24px on web (no inset →
+        // exactly the original 88px), or the real safe-area inset on native so
+        // the row clears the home indicator WITHOUT inflating the whole bar
+        // (88+34 = 122px buried the video scrubber and read as oversized).
+        height: 'calc(64px + max(var(--sab, 0px), 24px))',
         zIndex: 50,
         display: 'flex',
         alignItems: 'flex-start',
         justifyContent: 'space-around',
         padding: '12px 16px 0',
-        paddingBottom: 'var(--sab, 0px)',
         background: navDark ? 'rgba(12,10,9,.82)' : 'var(--nav-bg)',
         borderTop: `1px solid ${navDark ? 'rgba(255,255,255,.08)' : 'var(--line)'}`,
         backdropFilter: 'blur(20px)',

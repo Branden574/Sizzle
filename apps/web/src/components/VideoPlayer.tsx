@@ -218,7 +218,7 @@ export function VideoPlayer({ src, poster, active, immersive = false }: { src: s
         onPointerMove={onBarMove}
         onPointerUp={onBarUp}
         onClick={(e) => e.stopPropagation()}
-        style={{ position: 'absolute', left: 10, right: 10, bottom: 'calc(84px + var(--sab, 0px))', height: 22, zIndex: 22, display: 'flex', alignItems: 'center', cursor: 'pointer', touchAction: 'none', ...chromeFade }}
+        style={{ position: 'absolute', left: 10, right: 10, bottom: 'calc(60px + max(var(--sab, 0px), 24px))', height: 22, zIndex: 22, display: 'flex', alignItems: 'center', cursor: 'pointer', touchAction: 'none', ...chromeFade }}
       >
         <div style={{ position: 'relative', width: '100%', height: scrubbing ? 6 : 3, borderRadius: 3, background: 'rgba(255,255,255,.3)', transition: 'height .15s' }}>
           <div style={{ position: 'absolute', left: 0, top: 0, bottom: 0, width: `${progress * 100}%`, background: '#fff', borderRadius: 3 }} />
