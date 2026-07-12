@@ -70,6 +70,8 @@ const createSchema = z.object({
   caption: z.string().max(600).optional(),
   postType: z.enum(['recipe', 'review']).default('recipe'),
   rating: z.number().int().min(1).max(5).optional(),
+  status: z.enum(['draft', 'scheduled', 'published']).default('published'),
+  scheduledAt: z.string().datetime().optional(),
 }).refine((v) => v.postType === 'review' || v.rating === undefined, {
   message: 'rating is only allowed on a review',
   path: ['rating'],
@@ -126,6 +128,12 @@ recipes.post('/', requireAuth, requireNotBanned, rateLimit({ windowMs: 60_000, m
   const bg = POSTER_GRADIENTS[Math.abs(hash(input.title)) % POSTER_GRADIENTS.length]!;
   const tags = parseHashtags(input.caption, input.title);
 
+  // Draft = save without publishing; scheduled = publish automatically at a future
+  // time (a cron flips it). A scheduled time in the past just publishes now.
+  const scheduledAt = input.scheduledAt ? new Date(input.scheduledAt) : null;
+  const willSchedule = input.status === 'scheduled' && scheduledAt != null && scheduledAt.getTime() > Date.now();
+  const status = input.status === 'draft' ? 'draft' : willSchedule ? 'scheduled' : 'published';
+
   const { data: recipe, error } = await supabaseAdmin
     .from('recipes')
     .insert({
@@ -142,7 +150,8 @@ recipes.post('/', requireAuth, requireNotBanned, rateLimit({ windowMs: 60_000, m
       tags,
       post_type: input.postType,
       rating: input.postType === 'review' ? (input.rating ?? null) : null,
-      status: 'published',
+      status,
+      scheduled_at: willSchedule ? scheduledAt!.toISOString() : null,
     })
     .select('id')
     .single();
@@ -316,6 +325,20 @@ recipes.patch('/:id/controls', requireAuth, async (c) => {
     const { error } = await supabaseAdmin.from('recipes').update(patch).eq('id', id);
     if (error) throw dbFail(error.message);
   }
+  return c.json({ ok: true });
+});
+
+/** POST /recipes/:id/publish — flip the owner's draft or scheduled post live now. */
+recipes.post('/:id/publish', requireAuth, requireNotBanned, async (c) => {
+  const userId = c.get('userId')!;
+  const id = assertUuid(c.req.param('id'), 'recipe');
+  const { data: rec } = await supabaseAdmin.from('recipes').select('cook_id, status').eq('id', id).maybeSingle();
+  if (!rec) throw notFound('Recipe not found');
+  if (rec.cook_id !== userId) throw forbidden('You can only publish your own posts');
+  if (rec.status !== 'draft' && rec.status !== 'scheduled') throw badRequest('This post is already published');
+  const { error } = await supabaseAdmin.from('recipes').update({ status: 'published', scheduled_at: null }).eq('id', id);
+  if (error) throw dbFail(error.message);
+  await supabaseAdmin.from('profiles').update({ is_cook: true }).eq('id', userId);
   return c.json({ ok: true });
 });
 

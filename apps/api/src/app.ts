@@ -20,6 +20,7 @@ import { support } from './routes/support';
 import { reports } from './routes/reports';
 import { monetize } from './routes/monetize';
 import { seo } from './routes/seo';
+import { internal } from './routes/internal';
 
 export function createApp() {
   const app = new Hono<AppEnv>();
@@ -68,6 +69,7 @@ export function createApp() {
   app.route('/reports', reports);
   app.route('/monetize', monetize);
   app.route('/r', seo); // crawlable server-rendered recipe pages (SEO)
+  app.route('/internal', internal); // cron targets
 
   return app;
 }

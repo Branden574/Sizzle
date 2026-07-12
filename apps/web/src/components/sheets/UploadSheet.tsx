@@ -36,6 +36,7 @@ export function UploadSheet() {
   const [processing, setProcessing] = useState(false);
 
   const [postType, setPostType] = useState<PostType>('recipe');
+  const [scheduleAt, setScheduleAt] = useState('');
   const [rating, setRating] = useState(0);
   const [title, setTitle] = useState('');
   const [cuisine, setCuisine] = useState('');
@@ -103,9 +104,11 @@ export function UploadSheet() {
   // permanently blank, unplayable card bound to an empty Cloudflare asset.
   const canPost = title.trim().length > 0 && !busy && (mediaKind === 'video' ? !!videoFile : photos.length > 0);
 
-  const submit = async () => {
+  const submit = async (mode: 'publish' | 'draft' = 'publish') => {
     if (!requireAuth()) return;
     if (!canPost) return;
+    const status = mode === 'draft' ? 'draft' : scheduleAt ? 'scheduled' : 'published';
+    const scheduledAt = mode !== 'draft' && scheduleAt ? new Date(scheduleAt).toISOString() : undefined;
 
     let video: UploadRecipeInput['video'];
     let videoAssetId: string | undefined;
@@ -177,6 +180,8 @@ export function UploadSheet() {
         steps: isReview ? [] : steps.split('\n').map((s) => s.trim()).filter(Boolean),
         postType,
         rating: isReview && rating > 0 ? rating : undefined,
+        status,
+        scheduledAt,
         video,
         videoAssetId,
         images,
@@ -399,14 +404,34 @@ export function UploadSheet() {
             </div>
           </div>
         )}
-        <button
-          onClick={submit}
-          disabled={!canPost}
-          style={{ width: '100%', height: 56, border: 'none', borderRadius: 17, background: `linear-gradient(135deg,${accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 700, cursor: canPost ? 'pointer' : 'default', opacity: canPost ? 1 : 0.5, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9 }}
-        >
-          <div style={{ width: 14, height: 14, borderRadius: '50%', background: '#fff' }} />
-          {prepping ? 'Uploading…' : upload.isPending ? 'Posting…' : isReview ? 'Post review' : 'Post recipe'}
-        </button>
+        {/* Schedule: pick a future time to auto-publish, or leave blank to post now. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 10 }}>
+          <span style={{ fontSize: 13, fontWeight: 700, color: 'rgba(255,255,255,.6)', flex: 'none' }}>Schedule</span>
+          <input
+            type="datetime-local"
+            value={scheduleAt}
+            onChange={(e) => setScheduleAt(e.target.value)}
+            style={{ flex: 1, height: 40, border: '1.5px solid rgba(255,255,255,.16)', borderRadius: 12, background: 'rgba(255,255,255,.06)', color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 13.5, outline: 'none', padding: '0 10px', colorScheme: 'dark' }}
+          />
+          {scheduleAt && <button onClick={() => setScheduleAt('')} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,.5)', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>Clear</button>}
+        </div>
+        <div style={{ display: 'flex', gap: 10 }}>
+          <button
+            onClick={() => submit('draft')}
+            disabled={!canPost}
+            style={{ flex: 'none', padding: '0 20px', height: 56, borderRadius: 17, border: '1.5px solid rgba(255,255,255,.2)', background: 'transparent', color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 700, cursor: canPost ? 'pointer' : 'default', opacity: canPost ? 1 : 0.5 }}
+          >
+            Save draft
+          </button>
+          <button
+            onClick={() => submit('publish')}
+            disabled={!canPost}
+            style={{ flex: 1, height: 56, border: 'none', borderRadius: 17, background: `linear-gradient(135deg,${accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 700, cursor: canPost ? 'pointer' : 'default', opacity: canPost ? 1 : 0.5, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9 }}
+          >
+            <div style={{ width: 14, height: 14, borderRadius: '50%', background: '#fff' }} />
+            {prepping ? 'Uploading…' : upload.isPending ? 'Posting…' : scheduleAt ? 'Schedule' : isReview ? 'Post review' : 'Post recipe'}
+          </button>
+        </div>
       </div>
     </div>
   );

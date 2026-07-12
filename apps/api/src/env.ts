@@ -45,6 +45,7 @@ const schema = z.object({
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
   // Where Stripe Checkout returns the tipper after paying/cancelling.
   APP_ORIGIN: z.string().default('https://getsizzle.app'),
+  CRON_SECRET: z.string().optional(),
 });
 
 const parsed = schema.safeParse(process.env);

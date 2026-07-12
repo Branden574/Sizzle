@@ -245,6 +245,25 @@ me.get('/export', async (c) => {
   });
 });
 
+/** GET /me/drafts — the creator's own draft + scheduled posts (never public). */
+me.get('/drafts', async (c) => {
+  const userId = c.get('userId')!;
+  const { data: rows } = await supabaseAdmin
+    .from('recipes')
+    .select('*')
+    .eq('cook_id', userId)
+    .in('status', ['draft', 'scheduled'])
+    .order('created_at', { ascending: false })
+    .limit(100);
+  const cards = await buildCards(supabaseAdmin, userId, (rows ?? []) as RecipeRow[]);
+  // Surface the schedule time so the client can show "Goes live …".
+  const scheduledAt = new Map((rows ?? []).map((r) => [r.id as string, (r.scheduled_at as string | null) ?? null]));
+  const draftStatus = new Map((rows ?? []).map((r) => [r.id as string, r.status as string]));
+  return c.json({
+    drafts: cards.map((card) => ({ ...card, draftStatus: draftStatus.get(card.id) ?? 'draft', scheduledAt: scheduledAt.get(card.id) ?? null })),
+  });
+});
+
 /** GET /me/saved — the viewer's saved recipes (newest first). */
 me.get('/saved', async (c) => {
   const userId = c.get('userId')!;

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { RecipeCard } from '@sizzle/shared';
 import { useAuth } from '../auth/useAuth';
 import { useRequireAuth } from '../auth/useRequireAuth';
-import { useCook, useLikedFeed, useMe, useNotifications, useSavedFeed } from '../data/queries';
+import { useCook, useDeleteRecipe, useDrafts, useLikedFeed, useMe, useNotifications, usePublishDraft, useSavedFeed } from '../data/queries';
 import { useSizzle } from '../store';
 import { formatCount } from '../lib/format';
 import { VerifiedBadge } from './VerifiedBadge';
@@ -107,6 +107,7 @@ export function Profile() {
         >
           📊 View insights
         </button>
+        <DraftsStrip />
         {me?.role === 'admin' && (
           <button
             onClick={() => setShowAdmin(true)}
@@ -177,3 +178,38 @@ function Stat({ value, label, onClick }: { value: string; label: string; onClick
   if (!onClick) return <div>{inner}</div>;
   return <button onClick={onClick} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}>{inner}</button>;
 }
+
+/** The creator's own drafts + scheduled posts, with Publish / Edit / Delete. */
+function DraftsStrip() {
+  const { data } = useDrafts(true);
+  const publish = usePublishDraft();
+  const del = useDeleteRecipe();
+  const setEditPostFor = useSizzle((s) => s.setEditPostFor);
+  const drafts = data?.drafts ?? [];
+  if (!drafts.length) return null;
+  return (
+    <div style={{ marginTop: 14 }}>
+      <div style={{ fontSize: 12, color: 'var(--text-faint-2)', margin: '0 2px 8px', textTransform: 'uppercase', letterSpacing: '.06em' }}>Drafts &amp; scheduled ({drafts.length})</div>
+      <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {drafts.map((d) => {
+          const when = d.scheduledAt ? new Date(d.scheduledAt) : null;
+          return (
+            <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 14, padding: '10px 12px' }}>
+              <div style={{ flex: 1, minWidth: 0 }}>
+                <div style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.title}</div>
+                <div style={{ fontSize: 12, color: 'var(--text-faint)', marginTop: 2 }}>
+                  {d.draftStatus === 'scheduled' && when ? `⏰ Goes live ${when.toLocaleDateString()} ${when.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : '📝 Draft'}
+                </div>
+              </div>
+              <button onClick={() => setEditPostFor(d.id)} style={draftBtn}>Edit</button>
+              <button onClick={() => publish.mutate(d.id)} disabled={publish.isPending} style={{ ...draftBtn, color: 'var(--accent)', borderColor: 'var(--accent)' }}>Publish</button>
+              <button onClick={() => { if (window.confirm(`Delete draft "${d.title}"?`)) del.mutate(d.id); }} aria-label="Delete draft" style={{ ...draftBtn, color: 'var(--danger-fg)' }}>✕</button>
+            </div>
+          );
+        })}
+      </div>
+    </div>
+  );
+}
+
+const draftBtn: React.CSSProperties = { flex: 'none', height: 32, padding: '0 12px', border: '1.5px solid var(--line-2)', borderRadius: 10, background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 12.5, fontWeight: 800, cursor: 'pointer' };

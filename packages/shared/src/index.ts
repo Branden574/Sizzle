@@ -550,6 +550,9 @@ export interface Paginated<T> {
 export type FeedResponse = Paginated<RecipeCard>;
 
 /** Body for creating a recipe after its video upload is registered. */
+/** A draft or scheduled post in the creator's Drafts list. */
+export type DraftCard = RecipeCard & { draftStatus: 'draft' | 'scheduled'; scheduledAt: string | null };
+
 export interface CreateRecipeInput {
   /** Video post: the uploaded video asset. Omit for a photo post. */
   videoAssetId?: string;
@@ -568,6 +571,10 @@ export interface CreateRecipeInput {
   postType?: PostType;
   /** 1–5 star rating; only valid when postType is 'review'. */
   rating?: number;
+  /** Publish now (default), save as a draft, or schedule for later. */
+  status?: 'draft' | 'scheduled' | 'published';
+  /** ISO time to auto-publish when status is 'scheduled'. */
+  scheduledAt?: string;
 }
 
 /** Response from requesting a direct (client-side) video upload. */
