@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { PLATFORM_FEE_PCT, PLATFORM_FEE_RATIONALE, type EarningKind, type EarningsSummary } from '@sizzle/shared';
-import { useAnalytics, useEarnings, useMonetizationStatus, useSetSubPrice, useStartOnboarding } from '../../data/queries';
+import { useAnalytics, useEarnings, useMonetizationStatus, useSetGoal, useSetSubPrice, useSetWelcomeDm, useStartOnboarding } from '../../data/queries';
 import { useSizzle } from '../../store';
 import { formatCount } from '../../lib/format';
 import { theme } from '../../theme';
@@ -152,6 +152,22 @@ function Earnings() {
           </div>
 
           <SubPriceEditor data={data} />
+          <GoalEditor data={data} />
+          <WelcomeDmEditor data={data} />
+
+          {(data?.topSupporters?.length ?? 0) > 0 && (
+            <div style={{ marginBottom: 12 }}>
+              <div style={{ fontSize: 12, color: 'var(--text-faint-2)', margin: '2px 2px 8px', textTransform: 'uppercase', letterSpacing: '.06em' }}>Top supporters</div>
+              {data!.topSupporters.slice(0, 8).map((s, i) => (
+                <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 4px', borderBottom: '1px solid var(--line)' }}>
+                  <div style={{ width: 22, textAlign: 'center', fontSize: 14, fontWeight: 800, color: i === 0 ? '#e0a92e' : 'var(--text-faint)' }}>{i === 0 ? '🏆' : i + 1}</div>
+                  <div style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.user?.name ?? 'Someone'}</div>
+                  <div style={{ fontSize: 12, color: 'var(--text-faint-2)' }}>{s.count}×</div>
+                  <div style={{ fontSize: 14.5, fontWeight: 800, color: '#1f9d55', minWidth: 60, textAlign: 'right' }}>{usd(s.netCents)}</div>
+                </div>
+              ))}
+            </div>
+          )}
 
           {(data?.byPost.length ?? 0) > 0 && (
             <div style={{ marginBottom: 12 }}>
@@ -235,6 +251,87 @@ function SubPriceEditor({ data }: { data: EarningsSummary | undefined }) {
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
             <button onClick={() => setSubPrice.mutate(null, { onSuccess: () => setEditing(false) })} style={{ background: 'none', border: 'none', color: 'var(--danger-fg)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', padding: 0 }}>Turn off subscriptions</button>
             <button onClick={() => setEditing(false)} style={{ background: 'none', border: 'none', color: 'var(--text-faint)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', padding: 0 }}>Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Funding goal — a live progress bar plus an inline editor (label + target). */
+function GoalEditor({ data }: { data: EarningsSummary | undefined }) {
+  const setGoal = useSetGoal();
+  const goal = data?.goal ?? null;
+  const [editing, setEditing] = useState(false);
+  const [label, setLabel] = useState('');
+  const [target, setTarget] = useState('');
+  const open = () => { setLabel(goal?.label ?? ''); setTarget(goal ? (goal.targetCents / 100).toFixed(0) : ''); setEditing(true); };
+  const save = () => {
+    const t = Math.round(parseFloat(target) * 100);
+    setGoal.mutate({ label: label.trim() || null, targetCents: Number.isFinite(t) && t >= 500 ? t : null }, { onSuccess: () => setEditing(false) });
+  };
+  const pct = goal && goal.targetCents > 0 ? Math.min(100, Math.round((goal.raisedCents / goal.targetCents) * 100)) : 0;
+
+  return (
+    <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 16, padding: 16, marginBottom: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+        <div style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--text)' }}>{goal ? goal.label : 'Funding goal'}</div>
+        {!editing && (
+          <button onClick={open} style={{ flex: 'none', height: 34, padding: '0 14px', border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>{goal ? 'Edit' : 'Set a goal'}</button>
+        )}
+      </div>
+      {goal && !editing && (
+        <>
+          <div style={{ height: 10, background: 'var(--track)', borderRadius: 6, overflow: 'hidden', margin: '10px 0 6px' }}>
+            <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg,${theme.accent},#e23a18)`, borderRadius: 6, transition: 'width .4s' }} />
+          </div>
+          <div style={{ fontSize: 12.5, color: 'var(--text-faint)' }}>{usd(goal.raisedCents)} of {usd(goal.targetCents)} · {pct}%</div>
+        </>
+      )}
+      {editing && (
+        <div style={{ marginTop: 12 }}>
+          <input value={label} onChange={(e) => setLabel(e.target.value.slice(0, 80))} placeholder="e.g. New camera" style={{ width: '100%', height: 44, border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 700, outline: 'none', padding: '0 12px', marginBottom: 8, boxSizing: 'border-box' }} />
+          <div style={{ display: 'flex', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', flex: 1, background: 'var(--bg)', border: '1.5px solid var(--line-2)', borderRadius: 12, padding: '0 12px' }}>
+              <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-faint)' }}>$</span>
+              <input value={target} onChange={(e) => setTarget(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))} inputMode="numeric" placeholder="500" style={{ flex: 1, height: 44, border: 'none', background: 'transparent', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 800, outline: 'none', padding: '0 6px' }} />
+            </div>
+            <button onClick={save} disabled={setGoal.isPending} style={{ flex: 'none', height: 44, padding: '0 16px', border: 'none', borderRadius: 12, background: `linear-gradient(135deg,${theme.accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 14, fontWeight: 800, cursor: 'pointer', opacity: setGoal.isPending ? 0.7 : 1 }}>{setGoal.isPending ? '…' : 'Save'}</button>
+          </div>
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
+            {goal && <button onClick={() => setGoal.mutate({ label: null, targetCents: null }, { onSuccess: () => setEditing(false) })} style={{ background: 'none', border: 'none', color: 'var(--danger-fg)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', padding: 0 }}>Remove goal</button>}
+            <button onClick={() => setEditing(false)} style={{ background: 'none', border: 'none', color: 'var(--text-faint)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', padding: 0, marginLeft: 'auto' }}>Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Auto welcome/thank-you DM to new subscribers. */
+function WelcomeDmEditor({ data }: { data: EarningsSummary | undefined }) {
+  const setWelcome = useSetWelcomeDm();
+  const current = data?.welcomeDm ?? null;
+  const [editing, setEditing] = useState(false);
+  const [text, setText] = useState('');
+  const open = () => { setText(current ?? ''); setEditing(true); };
+  const save = () => setWelcome.mutate(text.trim() || null, { onSuccess: () => setEditing(false) });
+
+  return (
+    <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 16, padding: 16, marginBottom: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--text)' }}>Welcome DM</div>
+          <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 2 }}>{current ? 'Auto-sent to every new subscriber.' : 'Off — auto-thank new subscribers with a DM.'}</div>
+        </div>
+        {!editing && <button onClick={open} style={{ flex: 'none', height: 34, padding: '0 14px', border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>{current ? 'Edit' : 'Set'}</button>}
+      </div>
+      {editing && (
+        <div style={{ marginTop: 12 }}>
+          <textarea value={text} onChange={(e) => setText(e.target.value.slice(0, 500))} rows={3} placeholder="Thanks so much for subscribing! 🧡" style={{ width: '100%', border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 15, outline: 'none', padding: 12, resize: 'vertical', lineHeight: 1.5, boxSizing: 'border-box' }} />
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
+            <button onClick={save} disabled={setWelcome.isPending} style={{ height: 40, padding: '0 18px', border: 'none', borderRadius: 12, background: `linear-gradient(135deg,${theme.accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 14, fontWeight: 800, cursor: 'pointer', opacity: setWelcome.isPending ? 0.7 : 1 }}>{setWelcome.isPending ? '…' : 'Save'}</button>
+            <button onClick={() => setEditing(false)} style={{ background: 'none', border: 'none', color: 'var(--text-faint)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
           </div>
         </div>
       )}

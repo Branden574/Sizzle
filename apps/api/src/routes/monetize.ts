@@ -44,6 +44,26 @@ function mapSubStatus(s?: string): 'active' | 'canceled' | 'past_due' {
 /** Guard webhook-supplied ids before they reach FK columns (poison-event defence). */
 const isUuid = (s?: string): s is string => !!s && /^[0-9a-f-]{36}$/i.test(s);
 
+/** Add net earnings toward the creator's funding goal (no-op if they have no goal). */
+async function bumpGoal(creatorId: string, netCents: number): Promise<void> {
+  if (netCents > 0) await supabaseAdmin.rpc('bump_goal', { p_creator: creatorId, p_net: netCents }).then(() => {}, () => {});
+}
+
+/** Auto-send the creator's welcome/thank-you DM to a brand-new subscriber (if set). */
+async function sendWelcomeDm(creatorId: string, subscriberId: string): Promise<void> {
+  if (creatorId === subscriberId) return;
+  const { data: creator } = await supabaseAdmin.from('profiles').select('welcome_dm').eq('id', creatorId).maybeSingle();
+  const text = (creator?.welcome_dm as string | null)?.trim();
+  if (!text) return;
+  const [a, b] = creatorId < subscriberId ? [creatorId, subscriberId] : [subscriberId, creatorId];
+  await supabaseAdmin.from('conversations').upsert({ user_a: a, user_b: b }, { onConflict: 'user_a,user_b', ignoreDuplicates: true });
+  const { data: conv } = await supabaseAdmin.from('conversations').select('id').eq('user_a', a).eq('user_b', b).maybeSingle();
+  if (!conv) return;
+  await supabaseAdmin.from('messages').insert({ conversation_id: conv.id, sender_id: creatorId, text });
+  await supabaseAdmin.from('conversations').update({ last_message_at: new Date().toISOString() }).eq('id', conv.id).then(() => {}, () => {});
+  await notify({ userId: subscriberId, type: 'message', actorId: creatorId }).catch(() => {});
+}
+
 interface TipRow {
   id: string;
   kind?: string;
@@ -232,6 +252,36 @@ monetize.post('/sub-price', requireAuth, async (c) => {
   return c.json({ ok: true });
 });
 
+const goalSchema = z.object({
+  label: z.string().trim().max(80).nullable(),
+  targetCents: z.number().int().min(500).max(100_000_00).nullable(),
+});
+
+/** POST /monetize/goal — set (or clear) the creator's funding goal. Clearing resets progress. */
+monetize.post('/goal', requireAuth, async (c) => {
+  const userId = c.get('userId')!;
+  const parsed = goalSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) throw badRequest('Invalid goal');
+  const on = parsed.data.targetCents != null && !!parsed.data.label;
+  await supabaseAdmin.from('profiles').update({
+    goal_cents: on ? parsed.data.targetCents : null,
+    goal_label: on ? parsed.data.label : null,
+    ...(on ? {} : { goal_raised_cents: 0 }),
+  }).eq('id', userId);
+  return c.json({ ok: true });
+});
+
+const welcomeSchema = z.object({ text: z.string().trim().max(500).nullable() });
+
+/** POST /monetize/welcome — set (or clear) the auto welcome DM sent to new subscribers. */
+monetize.post('/welcome', requireAuth, async (c) => {
+  const userId = c.get('userId')!;
+  const parsed = welcomeSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) throw badRequest('Invalid message');
+  await supabaseAdmin.from('profiles').update({ welcome_dm: parsed.data.text || null }).eq('id', userId);
+  return c.json({ ok: true });
+});
+
 const subscribeSchema = z.object({ creatorId: z.string().uuid() });
 
 /** POST /monetize/subscribe — start a monthly subscription to a creator. */
@@ -261,6 +311,8 @@ monetize.post('/subscribe', requireAuth, requireNotBanned, rateLimit({ windowMs:
       { onConflict: 'subscriber_id,creator_id' },
     );
     await supabaseAdmin.from('tips').insert({ tipper_id: userId, creator_id: creatorId, amount_cents: priceCents, fee_cents: feeCents, net_cents: priceCents - feeCents, provider: 'mock', status: 'succeeded', succeeded_at: new Date().toISOString(), kind: 'subscription' });
+    await bumpGoal(creatorId, priceCents - feeCents);
+    await sendWelcomeDm(creatorId, userId);
     await notify({ userId: creatorId, type: 'tip', actorId: userId }).catch(() => {});
     return c.json({ url: null, status: 'active' as const });
   }
@@ -299,13 +351,14 @@ async function settleTip(tipId: string, paymentIntent: string | null): Promise<v
     .update({ status: 'succeeded', succeeded_at: new Date().toISOString(), provider_ref: paymentIntent ?? undefined })
     .eq('id', tipId)
     .eq('status', 'pending')
-    .select('creator_id, tipper_id, recipe_id, kind')
+    .select('creator_id, tipper_id, recipe_id, kind, net_cents')
     .maybeSingle();
   if (error) throw error; // surfaced as 500 so Stripe retries
   if (!settled) return;
   if (settled.kind === 'unlock' && settled.recipe_id && settled.tipper_id) {
     await supabaseAdmin.from('recipe_unlocks').upsert({ user_id: settled.tipper_id, recipe_id: settled.recipe_id }, { onConflict: 'user_id,recipe_id', ignoreDuplicates: true });
   }
+  await bumpGoal(settled.creator_id as string, (settled.net_cents as number) ?? 0);
   await notify({
     userId: settled.creator_id as string,
     type: 'tip',
@@ -405,6 +458,10 @@ monetize.post('/webhook/stripe', async (c) => {
             },
             { onConflict: 'subscriber_id,creator_id' },
           );
+          // Welcome the fan the first time a subscription is created + active.
+          if (event.type === 'customer.subscription.created' && status === 'active') {
+            await sendWelcomeDm(meta!.creator_id, meta!.subscriber_id);
+          }
         }
         break;
       }
@@ -437,7 +494,10 @@ monetize.post('/webhook/stripe', async (c) => {
           });
           // Duplicate (unique provider_ref) → already recorded; not an error.
           if (insErr && !/duplicate key|unique/i.test(insErr.message)) throw insErr;
-          if (!insErr) await notify({ userId: meta!.creator_id, type: 'tip', actorId: meta!.subscriber_id }).catch(() => {});
+          if (!insErr) {
+            await bumpGoal(meta!.creator_id, amount - feeCents);
+            await notify({ userId: meta!.creator_id, type: 'tip', actorId: meta!.subscriber_id }).catch(() => {});
+          }
           if (obj.subscription) {
             await supabaseAdmin.from('subscriptions').update({ status: 'active', ...(obj.period_end ? { current_period_end: new Date(obj.period_end * 1000).toISOString() } : {}) }).eq('stripe_subscription_id', obj.subscription);
           }
@@ -512,8 +572,8 @@ monetize.get('/status', requireAuth, async (c) => {
 /** GET /monetize/earnings — the creator's ledger: totals + recent tips, fee split explicit. */
 monetize.get('/earnings', requireAuth, async (c) => {
   const userId = c.get('userId')!;
-  const [{ data: me }, { data: rows }, { data: agg }, { data: byPostRows }, { data: activeSubRows }] = await Promise.all([
-    supabaseAdmin.from('profiles').select('monetization_status, sub_price_cents').eq('id', userId).maybeSingle(),
+  const [{ data: me }, { data: rows }, { data: agg }, { data: byPostRows }, { data: activeSubRows }, { data: topRows }] = await Promise.all([
+    supabaseAdmin.from('profiles').select('monetization_status, sub_price_cents, goal_cents, goal_label, goal_raised_cents, welcome_dm').eq('id', userId).maybeSingle(),
     supabaseAdmin
       .from('tips')
       .select('*')
@@ -527,6 +587,8 @@ monetize.get('/earnings', requireAuth, async (c) => {
     supabaseAdmin.rpc('creator_revenue_by_post', { uid: userId }),
     // Active subscriptions → MRR + subscriber count.
     supabaseAdmin.from('subscriptions').select('price_cents').eq('creator_id', userId).eq('status', 'active'),
+    // Biggest supporters by net contribution.
+    supabaseAdmin.rpc('creator_top_supporters', { uid: userId }),
   ]);
   const tips = (rows ?? []) as TipRow[];
   const totalsRow = (Array.isArray(agg) ? agg[0] : agg) as { gross_cents: number; fee_cents: number; net_cents: number; tip_count: number } | null;
@@ -536,8 +598,9 @@ monetize.get('/earnings', requireAuth, async (c) => {
   const activeSubs = activeSubList.length;
   const mrrCents = activeSubList.reduce((n, s) => n + (s.price_cents - Math.floor((s.price_cents * PLATFORM_FEE_PCT) / 100)), 0);
   const byPostRaw = (byPostRows ?? []) as { recipe_id: string; net_cents: number; earn_count: number }[];
+  const topRaw = (topRows ?? []) as { supporter_id: string; net_cents: number; cnt: number }[];
 
-  const tipperIds = [...new Set(tips.map((t) => t.tipper_id).filter((x): x is string => !!x))];
+  const tipperIds = [...new Set([...tips.map((t) => t.tipper_id), ...topRaw.map((t) => t.supporter_id)].filter((x): x is string => !!x))];
   const recipeIds = [...new Set([...tips.map((t) => t.recipe_id), ...byPostRaw.map((b) => b.recipe_id)].filter((x): x is string => !!x))];
   const [{ data: tippers }, { data: recipes }] = await Promise.all([
     tipperIds.length ? supabaseAdmin.from('profiles').select('*').in('id', tipperIds) : Promise.resolve({ data: [] }),
@@ -577,6 +640,14 @@ monetize.get('/earnings', requireAuth, async (c) => {
     byPost: byPostRaw
       .map((b) => ({ recipeId: b.recipe_id, title: titleMap.get(b.recipe_id) ?? 'Untitled', netCents: Number(b.net_cents), count: Number(b.earn_count) }))
       .sort((a, b) => b.netCents - a.netCents),
+    goal: me?.goal_cents != null
+      ? { label: (me.goal_label as string) ?? '', targetCents: me.goal_cents as number, raisedCents: (me.goal_raised_cents as number) ?? 0 }
+      : null,
+    welcomeDm: (me?.welcome_dm as string | null) ?? null,
+    topSupporters: topRaw.map((t) => {
+      const p = tipperMap.get(t.supporter_id);
+      return { user: p ? cookSummary(p) : null, netCents: Number(t.net_cents), count: Number(t.cnt) };
+    }),
     tips: dto,
   });
 });

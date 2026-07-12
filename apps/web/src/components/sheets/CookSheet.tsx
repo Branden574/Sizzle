@@ -149,6 +149,18 @@ export function CookSheet() {
             )
           )}
 
+          {ck.goal && ck.goal.targetCents > 0 && (
+            <div style={{ marginTop: 16, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 16, padding: '13px 16px' }}>
+              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
+                <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--text)' }}>🎯 {ck.goal.label}</span>
+                <span style={{ fontSize: 12.5, color: 'var(--text-faint)' }}>${(ck.goal.raisedCents / 100).toFixed(0)} / ${(ck.goal.targetCents / 100).toFixed(0)}</span>
+              </div>
+              <div style={{ height: 9, background: 'var(--track)', borderRadius: 5, overflow: 'hidden' }}>
+                <div style={{ width: `${Math.min(100, Math.round((ck.goal.raisedCents / ck.goal.targetCents) * 100))}%`, height: '100%', background: `linear-gradient(90deg,${accent},#e23a18)`, borderRadius: 5, transition: 'width .4s' }} />
+              </div>
+            </div>
+          )}
+
           <div style={{ display: 'flex', marginTop: 18, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 18, overflow: 'hidden' }}>
             <CookStat value={formatCount(ck.counts.followers)} label="Followers" border onClick={() => setFollowList({ id: ck.id, mode: 'followers', name: ck.name })} />
             <CookStat value={formatCount(ck.counts.following)} label="Following" border onClick={() => setFollowList({ id: ck.id, mode: 'following', name: ck.name })} />

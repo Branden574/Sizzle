@@ -137,6 +137,12 @@ cooks.get('/:id', optionalAuth, async (c) => {
     viewer: { following, blocked: blockedByMe, muted, subscribed },
     acceptsTips: monetized,
     subPriceCents: monetized ? ((p as { sub_price_cents?: number | null }).sub_price_cents ?? null) : null,
+    goal: (() => {
+      const g = p as { goal_cents?: number | null; goal_label?: string | null; goal_raised_cents?: number | null };
+      return monetized && g.goal_cents != null
+        ? { label: g.goal_label ?? '', targetCents: g.goal_cents, raisedCents: g.goal_raised_cents ?? 0 }
+        : null;
+    })(),
     recipes: cards,
   };
   return c.json(res);

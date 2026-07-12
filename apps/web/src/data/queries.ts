@@ -142,6 +142,24 @@ export function useSetSubPrice() {
   });
 }
 
+/** Set (or clear) the creator's funding goal. */
+export function useSetGoal() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { label: string | null; targetCents: number | null }) => apiSend('POST', '/monetize/goal', v),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['monetize'] }); void qc.invalidateQueries({ queryKey: ['cook'] }); },
+  });
+}
+
+/** Set (or clear) the auto welcome DM sent to new subscribers. */
+export function useSetWelcomeDm() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (text: string | null) => apiSend('POST', '/monetize/welcome', { text }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['monetize'] }),
+  });
+}
+
 /** Set (or clear) a premium price on the creator's own recipe. */
 export function useSetRecipePrice() {
   const qc = useQueryClient();

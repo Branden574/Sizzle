@@ -241,6 +241,8 @@ export interface CookProfile {
   acceptsTips: boolean;
   /** Monthly subscription price in cents, or null if they don't offer subs. */
   subPriceCents: number | null;
+  /** Public funding goal + progress (null if none), shown as a progress bar. */
+  goal: { label: string; targetCents: number; raisedCents: number } | null;
   recipes: RecipeCard[];
 }
 
@@ -310,6 +312,12 @@ export interface EarningsSummary {
   activeSubs: number;
   /** Net earnings attributed to each recipe (unlocks + recipe-tied support), best-first. */
   byPost: { recipeId: string; title: string; netCents: number; count: number }[];
+  /** The creator's funding goal + live progress, or null if none is set. */
+  goal: { label: string; targetCents: number; raisedCents: number } | null;
+  /** Auto welcome DM sent to new subscribers (null = off). */
+  welcomeDm: string | null;
+  /** Biggest supporters by net contribution, best-first. */
+  topSupporters: { user: CookSummary | null; netCents: number; count: number }[];
   tips: TipDTO[];
 }
 
