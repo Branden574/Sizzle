@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useSwipeDismiss } from '../../lib/useSwipeDismiss';
+import { showMonetization } from '../../lib/native';
 import { PLATFORM_FEE_PCT, PLATFORM_FEE_RATIONALE, type CreatorAnalytics, type EarningKind, type EarningsSummary } from '@sizzle/shared';
 import { useAnalytics, useBroadcast, useCreateProduct, useCreateTier, useDeleteProduct, useDeleteTier, useEarnings, useMonetizationStatus, useMyProducts, useMyTiers, usePayout, useSetGoal, useSetSubPrice, useSetWelcomeDm, useStartOnboarding } from '../../data/queries';
 import { useSizzle } from '../../store';
@@ -67,7 +68,10 @@ export function AnalyticsSheet() {
               <TrendSparkline data={data} />
               <Funnels data={data} />
 
-              <Earnings />
+              {/* The whole earnings + payouts + price/tier/product center is hidden
+                  on native (Apple 3.1.1 / Play Billing) — creators manage money on
+                  the web. Insights below stay visible. */}
+              {showMonetization && <Earnings />}
 
               <div style={{ fontSize: 12, color: 'var(--text-faint-2)', margin: '0 2px 8px', textTransform: 'uppercase', letterSpacing: '.06em' }}>Per post</div>
               {posts.length === 0 ? (

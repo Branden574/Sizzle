@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { PLATFORM_FEE_PCT, type RecipeDetail } from '@sizzle/shared';
 import { useEditRecipe, useMe, useMonetizationStatus, useRecipe, useSetRecipePoster, useSetRecipePrice, useSetRecipeVisibility } from '../../data/queries';
 import { uploadRecipeImage } from '../../lib/storage';
+import { showMonetization } from '../../lib/native';
 import { useSizzle } from '../../store';
 import { theme } from '../../theme';
 
@@ -167,9 +168,10 @@ export function EditPostSheet() {
                   <textarea value={steps} onChange={(e) => setSteps(e.target.value)} rows={5} style={{ ...field, resize: 'vertical', lineHeight: 1.5 }} />
                 </div>
 
-                {/* Premium: charge for the full recipe. Video, ingredients & steps
-                    stay locked until a fan unlocks or subscribes. */}
-                {canMonetize ? (
+                {/* Premium / subscribers-only gating. Hidden entirely on native —
+                    creators configure monetization on the web (Apple 3.1.1 / Play
+                    Billing). Existing premium settings are preserved on save. */}
+                {showMonetization && (canMonetize ? (
                   <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 14, padding: 14 }}>
                     <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}>
                       <div style={{ minWidth: 0, paddingRight: 12 }}>
@@ -203,7 +205,7 @@ export function EditPostSheet() {
                   <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 14, padding: 14, fontSize: 12.5, color: 'var(--text-faint)', lineHeight: 1.45 }}>
                     💰 Want to charge for this recipe? Set up payouts in <b style={{ color: 'var(--text)' }}>your insights</b> first — then you can make it premium.
                   </div>
-                )}
+                ))}
               </>
             )}
             {(edit.isError || setRecipePrice.isError) && <div style={{ color: 'var(--danger-fg)', fontSize: 13.5, fontWeight: 600 }}>Couldn’t save — please try again.</div>}

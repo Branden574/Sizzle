@@ -2,6 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { useRequireAuth } from '../../auth/useRequireAuth';
 import { useAppealRecipe, useDeleteRecipe, useMe, useRecipe, useToggleDownload, useToggleSave, useUnlockRecipe } from '../../data/queries';
 import { getOffline } from '../../lib/offline';
+import { showMonetization } from '../../lib/native';
 import { formatCount } from '../../lib/format';
 import { scaleIngredient } from '../../lib/ingredients';
 import { useShopping } from '../../lib/shopping';
@@ -180,14 +181,18 @@ export function RecipeSheet() {
                       <div style={{ fontSize: 30 }}>🔒</div>
                       <div style={{ fontSize: 16.5, fontWeight: 800, color: 'var(--text)', marginTop: 6 }}>Subscribers only</div>
                       <div style={{ fontSize: 13.5, color: 'var(--text-faint)', margin: '4px 0 14px', lineHeight: 1.5 }}>
-                        Subscribe to {r.cook.name} to watch this — plus every subscriber-only post, video, ingredients & steps.
+                        {showMonetization
+                          ? `Subscribe to ${r.cook.name} to watch this — plus every subscriber-only post, video, ingredients & steps.`
+                          : `This recipe is only available to ${r.cook.name}'s subscribers.`}
                       </div>
-                      <button
-                        onClick={() => { if (requireAuth()) setOpenCook(r.cook.id); }}
-                        style={{ width: '100%', height: 50, border: 'none', borderRadius: 14, background: `linear-gradient(135deg,${accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15.5, fontWeight: 800, cursor: 'pointer' }}
-                      >
-                        Subscribe to {r.cook.name}
-                      </button>
+                      {showMonetization && (
+                        <button
+                          onClick={() => { if (requireAuth()) setOpenCook(r.cook.id); }}
+                          style={{ width: '100%', height: 50, border: 'none', borderRadius: 14, background: `linear-gradient(135deg,${accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15.5, fontWeight: 800, cursor: 'pointer' }}
+                        >
+                          Subscribe to {r.cook.name}
+                        </button>
+                      )}
                     </div>
                   )}
 
@@ -196,16 +201,20 @@ export function RecipeSheet() {
                       <div style={{ fontSize: 30 }}>🔒</div>
                       <div style={{ fontSize: 16.5, fontWeight: 800, color: 'var(--text)', marginTop: 6 }}>Premium recipe</div>
                       <div style={{ fontSize: 13.5, color: 'var(--text-faint)', margin: '4px 0 14px', lineHeight: 1.5 }}>
-                        Unlock {r.cook.name}'s full recipe — video, ingredients & steps. {r.cook.name} keeps 90%.
+                        {showMonetization
+                          ? `Unlock ${r.cook.name}'s full recipe — video, ingredients & steps. ${r.cook.name} keeps 90%.`
+                          : `This is one of ${r.cook.name}'s premium recipes.`}
                       </div>
-                      <button
-                        onClick={() => { if (requireAuth()) unlock.mutate(r.id); }}
-                        disabled={unlock.isPending}
-                        style={{ width: '100%', height: 50, border: 'none', borderRadius: 14, background: `linear-gradient(135deg,${accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15.5, fontWeight: 800, cursor: 'pointer' }}
-                      >
-                        {unlock.isPending ? 'Starting…' : `Unlock · $${(r.price / 100).toFixed(2)}`}
-                      </button>
-                      {r.cook.subPriceCents != null && (
+                      {showMonetization && (
+                        <button
+                          onClick={() => { if (requireAuth()) unlock.mutate(r.id); }}
+                          disabled={unlock.isPending}
+                          style={{ width: '100%', height: 50, border: 'none', borderRadius: 14, background: `linear-gradient(135deg,${accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15.5, fontWeight: 800, cursor: 'pointer' }}
+                        >
+                          {unlock.isPending ? 'Starting…' : `Unlock · $${(r.price / 100).toFixed(2)}`}
+                        </button>
+                      )}
+                      {showMonetization && r.cook.subPriceCents != null && (
                         <button
                           onClick={() => setOpenCook(r.cook.id)}
                           style={{ marginTop: 10, background: 'none', border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 700, color: 'var(--text-faint)', textDecoration: 'underline', padding: 0 }}
