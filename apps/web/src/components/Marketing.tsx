@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Button } from './controls';
 import { gsap } from 'gsap';
 import { ScrollTrigger } from 'gsap/ScrollTrigger';
 import { useGSAP } from '@gsap/react';
@@ -289,17 +290,17 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
       {/* NAV */}
       <nav className="nav">
         <div className="wrap row">
-          <button className="brand linkbtn" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} style={{ display: 'inline-flex', alignItems: 'center', gap: 9 }}>
+          <Button className="brand linkbtn" onClick={() => window.scrollTo({ top: 0, behavior: 'smooth' })} style={{ display: 'inline-flex', alignItems: 'center', gap: 9 }}>
             <img src="/brand/sizzle-mark-flat.svg" alt="" width={28} height={35} style={{ display: 'block' }} />
             Sizzle
-          </button>
+          </Button>
           <div className="navlinks">
             <a href="#how">How it works</a>
             <a href="#features">Features</a>
             <a href="#creators">Creators</a>
             <a href="/privacy">Privacy</a>
-            <button className="linkbtn login" onClick={onLogin}>Log in</button>
-            <button className="btn btn-accent cta" onClick={app}>Get the app</button>
+            <Button className="linkbtn login" onClick={onLogin}>Log in</Button>
+            <Button className="btn btn-accent cta" onClick={app}>Get the app</Button>
           </div>
         </div>
       </nav>
@@ -361,10 +362,10 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
               <span className="eyebrow">Hungry yet?</span>
               <h2 className="serif">Come get <span className="hot ital">hungry.</span></h2>
               <div className="ctas">
-                <button className="store" onClick={app}><span className="ico"></span><span><span className="l1">Download on the</span><br /><span className="l2">App Store</span></span></button>
-                <button className="store" onClick={app}><span className="ico">▶</span><span><span className="l1">Get it on</span><br /><span className="l2">Google Play</span></span></button>
+                <Button className="store" onClick={app}><span className="ico"></span><span><span className="l1">Download on the</span><br /><span className="l2">App Store</span></span></Button>
+                <Button className="store" onClick={app}><span className="ico">▶</span><span><span className="l1">Get it on</span><br /><span className="l2">Google Play</span></span></Button>
               </div>
-              <button className="weblink linkbtn" onClick={app}>Or open the web app <span className="arr">→</span></button>
+              <Button className="weblink linkbtn" onClick={app}>Or open the web app <span className="arr">→</span></Button>
             </div>
           </div>
 
@@ -449,9 +450,9 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
             <h3 className="serif">Cooking for 2? Done.</h3>
             <p>Type how many people you're feeding and every quantity recalculates instantly. No mental math, no half-eggs.</p>
             <div className="stepper try">
-              <button onClick={() => setServings((n) => Math.max(1, n - 1))}>−</button>
+              <Button onClick={() => setServings((n) => Math.max(1, n - 1))}>−</Button>
               <div className="cnt"><b>{servings}</b><span>servings</span></div>
-              <button className="plus" onClick={() => setServings((n) => Math.min(20, n + 1))}>+</button>
+              <Button className="plus" onClick={() => setServings((n) => Math.min(20, n + 1))}>+</Button>
             </div>
           </div>
           <div className="try-panel">
@@ -539,10 +540,10 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
         <div className="menu-list">
           {FAQS.map((f, i) => (
             <div key={i} className={'faq' + (openFaq === i ? ' open' : '')}>
-              <button onClick={() => setOpenFaq(openFaq === i ? null : i)} aria-expanded={openFaq === i}>
+              <Button onClick={() => setOpenFaq(openFaq === i ? null : i)} aria-expanded={openFaq === i}>
                 <span className="q">{f.q}</span>
                 <span className="pm">+</span>
-              </button>
+              </Button>
               <div className="a"><p>{f.a}</p></div>
             </div>
           ))}
@@ -560,10 +561,10 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
             <p>Feed to recipe to dinner — here's exactly how Sizzle works, start to plate.</p>
             <div className="demo-steps">
               {DEMO_STEPS.map((s, i) => (
-                <button key={i} className={'demo-step' + (demoStep === i ? ' on' : '')} onClick={() => setDemoStep(i)} aria-pressed={demoStep === i}>
+                <Button key={i} className={'demo-step' + (demoStep === i ? ' on' : '')} onClick={() => setDemoStep(i)} aria-pressed={demoStep === i}>
                   <span className="ds-n">{String(i + 1).padStart(2, '0')}</span>
                   <span className="ds-txt"><b>{s.lab}</b><span>{s.t}</span></span>
-                </button>
+                </Button>
               ))}
             </div>
           </div>
@@ -606,7 +607,7 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
                   <div className="scr dark">
                     <div className="sbody">
                       <div className="sc-lab">Serving scaler</div>
-                      <div className="stepper"><button>−</button><div className="cnt"><b>6</b><span>servings</span></div><button className="plus">+</button></div>
+                      <div className="stepper"><Button>−</Button><div className="cnt"><b>6</b><span>servings</span></div><Button className="plus">+</Button></div>
                       <div className="scr-row"><span>Globe eggplants</span><b>3</b></div>
                       <div className="scr-row"><span>White miso</span><b>4½ tbsp</b></div>
                       <div className="scr-row"><span>Mirin</span><b>1½ tbsp</b></div>
@@ -630,7 +631,7 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
             </div>
             <div className="demo-dots" role="tablist" aria-label="App demo steps">
               {DEMO_STEPS.map((_, i) => (
-                <button key={i} className={demoStep === i ? 'on' : ''} onClick={() => setDemoStep(i)} aria-label={'Step ' + (i + 1)} />
+                <Button key={i} className={demoStep === i ? 'on' : ''} onClick={() => setDemoStep(i)} aria-label={'Step ' + (i + 1)} />
               ))}
             </div>
           </div>
@@ -643,10 +644,10 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
         <h2 className="serif">Recipes you can actually make.</h2>
         <p>Watch it. Scale it. Cook it. Free on iOS, Android, and the web.</p>
         <div className="ctas">
-          <button className="store on-cream" onClick={app}><span className="ico"></span><span><span className="l1">Download on the</span><br /><span className="l2">App Store</span></span></button>
-          <button className="store on-cream" onClick={app}><span className="ico">▶</span><span><span className="l1">Get it on</span><br /><span className="l2">Google Play</span></span></button>
+          <Button className="store on-cream" onClick={app}><span className="ico"></span><span><span className="l1">Download on the</span><br /><span className="l2">App Store</span></span></Button>
+          <Button className="store on-cream" onClick={app}><span className="ico">▶</span><span><span className="l1">Get it on</span><br /><span className="l2">Google Play</span></span></Button>
         </div>
-        <button className="weblink linkbtn" onClick={app}>Or open the web app <span className="arr">→</span></button>
+        <Button className="weblink linkbtn" onClick={app}>Or open the web app <span className="arr">→</span></Button>
       </div></div></section>
 
       {/* FOOTER — Nutrition Facts label */}
@@ -669,8 +670,8 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
           <div className="brand serif">Sizzle</div>
           <p className="tag">Watch it. Then actually cook it. The home for real recipes from real home cooks — at getsizzle.app.</p>
           <div className="nutri-cols">
-            <div><h6>Product</h6><a href="#how">How it works</a><a href="#features">Features</a><a href="#creators">For creators</a><button className="fl" onClick={app}>Get the app</button></div>
-            <div><h6>The menu</h6><a href="#menu">FAQ</a><a href="/contact">Contact</a><button className="fl" onClick={onLogin}>Log in</button></div>
+            <div><h6>Product</h6><a href="#how">How it works</a><a href="#features">Features</a><a href="#creators">For creators</a><Button className="fl" onClick={app}>Get the app</Button></div>
+            <div><h6>The menu</h6><a href="#menu">FAQ</a><a href="/contact">Contact</a><Button className="fl" onClick={onLogin}>Log in</Button></div>
             <div><h6>Legal</h6><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/cookie-policy">Cookies</a></div>
           </div>
         </div>

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Button, FilterChip, IconButton } from './controls';
 import type { RecipeCard } from '@sizzle/shared';
 import { discoverHeights } from '../data';
 import { useForYouFeed, useSearch, useTrendingTags } from '../data/queries';
@@ -48,7 +49,7 @@ export function Discover() {
             style={{ flex: 1, border: 'none', outline: 'none', background: 'none', fontFamily: "'Hanken Grotesk'", fontSize: 16, color: 'var(--text)' }}
           />
           {q && (
-            <button onClick={() => setQ('')} style={{ border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-faint-2)', fontSize: 18, lineHeight: 1, padding: 0 }}>×</button>
+            <IconButton label="Clear search" variant="text" size="sm" onClick={() => setQ('')}>×</IconButton>
           )}
         </div>
         {!query && (trending?.length ?? 0) > 0 && (
@@ -56,9 +57,7 @@ export function Discover() {
             <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-faint-2)', textTransform: 'uppercase', letterSpacing: '.4px', margin: '18px 0 10px' }}>Trending</div>
             <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap' }}>
               {trending!.map((t) => (
-                <button key={t.tag} onClick={() => setOpenTag(t.tag)} style={{ flex: 'none', padding: '9px 14px', borderRadius: 13, background: 'var(--surface)', border: '1px solid var(--line)', fontSize: 14, fontWeight: 700, color: 'var(--accent,#ff5a36)', cursor: 'pointer' }}>
-                  #{t.tag} <span style={{ color: 'var(--text-faint-2)', fontWeight: 600 }}>{formatCount(t.count)}</span>
-                </button>
+                <FilterChip key={t.tag} onClick={() => setOpenTag(t.tag)} count={t.count}>#{t.tag}</FilterChip>
               ))}
             </div>
           </>
@@ -71,7 +70,7 @@ export function Discover() {
           <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '.4px', marginBottom: 10 }}>People</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {cooks.map((ck) => (
-              <button key={ck.id} onClick={() => setOpenCook(ck.id)} style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 18, padding: 12, cursor: 'pointer', textAlign: 'left' }}>
+              <Button key={ck.id} onClick={() => setOpenCook(ck.id)} style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 18, padding: 12, cursor: 'pointer', textAlign: 'left' }}>
                 <div style={{ width: 46, height: 46, flex: 'none', borderRadius: 14, background: ck.avatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Instrument Serif',serif", fontSize: 18, color: '#fff', overflow: 'hidden' }}>
                   {ck.avatarUrl ? <img src={ck.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : ck.init}
                 </div>
@@ -79,7 +78,7 @@ export function Discover() {
                   <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{ck.name}</div>
                   <div style={{ fontSize: 13, color: 'var(--text-faint)' }}>@{ck.handle}</div>
                 </div>
-              </button>
+              </Button>
             ))}
           </div>
         </div>
@@ -95,7 +94,7 @@ export function Discover() {
 
       <div style={{ padding: '6px 18px 110px', columns: 2, columnGap: 14 }}>
         {tiles.map((r: RecipeCard, i: number) => (
-          <button
+          <Button
             key={r.id}
             onClick={() => setOpenRecipe(r.id)}
             style={{ breakInside: 'avoid', width: '100%', marginBottom: 14, border: 'none', padding: 0, cursor: 'pointer', borderRadius: 20, overflow: 'hidden', position: 'relative', height: discoverHeights[i % discoverHeights.length], background: r.bg, display: 'block', textAlign: 'left' }}
@@ -111,7 +110,7 @@ export function Discover() {
                 </div>
               )}
             </div>
-          </button>
+          </Button>
         ))}
       </div>
       {/* Infinite-scroll sentinel for the default grid. */}

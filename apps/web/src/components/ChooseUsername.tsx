@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Button } from './controls';
 import { useAuth } from '../auth/useAuth';
 import { apiSend, ApiError } from '../lib/api';
 import { theme } from '../theme';
@@ -61,13 +62,13 @@ export function ChooseUsername() {
 
       <div style={{ flex: 1 }} />
 
-      <button
+      <Button
         onClick={() => void submit()}
         disabled={!valid || busy}
         style={{ height: 56, border: 'none', borderRadius: 16, background: valid && !busy ? accent : 'var(--track)', color: valid && !busy ? '#fff' : 'var(--text-faint-2)', fontFamily: "'Hanken Grotesk'", fontSize: 17, fontWeight: 700, cursor: valid && !busy ? 'pointer' : 'default' }}
       >
         {busy ? 'Saving…' : 'Continue'}
-      </button>
+      </Button>
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Button, IconButton } from './controls';
 import type { RecipeCard } from '@sizzle/shared';
 import { useAuth } from '../auth/useAuth';
 import { useRequireAuth } from '../auth/useRequireAuth';
@@ -55,9 +56,9 @@ export function Profile() {
         <div style={{ padding: '60px 30px', textAlign: 'center' }}>
           <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 30, color: 'var(--text)' }}>You're browsing as a guest</div>
           <p style={{ color: 'var(--text-faint)', fontSize: 15, margin: '10px 0 24px' }}>Create an account to keep your saves, downloads, and the cooks you follow.</p>
-          <button onClick={() => requireAuth()} style={{ height: 52, padding: '0 28px', border: 'none', borderRadius: 16, background: 'var(--invert-bg)', color: 'var(--invert-fg)', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>
+          <Button variant="primary" size="lg" onClick={() => requireAuth()}>
             Sign in
-          </button>
+          </Button>
         </div>
       </div>
     );
@@ -87,65 +88,74 @@ export function Profile() {
           <Stat value={formatCount(me?.counts.saved ?? 0)} label="Saved" />
         </div>
         <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
-          <button onClick={() => setShowEditProfile(true)} style={{ flex: 1, height: 48, border: 'none', borderRadius: 14, background: 'var(--invert-bg)', color: 'var(--invert-fg)', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>Edit profile</button>
-          <button
+          <Button variant="primary" onClick={() => setShowEditProfile(true)} style={{ flex: 1 }}>Edit profile</Button>
+          <IconButton
             onClick={() => setShowNotifications(true)}
-            title="Notifications"
-            style={{ position: 'relative', width: 48, height: 48, border: '1.5px solid var(--line-2)', borderRadius: 14, background: 'var(--surface)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            label="Notifications"
+            variant="outline"
+            shape="square"
+            style={{ position: 'relative' }}
           >
             <BellIcon size={20} stroke="var(--text-muted)" />
             {unread > 0 && <div style={{ position: 'absolute', top: 9, right: 9, width: 9, height: 9, borderRadius: '50%', background: 'var(--accent,#ff5a36)', border: '2px solid var(--surface)' }} />}
-          </button>
-          <button
+          </IconButton>
+          <IconButton
             onClick={() => {
               if (!me) return;
               const url = cookShareUrl(me.handle);
               if (navigator.share) void navigator.share({ title: `${me.name} on Sizzle`, url }).catch(() => {});
               else void navigator.clipboard?.writeText(url).catch(() => {});
             }}
-            title="Share profile"
-            style={{ width: 48, height: 48, border: '1.5px solid var(--line-2)', borderRadius: 14, background: 'var(--surface)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            label="Share profile"
+            variant="outline"
+            shape="square"
           >
             <ShareIcon size={19} stroke="var(--text-muted)" strokeWidth={2} />
-          </button>
-          <button
+          </IconButton>
+          <IconButton
             onClick={() => setShowAppSettings(true)}
-            title="Settings"
-            style={{ width: 48, height: 48, border: '1.5px solid var(--line-2)', borderRadius: 14, background: 'var(--surface)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+            label="Settings"
+            variant="outline"
+            shape="square"
           >
             <GearIcon size={20} stroke="var(--text-muted)" />
-          </button>
+          </IconButton>
         </div>
-        <button
+        <Button
           onClick={() => setShowAnalytics(true)}
-          style={{ width: '100%', height: 46, marginTop: 10, border: '1.5px solid var(--line-2)', borderRadius: 14, background: 'var(--surface)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 14.5, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+          variant="outline"
+          fullWidth
+          style={{ marginTop: 10 }}
         >
           📊 View insights
-        </button>
+        </Button>
         {me && <GoLiveButton meId={me.id} />}
         {!me?.verifiedTier && <VerifyButton />}
         <DraftsStrip />
         {me?.role === 'admin' && (
-          <button
+          <Button
             onClick={() => setShowAdmin(true)}
-            style={{ width: '100%', height: 46, marginTop: 10, border: 'none', borderRadius: 14, background: 'linear-gradient(135deg,#1b1512,#3a2a22)', color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 14.5, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}
+            variant="secondary"
+            fullWidth
+            style={{ marginTop: 10 }}
           >
             <VerifiedBadge tier="blue" size={16} /> Admin dashboard
-          </button>
+          </Button>
         )}
         {/* Posts / Liked / Saved tabs — TikTok-style thumbnail grids. */}
         <div style={{ display: 'flex', margin: '24px 0 14px', borderBottom: '1px solid var(--line-2)' }}>
           {([['posts', GridIcon, 'Posts'], ['liked', HeartIcon, 'Liked'], ['saved', BookmarkIcon, 'Saved']] as const).map(([key, Icon, label]) => {
             const on = tab === key;
             return (
-              <button
+              <Button
                 key={key}
                 onClick={() => setTab(key)}
+                aria-pressed={on}
                 style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 7, padding: '10px 0', marginBottom: -1, background: 'none', border: 'none', borderBottom: on ? '2px solid var(--text)' : '2px solid transparent', cursor: 'pointer', color: on ? 'var(--text)' : 'var(--text-faint-2)' }}
               >
                 <Icon size={19} stroke="currentColor" />
                 <span style={{ fontSize: 13.5, fontWeight: 700 }}>{label}</span>
-              </button>
+              </Button>
             );
           })}
         </div>
@@ -167,7 +177,7 @@ function RecipeGrid({ items, empty, onOpenAt }: { items: RecipeCard[]; empty: st
   return (
     <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }}>
       {items.map((r, i) => (
-        <button
+        <Button
           key={r.id}
           onClick={() => onOpenAt(i)}
           style={{ border: 'none', padding: 0, cursor: 'pointer', borderRadius: 14, overflow: 'hidden', position: 'relative', aspectRatio: '3 / 4', background: r.bg }}
@@ -179,7 +189,7 @@ function RecipeGrid({ items, empty, onOpenAt }: { items: RecipeCard[]; empty: st
           <div style={{ position: 'absolute', left: 8, bottom: 8, display: 'flex', alignItems: 'center', gap: 4, color: '#fff', fontSize: 11.5, fontWeight: 700 }}>
             <HeartIcon size={12} fill="#fff" stroke="#fff" strokeWidth={1.4} /> {formatCount(r.counts.likes)}
           </div>
-        </button>
+        </Button>
       ))}
     </div>
   );
@@ -193,7 +203,7 @@ function Stat({ value, label, onClick }: { value: string; label: string; onClick
     </>
   );
   if (!onClick) return <div>{inner}</div>;
-  return <button onClick={onClick} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}>{inner}</button>;
+  return <Button onClick={onClick} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}>{inner}</Button>;
 }
 
 /** The creator's own drafts + scheduled posts, with Publish / Edit / Delete. */
@@ -218,9 +228,9 @@ function DraftsStrip() {
                   {d.draftStatus === 'scheduled' && when ? `⏰ Goes live ${when.toLocaleDateString()} ${when.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : '📝 Draft'}
                 </div>
               </div>
-              <button onClick={() => setEditPostFor(d.id)} style={draftBtn}>Edit</button>
-              <button onClick={() => publish.mutate(d.id)} disabled={publish.isPending} style={{ ...draftBtn, color: 'var(--accent)', borderColor: 'var(--accent)' }}>Publish</button>
-              <button onClick={() => { if (window.confirm(`Delete draft "${d.title}"?`)) del.mutate(d.id); }} aria-label="Delete draft" style={{ ...draftBtn, color: 'var(--danger-fg)' }}>✕</button>
+              <Button variant="outline" size="xs" onClick={() => setEditPostFor(d.id)}>Edit</Button>
+              <Button variant="primary" size="xs" onClick={() => publish.mutate(d.id)} loading={publish.isPending}>Publish</Button>
+              <IconButton variant="danger" size="xs" label={`Delete draft ${d.title}`} onClick={() => { if (window.confirm(`Delete draft "${d.title}"?`)) del.mutate(d.id); }}>✕</IconButton>
             </div>
           );
         })}
@@ -229,21 +239,20 @@ function DraftsStrip() {
   );
 }
 
-const draftBtn: React.CSSProperties = { flex: 'none', height: 32, padding: '0 12px', border: '1.5px solid var(--line-2)', borderRadius: 10, background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 12.5, fontWeight: 800, cursor: 'pointer' };
-
 /** Self-serve verification — auto-grants at follower thresholds, else shows how far off. */
 function VerifyButton() {
   const verify = useRequestVerification();
   const [msg, setMsg] = useState<string | null>(null);
   return (
     <div style={{ marginTop: 10 }}>
-      <button
+      <Button
         onClick={() => verify.mutate(undefined, { onSuccess: (r) => setMsg(r.granted ? `You're verified! ✓` : (r.message ?? null)) })}
-        disabled={verify.isPending}
-        style={{ width: '100%', height: 46, border: '1.5px solid var(--line-2)', borderRadius: 14, background: 'var(--surface)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 14.5, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: verify.isPending ? 0.6 : 1 }}
+        variant="outline"
+        fullWidth
+        loading={verify.isPending}
       >
         ✓ Get verified
-      </button>
+      </Button>
       {msg && <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 6, textAlign: 'center' }}>{msg}</div>}
     </div>
   );
@@ -256,9 +265,9 @@ function GoLiveButton({ meId }: { meId: string }) {
   const end = useEndLive();
   if (live) {
     return (
-      <button onClick={() => end.mutate()} disabled={end.isPending} style={{ width: '100%', height: 46, marginTop: 10, border: 'none', borderRadius: 14, background: 'linear-gradient(135deg,#e0143c,#a30f2c)', color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 14.5, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+      <Button variant="danger" fullWidth onClick={() => end.mutate()} loading={end.isPending} style={{ marginTop: 10 }}>
         ⏹ End live · {formatCount(live.viewers)} watching
-      </button>
+      </Button>
     );
   }
   const go = () => {
@@ -266,8 +275,8 @@ function GoLiveButton({ meId }: { meId: string }) {
     if (title && title.trim()) start.mutate(title.trim());
   };
   return (
-    <button onClick={go} disabled={start.isPending} style={{ width: '100%', height: 46, marginTop: 10, border: '1.5px solid var(--line-2)', borderRadius: 14, background: 'var(--surface)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 14.5, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
-      🔴 {start.isPending ? 'Starting…' : 'Go live'}
-    </button>
+    <Button variant="outline" fullWidth onClick={go} loading={start.isPending} loadingLabel="Starting…" style={{ marginTop: 10 }}>
+      🔴 Go live
+    </Button>
   );
 }

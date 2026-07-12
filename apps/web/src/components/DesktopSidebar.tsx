@@ -1,4 +1,5 @@
 import { useSizzle } from '../store';
+import { Button } from './controls';
 import { theme } from '../theme';
 import type { Tab } from '../types';
 import { useUnreadMessages } from '../data/queries';
@@ -53,83 +54,41 @@ export function DesktopSidebar() {
       {items.map((it) => {
         const active = tab === it.key;
         return (
-          <button
+          <Button
             key={it.key}
             onClick={() => setTab(it.key)}
-            style={{
-              display: 'flex',
-              alignItems: 'center',
-              gap: 14,
-              width: '100%',
-              padding: '12px 14px',
-              borderRadius: 14,
-              border: 'none',
-              cursor: 'pointer',
-              background: active ? 'rgba(255,255,255,.08)' : 'transparent',
-              color: active ? '#fff' : 'rgba(255,255,255,.62)',
-              fontFamily: "'Hanken Grotesk'",
-              fontSize: 16,
-              fontWeight: 700,
-              transition: 'background .15s ease, color .15s ease',
-            }}
+            variant={active ? 'glass' : 'plain'}
+            aria-current={active ? 'page' : undefined}
+            className="sz-desktop-nav__item"
           >
             <span style={{ display: 'flex', width: 24, height: 24 }}>{it.icon(active)}</span>
             {it.label}
-          </button>
+          </Button>
         );
       })}
 
       {/* Messages — opens the DM inbox sheet (not a tab); shows an unread dot. */}
-      <button
+      <Button
         onClick={() => setMessagesOpen(true)}
-        style={{
-          display: 'flex',
-          alignItems: 'center',
-          gap: 14,
-          width: '100%',
-          padding: '12px 14px',
-          borderRadius: 14,
-          border: 'none',
-          cursor: 'pointer',
-          background: 'transparent',
-          color: 'rgba(255,255,255,.62)',
-          fontFamily: "'Hanken Grotesk'",
-          fontSize: 16,
-          fontWeight: 700,
-          transition: 'background .15s ease, color .15s ease',
-        }}
+        className="sz-desktop-nav__item"
       >
         <span style={{ position: 'relative', display: 'flex', width: 24, height: 24 }}>
           <ShareIcon size={23} stroke="currentColor" strokeWidth={1.9} />
           {dmUnread > 0 && <span style={{ position: 'absolute', top: -3, right: -3, width: 9, height: 9, borderRadius: '50%', background: accent, border: '2px solid #17120f' }} />}
         </span>
         Messages
-      </button>
+      </Button>
 
-      <button
+      <Button
         onClick={() => setShowUpload(true)}
-        style={{
-          marginTop: 14,
-          display: 'flex',
-          alignItems: 'center',
-          justifyContent: 'center',
-          gap: 10,
-          width: '100%',
-          padding: '13px 14px',
-          borderRadius: 14,
-          border: 'none',
-          cursor: 'pointer',
-          background: `linear-gradient(135deg, ${accent}, #e23a18)`,
-          color: '#fff',
-          fontFamily: "'Hanken Grotesk'",
-          fontSize: 16,
-          fontWeight: 700,
-          boxShadow: '0 8px 20px -6px rgba(226,58,24,.6)',
-        }}
+        variant="primary"
+        size="lg"
+        fullWidth
+        leadingIcon={<NavPlusIcon size={22} stroke="#fff" strokeWidth={2.6} />}
+        style={{ marginTop: 14 }}
       >
-        <NavPlusIcon size={22} stroke="#fff" strokeWidth={2.6} />
         Post a recipe
-      </button>
+      </Button>
 
       <div style={{ flex: 1 }} />
       <div style={{ padding: '0 12px', fontSize: 12, color: 'rgba(255,255,255,.3)' }}>Sizzle · web</div>

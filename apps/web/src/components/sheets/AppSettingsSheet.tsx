@@ -1,4 +1,5 @@
 import { useState, useEffect, type ReactNode } from 'react';
+import { Button, DismissBackdrop } from '../controls';
 import { useSwipeDismiss } from '../../lib/useSwipeDismiss';
 import { useAuth } from '../../auth/useAuth';
 import { useSizzle, type FeedKindPref, type ThemePref, type UnitPref } from '../../store';
@@ -19,7 +20,7 @@ function SectionLabel({ children }: { children: ReactNode }) {
 
 function ToggleRow({ title, sub, icon, on, onToggle }: { title: string; sub: string; icon: ReactNode; on: boolean; onToggle: () => void }) {
   return (
-    <button
+    <Button
       onClick={onToggle}
       style={{ display: 'flex', alignItems: 'center', gap: 14, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 18, padding: 16, cursor: 'pointer', textAlign: 'left', marginBottom: 10, width: '100%' }}
     >
@@ -31,19 +32,19 @@ function ToggleRow({ title, sub, icon, on, onToggle }: { title: string; sub: str
       <div style={{ width: 50, height: 30, flex: 'none', borderRadius: 16, background: on ? 'var(--accent)' : 'var(--track)', position: 'relative', transition: 'background .25s' }}>
         <div style={{ position: 'absolute', top: 3, width: 24, height: 24, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.25)', transition: 'left .25s cubic-bezier(.34,1.56,.64,1)', left: on ? 23 : 3 }} />
       </div>
-    </button>
+    </Button>
   );
 }
 
 function RowButton({ label, hint, danger, onClick }: { label: string; hint?: string; danger?: boolean; onClick: () => void }) {
   return (
-    <button
+    <Button
       onClick={onClick}
       style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 16, border: '1px solid var(--line)', borderRadius: 18, background: 'var(--surface)', cursor: 'pointer', marginBottom: 10 }}
     >
       <span style={{ fontSize: 15.5, fontWeight: 700, color: danger ? '#d8521e' : 'var(--text)' }}>{label}</span>
       {hint && <span style={{ fontSize: 13, color: 'var(--text-faint)' }}>{hint}</span>}
-    </button>
+    </Button>
   );
 }
 
@@ -53,7 +54,7 @@ function Segmented<T extends string>({ value, options, onChange }: { value: T; o
       {options.map((o) => {
         const on = value === o.value;
         return (
-          <button
+          <Button
             key={o.value}
             onClick={() => onChange(o.value)}
             style={{
@@ -72,7 +73,7 @@ function Segmented<T extends string>({ value, options, onChange }: { value: T; o
             }}
           >
             {o.label}
-          </button>
+          </Button>
         );
       })}
     </div>
@@ -230,7 +231,7 @@ export function AppSettingsSheet() {
 
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 93 }}>
-      <div onClick={close} style={{ position: 'absolute', inset: 0, background: 'var(--scrim)', animation: 'sz-fadeIn .3s' }} />
+      <DismissBackdrop onDismiss={close} />
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, top: 70, background: 'var(--bg)', borderRadius: '26px 26px 0 0', overflow: 'hidden', animation: 'sz-slideUp .4s cubic-bezier(.16,1,.3,1)', display: 'flex', flexDirection: 'column', ...swipe.sheetStyle }}>
         <div {...swipe.handlers} style={{ textAlign: 'center', padding: '16px 0 6px', position: 'relative', flex: 'none' , ...swipe.handlers.style}}>
           <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', width: 42, height: 5, borderRadius: 3, background: 'var(--track)' }} />
@@ -241,7 +242,7 @@ export function AppSettingsSheet() {
         {legal ? (
           <div style={{ flex: 1, overflowY: 'auto', padding: '8px 22px 30px' }}>
             <p style={{ fontSize: 15, lineHeight: 1.6, color: 'var(--text-2)' }}>{LEGAL_COPY[legal].body}</p>
-            <button onClick={() => setLegal(null)} style={{ width: '100%', height: 50, marginTop: 18, border: '1px solid var(--line-2)', borderRadius: 16, background: 'var(--surface)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>Back to settings</button>
+            <Button onClick={() => setLegal(null)} style={{ width: '100%', height: 50, marginTop: 18, border: '1px solid var(--line-2)', borderRadius: 16, background: 'var(--surface)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>Back to settings</Button>
           </div>
         ) : showBlocked ? (
           <BlockedAccounts onBack={() => setShowBlocked(false)} />
@@ -372,8 +373,8 @@ export function AppSettingsSheet() {
                 style={{ width: '100%', height: 46, border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--surface-2)', padding: '0 14px', fontFamily: "'Hanken Grotesk'", fontSize: 15, color: 'var(--text)', outline: 'none' }}
               />
               <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                <button onClick={() => { setPwOpen(false); setPw(''); setPwMsg(null); }} style={{ flex: 1, height: 44, border: '1px solid var(--line-2)', borderRadius: 12, background: 'transparent', color: 'var(--text-faint)', fontWeight: 700, fontFamily: "'Hanken Grotesk'", fontSize: 14, cursor: 'pointer' }}>Cancel</button>
-                <button onClick={() => void changePassword()} disabled={pw.length < 10 || pwBusy} style={{ flex: 1, height: 44, border: 'none', borderRadius: 12, background: 'var(--accent)', color: '#fff', fontWeight: 700, fontFamily: "'Hanken Grotesk'", fontSize: 14, cursor: pw.length >= 10 ? 'pointer' : 'default', opacity: pw.length >= 10 && !pwBusy ? 1 : 0.5 }}>{pwBusy ? 'Saving…' : 'Update'}</button>
+                <Button variant="outline" onClick={() => { setPwOpen(false); setPw(''); setPwMsg(null); }} style={{ flex: 1 }}>Cancel</Button>
+                <Button variant="primary" onClick={() => void changePassword()} disabled={pw.length < 10} loading={pwBusy} loadingLabel="Saving…" style={{ flex: 1 }}>Update</Button>
               </div>
             </div>
           ) : (
@@ -383,12 +384,12 @@ export function AppSettingsSheet() {
 
           <RowButton label={exportBusy ? 'Preparing…' : 'Download my data'} hint="A JSON copy of your account (GDPR)" onClick={() => void exportData()} />
 
-          <button
+          <Button
             onClick={() => { void signOut(); close(); }}
             style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', height: 52, border: '1px solid var(--line-2)', borderRadius: 16, background: 'var(--surface)', color: 'var(--accent)', fontFamily: "'Hanken Grotesk'", fontSize: 15.5, fontWeight: 700, cursor: 'pointer', marginBottom: 10 }}
           >
             Log out
-          </button>
+          </Button>
 
           {delStep ? (
             <div style={{ background: 'var(--surface)', border: '1px solid #f2c8bb', borderRadius: 18, padding: 16, marginBottom: 12 }}>
@@ -407,8 +408,8 @@ export function AppSettingsSheet() {
                 style={{ width: '100%', height: 46, border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--surface-2)', padding: '0 14px', fontFamily: "'Hanken Grotesk'", fontSize: 15, color: 'var(--text)', outline: 'none', marginBottom: 10 }}
               />
               <div style={{ display: 'flex', gap: 8 }}>
-                <button onClick={() => { setDelStep(false); setDelConfirm(''); }} style={{ flex: 1, height: 46, border: '1px solid var(--line-2)', borderRadius: 12, background: 'transparent', color: 'var(--text)', fontWeight: 700, fontFamily: "'Hanken Grotesk'", fontSize: 14.5, cursor: 'pointer' }}>Cancel</button>
-                <button onClick={() => void deleteAccount()} disabled={!delReady} style={{ flex: 1, height: 46, border: 'none', borderRadius: 12, background: '#d8521e', color: '#fff', fontWeight: 700, fontFamily: "'Hanken Grotesk'", fontSize: 14.5, cursor: delReady ? 'pointer' : 'default', opacity: delReady ? 1 : 0.5 }}>{delBusy ? 'Deleting…' : 'Delete everything'}</button>
+                <Button variant="outline" onClick={() => { setDelStep(false); setDelConfirm(''); }} style={{ flex: 1 }}>Cancel</Button>
+                <Button variant="danger" onClick={() => void deleteAccount()} disabled={!delReady} loading={delBusy} loadingLabel="Deleting…" style={{ flex: 1 }}>Delete everything</Button>
               </div>
             </div>
           ) : (
@@ -423,7 +424,7 @@ export function AppSettingsSheet() {
 
           <div style={{ textAlign: 'center', color: 'var(--text-faint-2)', fontSize: 12.5, margin: '6px 0 14px' }}>Sizzle v{APP_VERSION}</div>
 
-          <button onClick={close} style={{ width: '100%', height: 52, border: 'none', borderRadius: 16, background: 'var(--text)', color: 'var(--bg)', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>Done</button>
+          <Button variant="primary" size="lg" fullWidth onClick={close}>Done</Button>
         </div>
         )}
       </div>
@@ -456,16 +457,16 @@ function BlockedAccounts({ onBack }: { onBack: () => void }) {
               <div style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.name}</div>
               <div style={{ fontSize: 13, color: 'var(--text-faint)' }}>@{u.handle}</div>
             </div>
-            <button
+            <Button
               onClick={() => block.mutate({ cookId: u.id, blocked: true })}
               style={{ flex: 'none', padding: '9px 16px', borderRadius: 12, border: '1.5px solid var(--line-2)', background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 13.5, fontWeight: 700, cursor: 'pointer' }}
             >
               Unblock
-            </button>
+            </Button>
           </div>
         ))
       )}
-      <button onClick={onBack} style={{ width: '100%', height: 50, marginTop: 8, border: '1px solid var(--line-2)', borderRadius: 16, background: 'var(--surface)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>Back to settings</button>
+      <Button onClick={onBack} style={{ width: '100%', height: 50, marginTop: 8, border: '1px solid var(--line-2)', borderRadius: 16, background: 'var(--surface)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>Back to settings</Button>
     </div>
   );
 }

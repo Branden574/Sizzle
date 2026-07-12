@@ -1,4 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
+import { Button } from './controls';
 import { biometricVerify } from '../lib/biometric';
 import { useAuth } from '../auth/useAuth';
 
@@ -65,7 +66,7 @@ export function BiometricLock({ label, onUnlock }: { label: string; onUnlock: ()
         {failed ? `Couldn't verify — tap to try ${label} again.` : `Unlock with ${label} to continue.`}
       </div>
 
-      <button
+      <Button
         onClick={() => void attempt()}
         disabled={busy}
         style={{
@@ -85,9 +86,9 @@ export function BiometricLock({ label, onUnlock }: { label: string; onUnlock: ()
         }}
       >
         {busy ? 'Verifying…' : `Unlock with ${label}`}
-      </button>
+      </Button>
 
-      <button
+      <Button
         onClick={() => void signOut()}
         style={{
           marginTop: 6,
@@ -101,7 +102,7 @@ export function BiometricLock({ label, onUnlock }: { label: string; onUnlock: ()
         }}
       >
         Log out instead
-      </button>
+      </Button>
     </div>
   );
 }

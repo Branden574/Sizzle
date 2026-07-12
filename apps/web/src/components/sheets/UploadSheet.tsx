@@ -1,4 +1,5 @@
 import { useRef, useState, type CSSProperties } from 'react';
+import { Button, GlassButton } from '../controls';
 import { MAX_DURATION_SECONDS, MAX_UPLOAD_BYTES, type DirectUploadTicket, type PostType } from '@sizzle/shared';
 import { useAuth } from '../../auth/useAuth';
 import { useRequireAuth } from '../../auth/useRequireAuth';
@@ -54,6 +55,7 @@ export function UploadSheet() {
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [previewAspect, setPreviewAspect] = useState(0); // width / height of the picked clip
   const [prepping, setPrepping] = useState(false);
+  const [submitMode, setSubmitMode] = useState<'publish' | 'draft' | null>(null);
   const [progress, setProgress] = useState(0); // upload % (0–100)
   const [videoErr, setVideoErr] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
@@ -109,6 +111,7 @@ export function UploadSheet() {
   const submit = async (mode: 'publish' | 'draft' = 'publish') => {
     if (!requireAuth()) return;
     if (!canPost) return;
+    setSubmitMode(mode);
     const status = mode === 'draft' ? 'draft' : scheduleAt ? 'scheduled' : 'published';
     const scheduledAt = mode !== 'draft' && scheduleAt ? new Date(scheduleAt).toISOString() : undefined;
 
@@ -196,6 +199,7 @@ export function UploadSheet() {
           setFeed('foryou');
           setTab('feed');
         },
+        onSettled: () => setSubmitMode(null),
       },
     );
   };
@@ -216,7 +220,7 @@ export function UploadSheet() {
         />
       )}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '56px 20px 14px', flex: 'none' }}>
-        <button onClick={close} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#fff', fontSize: 16, fontWeight: 600 }}>Cancel</button>
+        <Button variant="text" onClick={close} style={{ color: '#fff' }}>Cancel</Button>
         <div style={{ color: '#fff', fontSize: 16, fontWeight: 700 }}>{isReview ? 'New review' : 'New recipe'}</div>
         <div style={{ width: 48 }} />
       </div>
@@ -230,9 +234,10 @@ export function UploadSheet() {
           {([['recipe', 'Recipe'], ['review', 'Food review']] as const).map(([val, label]) => {
             const on = postType === val;
             return (
-              <button
+              <Button
                 key={val}
                 onClick={() => setPostType(val)}
+                aria-pressed={on}
                 style={{
                   flex: 1,
                   padding: '11px 0',
@@ -249,7 +254,7 @@ export function UploadSheet() {
                 }}
               >
                 {label}
-              </button>
+              </Button>
             );
           })}
         </div>
@@ -259,7 +264,7 @@ export function UploadSheet() {
           {([['video', 'Video'], ['photo', 'Photos']] as const).map(([val, label]) => {
             const on = mediaKind === val;
             return (
-              <button key={val} onClick={() => setMediaKind(val)} style={{ flex: 1, padding: '10px 0', borderRadius: 12, border: 'none', cursor: 'pointer', fontFamily: "'Hanken Grotesk'", fontSize: 14.5, fontWeight: 700, background: on ? '#fff' : 'transparent', color: on ? '#0c0a09' : 'rgba(255,255,255,.6)' }}>{label}</button>
+              <Button key={val} aria-pressed={on} onClick={() => setMediaKind(val)} style={{ flex: 1, padding: '10px 0', borderRadius: 12, border: 'none', cursor: 'pointer', fontFamily: "'Hanken Grotesk'", fontSize: 14.5, fontWeight: 700, background: on ? '#fff' : 'transparent', color: on ? '#0c0a09' : 'rgba(255,255,255,.6)' }}>{label}</Button>
             );
           })}
         </div>
@@ -267,24 +272,24 @@ export function UploadSheet() {
         {mediaKind === 'photo' ? (
           <div style={{ marginBottom: 18 }}>
             {photos.length === 0 ? (
-              <button onClick={() => photoInputRef.current?.click()} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 14, padding: 16, borderRadius: 20, border: 'none', background: `linear-gradient(135deg,${accent},#e23a18)`, cursor: 'pointer', textAlign: 'left', boxShadow: '0 10px 26px -10px rgba(226,58,24,.7)' }}>
+              <Button onClick={() => photoInputRef.current?.click()} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 14, padding: 16, borderRadius: 20, border: 'none', background: `linear-gradient(135deg,${accent},#e23a18)`, cursor: 'pointer', textAlign: 'left', boxShadow: '0 10px 26px -10px rgba(226,58,24,.7)' }}>
                 <div style={{ width: 52, height: 52, flex: 'none', borderRadius: '50%', background: 'rgba(255,255,255,.18)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 26 }}>🖼️</div>
                 <div>
                   <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 21, color: '#fff' }}>Add photos</div>
                   <div style={{ color: 'rgba(255,255,255,.78)', fontSize: 13, marginTop: 2 }}>Up to 8 · swipe through them in the feed</div>
                 </div>
-              </button>
+              </Button>
             ) : (
               <div className="sz-hscroll" style={{ display: 'flex', gap: 10, overflowX: 'auto', paddingBottom: 4 }}>
                 {photos.map((p, i) => (
                   <div key={p.url} style={{ position: 'relative', flex: '0 0 auto' }}>
                     <img src={p.url} alt="" style={{ width: 96, height: 120, objectFit: 'cover', borderRadius: 14, display: 'block' }} />
-                    <button onClick={() => removePhoto(i)} aria-label="Remove photo" style={{ position: 'absolute', top: 6, right: 6, width: 24, height: 24, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.6)', color: '#fff', cursor: 'pointer', fontSize: 15, lineHeight: 1 }}>×</button>
+                    <Button onClick={() => removePhoto(i)} aria-label="Remove photo" style={{ position: 'absolute', top: 6, right: 6, width: 24, height: 24, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.6)', color: '#fff', cursor: 'pointer', fontSize: 15, lineHeight: 1 }}>×</Button>
                     <div style={{ position: 'absolute', bottom: 6, left: 6, fontSize: 11, color: '#fff', background: 'rgba(0,0,0,.5)', borderRadius: 6, padding: '1px 6px' }}>{i + 1}</div>
                   </div>
                 ))}
                 {photos.length < 8 && (
-                  <button onClick={() => photoInputRef.current?.click()} aria-label="Add more photos" style={{ flex: '0 0 auto', width: 96, height: 120, borderRadius: 14, border: '1.5px dashed rgba(255,255,255,.25)', background: 'rgba(255,255,255,.05)', color: 'rgba(255,255,255,.7)', cursor: 'pointer', fontSize: 28 }}>+</button>
+                  <Button onClick={() => photoInputRef.current?.click()} aria-label="Add more photos" style={{ flex: '0 0 auto', width: 96, height: 120, borderRadius: 14, border: '1.5px dashed rgba(255,255,255,.25)', background: 'rgba(255,255,255,.05)', color: 'rgba(255,255,255,.7)', cursor: 'pointer', fontSize: 28 }}>+</Button>
                 )}
               </div>
             )}
@@ -301,29 +306,29 @@ export function UploadSheet() {
               style={{ width: '100%', height: '100%', objectFit: previewAspect > 1.05 ? 'contain' : 'cover' }}
             />
             <div style={{ position: 'absolute', bottom: 12, right: 12, display: 'flex', gap: 8 }}>
-              <button
+              <GlassButton
                 onClick={() => setTrimming(true)}
-                style={{ padding: '9px 14px', borderRadius: 12, border: 'none', background: 'rgba(0,0,0,.55)', backdropFilter: 'blur(6px)', color: '#fff', fontSize: 13.5, fontWeight: 700, cursor: 'pointer' }}
+                size="sm"
               >
                 ✂️ Trim
-              </button>
-              <button
+              </GlassButton>
+              <GlassButton
                 onClick={() => setRecording(true)}
-                style={{ padding: '9px 14px', borderRadius: 12, border: 'none', background: 'rgba(0,0,0,.55)', backdropFilter: 'blur(6px)', color: '#fff', fontSize: 13.5, fontWeight: 700, cursor: 'pointer' }}
+                size="sm"
               >
                 Re-record
-              </button>
-              <button
+              </GlassButton>
+              <GlassButton
                 onClick={() => fileRef.current?.click()}
-                style={{ padding: '9px 14px', borderRadius: 12, border: 'none', background: 'rgba(0,0,0,.55)', backdropFilter: 'blur(6px)', color: '#fff', fontSize: 13.5, fontWeight: 700, cursor: 'pointer' }}
+                size="sm"
               >
                 Library
-              </button>
+              </GlassButton>
             </div>
           </div>
         ) : (
           <div style={{ marginBottom: 18 }}>
-            <button
+            <Button
               onClick={() => setRecording(true)}
               style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 14, padding: '16px', borderRadius: 20, border: 'none', background: `linear-gradient(135deg,${accent},#e23a18)`, cursor: 'pointer', textAlign: 'left', boxShadow: '0 10px 26px -10px rgba(226,58,24,.7)' }}
             >
@@ -334,13 +339,13 @@ export function UploadSheet() {
                 <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 21, color: '#fff' }}>Record a video</div>
                 <div style={{ color: 'rgba(255,255,255,.78)', fontSize: 13, marginTop: 2 }}>Hold or tap · stop &amp; keep going</div>
               </div>
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={() => fileRef.current?.click()}
               style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 10, padding: '14px', borderRadius: 16, border: '1.5px solid rgba(255,255,255,.18)', background: 'rgba(255,255,255,.05)', cursor: 'pointer', color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 700 }}
             >
               Upload from library
-            </button>
+            </Button>
             <div style={{ color: 'rgba(255,255,255,.4)', fontSize: 12.5, textAlign: 'center', marginTop: 9 }}>Portrait or landscape · up to 30 min · 4K</div>
           </div>
         )}
@@ -428,24 +433,30 @@ export function UploadSheet() {
             onChange={(e) => setScheduleAt(e.target.value)}
             style={{ flex: 1, height: 40, border: '1.5px solid rgba(255,255,255,.16)', borderRadius: 12, background: 'rgba(255,255,255,.06)', color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 13.5, outline: 'none', padding: '0 10px', colorScheme: 'dark' }}
           />
-          {scheduleAt && <button onClick={() => setScheduleAt('')} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,.5)', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>Clear</button>}
+          {scheduleAt && <Button onClick={() => setScheduleAt('')} style={{ background: 'none', border: 'none', color: 'rgba(255,255,255,.5)', cursor: 'pointer', fontSize: 13, fontWeight: 700 }}>Clear</Button>}
         </div>
         <div style={{ display: 'flex', gap: 10 }}>
-          <button
+          <Button
             onClick={() => submit('draft')}
             disabled={!canPost}
-            style={{ flex: 'none', padding: '0 20px', height: 56, borderRadius: 17, border: '1.5px solid rgba(255,255,255,.2)', background: 'transparent', color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 700, cursor: canPost ? 'pointer' : 'default', opacity: canPost ? 1 : 0.5 }}
+            variant="glass"
+            size="lg"
+            loading={busy && submitMode === 'draft'}
+            loadingLabel="Saving…"
           >
             Save draft
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() => submit('publish')}
             disabled={!canPost}
-            style={{ flex: 1, height: 56, border: 'none', borderRadius: 17, background: `linear-gradient(135deg,${accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 700, cursor: canPost ? 'pointer' : 'default', opacity: canPost ? 1 : 0.5, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9 }}
+            variant="primary"
+            size="lg"
+            loading={busy && submitMode === 'publish'}
+            loadingLabel={prepping ? 'Uploading…' : 'Posting…'}
+            style={{ flex: 1 }}
           >
-            <div style={{ width: 14, height: 14, borderRadius: '50%', background: '#fff' }} />
-            {prepping ? 'Uploading…' : upload.isPending ? 'Posting…' : scheduleAt ? 'Schedule' : isReview ? 'Post review' : 'Post recipe'}
-          </button>
+            {scheduleAt ? 'Schedule' : isReview ? 'Post review' : 'Post recipe'}
+          </Button>
         </div>
       </div>
     </div>
@@ -459,7 +470,7 @@ function StarPicker({ value, onChange }: { value: number; onChange: (n: number) 
       {[1, 2, 3, 4, 5].map((n) => {
         const on = n <= value;
         return (
-          <button
+          <Button
             key={n}
             type="button"
             aria-label={`${n} star${n > 1 ? 's' : ''}`}
@@ -469,7 +480,7 @@ function StarPicker({ value, onChange }: { value: number; onChange: (n: number) 
             <svg width={30} height={30} viewBox="0 0 24 24" fill={on ? '#ffb52e' : 'none'} stroke={on ? '#ffb52e' : 'rgba(255,255,255,.3)'} strokeWidth={1.6} strokeLinejoin="round">
               <path d="M12 2.5l2.9 5.88 6.49.94-4.7 4.58 1.11 6.46L12 17.8l-5.8 3.05 1.11-6.46-4.7-4.58 6.49-.94L12 2.5z" />
             </svg>
-          </button>
+          </Button>
         );
       })}
     </div>

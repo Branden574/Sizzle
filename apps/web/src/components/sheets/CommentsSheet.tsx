@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Button, DismissBackdrop } from '../controls';
 import type { CommentDTO } from '@sizzle/shared';
 import { useRequireAuth } from '../../auth/useRequireAuth';
 import { useAddComment, useComments, useDeleteComment, useHideComment, useMe, useRecipe, useToggleCommentLike } from '../../data/queries';
@@ -81,14 +82,14 @@ export function CommentsSheet() {
 
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 98 }}>
-      <div onClick={close} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.5)', animation: 'sz-fadeIn .3s' }} />
+      <DismissBackdrop onDismiss={close} />
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '74%', background: 'var(--bg)', borderRadius: '26px 26px 0 0', overflow: 'hidden', animation: 'sz-slideUp .4s cubic-bezier(.16,1,.3,1)', display: 'flex', flexDirection: 'column', ...swipe.sheetStyle }}>
         <div {...swipe.handlers} style={{ padding: '14px 22px 12px', borderBottom: '1px solid var(--line)', position: 'relative', ...swipe.handlers.style }}>
           <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', width: 42, height: 5, borderRadius: 3, background: 'var(--track)' }} />
           <div style={{ textAlign: 'center', fontSize: 15, fontWeight: 700, color: 'var(--text)', marginTop: 6 }}>{total > 0 ? `${formatCount(total)} comments` : 'Comments'}</div>
-          <button onClick={close} style={{ position: 'absolute', top: 14, right: 16, background: 'none', border: 'none', cursor: 'pointer' }}>
+          <Button onClick={close} style={{ position: 'absolute', top: 14, right: 16, background: 'none', border: 'none', cursor: 'pointer' }}>
             <CloseIcon size={22} stroke="var(--text-faint)" strokeWidth={2.2} />
-          </button>
+          </Button>
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '14px 22px 16px', display: 'flex', flexDirection: 'column', gap: 18 }}>
@@ -103,7 +104,7 @@ export function CommentsSheet() {
           {replyTo && (
             <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '8px 18px 0', fontSize: 12.5, color: 'var(--text-faint-2)', fontWeight: 600 }}>
               <span>Replying to {replyTo.name}</span>
-              <button onClick={() => setReplyTo(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: accent, fontWeight: 700, fontSize: 12.5 }}>Cancel</button>
+              <Button onClick={() => setReplyTo(null)} style={{ background: 'none', border: 'none', cursor: 'pointer', color: accent, fontWeight: 700, fontSize: 12.5 }}>Cancel</Button>
             </div>
           )}
           <div style={{ padding: '12px 18px 28px', display: 'flex', alignItems: 'center', gap: 10 }}>
@@ -117,9 +118,9 @@ export function CommentsSheet() {
               placeholder={replyTo ? 'Add a reply…' : 'Add a comment…'}
               style={{ flex: 1, height: 42, border: '1.5px solid var(--line)', borderRadius: 14, padding: '0 14px', fontFamily: "'Hanken Grotesk'", fontSize: 15, color: 'var(--text)', outline: 'none', background: 'var(--bg-soft)' }}
             />
-            <button onClick={send} style={{ width: 42, height: 42, flex: 'none', border: 'none', borderRadius: 13, background: sendBg, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+            <Button onClick={send} style={{ width: 42, height: 42, flex: 'none', border: 'none', borderRadius: 13, background: sendBg, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
               <ShareIcon size={20} stroke="#fff" strokeWidth={1.9} />
-            </button>
+            </Button>
           </div>
         </div>
       </div>
@@ -137,12 +138,12 @@ function CommentItem({ cm, onLike, onReply, onAuthor, canDelete, onDelete, canMo
   return (
     <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
       <div style={{ display: 'flex', gap: 12 }}>
-        <div onClick={() => onAuthor(cm.authorId)} style={{ width: size, height: size, flex: 'none', borderRadius: '50%', background: cm.authorColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Instrument Serif',serif", fontSize: isReply ? 13 : 16, color: '#fff', overflow: 'hidden', cursor: 'pointer', opacity: dim }}>
+        <Button aria-label={`View ${cm.authorName}'s profile`} onClick={() => onAuthor(cm.authorId)} style={{ width: size, height: size, flex: 'none', borderRadius: '50%', background: cm.authorColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Instrument Serif',serif", fontSize: isReply ? 13 : 16, color: '#fff', overflow: 'hidden', cursor: 'pointer', opacity: dim }}>
           {cm.authorAvatarUrl ? <img src={cm.authorAvatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : cm.authorInit}
-        </div>
+        </Button>
         <div style={{ flex: 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: dim }}>
-            <span onClick={() => onAuthor(cm.authorId)} style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', cursor: 'pointer' }}>{cm.authorName}</span>
+            <Button onClick={() => onAuthor(cm.authorId)} style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', cursor: 'pointer' }}>{cm.authorName}</Button>
             <span style={{ fontSize: 12, color: 'var(--text-faint-2)' }}>{cm.time}</span>
             {cm.hidden && (
               <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.3px', textTransform: 'uppercase', color: 'var(--text-faint-2)', background: 'var(--track)', padding: '2px 7px', borderRadius: 7 }}>Hidden</span>
@@ -150,22 +151,22 @@ function CommentItem({ cm, onLike, onReply, onAuthor, canDelete, onDelete, canMo
           </div>
           <div style={{ fontSize: 14.5, color: 'var(--text-2)', lineHeight: 1.45, marginTop: 3, opacity: dim }}>{cm.text}</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 5 }}>
-            <button onClick={() => onReply(cm.parentId ?? cm.id, cm.authorName)} style={actionBtn}>Reply</button>
+            <Button onClick={() => onReply(cm.parentId ?? cm.id, cm.authorName)} style={actionBtn}>Reply</Button>
             {canModerate && (
-              <button onClick={() => onHide(cm.id, !cm.hidden)} style={actionBtn}>{cm.hidden ? 'Unhide' : 'Hide'}</button>
+              <Button onClick={() => onHide(cm.id, !cm.hidden)} style={actionBtn}>{cm.hidden ? 'Unhide' : 'Hide'}</Button>
             )}
             {canDelete(cm) && (
-              <button onClick={() => onDelete(cm.id)} style={actionBtn}>Delete</button>
+              <Button onClick={() => onDelete(cm.id)} style={actionBtn}>Delete</Button>
             )}
             {!!myId && cm.authorId !== myId && (
-              <button onClick={() => onReport(cm.id)} style={actionBtn}>Report</button>
+              <Button onClick={() => onReport(cm.id)} style={actionBtn}>Report</Button>
             )}
           </div>
         </div>
-        <button onClick={() => onLike(cm.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, paddingTop: 3 }}>
+        <Button onClick={() => onLike(cm.id)} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 3, paddingTop: 3 }}>
           <HeartIcon width={16} height={16} fill={cm.likedByMe ? accent : 'none'} stroke={cm.likedByMe ? accent : '#bcae9f'} strokeWidth={1.8} />
           <span style={{ fontSize: 11, color: cm.likedByMe ? accent : 'var(--text-faint-2)' }}>{cm.likes > 0 ? formatCount(cm.likes) : ''}</span>
-        </button>
+        </Button>
       </div>
 
       {cm.replies && cm.replies.length > 0 && (

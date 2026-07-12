@@ -1,4 +1,5 @@
 import { useEffect } from 'react';
+import { Button, DismissBackdrop } from '../controls';
 import { useSwipeDismiss } from '../../lib/useSwipeDismiss';
 import type { NotificationDTO } from '@sizzle/shared';
 import { useMarkNotificationsRead, useNotifications, useRespondFollowRequest } from '../../data/queries';
@@ -48,14 +49,14 @@ export function NotificationsSheet() {
 
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 91 }}>
-      <div onClick={close} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.5)', animation: 'sz-fadeIn .3s' }} />
+      <DismissBackdrop onDismiss={close} />
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '78%', background: 'var(--bg)', borderRadius: '26px 26px 0 0', overflow: 'hidden', animation: 'sz-slideUp .4s cubic-bezier(.16,1,.3,1)', display: 'flex', flexDirection: 'column', ...swipe.sheetStyle }}>
         <div {...swipe.handlers} style={{ padding: '14px 22px 12px', borderBottom: '1px solid var(--line)', position: 'relative' , ...swipe.handlers.style}}>
           <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', width: 42, height: 5, borderRadius: 3, background: 'var(--track)' }} />
           <div style={{ textAlign: 'center', fontSize: 15, fontWeight: 700, color: 'var(--text)', marginTop: 6 }}>Notifications</div>
-          <button onClick={close} style={{ position: 'absolute', top: 14, right: 16, background: 'none', border: 'none', cursor: 'pointer' }}>
+          <Button onClick={close} style={{ position: 'absolute', top: 14, right: 16, background: 'none', border: 'none', cursor: 'pointer' }}>
             <CloseIcon size={22} stroke="var(--text-faint)" strokeWidth={2.2} />
-          </button>
+          </Button>
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '8px 16px 24px' }}>
@@ -64,36 +65,34 @@ export function NotificationsSheet() {
             <div style={{ textAlign: 'center', color: 'var(--text-faint-2)', fontSize: 15, padding: '50px 30px' }}>No activity yet. Likes, comments and new followers show up here.</div>
           )}
           {list.map((n) => (
-            <button
-              key={n.id}
-              onClick={() => open(n)}
-              style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, background: n.read ? 'none' : 'rgba(255,90,54,.06)', border: 'none', borderRadius: 14, padding: '12px 10px', cursor: 'pointer', textAlign: 'left' }}
-            >
-              <div style={{ width: 44, height: 44, flex: 'none', borderRadius: '50%', background: n.actor.avatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Instrument Serif',serif", fontSize: 17, color: '#fff' }}>{n.actor.init}</div>
-              <div style={{ flex: 1 }}>
-                <div style={{ fontSize: 14.5, color: 'var(--text)', lineHeight: 1.4 }}>{text(n)}</div>
-                <div style={{ fontSize: 12.5, color: 'var(--text-faint-2)', marginTop: 2 }}>{n.time}</div>
-              </div>
+            <div key={n.id} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, background: n.read ? 'none' : 'rgba(255,90,54,.06)', borderRadius: 14, padding: '4px 6px' }}>
+              <Button onClick={() => open(n)} style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 12, background: 'none', border: 'none', padding: '8px 4px', cursor: 'pointer', textAlign: 'left' }}>
+                <div style={{ width: 44, height: 44, flex: 'none', borderRadius: '50%', background: n.actor.avatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Instrument Serif',serif", fontSize: 17, color: '#fff' }}>{n.actor.init}</div>
+                <div style={{ flex: 1 }}>
+                  <div style={{ fontSize: 14.5, color: 'var(--text)', lineHeight: 1.4 }}>{text(n)}</div>
+                  <div style={{ fontSize: 12.5, color: 'var(--text-faint-2)', marginTop: 2 }}>{n.time}</div>
+                </div>
+                {!n.read && <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--accent,#ff5a36)', flex: 'none' }} />}
+              </Button>
               {n.type === 'follow_request' && (
                 <div style={{ display: 'flex', gap: 6, flex: 'none' }}>
-                  <span
-                    role="button"
+                  <Button
+                    variant="primary"
+                    size="xs"
                     onClick={(e) => { e.stopPropagation(); if (!respond.isPending) respond.mutate({ followerId: n.actor.id, accept: true }); }}
-                    style={{ padding: '8px 14px', borderRadius: 12, background: 'var(--accent,#ff5a36)', color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}
                   >
                     Accept
-                  </span>
-                  <span
-                    role="button"
+                  </Button>
+                  <Button
+                    variant="tonal"
+                    size="xs"
                     onClick={(e) => { e.stopPropagation(); if (!respond.isPending) respond.mutate({ followerId: n.actor.id, accept: false }); }}
-                    style={{ padding: '8px 14px', borderRadius: 12, background: 'var(--surface-2)', border: '1px solid var(--line-2)', color: 'var(--text)', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}
                   >
                     Decline
-                  </span>
+                  </Button>
                 </div>
               )}
-              {!n.read && <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--accent,#ff5a36)', flex: 'none' }} />}
-            </button>
+            </div>
           ))}
         </div>
       </div>

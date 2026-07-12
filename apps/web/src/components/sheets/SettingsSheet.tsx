@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { Button, DismissBackdrop } from '../controls';
 import { useSwipeDismiss } from '../../lib/useSwipeDismiss';
 import type { PostControls } from '@sizzle/shared';
 import { useRecipe, useUpdatePostControls } from '../../data/queries';
@@ -36,7 +37,7 @@ export function SettingsSheet() {
 
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 92 }}>
-      <div onClick={close} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.5)', animation: 'sz-fadeIn .3s' }} />
+      <DismissBackdrop onDismiss={close} />
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, background: 'var(--bg)', borderRadius: '26px 26px 0 0', overflow: 'hidden', animation: 'sz-slideUp .4s cubic-bezier(.16,1,.3,1)', paddingBottom: 30, ...swipe.sheetStyle }}>
         <div {...swipe.handlers} style={{ textAlign: 'center', padding: '16px 0 6px', position: 'relative' , ...swipe.handlers.style}}>
           <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', width: 42, height: 5, borderRadius: 3, background: 'var(--track)' }} />
@@ -48,7 +49,7 @@ export function SettingsSheet() {
           {ROWS.map((row) => {
             const on = controls[row.key]; // ON = feature enabled
             return (
-              <button
+              <Button
                 key={row.key}
                 onClick={() => update.mutate({ id: settingsFor, patch: { [row.key]: !on } })}
                 style={{ display: 'flex', alignItems: 'center', gap: 14, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 18, padding: 16, cursor: 'pointer', textAlign: 'left', marginBottom: 10 }}
@@ -61,13 +62,13 @@ export function SettingsSheet() {
                 <div style={{ width: 50, height: 30, flex: 'none', borderRadius: 16, background: on ? accent : 'var(--track)', position: 'relative', transition: 'background .25s' }}>
                   <div style={{ position: 'absolute', top: 3, width: 24, height: 24, borderRadius: '50%', background: 'var(--surface)', boxShadow: '0 1px 3px rgba(0,0,0,.25)', transition: 'left .25s cubic-bezier(.34,1.56,.64,1)', left: on ? 23 : 3 }} />
                 </div>
-              </button>
+              </Button>
             );
           })}
         </div>
 
         <div style={{ padding: '6px 22px 0' }}>
-          <button onClick={close} style={{ width: '100%', height: 52, border: 'none', borderRadius: 16, background: 'var(--invert-bg)', color: 'var(--invert-fg)', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>Done</button>
+          <Button onClick={close} style={{ width: '100%', height: 52, border: 'none', borderRadius: 16, background: 'var(--invert-bg)', color: 'var(--invert-fg)', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>Done</Button>
         </div>
       </div>
     </div>

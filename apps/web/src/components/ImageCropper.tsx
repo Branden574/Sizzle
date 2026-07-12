@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Button } from './controls';
 import { pressVars } from './ui';
 
 /**
@@ -110,12 +111,12 @@ export function ImageCropper({
       />
 
       <div style={{ display: 'flex', gap: 12, marginTop: 24, width: VIEW_W }}>
-        <button onClick={onCancel} className="sz-press" style={{ ...pressVars(0.97), flex: 1, height: 50, borderRadius: 15, border: '1.5px solid rgba(255,255,255,.3)', background: 'transparent', color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15.5, fontWeight: 700, cursor: 'pointer' }}>
+        <Button onClick={onCancel} className="sz-press" style={{ ...pressVars(0.97), flex: 1, height: 50, borderRadius: 15, border: '1.5px solid rgba(255,255,255,.3)', background: 'transparent', color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15.5, fontWeight: 700, cursor: 'pointer' }}>
           Cancel
-        </button>
-        <button onClick={save} className="sz-press" style={{ ...pressVars(0.97), flex: 1, height: 50, borderRadius: 15, border: 'none', background: 'var(--accent)', color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15.5, fontWeight: 700, cursor: 'pointer' }}>
+        </Button>
+        <Button onClick={save} className="sz-press" style={{ ...pressVars(0.97), flex: 1, height: 50, borderRadius: 15, border: 'none', background: 'var(--accent)', color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15.5, fontWeight: 700, cursor: 'pointer' }}>
           Use photo
-        </button>
+        </Button>
       </div>
     </div>
   );

@@ -10,6 +10,7 @@
     "build:lan": "tsc -b && vite build --mode lan",
     "preview": "vite preview",
     "typecheck": "tsc -b --noEmit",
+    "test:controls": "node --test src/components/controls.contract.test.mjs",
     "cap:sync": "npm run build && cap sync",
     "ios": "npm run build && cap run ios",
     "android": "npm run build && cap run android",

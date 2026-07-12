@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Button, DismissBackdrop } from '../controls';
 import { useSwipeDismiss } from '../../lib/useSwipeDismiss';
 import type { CSSProperties } from 'react';
 import { PROFILE_LINK_KEYS, type ProfileLinkKey } from '@sizzle/shared';
@@ -130,18 +131,18 @@ export function EditProfileSheet() {
 
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 93 }}>
-      <div onClick={close} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.5)', animation: 'sz-fadeIn .3s' }} />
+      <DismissBackdrop onDismiss={close} />
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, top: 60, background: 'var(--bg)', borderRadius: '26px 26px 0 0', overflow: 'hidden', animation: 'sz-slideUp .4s cubic-bezier(.16,1,.3,1)', display: 'flex', flexDirection: 'column', ...swipe.sheetStyle }}>
         <div {...swipe.handlers} style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '16px 22px 10px', flex: 'none', position: 'relative' , ...swipe.handlers.style}}>
           <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', width: 42, height: 5, borderRadius: 3, background: 'var(--track)' }} />
-          <button onClick={close} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-faint)', fontSize: 15, fontWeight: 600 }}>Cancel</button>
+          <Button variant="text" size="sm" onClick={close}>Cancel</Button>
           <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>Edit profile</div>
-          <button onClick={save} disabled={!canSave || update.isPending} style={{ background: 'none', border: 'none', cursor: canSave ? 'pointer' : 'default', color: 'var(--accent,#ff5a36)', fontSize: 15, fontWeight: 700, opacity: canSave ? 1 : 0.45 }}>{update.isPending ? 'Saving…' : 'Save'}</button>
+          <Button variant="primary" size="sm" onClick={save} disabled={!canSave} loading={update.isPending} loadingLabel="Saving…">Save</Button>
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto' }}>
           {/* banner + avatar uploaders */}
-          <button
+          <Button
             onClick={() => bannerInput.current?.click()}
             style={{ position: 'relative', display: 'block', width: '100%', height: 120, border: 'none', cursor: 'pointer', background: bannerUrl ? `url(${bannerUrl}) center/cover no-repeat` : BANNER, padding: 0 }}
           >
@@ -149,9 +150,9 @@ export function EditProfileSheet() {
               <CameraIcon size={20} stroke="#fff" strokeWidth={1.8} />
               {uploading === 'banner' ? 'Uploading…' : 'Change banner'}
             </div>
-          </button>
+          </Button>
           <div style={{ padding: '0 22px', marginTop: -36, position: 'relative', zIndex: 1 }}>
-            <button
+            <Button
               onClick={() => avatarInput.current?.click()}
               style={{ position: 'relative', width: 80, height: 80, borderRadius: 24, border: '4px solid var(--bg)', cursor: 'pointer', overflow: 'hidden', background: avatarUrl ? `url(${avatarUrl}) center/cover` : 'linear-gradient(135deg,#3a2a22,#1b1512)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Instrument Serif',serif", fontSize: 30, color: '#fff', padding: 0 }}
             >
@@ -159,7 +160,7 @@ export function EditProfileSheet() {
               <div style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.3)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                 <CameraIcon size={20} stroke="#fff" strokeWidth={1.8} />
               </div>
-            </button>
+            </Button>
           </div>
           <input ref={bannerInput} type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => { pick('banners', e.target.files?.[0]); e.target.value = ''; }} />
           <input ref={avatarInput} type="file" accept="image/*" style={{ display: 'none' }} onChange={(e) => { pick('avatars', e.target.files?.[0]); e.target.value = ''; }} />

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Button, DismissBackdrop } from '../controls';
 import { useSwipeDismiss } from '../../lib/useSwipeDismiss';
 import { showMonetization } from '../../lib/native';
 import { PLATFORM_FEE_PCT, PLATFORM_FEE_RATIONALE, type CreatorAnalytics, type EarningKind, type EarningsSummary } from '@sizzle/shared';
@@ -41,14 +42,14 @@ export function AnalyticsSheet() {
 
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 92 }}>
-      <div onClick={close} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.5)', animation: 'sz-fadeIn .3s' }} />
+      <DismissBackdrop onDismiss={close} />
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '86%', background: 'var(--bg)', borderRadius: '26px 26px 0 0', overflow: 'hidden', animation: 'sz-slideUp .4s cubic-bezier(.16,1,.3,1)', display: 'flex', flexDirection: 'column', ...swipe.sheetStyle }}>
         <div {...swipe.handlers} style={{ padding: '14px 22px 12px', borderBottom: '1px solid var(--line)', position: 'relative' , ...swipe.handlers.style}}>
           <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', width: 42, height: 5, borderRadius: 3, background: 'var(--track)' }} />
           <div style={{ textAlign: 'center', fontSize: 15, fontWeight: 700, color: 'var(--text)', marginTop: 6 }}>Your insights</div>
-          <button onClick={close} aria-label="Close" style={{ position: 'absolute', top: 14, right: 16, background: 'none', border: 'none', cursor: 'pointer' }}>
+          <Button onClick={close} aria-label="Close" style={{ position: 'absolute', top: 14, right: 16, background: 'none', border: 'none', cursor: 'pointer' }}>
             <CloseIcon size={22} stroke="var(--text-faint)" strokeWidth={2.2} />
-          </button>
+          </Button>
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '16px 18px 30px' }}>
@@ -131,13 +132,13 @@ function Earnings() {
             Turn on payouts to earn from monthly subscriptions, premium recipes, and one-off support. You keep {100 - PLATFORM_FEE_PCT}% of everything.
           </div>
           <div style={{ fontSize: 12.5, color: 'var(--text-faint-2)', lineHeight: 1.55, marginBottom: 12 }}>{PLATFORM_FEE_RATIONALE}</div>
-          <button
+          <Button
             onClick={startPayouts}
             disabled={onboard.isPending || st === 'pending'}
             style={{ width: '100%', height: 48, border: 'none', borderRadius: 14, background: `linear-gradient(135deg,${theme.accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 800, cursor: 'pointer', opacity: onboard.isPending ? 0.7 : 1 }}
           >
             {st === 'pending' ? 'Finishing setup… (complete the Stripe form)' : onboard.isPending ? 'Starting…' : 'Set up payouts'}
-          </button>
+          </Button>
         </div>
       ) : (
         <>
@@ -236,9 +237,9 @@ function SubPriceEditor({ data }: { data: EarningsSummary | undefined }) {
           </div>
         </div>
         {!editing && (
-          <button onClick={open} style={{ flex: 'none', height: 36, padding: '0 14px', border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 13.5, fontWeight: 800, cursor: 'pointer' }}>
+          <Button onClick={open} style={{ flex: 'none', height: 36, padding: '0 14px', border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 13.5, fontWeight: 800, cursor: 'pointer' }}>
             {current != null ? 'Edit' : 'Set price'}
-          </button>
+          </Button>
         )}
       </div>
 
@@ -257,13 +258,13 @@ function SubPriceEditor({ data }: { data: EarningsSummary | undefined }) {
               />
               <span style={{ fontSize: 13, color: 'var(--text-faint-2)' }}>/mo</span>
             </div>
-            <button onClick={save} disabled={setSubPrice.isPending} style={{ flex: 'none', height: 44, padding: '0 16px', border: 'none', borderRadius: 12, background: `linear-gradient(135deg,${theme.accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 14, fontWeight: 800, cursor: 'pointer', opacity: setSubPrice.isPending ? 0.7 : 1 }}>
+            <Button onClick={save} disabled={setSubPrice.isPending} style={{ flex: 'none', height: 44, padding: '0 16px', border: 'none', borderRadius: 12, background: `linear-gradient(135deg,${theme.accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 14, fontWeight: 800, cursor: 'pointer', opacity: setSubPrice.isPending ? 0.7 : 1 }}>
               {setSubPrice.isPending ? '…' : 'Save'}
-            </button>
+            </Button>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
-            <button onClick={() => setSubPrice.mutate(null, { onSuccess: () => setEditing(false) })} style={{ background: 'none', border: 'none', color: 'var(--danger-fg)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', padding: 0 }}>Turn off subscriptions</button>
-            <button onClick={() => setEditing(false)} style={{ background: 'none', border: 'none', color: 'var(--text-faint)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', padding: 0 }}>Cancel</button>
+            <Button onClick={() => setSubPrice.mutate(null, { onSuccess: () => setEditing(false) })} style={{ background: 'none', border: 'none', color: 'var(--danger-fg)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', padding: 0 }}>Turn off subscriptions</Button>
+            <Button onClick={() => setEditing(false)} style={{ background: 'none', border: 'none', color: 'var(--text-faint)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', padding: 0 }}>Cancel</Button>
           </div>
         </div>
       )}
@@ -358,7 +359,7 @@ function TiersManager() {
     <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 16, padding: 16, marginBottom: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--text)' }}>Subscription tiers</div>
-        {!adding && <button onClick={() => setAdding(true)} style={{ height: 34, padding: '0 14px', border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>+ Add</button>}
+        {!adding && <Button onClick={() => setAdding(true)} style={{ height: 34, padding: '0 14px', border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>+ Add</Button>}
       </div>
       {tiers.length === 0 && !adding && <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 4 }}>Optional — offer multiple tiers (e.g. Home Cook / Pro) with different perks.</div>}
       {tiers.map((t) => (
@@ -368,7 +369,7 @@ function TiersManager() {
             {t.perks && <div style={{ fontSize: 12, color: 'var(--text-faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.perks}</div>}
           </div>
           <div style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--text)' }}>{usd(t.priceCents)}/mo</div>
-          <button onClick={() => { if (window.confirm(`Remove "${t.name}"?`)) del.mutate(t.id); }} aria-label="Remove" style={{ background: 'none', border: 'none', color: 'var(--danger-fg)', cursor: 'pointer', fontSize: 15, fontWeight: 800 }}>✕</button>
+          <Button onClick={() => { if (window.confirm(`Remove "${t.name}"?`)) del.mutate(t.id); }} aria-label="Remove" style={{ background: 'none', border: 'none', color: 'var(--danger-fg)', cursor: 'pointer', fontSize: 15, fontWeight: 800 }}>✕</Button>
         </div>
       ))}
       {adding && (
@@ -382,8 +383,8 @@ function TiersManager() {
           </div>
           <input value={perks} onChange={(e) => setPerks(e.target.value.slice(0, 200))} placeholder="Perks (e.g. all premium recipes + monthly Q&A)" style={{ height: 44, border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 13.5, outline: 'none', padding: '0 12px' }} />
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <button onClick={save} disabled={create.isPending} style={{ height: 40, padding: '0 18px', border: 'none', borderRadius: 12, background: `linear-gradient(135deg,${theme.accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 14, fontWeight: 800, cursor: 'pointer', opacity: create.isPending ? 0.7 : 1 }}>{create.isPending ? '…' : 'Add tier'}</button>
-            <button onClick={() => setAdding(false)} style={{ background: 'none', border: 'none', color: 'var(--text-faint)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
+            <Button onClick={save} disabled={create.isPending} style={{ height: 40, padding: '0 18px', border: 'none', borderRadius: 12, background: `linear-gradient(135deg,${theme.accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 14, fontWeight: 800, cursor: 'pointer', opacity: create.isPending ? 0.7 : 1 }}>{create.isPending ? '…' : 'Add tier'}</Button>
+            <Button onClick={() => setAdding(false)} style={{ background: 'none', border: 'none', color: 'var(--text-faint)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>Cancel</Button>
           </div>
         </div>
       )}
@@ -410,14 +411,14 @@ function ProductsManager() {
     <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 16, padding: 16, marginBottom: 12 }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
         <div style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--text)' }}>Digital products</div>
-        {!adding && <button onClick={() => setAdding(true)} style={{ height: 34, padding: '0 14px', border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>+ Add</button>}
+        {!adding && <Button onClick={() => setAdding(true)} style={{ height: 34, padding: '0 14px', border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>+ Add</Button>}
       </div>
       {products.length === 0 && !adding && <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 4 }}>Sell a cookbook, meal plan, or guide — you keep {100 - PLATFORM_FEE_PCT}%.</div>}
       {products.map((p) => (
         <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 0', borderBottom: '1px solid var(--line)' }}>
           <div style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</div>
           <div style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--text)' }}>{usd(p.priceCents)}</div>
-          <button onClick={() => { if (window.confirm(`Remove "${p.title}"?`)) del.mutate(p.id); }} aria-label="Remove" style={{ background: 'none', border: 'none', color: 'var(--danger-fg)', cursor: 'pointer', fontSize: 15, fontWeight: 800 }}>✕</button>
+          <Button onClick={() => { if (window.confirm(`Remove "${p.title}"?`)) del.mutate(p.id); }} aria-label="Remove" style={{ background: 'none', border: 'none', color: 'var(--danger-fg)', cursor: 'pointer', fontSize: 15, fontWeight: 800 }}>✕</Button>
         </div>
       ))}
       {adding && (
@@ -431,8 +432,8 @@ function ProductsManager() {
             <input value={fileUrl} onChange={(e) => setFileUrl(e.target.value)} placeholder="Download URL (optional)" style={{ flex: 1, height: 44, border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 13.5, outline: 'none', padding: '0 12px', minWidth: 0 }} />
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
-            <button onClick={save} disabled={create.isPending} style={{ height: 40, padding: '0 18px', border: 'none', borderRadius: 12, background: `linear-gradient(135deg,${theme.accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 14, fontWeight: 800, cursor: 'pointer', opacity: create.isPending ? 0.7 : 1 }}>{create.isPending ? '…' : 'Add product'}</button>
-            <button onClick={() => setAdding(false)} style={{ background: 'none', border: 'none', color: 'var(--text-faint)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
+            <Button onClick={save} disabled={create.isPending} style={{ height: 40, padding: '0 18px', border: 'none', borderRadius: 12, background: `linear-gradient(135deg,${theme.accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 14, fontWeight: 800, cursor: 'pointer', opacity: create.isPending ? 0.7 : 1 }}>{create.isPending ? '…' : 'Add product'}</Button>
+            <Button onClick={() => setAdding(false)} style={{ background: 'none', border: 'none', color: 'var(--text-faint)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>Cancel</Button>
           </div>
         </div>
       )}
@@ -455,7 +456,7 @@ function PayoutCard() {
         Available balance · next payout {next.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
       </div>
       {data.dashboardUrl && (
-        <button onClick={() => window.open(data.dashboardUrl!, '_blank', 'noopener')} style={{ marginTop: 10, height: 38, padding: '0 14px', border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>Open payout dashboard →</button>
+        <Button onClick={() => window.open(data.dashboardUrl!, '_blank', 'noopener')} style={{ marginTop: 10, height: 38, padding: '0 14px', border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>Open payout dashboard →</Button>
       )}
       <div style={{ fontSize: 11.5, color: 'var(--text-faint-2)', lineHeight: 1.5, marginTop: 10 }}>{data.taxNote}</div>
     </div>
@@ -479,14 +480,14 @@ function BroadcastComposer({ count }: { count: number }) {
           <div style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--text)' }}>Message your subscribers</div>
           <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 2 }}>{sent != null ? `Sent to ${sent} subscriber${sent === 1 ? '' : 's'} 🎉` : `Send one DM to all ${count} of your subscribers.`}</div>
         </div>
-        {!open && <button onClick={() => { setOpen(true); setSent(null); }} style={{ flex: 'none', height: 34, padding: '0 14px', border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>Compose</button>}
+        {!open && <Button onClick={() => { setOpen(true); setSent(null); }} style={{ flex: 'none', height: 34, padding: '0 14px', border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>Compose</Button>}
       </div>
       {open && (
         <div style={{ marginTop: 12 }}>
           <textarea value={text} onChange={(e) => setText(e.target.value.slice(0, 1000))} rows={3} placeholder="New drop this week, subscribers get it first…" style={{ width: '100%', border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 15, outline: 'none', padding: 12, resize: 'vertical', lineHeight: 1.5, boxSizing: 'border-box' }} />
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
-            <button onClick={send} disabled={broadcast.isPending || !text.trim()} style={{ height: 40, padding: '0 18px', border: 'none', borderRadius: 12, background: `linear-gradient(135deg,${theme.accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 14, fontWeight: 800, cursor: 'pointer', opacity: broadcast.isPending || !text.trim() ? 0.6 : 1 }}>{broadcast.isPending ? 'Sending…' : `Send to ${count}`}</button>
-            <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--text-faint)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
+            <Button onClick={send} disabled={broadcast.isPending || !text.trim()} style={{ height: 40, padding: '0 18px', border: 'none', borderRadius: 12, background: `linear-gradient(135deg,${theme.accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 14, fontWeight: 800, cursor: 'pointer', opacity: broadcast.isPending || !text.trim() ? 0.6 : 1 }}>{broadcast.isPending ? 'Sending…' : `Send to ${count}`}</Button>
+            <Button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--text-faint)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>Cancel</Button>
           </div>
         </div>
       )}
@@ -513,7 +514,7 @@ function GoalEditor({ data }: { data: EarningsSummary | undefined }) {
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
         <div style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--text)' }}>{goal ? goal.label : 'Funding goal'}</div>
         {!editing && (
-          <button onClick={open} style={{ flex: 'none', height: 34, padding: '0 14px', border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>{goal ? 'Edit' : 'Set a goal'}</button>
+          <Button onClick={open} style={{ flex: 'none', height: 34, padding: '0 14px', border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>{goal ? 'Edit' : 'Set a goal'}</Button>
         )}
       </div>
       {goal && !editing && (
@@ -532,11 +533,11 @@ function GoalEditor({ data }: { data: EarningsSummary | undefined }) {
               <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-faint)' }}>$</span>
               <input value={target} onChange={(e) => setTarget(e.target.value.replace(/[^0-9]/g, '').slice(0, 6))} inputMode="numeric" placeholder="500" style={{ flex: 1, height: 44, border: 'none', background: 'transparent', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 800, outline: 'none', padding: '0 6px' }} />
             </div>
-            <button onClick={save} disabled={setGoal.isPending} style={{ flex: 'none', height: 44, padding: '0 16px', border: 'none', borderRadius: 12, background: `linear-gradient(135deg,${theme.accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 14, fontWeight: 800, cursor: 'pointer', opacity: setGoal.isPending ? 0.7 : 1 }}>{setGoal.isPending ? '…' : 'Save'}</button>
+            <Button onClick={save} disabled={setGoal.isPending} style={{ flex: 'none', height: 44, padding: '0 16px', border: 'none', borderRadius: 12, background: `linear-gradient(135deg,${theme.accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 14, fontWeight: 800, cursor: 'pointer', opacity: setGoal.isPending ? 0.7 : 1 }}>{setGoal.isPending ? '…' : 'Save'}</Button>
           </div>
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
-            {goal && <button onClick={() => setGoal.mutate({ label: null, targetCents: null }, { onSuccess: () => setEditing(false) })} style={{ background: 'none', border: 'none', color: 'var(--danger-fg)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', padding: 0 }}>Remove goal</button>}
-            <button onClick={() => setEditing(false)} style={{ background: 'none', border: 'none', color: 'var(--text-faint)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', padding: 0, marginLeft: 'auto' }}>Cancel</button>
+            {goal && <Button onClick={() => setGoal.mutate({ label: null, targetCents: null }, { onSuccess: () => setEditing(false) })} style={{ background: 'none', border: 'none', color: 'var(--danger-fg)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', padding: 0 }}>Remove goal</Button>}
+            <Button onClick={() => setEditing(false)} style={{ background: 'none', border: 'none', color: 'var(--text-faint)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', padding: 0, marginLeft: 'auto' }}>Cancel</Button>
           </div>
         </div>
       )}
@@ -560,14 +561,14 @@ function WelcomeDmEditor({ data }: { data: EarningsSummary | undefined }) {
           <div style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--text)' }}>Welcome DM</div>
           <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 2 }}>{current ? 'Auto-sent to every new subscriber.' : 'Off — auto-thank new subscribers with a DM.'}</div>
         </div>
-        {!editing && <button onClick={open} style={{ flex: 'none', height: 34, padding: '0 14px', border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>{current ? 'Edit' : 'Set'}</button>}
+        {!editing && <Button onClick={open} style={{ flex: 'none', height: 34, padding: '0 14px', border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>{current ? 'Edit' : 'Set'}</Button>}
       </div>
       {editing && (
         <div style={{ marginTop: 12 }}>
           <textarea value={text} onChange={(e) => setText(e.target.value.slice(0, 500))} rows={3} placeholder="Thanks so much for subscribing! 🧡" style={{ width: '100%', border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 15, outline: 'none', padding: 12, resize: 'vertical', lineHeight: 1.5, boxSizing: 'border-box' }} />
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
-            <button onClick={save} disabled={setWelcome.isPending} style={{ height: 40, padding: '0 18px', border: 'none', borderRadius: 12, background: `linear-gradient(135deg,${theme.accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 14, fontWeight: 800, cursor: 'pointer', opacity: setWelcome.isPending ? 0.7 : 1 }}>{setWelcome.isPending ? '…' : 'Save'}</button>
-            <button onClick={() => setEditing(false)} style={{ background: 'none', border: 'none', color: 'var(--text-faint)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
+            <Button onClick={save} disabled={setWelcome.isPending} style={{ height: 40, padding: '0 18px', border: 'none', borderRadius: 12, background: `linear-gradient(135deg,${theme.accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 14, fontWeight: 800, cursor: 'pointer', opacity: setWelcome.isPending ? 0.7 : 1 }}>{setWelcome.isPending ? '…' : 'Save'}</Button>
+            <Button onClick={() => setEditing(false)} style={{ background: 'none', border: 'none', color: 'var(--text-faint)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>Cancel</Button>
           </div>
         </div>
       )}

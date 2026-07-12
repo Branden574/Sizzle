@@ -1,4 +1,5 @@
 import { TERMS_VERSION } from '../lib/geo';
+import { Button } from './controls';
 import { CloseIcon } from './icons';
 
 /**
@@ -43,9 +44,9 @@ export function LegalDoc({ which, onClose }: { which: 'terms' | 'privacy'; onClo
     <div style={{ position: 'absolute', inset: 0, zIndex: 200, background: 'var(--bg)', display: 'flex', flexDirection: 'column', animation: 'sz-slideUp .35s cubic-bezier(.16,1,.3,1)' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '54px 20px 12px', flex: 'none' }}>
         <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 26, color: 'var(--text)' }}>{title}</div>
-        <button onClick={onClose} aria-label="Close" style={{ width: 38, height: 38, borderRadius: '50%', border: '1.5px solid var(--line-2)', background: 'var(--surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+        <Button onClick={onClose} aria-label="Close" style={{ width: 38, height: 38, borderRadius: '50%', border: '1.5px solid var(--line-2)', background: 'var(--surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
           <CloseIcon size={18} stroke="var(--text-muted)" strokeWidth={2.2} />
-        </button>
+        </Button>
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 22px 32px' }}>
         <div style={{ background: 'var(--warn-bg)', border: '1px solid var(--line-2)', borderRadius: 14, padding: '12px 14px', marginBottom: 18 }}>

@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
+import { Button } from '../controls';
 import { useRecipe } from '../../data/queries';
 import { getOffline } from '../../lib/offline';
 import { scaleIngredient } from '../../lib/ingredients';
@@ -96,17 +97,17 @@ export function CookModeSheet() {
       {/* header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '54px 20px 10px', flex: 'none' }}>
         <div style={{ minWidth: 40 }}>
-          <button onClick={close} style={{ width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+          <Button onClick={close} style={{ width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(255,255,255,.12)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
             <CloseIcon size={20} stroke="#fff" strokeWidth={2.2} />
-          </button>
+          </Button>
         </div>
         <div style={{ textAlign: 'center', color: '#fff', overflow: 'hidden' }}>
           <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.5px', textTransform: 'uppercase', color: 'rgba(255,255,255,.5)' }}>Cook mode</div>
           <div style={{ fontSize: 14.5, fontWeight: 700, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</div>
         </div>
-        <button onClick={() => setShowIngredients((v) => !v)} style={{ minWidth: 40, height: 38, padding: '0 12px', borderRadius: 19, border: 'none', background: showIngredients ? 'var(--accent)' : 'rgba(255,255,255,.12)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
+        <Button onClick={() => setShowIngredients((v) => !v)} style={{ minWidth: 40, height: 38, padding: '0 12px', borderRadius: 19, border: 'none', background: showIngredients ? 'var(--accent)' : 'rgba(255,255,255,.12)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
           {showIngredients ? 'Steps' : 'Items'}
-        </button>
+        </Button>
       </div>
 
       {/* progress dots */}
@@ -122,7 +123,7 @@ export function CookModeSheet() {
           {r.ingredients.map((ing, i) => {
             const on = !!checked[i];
             return (
-              <button
+              <Button
                 key={i}
                 onClick={() => setChecked((c) => ({ ...c, [i]: !c[i] }))}
                 style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 14, padding: '14px 12px', background: 'none', border: 'none', borderBottom: '1px solid rgba(255,255,255,.08)', cursor: 'pointer', textAlign: 'left' }}
@@ -131,7 +132,7 @@ export function CookModeSheet() {
                   {on && <span style={{ color: '#fff', fontSize: 14, fontWeight: 800 }}>✓</span>}
                 </div>
                 <span style={{ fontSize: 16, color: on ? 'rgba(255,255,255,.45)' : '#fff', textDecoration: on ? 'line-through' : 'none' }}>{scale === 1 && units === 'original' ? ing : scaleIngredient(ing, scale, units)}</span>
-              </button>
+              </Button>
             );
           })}
         </div>
@@ -147,11 +148,11 @@ export function CookModeSheet() {
                 <div style={{ fontFamily: "'Hanken Grotesk'", fontSize: 34, fontWeight: 800, color: remaining === 0 ? 'var(--accent)' : '#fff', fontVariantNumeric: 'tabular-nums' }}>{fmt(remaining ?? timerSeconds)}</div>
               </div>
               {remaining == null ? (
-                <button onClick={startTimer} style={{ height: 46, padding: '0 22px', borderRadius: 14, border: 'none', background: 'var(--accent)', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>Start</button>
+                <Button onClick={startTimer} style={{ height: 46, padding: '0 22px', borderRadius: 14, border: 'none', background: 'var(--accent)', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>Start</Button>
               ) : running ? (
-                <button onClick={() => setRunning(false)} style={{ height: 46, padding: '0 22px', borderRadius: 14, border: '1.5px solid rgba(255,255,255,.3)', background: 'transparent', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>Pause</button>
+                <Button onClick={() => setRunning(false)} style={{ height: 46, padding: '0 22px', borderRadius: 14, border: '1.5px solid rgba(255,255,255,.3)', background: 'transparent', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>Pause</Button>
               ) : (
-                <button onClick={() => (remaining === 0 ? startTimer() : setRunning(true))} style={{ height: 46, padding: '0 22px', borderRadius: 14, border: 'none', background: 'var(--accent)', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>{remaining === 0 ? 'Reset' : 'Resume'}</button>
+                <Button onClick={() => (remaining === 0 ? startTimer() : setRunning(true))} style={{ height: 46, padding: '0 22px', borderRadius: 14, border: 'none', background: 'var(--accent)', color: '#fff', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>{remaining === 0 ? 'Reset' : 'Resume'}</Button>
               )}
             </div>
           )}
@@ -161,19 +162,19 @@ export function CookModeSheet() {
       {/* step nav */}
       {!showIngredients && (
         <div style={{ display: 'flex', gap: 12, padding: '14px 22px 34px', flex: 'none' }}>
-          <button
+          <Button
             onClick={() => setStep((s) => Math.max(0, s - 1))}
             disabled={step === 0}
             style={{ flex: 'none', width: 64, height: 54, borderRadius: 16, border: '1.5px solid rgba(255,255,255,.2)', background: 'transparent', color: '#fff', fontSize: 15, fontWeight: 700, cursor: step === 0 ? 'default' : 'pointer', opacity: step === 0 ? 0.4 : 1 }}
           >
             Back
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() => (last ? close() : setStep((s) => s + 1))}
             style={{ flex: 1, height: 54, borderRadius: 16, border: 'none', background: 'var(--accent)', color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 700, cursor: 'pointer' }}
           >
             {last ? 'Finish cooking' : 'Next step'}
-          </button>
+          </Button>
         </div>
       )}
     </div>

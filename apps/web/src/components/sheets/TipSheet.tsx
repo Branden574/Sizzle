@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Button, DismissBackdrop } from '../controls';
 import { useSwipeDismiss } from '../../lib/useSwipeDismiss';
 import { showMonetization } from '../../lib/native';
 import { platformFeeCents, PLATFORM_FEE_PCT } from '@sizzle/shared';
@@ -51,7 +52,7 @@ export function TipSheet() {
 
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 94 }}>
-      <div onClick={close} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.5)', animation: 'sz-fadeIn .3s' }} />
+      <DismissBackdrop onDismiss={close} />
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, background: 'var(--bg)', borderRadius: '26px 26px 0 0', overflow: 'hidden', animation: 'sz-slideUp .4s cubic-bezier(.16,1,.3,1)', paddingBottom: 30, ...swipe.sheetStyle }}>
         <div {...swipe.handlers} style={{ textAlign: 'center', padding: '16px 0 6px', position: 'relative' , ...swipe.handlers.style}}>
           <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', width: 42, height: 5, borderRadius: 3, background: 'var(--track)' }} />
@@ -63,20 +64,20 @@ export function TipSheet() {
 
         <div style={{ padding: '12px 22px 0' }}>
           {done ? (
-            <button onClick={close} style={{ width: '100%', height: 52, border: 'none', borderRadius: 16, background: 'var(--invert-bg)', color: 'var(--invert-fg)', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>Done</button>
+            <Button onClick={close} style={{ width: '100%', height: 52, border: 'none', borderRadius: 16, background: 'var(--invert-bg)', color: 'var(--invert-fg)', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>Done</Button>
           ) : (
             <>
               <div style={{ display: 'flex', gap: 8, marginBottom: 14 }}>
                 {presets.map((p) => {
                   const on = amount === p;
                   return (
-                    <button
+                    <Button
                       key={p}
                       onClick={() => setAmount(p)}
                       style={{ flex: 1, height: 52, borderRadius: 14, border: on ? `2px solid ${accent}` : '1.5px solid var(--line-2)', background: on ? 'rgba(255,90,54,.08)' : 'var(--surface)', color: on ? accent : 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 800, cursor: 'pointer' }}
                     >
                       ${p / 100}
-                    </button>
+                    </Button>
                   );
                 })}
               </div>
@@ -96,13 +97,13 @@ export function TipSheet() {
               )}
               {err && <div style={{ color: '#d8521e', fontSize: 13.5, fontWeight: 600, margin: '0 2px 10px' }}>{err}</div>}
 
-              <button
+              <Button
                 onClick={pay}
                 disabled={send.isPending}
                 style={{ width: '100%', height: 52, border: 'none', borderRadius: 16, background: `linear-gradient(135deg,${accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 800, cursor: 'pointer', opacity: send.isPending ? 0.7 : 1 }}
               >
                 {send.isPending ? 'Starting…' : `Send ${usd(amount)}`}
-              </button>
+              </Button>
             </>
           )}
         </div>

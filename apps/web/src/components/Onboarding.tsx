@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
+import { Button, FilterChip, FollowButton, IconButton } from './controls';
 import { useAuth } from '../auth/useAuth';
 import { tasteDefs } from '../data';
 import { useSuggestedCooks } from '../data/queries';
@@ -9,7 +10,6 @@ import { formatCount } from '../lib/format';
 import { useSizzle } from '../store';
 import { theme } from '../theme';
 import { ChevronLeftIcon } from './icons';
-import { pressVars } from './ui';
 
 const STEP_IN = 'sz-stepIn .55s cubic-bezier(.34,1.56,.64,1)';
 
@@ -76,26 +76,15 @@ export function Onboarding() {
       {step === 3 && <StepAccount />}
 
       {showBack && (
-        <button
+        <IconButton
           onClick={back}
-          style={{
-            position: 'absolute',
-            top: 58,
-            left: 20,
-            zIndex: 31,
-            width: 38,
-            height: 38,
-            borderRadius: '50%',
-            border: 'none',
-            background: 'rgba(27,21,18,.06)',
-            display: 'flex',
-            alignItems: 'center',
-            justifyContent: 'center',
-            cursor: 'pointer',
-          }}
+          label="Go back"
+          variant="tonal"
+          size="sm"
+          style={{ position: 'absolute', top: 58, left: 20, zIndex: 31 }}
         >
           <ChevronLeftIcon />
-        </button>
+        </IconButton>
       )}
 
       {showContinue && (
@@ -109,26 +98,15 @@ export function Onboarding() {
             background: 'linear-gradient(180deg, transparent, var(--bg) 38%)',
           }}
         >
-          <button
+          <Button
             onClick={next}
-            className="sz-press"
-            style={{
-              ...pressVars(0.97),
-              width: '100%',
-              height: 58,
-              border: 'none',
-              borderRadius: 18,
-              background: contReady ? theme.ink : 'var(--line)',
-              color: contReady ? 'var(--invert-fg)' : 'var(--text-faint-2)',
-              fontFamily: "'Hanken Grotesk'",
-              fontSize: 17,
-              fontWeight: 700,
-              cursor: 'pointer',
-              transition: 'transform .2s cubic-bezier(.34,1.56,.64,1)',
-            }}
+            variant="primary"
+            size="lg"
+            fullWidth
+            disabled={!contReady}
           >
             {contLabel}
-          </button>
+          </Button>
         </div>
       )}
     </div>
@@ -166,32 +144,22 @@ function StepHero({ next, onLogin }: { next: () => void; onLogin: () => void }) 
         <p style={{ margin: '0 0 22px', color: 'var(--text-muted)', fontSize: 16, lineHeight: 1.5, maxWidth: 300 }}>
           A full-screen video feed of real recipes from real home cooks. Swipe, save, cook.
         </p>
-        <button
+        <Button
           onClick={next}
-          className="sz-press"
-          style={{
-            ...pressVars(0.96),
-            width: '100%',
-            height: 58,
-            border: 'none',
-            borderRadius: 18,
-            background: 'var(--invert-bg)',
-            color: 'var(--invert-fg)',
-            fontFamily: "'Hanken Grotesk'",
-            fontSize: 17,
-            fontWeight: 700,
-            cursor: 'pointer',
-            transition: 'transform .2s cubic-bezier(.34,1.56,.64,1)',
-          }}
+          variant="primary"
+          size="lg"
+          fullWidth
         >
           Get started
-        </button>
-        <button
+        </Button>
+        <Button
           onClick={onLogin}
-          style={{ width: '100%', height: 44, marginTop: 6, border: 'none', background: 'none', color: 'var(--text-soft)', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 600, cursor: 'pointer' }}
+          variant="text"
+          fullWidth
+          style={{ marginTop: 6 }}
         >
           Already have an account? <span style={{ color: 'var(--text)', fontWeight: 700 }}>Log in</span>
-        </button>
+        </Button>
       </div>
     </div>
   );
@@ -206,26 +174,13 @@ function StepTastes({ tastes, toggle }: { tastes: Record<string, boolean>; toggl
         {tasteDefs.map((label) => {
           const sel = !!tastes[label];
           return (
-            <button
+            <FilterChip
               key={label}
               onClick={() => toggle(label)}
-              className="sz-press"
-              style={{
-                ...pressVars(0.93, sel ? 1.04 : 1),
-                border: `1.5px solid ${sel ? 'var(--invert-bg)' : 'var(--line-2)'}`,
-                background: sel ? 'var(--invert-bg)' : 'var(--surface)',
-                color: sel ? 'var(--invert-fg)' : 'var(--text-2)',
-                padding: '13px 18px',
-                borderRadius: 16,
-                fontFamily: "'Hanken Grotesk'",
-                fontSize: 15.5,
-                fontWeight: 600,
-                cursor: 'pointer',
-                transition: 'all .28s cubic-bezier(.34,1.56,.64,1)',
-              }}
+              selected={sel}
             >
               {label}
-            </button>
+            </FilterChip>
           );
         })}
       </div>
@@ -261,26 +216,12 @@ function StepCooks({ followed, toggle }: { followed: Record<string, boolean>; to
                 <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>{c.name}</div>
                 <div style={{ fontSize: 13, color: c.matched.length ? '#c0531f' : 'var(--text-faint)', fontWeight: c.matched.length ? 600 : 400, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{subtitle}</div>
               </div>
-              <button
+              <FollowButton
+                name={c.name}
+                state={f ? 'following' : 'follow'}
+                compact
                 onClick={() => toggle(c.id)}
-                className="sz-press"
-                style={{
-                  ...pressVars(0.92),
-                  flex: 'none',
-                  padding: '11px 18px',
-                  borderRadius: 14,
-                  border: `1.5px solid ${f ? 'var(--invert-bg)' : 'var(--line-3)'}`,
-                  background: f ? 'var(--invert-bg)' : 'var(--surface)',
-                  color: f ? 'var(--invert-fg)' : 'var(--text)',
-                  fontFamily: "'Hanken Grotesk'",
-                  fontSize: 14,
-                  fontWeight: 700,
-                  cursor: 'pointer',
-                  transition: 'all .25s cubic-bezier(.34,1.56,.64,1)',
-                }}
-              >
-                {f ? 'Following' : 'Follow'}
-              </button>
+              />
             </div>
           );
         })}
@@ -374,19 +315,19 @@ function StepAccount() {
             {resetSent ? 'Check your email for a link to set a new password.' : 'Enter your email and we’ll send you a reset link.'}
           </p>
           {resetSent ? (
-            <button onClick={back} className="sz-press" style={{ ...pressVars(0.97), height: 56, border: 'none', borderRadius: 16, background: 'var(--invert-bg)', color: 'var(--invert-fg)', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>
+            <Button onClick={back} variant="primary" size="lg" fullWidth>
               Back to log in
-            </button>
+            </Button>
           ) : (
             <form onSubmit={sendReset} style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
               <input type="email" autoComplete="email" inputMode="email" placeholder="Email address" value={email} onChange={(e) => setEmail(e.target.value)} style={inputStyle} />
               {error && <div style={{ color: '#d8521e', fontSize: 13.5, fontWeight: 600, padding: '0 2px' }}>{error}</div>}
-              <button type="submit" disabled={!email.trim() || busy} className="sz-press" style={{ ...pressVars(0.97), height: 56, border: 'none', borderRadius: 16, background: 'var(--invert-bg)', color: 'var(--invert-fg)', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 700, cursor: email.trim() && !busy ? 'pointer' : 'default', opacity: email.trim() && !busy ? 1 : 0.55 }}>
-                {busy ? 'Sending…' : 'Send reset link'}
-              </button>
-              <button type="button" onClick={back} style={{ height: 40, border: 'none', background: 'none', color: 'var(--text-soft)', fontFamily: "'Hanken Grotesk'", fontSize: 14.5, fontWeight: 600, cursor: 'pointer' }}>
+              <Button type="submit" variant="primary" size="lg" fullWidth disabled={!email.trim()} loading={busy} loadingLabel="Sending…">
+                Send reset link
+              </Button>
+              <Button type="button" variant="text" onClick={back}>
                 Back to log in
-              </button>
+              </Button>
             </form>
           )}
         </div>
@@ -415,17 +356,23 @@ function StepAccount() {
           We sent a confirmation link to <b style={{ color: 'var(--text)' }}>{email || 'your email'}</b>. Tap it to verify your email and start cooking.
         </p>
         <p style={{ color: 'var(--text-faint-2)', fontSize: 13.5, margin: '0 0 30px' }}>Didn’t get it? Check your spam folder.</p>
-        <button
+        <Button
           onClick={resend}
           disabled={resending || resent}
-          className="sz-press"
-          style={{ ...pressVars(0.97), width: '100%', maxWidth: 360, height: 54, border: 'none', borderRadius: 16, background: resent ? 'var(--surface-2)' : 'var(--invert-bg)', color: resent ? 'var(--text-soft)' : 'var(--invert-fg)', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 700, cursor: resending || resent ? 'default' : 'pointer', opacity: resending ? 0.6 : 1 }}
+          variant="primary"
+          size="lg"
+          fullWidth
+          loading={resending}
+          loadingLabel="Sending…"
+          success={resent}
+          successLabel="Email sent"
+          style={{ maxWidth: 360 }}
         >
-          {resent ? 'Email sent ✓' : resending ? 'Sending…' : 'Resend email'}
-        </button>
-        <button type="button" onClick={back} style={{ marginTop: 14, height: 40, border: 'none', background: 'none', color: 'var(--text-soft)', fontFamily: "'Hanken Grotesk'", fontSize: 14.5, fontWeight: 600, cursor: 'pointer' }}>
+          Resend email
+        </Button>
+        <Button type="button" variant="text" onClick={back} style={{ marginTop: 14 }}>
           Use a different email
-        </button>
+        </Button>
       </div>
     );
   }
@@ -477,29 +424,31 @@ function StepAccount() {
         </p>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
-          <button
+          <Button
             onClick={() => void signInOAuth('apple')}
-            className="sz-press"
-            style={{ ...pressVars(0.97), height: 54, border: 'none', borderRadius: 16, background: 'var(--invert-bg)', color: 'var(--invert-fg)', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 700, cursor: 'pointer', transition: 'transform .2s' }}
+            variant="secondary"
+            size="lg"
+            fullWidth
           >
             Continue with Apple
-          </button>
-          <button
+          </Button>
+          <Button
             onClick={() => void signInOAuth('google')}
-            className="sz-press"
-            style={{ ...pressVars(0.97), height: 54, border: '1.5px solid var(--line-2)', borderRadius: 16, background: 'var(--surface)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 700, cursor: 'pointer', transition: 'transform .2s' }}
+            variant="outline"
+            size="lg"
+            fullWidth
           >
             Continue with Google
-          </button>
+          </Button>
 
           {/* Social sign-up consent: the email form has its own 13+ checkbox, but
               OAuth skips that form, so capture the same agreement here. */}
           {!isLogin && (
             <p style={{ fontSize: 12.5, lineHeight: 1.45, color: 'var(--text-faint)', textAlign: 'center', margin: '2px 6px 0' }}>
               By continuing, you confirm you’re 13+ and agree to Sizzle’s{' '}
-              <button type="button" onClick={() => setShowLegal('terms')} style={legalLinkStyle}>Terms</button>
+              <Button type="button" onClick={() => setShowLegal('terms')} style={legalLinkStyle}>Terms</Button>
               {' '}and{' '}
-              <button type="button" onClick={() => setShowLegal('privacy')} style={legalLinkStyle}>Privacy Policy</button>.
+              <Button type="button" onClick={() => setShowLegal('privacy')} style={legalLinkStyle}>Privacy Policy</Button>.
             </p>
           )}
 
@@ -560,18 +509,19 @@ function StepAccount() {
                 onChange={(e) => setPassword(e.target.value)}
                 style={{ ...inputStyle, paddingRight: 48, width: '100%', boxSizing: 'border-box' }}
               />
-              <button
+              <IconButton
                 type="button"
                 onClick={() => setShowPassword((v) => !v)}
-                aria-label={showPassword ? 'Hide password' : 'Show password'}
-                style={{ position: 'absolute', right: 4, top: 0, bottom: 0, width: 44, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text-muted)', padding: 0 }}
+                label={showPassword ? 'Hide password' : 'Show password'}
+                variant="text"
+                style={{ position: 'absolute', right: 4, top: 4 }}
               >
                 {showPassword ? (
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-10-7-10-7a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 10 7 10 7a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>
                 ) : (
                   <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round"><path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>
                 )}
-              </button>
+              </IconButton>
             </div>
 
             {!isLogin && (
@@ -598,22 +548,24 @@ function StepAccount() {
                   <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)} aria-label="Agree to Terms and Privacy Policy" style={{ width: 20, height: 20, marginTop: 1, accentColor: theme.accent, flex: 'none', cursor: 'pointer' }} />
                   <span style={{ fontSize: 13.5, lineHeight: 1.45, color: 'var(--text-soft)' }}>
                     I’m 13+ and agree to Sizzle’s{' '}
-                    <button type="button" onClick={() => setShowLegal('terms')} style={legalLinkStyle}>Terms of Service</button>
+                    <Button type="button" onClick={() => setShowLegal('terms')} style={legalLinkStyle}>Terms of Service</Button>
                     {' '}and{' '}
-                    <button type="button" onClick={() => setShowLegal('privacy')} style={legalLinkStyle}>Privacy Policy</button>.
+                    <Button type="button" onClick={() => setShowLegal('privacy')} style={legalLinkStyle}>Privacy Policy</Button>.
                   </span>
                 </label>
               </>
             )}
 
             {isLogin && (
-              <button
+              <Button
                 type="button"
                 onClick={() => { clearError(); setForgot(true); }}
-                style={{ alignSelf: 'flex-end', border: 'none', background: 'none', color: 'var(--text-soft)', fontFamily: "'Hanken Grotesk'", fontSize: 13.5, fontWeight: 600, cursor: 'pointer', padding: '0 2px' }}
+                variant="text"
+                size="sm"
+                style={{ alignSelf: 'flex-end' }}
               >
                 Forgot password?
-              </button>
+              </Button>
             )}
 
             {!isLogin && password.length > 0 && !pwValid && (
@@ -626,36 +578,27 @@ function StepAccount() {
 
             {error && <div style={{ color: '#d8521e', fontSize: 13.5, fontWeight: 600, padding: '0 2px' }}>{error}</div>}
 
-            <button
+            <Button
               type="submit"
-              disabled={!canSubmit}
-              className="sz-press"
-              style={{
-                ...pressVars(0.97),
-                height: 56,
-                border: 'none',
-                borderRadius: 16,
-                background: 'var(--invert-bg)',
-                color: 'var(--invert-fg)',
-                fontFamily: "'Hanken Grotesk'",
-                fontSize: 16,
-                fontWeight: 700,
-                cursor: canSubmit ? 'pointer' : 'default',
-                opacity: canSubmit ? 1 : 0.55,
-                transition: 'transform .2s, opacity .2s',
-              }}
+              disabled={!canSubmit && !busy}
+              variant="primary"
+              size="lg"
+              fullWidth
+              loading={busy}
+              loadingLabel="One moment…"
             >
-              {busy ? 'One moment…' : isLogin ? 'Log in' : 'Create account'}
-            </button>
+              {isLogin ? 'Log in' : 'Create account'}
+            </Button>
           </form>
 
-          <button
+          <Button
             onClick={() => setMode(isLogin ? 'signup' : 'login')}
-            style={{ height: 40, border: 'none', background: 'none', color: 'var(--text-soft)', fontFamily: "'Hanken Grotesk'", fontSize: 14.5, fontWeight: 600, cursor: 'pointer' }}
+            variant="text"
+            fullWidth
           >
             {isLogin ? 'New here? ' : 'Already have an account? '}
             <span style={{ color: 'var(--text)', fontWeight: 700 }}>{isLogin ? 'Create an account' : 'Log in'}</span>
-          </button>
+          </Button>
         </div>
       </div>
     </div>

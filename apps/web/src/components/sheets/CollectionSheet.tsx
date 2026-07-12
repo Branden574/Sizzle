@@ -1,4 +1,5 @@
 import { useCollectionRecipes, useDeleteCollection, useRenameCollection, useToggleCollectionRecipe } from '../../data/queries';
+import { Button } from '../controls';
 import { useSizzle } from '../../store';
 import { ChevronLeftIcon } from '../icons';
 
@@ -35,12 +36,12 @@ export function CollectionSheet() {
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 86, background: 'var(--bg)', overflowY: 'auto', animation: 'sz-slideUp .35s cubic-bezier(.16,1,.3,1)' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '54px 16px 8px', position: 'sticky', top: 0, background: 'var(--bg)', zIndex: 2 }}>
-        <button onClick={close} aria-label="Back" style={{ width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'var(--surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+        <Button onClick={close} aria-label="Back" style={{ width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'var(--surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
           <ChevronLeftIcon size={22} stroke="var(--text)" strokeWidth={2.2} />
-        </button>
+        </Button>
         <div style={{ display: 'flex', alignItems: 'center', gap: 16 }}>
-          <button onClick={onRename} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text)', fontSize: 14.5, fontWeight: 700 }}>Rename</button>
-          <button onClick={onDelete} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#d8521e', fontSize: 14.5, fontWeight: 700 }}>Delete</button>
+          <Button onClick={onRename} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text)', fontSize: 14.5, fontWeight: 700 }}>Rename</Button>
+          <Button onClick={onDelete} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#d8521e', fontSize: 14.5, fontWeight: 700 }}>Delete</Button>
         </div>
       </div>
 
@@ -58,7 +59,7 @@ export function CollectionSheet() {
       <div style={{ padding: '14px 18px 110px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
         {items.map((r) => (
           <div key={r.id} style={{ position: 'relative' }}>
-            <button
+            <Button
               onClick={() => setOpenRecipe(r.id)}
               style={{ border: 'none', padding: 0, cursor: 'pointer', borderRadius: 20, overflow: 'hidden', position: 'relative', height: 200, width: '100%', background: r.bg, textAlign: 'left', display: 'block' }}
             >
@@ -68,15 +69,15 @@ export function CollectionSheet() {
                 <div style={{ color: 'rgba(255,255,255,.75)', fontSize: 11.5, fontWeight: 600 }}>{r.cuisine} · {r.time}</div>
                 <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 20, lineHeight: 1.05, color: '#fff', marginTop: 3 }}>{r.title}</div>
               </div>
-            </button>
-            <button
+            </Button>
+            <Button
               onClick={() => onRemove(r.id)}
               aria-label={`Remove ${r.title} from collection`}
               title="Remove from collection"
               style={{ position: 'absolute', top: 8, right: 8, width: 30, height: 30, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.55)', backdropFilter: 'blur(4px)', color: '#fff', fontSize: 17, lineHeight: 1, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
             >
               ×
-            </button>
+            </Button>
           </div>
         ))}
       </div>

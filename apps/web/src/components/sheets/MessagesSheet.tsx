@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Button, DismissBackdrop } from '../controls';
 import { useSwipeDismiss } from '../../lib/useSwipeDismiss';
 import { useConversations, useFollowList, useMe } from '../../data/queries';
 import { useSizzle } from '../../store';
@@ -30,14 +31,14 @@ export function MessagesSheet() {
 
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 90 }}>
-      <div onClick={close} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.5)', animation: 'sz-fadeIn .3s' }} />
+      <DismissBackdrop onDismiss={close} />
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '82%', background: 'var(--bg)', borderRadius: '26px 26px 0 0', overflow: 'hidden', animation: 'sz-slideUp .4s cubic-bezier(.16,1,.3,1)', display: 'flex', flexDirection: 'column', ...swipe.sheetStyle }}>
         <div {...swipe.handlers} style={{ padding: '14px 22px 12px', borderBottom: '1px solid var(--line)', position: 'relative' , ...swipe.handlers.style}}>
           <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', width: 42, height: 5, borderRadius: 3, background: 'var(--track)' }} />
           <div style={{ textAlign: 'center', fontSize: 15, fontWeight: 700, color: 'var(--text)', marginTop: 6 }}>Messages</div>
-          <button onClick={close} style={{ position: 'absolute', top: 14, right: 16, background: 'none', border: 'none', cursor: 'pointer' }}>
+          <Button onClick={close} style={{ position: 'absolute', top: 14, right: 16, background: 'none', border: 'none', cursor: 'pointer' }}>
             <CloseIcon size={22} stroke="var(--text-faint)" strokeWidth={2.2} />
-          </button>
+          </Button>
         </div>
 
         {/* Search people you follow */}
@@ -51,9 +52,9 @@ export function MessagesSheet() {
               style={{ flex: 1, border: 'none', background: 'none', outline: 'none', fontFamily: "'Hanken Grotesk'", fontSize: 14.5, color: 'var(--text)' }}
             />
             {q && (
-              <button onClick={() => setQ('')} aria-label="Clear" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}>
+              <Button onClick={() => setQ('')} aria-label="Clear" style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 0, display: 'flex' }}>
                 <CloseIcon size={16} stroke="var(--text-faint)" strokeWidth={2.4} />
-              </button>
+              </Button>
             )}
           </div>
         </div>
@@ -67,7 +68,7 @@ export function MessagesSheet() {
               </div>
             ) : (
               people.map((p) => (
-                <button
+                <Button
                   key={p.id}
                   onClick={() => open(p.id)}
                   style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, background: 'none', border: 'none', borderRadius: 14, padding: '10px', cursor: 'pointer', textAlign: 'left' }}
@@ -79,7 +80,7 @@ export function MessagesSheet() {
                     <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
                     <div style={{ fontSize: 13, color: 'var(--text-faint)', marginTop: 1 }}>@{p.handle}</div>
                   </div>
-                </button>
+                </Button>
               ))
             )
           ) : (
@@ -92,7 +93,7 @@ export function MessagesSheet() {
                 </div>
               )}
               {list.map((c) => (
-                <button
+                <Button
                   key={c.id}
                   onClick={() => setThreadWith(c.otherUser.id)}
                   style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, background: 'none', border: 'none', borderRadius: 14, padding: '11px 10px', cursor: 'pointer', textAlign: 'left' }}
@@ -110,7 +111,7 @@ export function MessagesSheet() {
                     <span style={{ fontSize: 12, color: 'var(--text-faint-2)' }}>{c.lastTime}</span>
                     {c.unread && <div style={{ width: 9, height: 9, borderRadius: '50%', background: 'var(--accent,#ff5a36)' }} />}
                   </div>
-                </button>
+                </Button>
               ))}
             </>
           )}

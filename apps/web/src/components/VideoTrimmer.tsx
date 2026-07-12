@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Button } from './controls';
 import { theme } from '../theme';
 
 const accent = theme.accent;
@@ -77,9 +78,9 @@ export function VideoTrimmer({ file, onTrimmed, onCancel }: { file: File; onTrim
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 96, background: '#0c0a09', display: 'flex', flexDirection: 'column', animation: 'sz-slideUp .3s' }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '56px 20px 12px' }}>
-        <button onClick={onCancel} disabled={recording} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 16, fontWeight: 600, cursor: recording ? 'default' : 'pointer', opacity: recording ? 0.4 : 1 }}>Cancel</button>
+        <Button onClick={onCancel} disabled={recording} style={{ background: 'none', border: 'none', color: '#fff', fontSize: 16, fontWeight: 600, cursor: recording ? 'default' : 'pointer', opacity: recording ? 0.4 : 1 }}>Cancel</Button>
         <div style={{ color: '#fff', fontSize: 16, fontWeight: 700 }}>Trim video</div>
-        <button onClick={apply} disabled={recording} style={{ background: 'none', border: 'none', color: accent, fontSize: 16, fontWeight: 800, cursor: recording ? 'default' : 'pointer' }}>{recording ? `${Math.round(progress * 100)}%` : 'Done'}</button>
+        <Button onClick={apply} disabled={recording} style={{ background: 'none', border: 'none', color: accent, fontSize: 16, fontWeight: 800, cursor: recording ? 'default' : 'pointer' }}>{recording ? `${Math.round(progress * 100)}%` : 'Done'}</Button>
       </div>
       <div style={{ flex: 1, display: 'flex', alignItems: 'center', justifyContent: 'center', padding: '0 20px', minHeight: 0 }}>
         <video ref={videoRef} src={url} playsInline autoPlay loop muted onLoadedMetadata={onMeta} onTimeUpdate={onTimeUpdate} style={{ maxWidth: '100%', maxHeight: '58vh', borderRadius: 14, background: '#000' }} />

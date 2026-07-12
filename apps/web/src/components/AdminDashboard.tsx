@@ -1,4 +1,5 @@
 import { useState, type CSSProperties } from 'react';
+import { Button } from './controls';
 import type { AdminAppealDTO, AdminContentReportDTO, AdminReportGroupDTO, AdminUserDTO, ReportCategory, SupportRequestDTO, VerificationTier } from '@sizzle/shared';
 import {
   useAdminAppeals, useAdminContentReports, useAdminLog, useAdminReports, useAdminStats, useAdminSupportRequests, useAdminUsers, useBanUser, useBoostUser, useDenyAppeal,
@@ -31,13 +32,13 @@ export function AdminDashboard() {
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 96, background: 'var(--bg)', display: 'flex', flexDirection: 'column', animation: 'sz-fadeIn .3s' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '52px 16px 12px', borderBottom: '1px solid var(--line)', flex: 'none' }}>
-        <button onClick={() => setShowAdmin(false)} style={{ width: 38, height: 38, border: 'none', background: 'var(--surface)', borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Button onClick={() => setShowAdmin(false)} style={{ width: 38, height: 38, border: 'none', background: 'var(--surface)', borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <ChevronLeftIcon size={22} stroke="var(--text)" />
-        </button>
+        </Button>
         <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 26, color: 'var(--text)', flex: 1 }}>Admin dashboard</div>
-        <button onClick={() => purge.mutate()} title="Run the expired-ban wipe now (also daily)" style={{ height: 34, padding: '0 12px', border: '1px solid var(--line)', borderRadius: 11, background: 'var(--surface)', color: 'var(--text-faint)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
+        <Button onClick={() => purge.mutate()} title="Run the expired-ban wipe now (also daily)" style={{ height: 34, padding: '0 12px', border: '1px solid var(--line)', borderRadius: 11, background: 'var(--surface)', color: 'var(--text-faint)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
           {purge.isPending ? 'Purging…' : 'Run purge'}
-        </button>
+        </Button>
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '16px 16px 40px' }}>
@@ -73,7 +74,7 @@ function Stat({ label, value, tone }: { label: string; value: number; tone: stri
   );
 }
 function Tab({ on, onClick, children }: { on: boolean; onClick: () => void; children: React.ReactNode }) {
-  return <button onClick={onClick} style={{ flex: 1, height: 40, border: '1px solid var(--line)', borderRadius: 12, background: on ? 'var(--invert-bg)' : 'var(--surface)', color: on ? 'var(--invert-fg)' : 'var(--text-soft)', fontFamily: "'Hanken Grotesk'", fontSize: 13.5, fontWeight: 700, cursor: 'pointer' }}>{children}</button>;
+  return <Button onClick={onClick} style={{ flex: 1, height: 40, border: '1px solid var(--line)', borderRadius: 12, background: on ? 'var(--invert-bg)' : 'var(--surface)', color: on ? 'var(--invert-fg)' : 'var(--text-soft)', fontFamily: "'Hanken Grotesk'", fontSize: 13.5, fontWeight: 700, cursor: 'pointer' }}>{children}</Button>;
 }
 function Muted({ children }: { children: React.ReactNode }) {
   return <div style={{ padding: 30, textAlign: 'center', color: 'var(--text-faint-2)', fontSize: 14 }}>{children}</div>;
@@ -134,7 +135,7 @@ function RequestsTab() {
           <div style={{ fontSize: 13.5, color: 'var(--text-soft)', marginTop: 8, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{r.message}</div>
           {r.status !== 'resolved' && (
             <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-              <button disabled={resolve.isPending} onClick={() => resolve.mutate({ id: r.id })} style={pill('#1f9d55', '#fff')}>Mark resolved</button>
+              <Button disabled={resolve.isPending} onClick={() => resolve.mutate({ id: r.id })} style={pill('#1f9d55', '#fff')}>Mark resolved</Button>
             </div>
           )}
         </div>
@@ -171,9 +172,9 @@ function ReportsTab() {
           <div style={{ fontSize: 15.5, fontWeight: 700, color: 'var(--text)' }}>{r.recipeTitle}</div>
           <div style={{ fontSize: 13, color: 'var(--text-faint)', marginTop: 2 }}>by {r.cookName}{r.recipeStatus === 'removed' ? ' · removed' : ''}</div>
           <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-            <button onClick={() => setOpenRecipe(r.recipeId)} style={pill('var(--invert-bg)', 'var(--invert-fg)')}>View video</button>
-            <button disabled={markFalse.isPending} onClick={() => markFalse.mutate({ recipeId: r.recipeId })} style={pill('var(--surface-3)', 'var(--text-soft)')}>Mark false</button>
-            <button disabled={remove.isPending || r.recipeStatus === 'removed'} onClick={() => remove.mutate({ recipeId: r.recipeId, reason: topCategory(r.categories) })} style={pill('#d8521e', '#fff')}>Remove</button>
+            <Button onClick={() => setOpenRecipe(r.recipeId)} style={pill('var(--invert-bg)', 'var(--invert-fg)')}>View video</Button>
+            <Button disabled={markFalse.isPending} onClick={() => markFalse.mutate({ recipeId: r.recipeId })} style={pill('var(--surface-3)', 'var(--text-soft)')}>Mark false</Button>
+            <Button disabled={remove.isPending || r.recipeStatus === 'removed'} onClick={() => remove.mutate({ recipeId: r.recipeId, reason: topCategory(r.categories) })} style={pill('#d8521e', '#fff')}>Remove</Button>
           </div>
         </div>
       ))}
@@ -192,9 +193,9 @@ function ReportsTab() {
               <div style={{ fontSize: 14.5, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' }}>{f.preview}</div>
               {f.subLabel && <div style={{ fontSize: 13, color: 'var(--text-faint)', marginTop: 2 }}>{f.subLabel}</div>}
               <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-                {f.targetType === 'profile' && <button onClick={() => setOpenCook(f.targetId)} style={pill('var(--invert-bg)', 'var(--invert-fg)')}>View profile</button>}
-                <button disabled={resolveContent.isPending} onClick={() => resolveContent.mutate({ targetType: f.targetType, targetId: f.targetId, action: 'dismiss' })} style={pill('var(--surface-3)', 'var(--text-soft)')}>Dismiss</button>
-                {f.targetType === 'comment' && <button disabled={resolveContent.isPending} onClick={() => resolveContent.mutate({ targetType: 'comment', targetId: f.targetId, action: 'hide' })} style={pill('#d8521e', '#fff')}>Hide</button>}
+                {f.targetType === 'profile' && <Button onClick={() => setOpenCook(f.targetId)} style={pill('var(--invert-bg)', 'var(--invert-fg)')}>View profile</Button>}
+                <Button disabled={resolveContent.isPending} onClick={() => resolveContent.mutate({ targetType: f.targetType, targetId: f.targetId, action: 'dismiss' })} style={pill('var(--surface-3)', 'var(--text-soft)')}>Dismiss</Button>
+                {f.targetType === 'comment' && <Button disabled={resolveContent.isPending} onClick={() => resolveContent.mutate({ targetType: 'comment', targetId: f.targetId, action: 'hide' })} style={pill('#d8521e', '#fff')}>Hide</Button>}
               </div>
             </div>
           ))}
@@ -226,9 +227,9 @@ function AppealsTab() {
           <div style={{ fontSize: 13, color: 'var(--text-faint)', marginTop: 2 }}>by {a.cookName} · removed for {a.removalReason ?? '—'}</div>
           {a.appealText && <div style={{ fontSize: 13.5, color: 'var(--text-2)', marginTop: 8, fontStyle: 'italic', background: 'var(--bg-soft)', borderRadius: 10, padding: 10 }}>“{a.appealText}”</div>}
           <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
-            <button onClick={() => setOpenRecipe(a.recipeId)} style={pill('var(--invert-bg)', 'var(--invert-fg)')}>View video</button>
-            <button disabled={deny.isPending} onClick={() => deny.mutate({ recipeId: a.recipeId })} style={pill('var(--surface-3)', 'var(--text-soft)')}>Deny</button>
-            <button disabled={restore.isPending} onClick={() => restore.mutate({ recipeId: a.recipeId })} style={pill('#1f9d55', '#fff')}>Restore</button>
+            <Button onClick={() => setOpenRecipe(a.recipeId)} style={pill('var(--invert-bg)', 'var(--invert-fg)')}>View video</Button>
+            <Button disabled={deny.isPending} onClick={() => deny.mutate({ recipeId: a.recipeId })} style={pill('var(--surface-3)', 'var(--text-soft)')}>Deny</Button>
+            <Button disabled={restore.isPending} onClick={() => restore.mutate({ recipeId: a.recipeId })} style={pill('#1f9d55', '#fff')}>Restore</Button>
           </div>
         </div>
       ))}
@@ -247,21 +248,21 @@ function UsersTab() {
 
   const tierBtn = (u: AdminUserDTO, tier: VerificationTier | null, label: string) => {
     const active = u.verifiedTier === tier || (tier === null && !u.verifiedTier);
-    return <button key={label} onClick={() => verify.mutate({ id: u.id, tier })} style={{ flex: 1, height: 32, border: '1px solid var(--line)', borderRadius: 9, background: active ? 'var(--invert-bg)' : 'var(--surface)', color: active ? 'var(--invert-fg)' : 'var(--text-soft)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>{label}</button>;
+    return <Button key={label} onClick={() => verify.mutate({ id: u.id, tier })} style={{ flex: 1, height: 32, border: '1px solid var(--line)', borderRadius: 9, background: active ? 'var(--invert-bg)' : 'var(--surface)', color: active ? 'var(--invert-fg)' : 'var(--text-soft)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>{label}</Button>;
   };
 
   // Per-creator For You ranking lift. Off=0, Light=0.5, Strong=1 (folded into the
   // score as one signal, so it's a natural nudge — not an obvious always-#1 pin).
   const boostBtn = (u: AdminUserDTO, val: number, label: string) => {
     const active = Math.abs((u.boost ?? 0) - val) < 0.01;
-    return <button key={label} onClick={() => boost.mutate({ id: u.id, boost: val })} style={{ flex: 1, height: 30, border: '1px solid var(--line)', borderRadius: 9, background: active ? (val > 0 ? '#c98a1e' : 'var(--invert-bg)') : 'var(--surface)', color: active ? '#fff' : 'var(--text-soft)', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{label}</button>;
+    return <Button key={label} onClick={() => boost.mutate({ id: u.id, boost: val })} style={{ flex: 1, height: 30, border: '1px solid var(--line)', borderRadius: 9, background: active ? (val > 0 ? '#c98a1e' : 'var(--invert-bg)') : 'var(--surface)', color: active ? '#fff' : 'var(--text-soft)', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{label}</Button>;
   };
 
   return (
     <>
       <div style={{ display: 'flex', gap: 6, marginBottom: 10 }}>
         {(['flagged', 'all', 'banned'] as const).map((f) => (
-          <button key={f} onClick={() => setFilter(f)} style={{ flex: 1, height: 34, border: '1px solid var(--line)', borderRadius: 10, background: filter === f ? 'var(--invert-bg)' : 'var(--surface)', color: filter === f ? 'var(--invert-fg)' : 'var(--text-soft)', fontSize: 13, fontWeight: 700, cursor: 'pointer', textTransform: 'capitalize' }}>{f}</button>
+          <Button key={f} onClick={() => setFilter(f)} style={{ flex: 1, height: 34, border: '1px solid var(--line)', borderRadius: 10, background: filter === f ? 'var(--invert-bg)' : 'var(--surface)', color: filter === f ? 'var(--invert-fg)' : 'var(--text-soft)', fontSize: 13, fontWeight: 700, cursor: 'pointer', textTransform: 'capitalize' }}>{f}</Button>
         ))}
       </div>
       <input value={q} onChange={(e) => setQ(e.target.value)} placeholder="Search name or handle" style={{ width: '100%', height: 42, border: '1px solid var(--line)', borderRadius: 12, padding: '0 14px', fontFamily: "'Hanken Grotesk'", fontSize: 14.5, color: 'var(--text)', outline: 'none', background: 'var(--surface)', marginBottom: 12 }} />
@@ -295,13 +296,13 @@ function UsersTab() {
               <span style={{ width: 42, flex: 'none', fontSize: 11, fontWeight: 800, letterSpacing: '.04em', textTransform: 'uppercase', color: u.boost > 0 ? '#c98a1e' : 'var(--text-faint)' }}>Boost</span>
               {boostBtn(u, 0, 'Off')}{boostBtn(u, 0.5, 'Light')}{boostBtn(u, 1, 'Strong')}
             </div>
-            <button
+            <Button
               disabled={u.role === 'admin' || ban.isPending}
               onClick={() => ban.mutate({ id: u.id, banned: !u.banned, reason: 'Repeated violations' })}
               style={{ width: '100%', height: 38, marginTop: 8, border: 'none', borderRadius: 11, background: u.role === 'admin' ? 'var(--surface-3)' : u.banned ? '#1f9d55' : 'var(--danger-bg)', color: u.role === 'admin' ? 'var(--text-faint-2)' : u.banned ? '#fff' : '#d8521e', fontSize: 13.5, fontWeight: 700, cursor: u.role === 'admin' ? 'default' : 'pointer' }}
             >
               {u.role === 'admin' ? 'Admin (protected)' : u.banned ? 'Unban (restore account)' : 'Ban user (45-day wipe)'}
-            </button>
+            </Button>
           </div>
         );
       })}

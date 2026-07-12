@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Button, DismissBackdrop } from '../controls';
 import { useRequireAuth } from '../../auth/useRequireAuth';
 import { useAppealRecipe, useDeleteRecipe, useMe, useRecipe, useToggleDownload, useToggleSave, useUnlockRecipe } from '../../data/queries';
 import { getOffline } from '../../lib/offline';
@@ -63,7 +64,7 @@ export function RecipeSheet() {
 
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 97 }}>
-      <div onClick={close} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.5)', animation: 'sz-fadeIn .3s' }} />
+      <DismissBackdrop onDismiss={close} />
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, top: 44, background: 'var(--bg)', borderRadius: '30px 30px 0 0', overflow: 'hidden', animation: 'sz-slideUp .42s cubic-bezier(.16,1,.3,1)', display: 'flex', flexDirection: 'column' }}>
         <div style={{ position: 'relative', height: hasMedia ? 300 : 230, flex: 'none', background: r?.bg ?? 'linear-gradient(165deg,#2a160e,#b5471f)' }}>
           {headerVideo ? (
@@ -75,18 +76,18 @@ export function RecipeSheet() {
           )}
           {/* fade the bottom into the sheet bg so the recipe title reads over it */}
           <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: hasMedia ? 'linear-gradient(180deg, rgba(0,0,0,.3) 0%, transparent 24%, transparent 64%, var(--bg))' : 'linear-gradient(180deg, transparent 50%, var(--bg))' }} />
-          <button onClick={close} style={{ position: 'absolute', top: 16, right: 16, zIndex: 6, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.35)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+          <Button onClick={close} style={{ position: 'absolute', top: 16, right: 16, zIndex: 6, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.35)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
             <CloseIcon size={20} stroke="#fff" strokeWidth={2.2} />
-          </button>
+          </Button>
           {isOwner && (
-            <button onClick={() => setConfirmDel(true)} title="Delete post" aria-label="Delete post" style={{ position: 'absolute', top: 16, left: 16, zIndex: 6, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.4)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+            <Button onClick={() => setConfirmDel(true)} title="Delete post" aria-label="Delete post" style={{ position: 'absolute', top: 16, left: 16, zIndex: 6, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.4)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
               <TrashIcon size={19} stroke="#fff" strokeWidth={2} />
-            </button>
+            </Button>
           )}
           {isOwner && (
-            <button onClick={() => { if (r) setEditPostFor(r.id); }} title="Edit post" aria-label="Edit post" style={{ position: 'absolute', top: 16, left: 62, zIndex: 6, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.4)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+            <Button onClick={() => { if (r) setEditPostFor(r.id); }} title="Edit post" aria-label="Edit post" style={{ position: 'absolute', top: 16, left: 62, zIndex: 6, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.4)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
               <PencilIcon size={18} stroke="#fff" strokeWidth={2} />
-            </button>
+            </Button>
           )}
           <div style={{ position: 'absolute', top: 14, left: '50%', transform: 'translateX(-50%)', zIndex: 6, width: 42, height: 5, borderRadius: 3, background: 'rgba(255,255,255,.6)' }} />
         </div>
@@ -105,13 +106,13 @@ export function RecipeSheet() {
                   {isOwner && r.appealStatus === 'none' && (
                     <div style={{ marginTop: 12 }}>
                       <textarea value={appealText} onChange={(e) => setAppealText(e.target.value)} rows={2} placeholder="Tell us why this should be restored…" style={{ width: '100%', border: '1.5px solid var(--line-2)', borderRadius: 12, padding: '10px 12px', fontFamily: "'Hanken Grotesk'", fontSize: 14, color: 'var(--text)', outline: 'none', background: 'var(--surface)', resize: 'vertical', lineHeight: 1.4 }} />
-                      <button
+                      <Button
                         disabled={!appealText.trim() || appeal.isPending}
                         onClick={() => appeal.mutate({ recipeId: r.id, text: appealText.trim() })}
                         style={{ marginTop: 8, width: '100%', height: 44, border: 'none', borderRadius: 12, background: 'var(--invert-bg)', color: 'var(--invert-fg)', fontFamily: "'Hanken Grotesk'", fontSize: 14.5, fontWeight: 700, cursor: appealText.trim() ? 'pointer' : 'default', opacity: appealText.trim() && !appeal.isPending ? 1 : 0.55 }}
                       >
                         {appeal.isPending ? 'Submitting…' : 'Submit appeal'}
-                      </button>
+                      </Button>
                     </div>
                   )}
                   {isOwner && r.appealStatus === 'pending' && <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--warn-fg)', marginTop: 10 }}>Appeal under review</div>}
@@ -134,7 +135,7 @@ export function RecipeSheet() {
                 <span style={{ display: 'inline-block', background: accent, color: '#fff', fontSize: 11.5, fontWeight: 700, letterSpacing: '.5px', textTransform: 'uppercase', padding: '5px 11px', borderRadius: 9 }}>{r.cuisine}</span>
               </div>
               <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 38, lineHeight: 1.02, color: 'var(--text)', marginTop: 12 }}>{r.title}</div>
-              <button
+              <Button
                 onClick={() => {
                   setOpenCook(r.cook.id);
                   setOpenRecipe(null);
@@ -149,7 +150,7 @@ export function RecipeSheet() {
                   </div>
                   <div style={{ fontSize: 12.5, color: 'var(--text-soft)' }}>@{r.cook.handle}</div>
                 </div>
-              </button>
+              </Button>
               {r.hashtags.length > 0 && (
                 <div style={{ marginTop: 16 }}>
                   <Hashtags tags={r.hashtags} size={14} />
@@ -186,12 +187,12 @@ export function RecipeSheet() {
                           : `This recipe is only available to ${r.cook.name}'s subscribers.`}
                       </div>
                       {showMonetization && (
-                        <button
+                        <Button
                           onClick={() => { if (requireAuth()) setOpenCook(r.cook.id); }}
                           style={{ width: '100%', height: 50, border: 'none', borderRadius: 14, background: `linear-gradient(135deg,${accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15.5, fontWeight: 800, cursor: 'pointer' }}
                         >
                           Subscribe to {r.cook.name}
-                        </button>
+                        </Button>
                       )}
                     </div>
                   )}
@@ -206,21 +207,21 @@ export function RecipeSheet() {
                           : `This is one of ${r.cook.name}'s premium recipes.`}
                       </div>
                       {showMonetization && (
-                        <button
+                        <Button
                           onClick={() => { if (requireAuth()) unlock.mutate(r.id); }}
                           disabled={unlock.isPending}
                           style={{ width: '100%', height: 50, border: 'none', borderRadius: 14, background: `linear-gradient(135deg,${accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15.5, fontWeight: 800, cursor: 'pointer' }}
                         >
                           {unlock.isPending ? 'Starting…' : `Unlock · $${(r.price / 100).toFixed(2)}`}
-                        </button>
+                        </Button>
                       )}
                       {showMonetization && r.cook.subPriceCents != null && (
-                        <button
+                        <Button
                           onClick={() => setOpenCook(r.cook.id)}
                           style={{ marginTop: 10, background: 'none', border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 700, color: 'var(--text-faint)', textDecoration: 'underline', padding: 0 }}
                         >
                           …or subscribe to {r.cook.name} for all their premium recipes
-                        </button>
+                        </Button>
                       )}
                     </div>
                   )}
@@ -233,7 +234,7 @@ export function RecipeSheet() {
                     <div style={{ display: 'flex', alignItems: 'center', gap: 9 }}>
                       <span style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-soft)' }}>Serves</span>
                       <div style={{ display: 'flex', alignItems: 'center', background: 'var(--surface-2)', border: '1px solid var(--line)', borderRadius: 12, overflow: 'hidden' }}>
-                        <button onClick={() => { setServesEdit(null); setServes(serves - 1); }} disabled={serves <= 1} aria-label="Fewer servings" style={{ width: 36, height: 38, border: 'none', background: 'transparent', color: serves <= 1 ? 'var(--text-faint-2)' : 'var(--text)', fontSize: 22, fontWeight: 600, cursor: serves <= 1 ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>−</button>
+                        <Button onClick={() => { setServesEdit(null); setServes(serves - 1); }} disabled={serves <= 1} aria-label="Fewer servings" style={{ width: 36, height: 38, border: 'none', background: 'transparent', color: serves <= 1 ? 'var(--text-faint-2)' : 'var(--text)', fontSize: 22, fontWeight: 600, cursor: serves <= 1 ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>−</Button>
                         <input
                           type="text"
                           inputMode="numeric"
@@ -244,7 +245,7 @@ export function RecipeSheet() {
                           aria-label="Number of servings"
                           style={{ width: 42, height: 38, textAlign: 'center', border: 'none', borderLeft: '1px solid var(--line)', borderRight: '1px solid var(--line)', background: 'transparent', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 15.5, fontWeight: 800, outline: 'none', fontVariantNumeric: 'tabular-nums', padding: 0 }}
                         />
-                        <button onClick={() => { setServesEdit(null); setServes(serves + 1); }} disabled={serves >= 100} aria-label="More servings" style={{ width: 36, height: 38, border: 'none', background: 'transparent', color: serves >= 100 ? 'var(--text-faint-2)' : 'var(--text)', fontSize: 20, fontWeight: 600, cursor: serves >= 100 ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>+</button>
+                        <Button onClick={() => { setServesEdit(null); setServes(serves + 1); }} disabled={serves >= 100} aria-label="More servings" style={{ width: 36, height: 38, border: 'none', background: 'transparent', color: serves >= 100 ? 'var(--text-faint-2)' : 'var(--text)', fontSize: 20, fontWeight: 600, cursor: serves >= 100 ? 'default' : 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', padding: 0 }}>+</Button>
                       </div>
                     </div>
                   </div>
@@ -258,7 +259,7 @@ export function RecipeSheet() {
                   </div>
 
                   <div style={{ display: 'flex', gap: 10, marginTop: 14 }}>
-                    <button
+                    <Button
                       onClick={() => {
                         const lines = scale === 1 && units === 'original' ? r.ingredients : r.ingredients.map((ing) => scaleIngredient(ing, scale, units));
                         addToShopping(lines, { id: r.id, title: r.title });
@@ -269,24 +270,24 @@ export function RecipeSheet() {
                       style={{ ...pressVars(0.98), flex: 1, height: 50, border: '1.5px solid var(--line-2)', borderRadius: 16, background: 'var(--surface)', color: addedToList ? 'var(--accent)' : 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 14.5, fontWeight: 700, cursor: 'pointer' }}
                     >
                       {addedToList ? '✓ Added' : '🛒 Shopping list'}
-                    </button>
-                    <button
+                    </Button>
+                    <Button
                       onClick={() => { if (!requireAuth()) return; setCollectionPickerFor(r.id); }}
                       className="sz-press"
                       style={{ ...pressVars(0.98), flex: 1, height: 50, border: '1.5px solid var(--line-2)', borderRadius: 16, background: 'var(--surface)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 14.5, fontWeight: 700, cursor: 'pointer' }}
                     >
                       📁 Save to…
-                    </button>
+                    </Button>
                   </div>
 
                   {r.steps.length > 0 && (
-                    <button
+                    <Button
                       onClick={() => setCookFor({ id: r.id, scale })}
                       className="sz-press"
                       style={{ ...pressVars(0.97), width: '100%', height: 54, marginTop: 12, border: 'none', borderRadius: 16, background: `linear-gradient(135deg, ${accent}, #e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9, boxShadow: '0 8px 22px -8px rgba(226,58,24,.6)' }}
                     >
                       ▶ Start cooking
-                    </button>
+                    </Button>
                   )}
 
                   <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 26, color: 'var(--text)', margin: '26px 0 12px' }}>Method</div>
@@ -307,7 +308,7 @@ export function RecipeSheet() {
             <div style={{ position: 'absolute', bottom: 0, left: 0, right: 0, zIndex: 4, padding: '14px 24px 30px', background: 'var(--bg)', display: 'flex', gap: 12 }}>
               {/* soft fade from the scrolling content into the solid action bar */}
               <div style={{ position: 'absolute', top: -24, left: 0, right: 0, height: 24, background: 'linear-gradient(180deg, transparent, var(--bg))', pointerEvents: 'none' }} />
-              <button
+              <Button
                 onClick={() => {
                   if (!requireAuth()) return;
                   save.mutate(r.id);
@@ -317,8 +318,8 @@ export function RecipeSheet() {
               >
                 <BookmarkIcon size={19} fill={r.viewer.saved ? accent : 'var(--invert-fg)'} stroke={r.viewer.saved ? accent : 'var(--invert-fg)'} strokeWidth={2} />
                 {r.viewer.saved ? 'Saved' : 'Save recipe'}
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={() => setCommentsFor(r.id)}
                 className="sz-press"
                 title="Comments"
@@ -327,8 +328,8 @@ export function RecipeSheet() {
               >
                 <CommentIcon size={21} stroke="var(--text-muted)" strokeWidth={2} />
                 <span style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{formatCount(r.counts.comments)}</span>
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={() => {
                   if (!requireAuth()) return;
                   download.mutate({ recipeId: r.id, downloaded: r.viewer.downloaded });
@@ -338,7 +339,7 @@ export function RecipeSheet() {
                 style={{ ...pressVars(0.93), width: 56, height: 56, flex: 'none', border: `1.5px solid ${r.viewer.downloaded ? accent : 'var(--line-2)'}`, borderRadius: 17, background: r.viewer.downloaded ? accent : 'var(--surface)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', transition: 'transform .2s' }}
               >
                 <DownloadIcon size={22} stroke={r.viewer.downloaded ? '#fff' : 'var(--text-muted)'} strokeWidth={2.2} />
-              </button>
+              </Button>
             </div>
           </>
         )}
@@ -346,20 +347,23 @@ export function RecipeSheet() {
 
       {confirmDel && r && (
         <div style={{ position: 'absolute', inset: 0, zIndex: 110, display: 'flex', alignItems: 'flex-end', justifyContent: 'center' }}>
-          <div onClick={() => setConfirmDel(false)} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.55)', animation: 'sz-fadeIn .2s' }} />
+          <DismissBackdrop onDismiss={() => setConfirmDel(false)} />
           <div style={{ position: 'relative', width: '100%', background: 'var(--bg)', borderRadius: '26px 26px 0 0', padding: '24px 22px 30px', animation: 'sz-slideUp .32s cubic-bezier(.16,1,.3,1)' }}>
             <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 25, color: 'var(--text)', textAlign: 'center' }}>Delete this post?</div>
             <p style={{ color: 'var(--text-faint)', fontSize: 14.5, textAlign: 'center', margin: '8px 0 20px', lineHeight: 1.45 }}>This permanently removes the video, recipe, likes and comments. This can’t be undone.</p>
             {del.isError && <div style={{ color: 'var(--danger-fg)', fontSize: 13.5, fontWeight: 600, textAlign: 'center', marginBottom: 12 }}>Couldn’t delete — please try again.</div>}
-            <button
-              disabled={del.isPending}
+            <Button
               onClick={() => del.mutate(r.id, { onSuccess: () => { setConfirmDel(false); setOpenRecipe(null); } })}
-              style={{ width: '100%', height: 52, border: 'none', borderRadius: 15, background: 'var(--danger-fg)', color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 700, cursor: del.isPending ? 'default' : 'pointer', opacity: del.isPending ? 0.6 : 1, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 9 }}
+              variant="danger"
+              size="lg"
+              fullWidth
+              loading={del.isPending}
+              loadingLabel="Deleting…"
+              leadingIcon={<TrashIcon size={19} stroke="currentColor" strokeWidth={2} />}
             >
-              <TrashIcon size={19} stroke="#fff" strokeWidth={2} />
-              {del.isPending ? 'Deleting…' : 'Delete post'}
-            </button>
-            <button onClick={() => setConfirmDel(false)} style={{ width: '100%', height: 50, marginTop: 10, border: '1.5px solid var(--line-2)', borderRadius: 15, background: 'var(--surface)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 15.5, fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
+              Delete post
+            </Button>
+            <Button variant="outline" fullWidth onClick={() => setConfirmDel(false)} style={{ marginTop: 10 }}>Cancel</Button>
           </div>
         </div>
       )}
@@ -404,7 +408,7 @@ function RecipeHeaderVideo({ src, poster, onExpand }: { src: string; poster?: st
   };
 
   return (
-    <div onClick={toggle} style={{ position: 'absolute', inset: 0, cursor: 'pointer', background: '#000' }}>
+    <div style={{ position: 'absolute', inset: 0, background: '#000' }}>
       <video
         ref={ref}
         poster={poster ?? undefined}
@@ -417,19 +421,20 @@ function RecipeHeaderVideo({ src, poster, onExpand }: { src: string; poster?: st
         onPause={() => setPaused(true)}
         style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }}
       />
+      <Button onClick={toggle} aria-label={paused ? 'Play video' : 'Pause video'} style={{ position: 'absolute', inset: 0, zIndex: 1, border: 0, background: 'transparent', cursor: 'pointer' }} />
       {paused && (
-        <div style={{ position: 'absolute', top: '46%', left: '50%', transform: 'translate(-50%,-50%)', width: 60, height: 60, borderRadius: '50%', background: 'rgba(255,255,255,.18)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
+        <div style={{ position: 'absolute', zIndex: 2, top: '46%', left: '50%', transform: 'translate(-50%,-50%)', width: 60, height: 60, borderRadius: '50%', background: 'rgba(255,255,255,.18)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center', pointerEvents: 'none' }}>
           <PlayIcon size={24} />
         </div>
       )}
-      <button
+      <Button
         onClick={(e) => { e.stopPropagation(); const v = ref.current; if (v) { v.muted = !v.muted; setMuted(v.muted); } }}
         aria-label={muted ? 'Unmute' : 'Mute'}
         style={{ position: 'absolute', bottom: 64, right: 62, zIndex: 5, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.4)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
       >
         {muted ? <SpeakerOffIcon size={19} /> : <SpeakerIcon size={19} />}
-      </button>
-      <button
+      </Button>
+      <Button
         onClick={(e) => { e.stopPropagation(); onExpand(); }}
         aria-label="Watch full screen"
         style={{ position: 'absolute', bottom: 64, right: 16, zIndex: 5, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.4)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}
@@ -437,7 +442,7 @@ function RecipeHeaderVideo({ src, poster, onExpand }: { src: string; poster?: st
         <svg width={18} height={18} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
           <path d="M8 3H5a2 2 0 0 0-2 2v3M16 3h3a2 2 0 0 1 2 2v3M21 16v3a2 2 0 0 1-2 2h-3M3 16v3a2 2 0 0 0 2 2h3" />
         </svg>
-      </button>
+      </Button>
     </div>
   );
 }

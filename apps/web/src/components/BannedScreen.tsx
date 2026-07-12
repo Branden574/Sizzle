@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Button } from './controls';
 import { useAuth } from '../auth/useAuth';
 import { useBanAppeal, useMe } from '../data/queries';
 
@@ -40,17 +41,17 @@ export function BannedScreen() {
             style={{ width: '100%', border: '1.5px solid var(--line-2)', borderRadius: 16, padding: '14px 16px', fontFamily: "'Hanken Grotesk'", fontSize: 15.5, color: 'var(--text)', outline: 'none', background: 'var(--surface)', resize: 'vertical', lineHeight: 1.5 }}
           />
           {appeal.isError && <div style={{ color: '#d8521e', fontSize: 13.5, fontWeight: 600, marginTop: 8 }}>Couldn't submit — please try again.</div>}
-          <button
+          <Button
             disabled={!text.trim() || appeal.isPending}
             onClick={() => appeal.mutate(text.trim(), { onSuccess: () => setDone(true) })}
             style={{ marginTop: 12, height: 54, border: 'none', borderRadius: 16, background: 'var(--invert-bg)', color: 'var(--invert-fg)', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 700, cursor: text.trim() ? 'pointer' : 'default', opacity: text.trim() && !appeal.isPending ? 1 : 0.55 }}
           >
             {appeal.isPending ? 'Submitting…' : 'Submit appeal'}
-          </button>
+          </Button>
         </>
       )}
 
-      <button onClick={() => void signOut()} style={{ marginTop: 'auto', height: 48, border: 'none', background: 'none', color: 'var(--text-faint)', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 600, cursor: 'pointer' }}>Log out</button>
+      <Button onClick={() => void signOut()} style={{ marginTop: 'auto', height: 48, border: 'none', background: 'none', color: 'var(--text-faint)', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 600, cursor: 'pointer' }}>Log out</Button>
     </div>
   );
 }

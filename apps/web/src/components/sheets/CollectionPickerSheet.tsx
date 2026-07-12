@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Button, DismissBackdrop } from '../controls';
 import { useSwipeDismiss } from '../../lib/useSwipeDismiss';
 import { useCollections, useCreateCollection, useToggleCollectionRecipe } from '../../data/queries';
 import { useSizzle } from '../../store';
@@ -29,7 +30,7 @@ export function CollectionPickerSheet() {
 
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 100 }}>
-      <div onClick={close} style={{ position: 'absolute', inset: 0, background: 'var(--scrim)', animation: 'sz-fadeIn .3s' }} />
+      <DismissBackdrop onDismiss={close} />
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, background: 'var(--bg)', borderRadius: '26px 26px 0 0', overflow: 'hidden', animation: 'sz-slideUp .4s cubic-bezier(.16,1,.3,1)', paddingBottom: 30, maxHeight: '80%', display: 'flex', flexDirection: 'column', ...swipe.sheetStyle }}>
         <div {...swipe.handlers} style={{ textAlign: 'center', padding: '16px 0 8px', position: 'relative', flex: 'none' , ...swipe.handlers.style}}>
           <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', width: 42, height: 5, borderRadius: 3, background: 'var(--track)' }} />
@@ -47,13 +48,13 @@ export function CollectionPickerSheet() {
               maxLength={60}
               style={{ flex: 1, height: 46, border: '1.5px solid var(--line-2)', borderRadius: 13, padding: '0 14px', fontFamily: "'Hanken Grotesk'", fontSize: 15, color: 'var(--text)', outline: 'none', background: 'var(--surface)' }}
             />
-            <button
+            <Button
               onClick={onCreate}
               disabled={!newName.trim() || create.isPending}
               style={{ flex: 'none', padding: '0 18px', height: 46, border: 'none', borderRadius: 13, background: 'var(--accent)', color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 14.5, fontWeight: 700, cursor: newName.trim() ? 'pointer' : 'default', opacity: newName.trim() && !create.isPending ? 1 : 0.5 }}
             >
               Create
-            </button>
+            </Button>
           </div>
 
           {isLoading && <div style={{ color: 'var(--text-faint-2)', fontSize: 14, padding: '8px 2px' }}>Loading…</div>}
@@ -63,7 +64,7 @@ export function CollectionPickerSheet() {
           {(collections ?? []).map((col) => {
             const inIt = !!col.hasRecipe;
             return (
-              <button
+              <Button
                 key={col.id}
                 onClick={() => toggle.mutate({ collectionId: col.id, recipeId, inCollection: inIt })}
                 style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, padding: '12px 4px', background: 'none', border: 'none', borderBottom: '1px solid var(--line)', cursor: 'pointer', textAlign: 'left' }}
@@ -76,13 +77,13 @@ export function CollectionPickerSheet() {
                 <div style={{ width: 26, height: 26, flex: 'none', borderRadius: '50%', border: `2px solid ${inIt ? 'var(--accent)' : 'var(--line-2)'}`, background: inIt ? 'var(--accent)' : 'transparent', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
                   {inIt && <CheckIcon size={14} stroke="#fff" strokeWidth={3} />}
                 </div>
-              </button>
+              </Button>
             );
           })}
         </div>
 
         <div style={{ padding: '14px 20px 0', flex: 'none' }}>
-          <button onClick={close} style={{ width: '100%', height: 52, border: 'none', borderRadius: 16, background: 'var(--invert-bg)', color: 'var(--invert-fg)', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>Done</button>
+          <Button onClick={close} style={{ width: '100%', height: 52, border: 'none', borderRadius: 16, background: 'var(--invert-bg)', color: 'var(--invert-fg)', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>Done</Button>
         </div>
       </div>
     </div>

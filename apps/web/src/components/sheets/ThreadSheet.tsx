@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Button } from '../controls';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRequireAuth } from '../../auth/useRequireAuth';
 import { useDeleteConversation, useSendMessage, useThread } from '../../data/queries';
@@ -63,18 +64,18 @@ export function ThreadSheet() {
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 92, background: 'var(--bg)', display: 'flex', flexDirection: 'column', animation: 'sz-slideUp .35s cubic-bezier(.16,1,.3,1)' }}>
       <div style={{ flex: 'none', display: 'flex', alignItems: 'center', gap: 10, padding: '52px 16px 12px', borderBottom: '1px solid var(--line)' }}>
-        <button onClick={close} aria-label="Back" style={{ width: 36, height: 36, flex: 'none', borderRadius: '50%', border: 'none', background: 'var(--surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+        <Button onClick={close} aria-label="Back" style={{ width: 36, height: 36, flex: 'none', borderRadius: '50%', border: 'none', background: 'var(--surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
           <ChevronLeftIcon size={20} stroke="var(--text)" strokeWidth={2.2} />
-        </button>
-        <button onClick={openProfile} style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0 }}>
+        </Button>
+        <Button onClick={openProfile} style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0 }}>
           <div style={{ width: 38, height: 38, flex: 'none', borderRadius: '50%', background: other?.avatarColor ?? 'var(--surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Instrument Serif',serif", fontSize: 16, color: '#fff', overflow: 'hidden' }}>
             {other?.avatarUrl ? <img src={other.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : other?.init ?? ''}
           </div>
           <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>{other?.name ?? 'Loading…'}</div>
-        </button>
-        <button onClick={removeChat} aria-label="Delete conversation" disabled={!thread?.conversationId} style={{ width: 36, height: 36, flex: 'none', borderRadius: '50%', border: 'none', background: 'var(--surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: thread?.conversationId ? 'pointer' : 'default', opacity: thread?.conversationId ? 1 : 0.4 }}>
+        </Button>
+        <Button onClick={removeChat} aria-label="Delete conversation" disabled={!thread?.conversationId} style={{ width: 36, height: 36, flex: 'none', borderRadius: '50%', border: 'none', background: 'var(--surface)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: thread?.conversationId ? 'pointer' : 'default', opacity: thread?.conversationId ? 1 : 0.4 }}>
           <TrashIcon size={18} />
-        </button>
+        </Button>
       </div>
 
       <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '16px 16px 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
@@ -109,9 +110,9 @@ export function ThreadSheet() {
           maxLength={2000}
           style={{ flex: 1, height: 44, border: '1.5px solid var(--line)', borderRadius: 22, padding: '0 16px', fontFamily: "'Hanken Grotesk'", fontSize: 15, color: 'var(--text)', outline: 'none', background: 'var(--bg-soft)' }}
         />
-        <button onClick={submit} aria-label="Send" style={{ width: 44, height: 44, flex: 'none', border: 'none', borderRadius: '50%', background: draft.trim() ? accent : 'var(--track)', cursor: draft.trim() ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Button onClick={submit} aria-label="Send" style={{ width: 44, height: 44, flex: 'none', border: 'none', borderRadius: '50%', background: draft.trim() ? accent : 'var(--track)', cursor: draft.trim() ? 'pointer' : 'default', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <ShareIcon size={20} stroke="#fff" strokeWidth={1.9} />
-        </button>
+        </Button>
       </div>
     </div>
   );

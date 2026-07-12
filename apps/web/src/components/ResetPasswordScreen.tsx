@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Button } from './controls';
 import { useAuth } from '../auth/useAuth';
 
 const inputStyle = {
@@ -54,9 +55,9 @@ export function ResetPasswordScreen() {
               </div>
             )}
             {error && <div style={{ color: '#d8521e', fontSize: 13.5, fontWeight: 600, padding: '0 2px' }}>{error}</div>}
-            <button type="submit" disabled={!valid || busy} style={{ height: 56, border: 'none', borderRadius: 16, background: 'var(--invert-bg)', color: 'var(--invert-fg)', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 700, cursor: valid && !busy ? 'pointer' : 'default', opacity: valid && !busy ? 1 : 0.55 }}>
+            <Button type="submit" disabled={!valid || busy} style={{ height: 56, border: 'none', borderRadius: 16, background: 'var(--invert-bg)', color: 'var(--invert-fg)', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 700, cursor: valid && !busy ? 'pointer' : 'default', opacity: valid && !busy ? 1 : 0.55 }}>
               {busy ? 'Updating…' : 'Update password'}
-            </button>
+            </Button>
           </form>
         )}
       </div>

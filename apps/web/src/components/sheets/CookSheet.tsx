@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Button, DismissBackdrop } from '../controls';
 import { useBuyProduct, useCancelSubscription, useCook, useCookProducts, useCookLive, useCookTiers, useMe, useSubscribe, useToggleBlock, useToggleFollow, useToggleMute } from '../../data/queries';
 import { useRequireAuth } from '../../auth/useRequireAuth';
 import { showMonetization } from '../../lib/native';
@@ -64,30 +65,30 @@ export function CookSheet() {
     <div style={{ position: 'absolute', inset: 0, zIndex: 85, background: 'var(--bg)', overflowY: 'auto', animation: 'sz-slideUp .42s cubic-bezier(.16,1,.3,1)' }}>
       <div style={{ height: 170, background: ck?.bannerUrl ? `url(${ck.bannerUrl}) center/cover no-repeat` : ck?.avatarColor ?? 'linear-gradient(135deg,#3a2a22,#1b1512)', position: 'relative' }}>
         {!ck?.bannerUrl && <div style={{ position: 'absolute', inset: 0, opacity: 0.12, background: 'repeating-linear-gradient(115deg,#000 0 2px, transparent 2px 7px)' }} />}
-        <button onClick={close} style={{ position: 'absolute', top: 54, left: 18, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.3)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+        <Button onClick={close} style={{ position: 'absolute', top: 54, left: 18, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.3)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
           <ChevronLeftIcon size={20} stroke="#fff" strokeWidth={2.2} />
-        </button>
+        </Button>
         {ck && (
-          <button onClick={onShare} aria-label="Share profile" style={{ position: 'absolute', top: 54, right: isOwn ? 18 : 64, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.3)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+          <Button onClick={onShare} aria-label="Share profile" style={{ position: 'absolute', top: 54, right: isOwn ? 18 : 64, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.3)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
             <ShareIcon size={19} stroke="#fff" strokeWidth={2} />
-          </button>
+          </Button>
         )}
         {ck && !isOwn && (
-          <button onClick={() => setMenuOpen((o) => !o)} aria-label="More" style={{ position: 'absolute', top: 54, right: 18, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.3)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+          <Button onClick={() => setMenuOpen((o) => !o)} aria-label="More" style={{ position: 'absolute', top: 54, right: 18, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.3)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
             <DotsIcon size={20} />
-          </button>
+          </Button>
         )}
       </div>
 
       {menuOpen && ck && (
         <>
-          <div onClick={() => setMenuOpen(false)} style={{ position: 'absolute', inset: 0, zIndex: 5 }} />
+          <DismissBackdrop onDismiss={() => setMenuOpen(false)} style={{ zIndex: 5, background: 'transparent' }} />
           <div style={{ position: 'absolute', top: 98, right: 18, zIndex: 6, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 16, overflow: 'hidden', minWidth: 200, boxShadow: '0 12px 34px -10px rgba(0,0,0,.5)' }}>
-            <button onClick={onMute} style={menuRow}>{ck.viewer.muted ? 'Unmute' : 'Mute'} <span style={menuHint}>{ck.viewer.muted ? 'show their posts again' : "hide their posts from your feed"}</span></button>
+            <Button onClick={onMute} style={menuRow}>{ck.viewer.muted ? 'Unmute' : 'Mute'} <span style={menuHint}>{ck.viewer.muted ? 'show their posts again' : "hide their posts from your feed"}</span></Button>
             <div style={{ height: 1, background: 'var(--line)' }} />
-            <button onClick={() => { setMenuOpen(false); setReportFor({ type: 'profile', id: ck.id, name: ck.name }); }} style={{ ...menuRow, color: '#e0573a' }}>Report <span style={menuHint}>flag this profile for review</span></button>
+            <Button onClick={() => { setMenuOpen(false); setReportFor({ type: 'profile', id: ck.id, name: ck.name }); }} style={{ ...menuRow, color: '#e0573a' }}>Report <span style={menuHint}>flag this profile for review</span></Button>
             <div style={{ height: 1, background: 'var(--line)' }} />
-            <button onClick={onBlock} style={{ ...menuRow, color: '#e0573a' }}>{ck.viewer.blocked ? 'Unblock' : 'Block'} <span style={menuHint}>{ck.viewer.blocked ? '' : 'hide each other everywhere'}</span></button>
+            <Button onClick={onBlock} style={{ ...menuRow, color: '#e0573a' }}>{ck.viewer.blocked ? 'Unblock' : 'Block'} <span style={menuHint}>{ck.viewer.blocked ? '' : 'hide each other everywhere'}</span></Button>
           </div>
         </>
       )}
@@ -102,7 +103,7 @@ export function CookSheet() {
           <div style={{ marginTop: 26, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 18, padding: 20, textAlign: 'center' }}>
             <div style={{ fontSize: 15.5, fontWeight: 700, color: 'var(--text)' }}>You blocked @{ck.handle}</div>
             <p style={{ fontSize: 13.5, color: 'var(--text-faint)', lineHeight: 1.5, margin: '8px 0 16px' }}>They can't find your profile or content, and you won't see theirs anywhere on Sizzle.</p>
-            <button onClick={onBlock} className="sz-press" style={{ ...pressVars(0.95), padding: '12px 28px', borderRadius: 14, border: '1.5px solid var(--line-2)', background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>Unblock</button>
+            <Button onClick={onBlock} className="sz-press" style={{ ...pressVars(0.95), padding: '12px 28px', borderRadius: 14, border: '1.5px solid var(--line-2)', background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>Unblock</Button>
           </div>
         </div>
       ) : (
@@ -123,23 +124,23 @@ export function CookSheet() {
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               {showMonetization && ck.acceptsTips && (
-                <button
+                <Button
                   onClick={() => { if (requireAuth()) setTipFor({ creatorId: ck.id, name: ck.name }); }}
                   className="sz-press"
                   title="Send a tip"
                   style={{ ...pressVars(0.94), padding: '12px 16px', borderRadius: 15, border: '1.5px solid var(--line-2)', background: 'var(--surface)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 700, cursor: 'pointer', transition: 'transform .2s cubic-bezier(.34,1.56,.64,1)' }}
                 >
                   💝 Support
-                </button>
+                </Button>
               )}
-              <button
+              <Button
                 onClick={() => { if (requireAuth()) setThreadWith(ck.id); }}
                 className="sz-press"
                 style={{ ...pressVars(0.94), padding: '12px 18px', borderRadius: 15, border: '1.5px solid var(--line-2)', background: 'var(--surface)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 700, cursor: 'pointer', transition: 'transform .2s cubic-bezier(.34,1.56,.64,1)' }}
               >
                 Message
-              </button>
-              <button
+              </Button>
+              <Button
                 onClick={() => {
                   if (!requireAuth()) return;
                   follow.mutate({ cookId: ck.id, following: ck.viewer.following, requested: ck.viewer.requested });
@@ -148,7 +149,7 @@ export function CookSheet() {
                 style={{ ...pressVars(0.94), padding: '12px 24px', borderRadius: 15, border: `1.5px solid ${ck.viewer.following || ck.viewer.requested ? 'var(--invert-bg)' : accent}`, background: ck.viewer.following || ck.viewer.requested ? 'var(--invert-bg)' : accent, color: ck.viewer.following || ck.viewer.requested ? 'var(--invert-fg)' : '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 700, cursor: 'pointer', transition: 'transform .2s cubic-bezier(.34,1.56,.64,1)' }}
               >
                 {ck.viewer.following ? 'Following' : ck.viewer.requested ? 'Requested' : ck.isPrivate ? 'Request' : 'Follow'}
-              </button>
+              </Button>
             </div>
           </div>
           <p style={{ color: 'var(--text-muted)', fontSize: 15, lineHeight: 1.5, margin: '14px 0 0' }}>{ck.bio}</p>
@@ -159,7 +160,7 @@ export function CookSheet() {
             ck.viewer.subscribed ? (
               <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 10, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 16, padding: '12px 16px' }}>
                 <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', flex: 1 }}>⭐ Subscribed · unlocks {ck.name}'s premium recipes</span>
-                <button onClick={() => { if (window.confirm(`Cancel your subscription to ${ck.name}? You keep access until the month ends.`)) cancelSub.mutate(ck.id); }} disabled={cancelSub.isPending} style={{ background: 'none', border: 'none', color: 'var(--text-faint)', fontFamily: "'Hanken Grotesk'", fontSize: 13, fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}>Cancel</button>
+                <Button onClick={() => { if (window.confirm(`Cancel your subscription to ${ck.name}? You keep access until the month ends.`)) cancelSub.mutate(ck.id); }} disabled={cancelSub.isPending} style={{ background: 'none', border: 'none', color: 'var(--text-faint)', fontFamily: "'Hanken Grotesk'", fontSize: 13, fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}>Cancel</Button>
               </div>
             ) : (
               <SubscribeTiers cookId={ck.id} basePriceCents={ck.subPriceCents} />
@@ -203,7 +204,7 @@ export function CookSheet() {
           <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', margin: '24px 0 12px' }}>Recipes</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
             {ck.recipes.map((d) => (
-              <button
+              <Button
                 key={d.id}
                 onClick={() => setOpenRecipe(d.id)}
                 style={{ border: 'none', padding: 0, cursor: 'pointer', borderRadius: 18, overflow: 'hidden', position: 'relative', height: 180, background: d.images && d.images.length > 0 ? `center/cover no-repeat url(${d.images[0]})` : d.bg, textAlign: 'left' }}
@@ -225,7 +226,7 @@ export function CookSheet() {
                   <div style={{ color: 'rgba(255,255,255,.75)', fontSize: 11, fontWeight: 600 }}>{d.time}</div>
                   <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 18, lineHeight: 1.05, color: '#fff', marginTop: 2 }}>{d.title}</div>
                 </div>
-              </button>
+              </Button>
             ))}
           </div>
           </>
@@ -248,7 +249,7 @@ function CookStat({ value, label, border, onClick }: { value: string; label: str
     </>
   );
   if (!onClick) return <div style={style}>{inner}</div>;
-  return <button onClick={onClick} style={{ ...style, background: 'none', border: 'none', borderRight: style.borderRight, cursor: 'pointer' }}>{inner}</button>;
+  return <Button onClick={onClick} style={{ ...style, background: 'none', border: 'none', borderRight: style.borderRight, cursor: 'pointer' }}>{inner}</Button>;
 }
 
 /** A creator's digital products, with buy / download. */
@@ -269,12 +270,12 @@ function ProductShelf({ cookId }: { cookId: string }) {
             </div>
             {p.owned ? (
               p.fileUrl
-                ? <button onClick={() => window.open(p.fileUrl!, '_blank', 'noopener')} style={{ flex: 'none', height: 38, padding: '0 16px', border: 'none', borderRadius: 12, background: 'var(--invert-bg)', color: 'var(--invert-fg)', fontFamily: "'Hanken Grotesk'", fontSize: 13.5, fontWeight: 800, cursor: 'pointer' }}>Download</button>
+                ? <Button onClick={() => window.open(p.fileUrl!, '_blank', 'noopener')} style={{ flex: 'none', height: 38, padding: '0 16px', border: 'none', borderRadius: 12, background: 'var(--invert-bg)', color: 'var(--invert-fg)', fontFamily: "'Hanken Grotesk'", fontSize: 13.5, fontWeight: 800, cursor: 'pointer' }}>Download</Button>
                 : <span style={{ flex: 'none', fontSize: 13, fontWeight: 800, color: '#1f9d55' }}>✓ Owned</span>
             ) : (
-              <button onClick={() => { if (requireAuth()) buy.mutate(p.id); }} disabled={buy.isPending} style={{ flex: 'none', height: 38, padding: '0 16px', border: 'none', borderRadius: 12, background: `linear-gradient(135deg,${accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 13.5, fontWeight: 800, cursor: 'pointer', opacity: buy.isPending ? 0.7 : 1 }}>
+              <Button onClick={() => { if (requireAuth()) buy.mutate(p.id); }} disabled={buy.isPending} style={{ flex: 'none', height: 38, padding: '0 16px', border: 'none', borderRadius: 12, background: `linear-gradient(135deg,${accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 13.5, fontWeight: 800, cursor: 'pointer', opacity: buy.isPending ? 0.7 : 1 }}>
                 {`Buy · $${(p.priceCents / 100).toFixed(2)}`}
-              </button>
+              </Button>
             )}
           </div>
         ))}
@@ -293,21 +294,21 @@ function SubscribeTiers({ cookId, basePriceCents }: { cookId: string; basePriceC
     return (
       <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
         {tiers.map((t) => (
-          <button key={t.id} onClick={() => go(t.id)} disabled={subscribe.isPending} className="sz-press" style={{ ...pressVars(0.98), textAlign: 'left', border: '1px solid var(--line)', borderRadius: 16, background: 'var(--surface)', padding: '13px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12 }}>
+          <Button key={t.id} onClick={() => go(t.id)} disabled={subscribe.isPending} className="sz-press" style={{ ...pressVars(0.98), textAlign: 'left', border: '1px solid var(--line)', borderRadius: 16, background: 'var(--surface)', padding: '13px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)' }}>{t.name}</div>
               {t.perks && <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 2 }}>{t.perks}</div>}
             </div>
             <div style={{ flex: 'none', padding: '7px 14px', borderRadius: 12, background: `linear-gradient(135deg,${accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 14, fontWeight: 800 }}>${(t.priceCents / 100).toFixed(2)}/mo</div>
-          </button>
+          </Button>
         ))}
       </div>
     );
   }
   return (
-    <button onClick={() => go()} disabled={subscribe.isPending} className="sz-press" style={{ ...pressVars(0.97), width: '100%', marginTop: 16, height: 50, borderRadius: 15, border: 'none', background: `linear-gradient(135deg,${accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15.5, fontWeight: 800, cursor: 'pointer' }}>
+    <Button onClick={() => go()} disabled={subscribe.isPending} className="sz-press" style={{ ...pressVars(0.97), width: '100%', marginTop: 16, height: 50, borderRadius: 15, border: 'none', background: `linear-gradient(135deg,${accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15.5, fontWeight: 800, cursor: 'pointer' }}>
       {subscribe.isPending ? 'Starting…' : `⭐ Subscribe · $${(basePriceCents / 100).toFixed(2)}/mo`}
-    </button>
+    </Button>
   );
 }
 

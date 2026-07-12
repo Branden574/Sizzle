@@ -1,4 +1,5 @@
 import { useFollowList } from '../../data/queries';
+import { Button, DismissBackdrop } from '../controls';
 import { useSwipeDismiss } from '../../lib/useSwipeDismiss';
 import { useSizzle } from '../../store';
 import { CloseIcon } from '../icons';
@@ -19,15 +20,15 @@ export function FollowListSheet() {
 
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 89 }}>
-      <div onClick={close} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.5)', animation: 'sz-fadeIn .3s' }} />
+      <DismissBackdrop onDismiss={close} />
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '74%', background: 'var(--bg)', borderRadius: '26px 26px 0 0', overflow: 'hidden', animation: 'sz-slideUp .4s cubic-bezier(.16,1,.3,1)', display: 'flex', flexDirection: 'column', ...swipe.sheetStyle }}>
         <div {...swipe.handlers} style={{ padding: '14px 22px 12px', borderBottom: '1px solid var(--line)', position: 'relative' , ...swipe.handlers.style}}>
           <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', width: 42, height: 5, borderRadius: 3, background: 'var(--track)' }} />
           <div style={{ textAlign: 'center', fontSize: 15, fontWeight: 700, color: 'var(--text)', marginTop: 6 }}>{title}</div>
           <div style={{ textAlign: 'center', fontSize: 12.5, color: 'var(--text-faint)' }}>{followList.name}</div>
-          <button onClick={close} style={{ position: 'absolute', top: 14, right: 16, background: 'none', border: 'none', cursor: 'pointer' }}>
+          <Button onClick={close} style={{ position: 'absolute', top: 14, right: 16, background: 'none', border: 'none', cursor: 'pointer' }}>
             <CloseIcon size={22} stroke="var(--text-faint)" strokeWidth={2.2} />
-          </button>
+          </Button>
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '12px 18px 24px' }}>
@@ -38,7 +39,7 @@ export function FollowListSheet() {
             </div>
           )}
           {list.map((u) => (
-            <button
+            <Button
               key={u.id}
               onClick={() => { setOpenCook(u.id); close(); }}
               style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 16, padding: 12, cursor: 'pointer', textAlign: 'left', width: '100%', marginBottom: 10 }}
@@ -53,7 +54,7 @@ export function FollowListSheet() {
                 </div>
                 <div style={{ fontSize: 13, color: 'var(--text-faint)' }}>@{u.handle}</div>
               </div>
-            </button>
+            </Button>
           ))}
         </div>
       </div>

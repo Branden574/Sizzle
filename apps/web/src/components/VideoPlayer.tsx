@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { Button } from './controls';
 import { useSizzle } from '../store';
 import { PlayIcon, RotateIcon, SpeakerIcon, SpeakerOffIcon } from './icons';
 
@@ -170,7 +171,7 @@ export function VideoPlayer({ src, poster, active, immersive = false }: { src: s
       : { position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' };
 
   return (
-    <div ref={wrapRef} onClick={togglePlay} style={{ position: 'absolute', inset: 0, cursor: 'pointer', background: rotated ? '#000' : 'transparent' }}>
+    <div ref={wrapRef} style={{ position: 'absolute', inset: 0, background: rotated ? '#000' : 'transparent' }}>
       <video
         ref={ref}
         poster={poster ?? undefined}
@@ -187,37 +188,57 @@ export function VideoPlayer({ src, poster, active, immersive = false }: { src: s
         onTimeUpdate={(e) => { if (!scrubbing) { const v = e.currentTarget; if (v.duration) setProgress(v.currentTime / v.duration); } }}
         style={videoStyle}
       />
+      <Button onClick={togglePlay} aria-label={paused ? 'Play video' : 'Pause video'} style={{ position: 'absolute', inset: 0, zIndex: 1, border: 'none', background: 'transparent', cursor: 'pointer' }} />
       {paused && (
-        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 64, height: 64, borderRadius: '50%', background: 'rgba(255,255,255,.18)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <div style={{ position: 'absolute', zIndex: 2, pointerEvents: 'none', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 64, height: 64, borderRadius: '50%', background: 'rgba(255,255,255,.18)', backdropFilter: 'blur(2px)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <PlayIcon size={26} />
         </div>
       )}
-      <button
+      <Button
         onClick={(e) => { e.stopPropagation(); toggleMuted(); }}
         aria-label={muted ? 'Unmute' : 'Mute'}
         style={{ position: 'absolute', top: 96, left: 16, zIndex: 25, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.28)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', ...chromeFade }}
       >
         {muted ? <SpeakerOffIcon size={20} /> : <SpeakerIcon size={20} />}
-      </button>
+      </Button>
 
       {/* Landscape clips can be rotated to a phone-turned full-screen view. */}
       {isLandscape && (
-        <button
+        <Button
           onClick={(e) => { e.stopPropagation(); setRotated((r) => !r); }}
           aria-label={rotated ? 'Exit full screen' : 'Rotate to full screen'}
           style={{ position: 'absolute', top: 140, left: 16, zIndex: 25, width: 38, height: 38, borderRadius: '50%', border: 'none', background: rotated ? 'rgba(226,58,24,.85)' : 'rgba(0,0,0,.28)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', ...chromeFade }}
         >
           <RotateIcon size={20} stroke="#fff" strokeWidth={2} />
-        </button>
+        </Button>
       )}
 
       {/* Scrubber — just above the bottom nav. Tall transparent hit area, thin visible track. */}
       <div
         ref={barRef}
+        role="slider"
+        tabIndex={0}
+        aria-label="Video progress"
+        aria-valuemin={0}
+        aria-valuemax={100}
+        aria-valuenow={Math.round(progress * 100)}
         onPointerDown={onBarDown}
         onPointerMove={onBarMove}
         onPointerUp={onBarUp}
-        onClick={(e) => e.stopPropagation()}
+        onKeyDown={(e) => {
+          const v = ref.current;
+          if (!v || !v.duration) return;
+          const step = e.key === 'ArrowLeft' ? -5 : e.key === 'ArrowRight' ? 5 : 0;
+          if (step) {
+            e.preventDefault();
+            v.currentTime = Math.max(0, Math.min(v.duration, v.currentTime + step));
+            setProgress(v.currentTime / v.duration);
+          } else if (e.key === 'Home' || e.key === 'End') {
+            e.preventDefault();
+            v.currentTime = e.key === 'Home' ? 0 : v.duration;
+            setProgress(v.currentTime / v.duration);
+          }
+        }}
         style={{ position: 'absolute', left: 10, right: 10, bottom: 'calc(60px + max(var(--sab, 0px), 24px))', height: 22, zIndex: 22, display: 'flex', alignItems: 'center', cursor: 'pointer', touchAction: 'none', ...chromeFade }}
       >
         <div style={{ position: 'relative', width: '100%', height: scrubbing ? 6 : 3, borderRadius: 3, background: 'rgba(255,255,255,.3)', transition: 'height .15s' }}>

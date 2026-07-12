@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { Button } from '../controls';
 import { PLATFORM_FEE_PCT, type RecipeDetail } from '@sizzle/shared';
 import { useEditRecipe, useMe, useMonetizationStatus, useRecipe, useSetRecipePoster, useSetRecipePrice, useSetRecipeVisibility } from '../../data/queries';
 import { uploadRecipeImage } from '../../lib/storage';
@@ -108,11 +109,11 @@ export function EditPostSheet() {
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 99, background: 'var(--bg)', animation: 'sz-slideUp .4s cubic-bezier(.16,1,.3,1)', display: 'flex', flexDirection: 'column' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '56px 20px 14px', flex: 'none' }}>
-        <button onClick={close} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text)', fontSize: 16, fontWeight: 600 }}>Cancel</button>
+        <Button onClick={close} style={{ background: 'none', border: 'none', cursor: 'pointer', color: 'var(--text)', fontSize: 16, fontWeight: 600 }}>Cancel</Button>
         <div style={{ color: 'var(--text)', fontSize: 16, fontWeight: 700 }}>Edit post</div>
-        <button onClick={save} disabled={!canSave} style={{ background: 'none', border: 'none', cursor: canSave ? 'pointer' : 'default', color: canSave ? accent : 'var(--text-faint-2)', fontSize: 16, fontWeight: 800 }}>
+        <Button onClick={save} disabled={!canSave} style={{ background: 'none', border: 'none', cursor: canSave ? 'pointer' : 'default', color: canSave ? accent : 'var(--text-faint-2)', fontSize: 16, fontWeight: 800 }}>
           {edit.isPending ? 'Saving…' : 'Save'}
-        </button>
+        </Button>
       </div>
 
       {!ready ? (
@@ -223,11 +224,11 @@ function StarPicker({ value, onChange }: { value: number; onChange: (n: number) 
       {[1, 2, 3, 4, 5].map((n) => {
         const on = n <= value;
         return (
-          <button key={n} type="button" aria-label={`${n} star${n > 1 ? 's' : ''}`} onClick={() => onChange(value === n ? 0 : n)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, lineHeight: 1 }}>
+          <Button key={n} type="button" aria-label={`${n} star${n > 1 ? 's' : ''}`} onClick={() => onChange(value === n ? 0 : n)} style={{ background: 'none', border: 'none', cursor: 'pointer', padding: 2, lineHeight: 1 }}>
             <svg width={30} height={30} viewBox="0 0 24 24" fill={on ? '#ffb52e' : 'none'} stroke={on ? '#ffb52e' : 'var(--line-3)'} strokeWidth={1.6} strokeLinejoin="round">
               <path d="M12 2.5l2.9 5.88 6.49.94-4.7 4.58 1.11 6.46L12 17.8l-5.8 3.05 1.11-6.46-4.7-4.58 6.49-.94L12 2.5z" />
             </svg>
-          </button>
+          </Button>
         );
       })}
     </div>
@@ -264,14 +265,14 @@ function PosterEditor({ recipe }: { recipe: RecipeDetail }) {
       <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
         <div style={{ width: 60, height: 78, borderRadius: 12, flex: 'none', background: poster ? `url(${poster}) center/cover` : 'var(--surface-2)', border: '1px solid var(--line)' }} />
         <div style={{ flex: 1, minWidth: 0 }}>
-          <button
+          <Button
             type="button"
             onClick={() => fileRef.current?.click()}
             disabled={busy}
             style={{ height: 40, padding: '0 16px', border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 14, fontWeight: 800, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}
           >
             {busy ? 'Uploading…' : poster ? 'Change cover' : 'Upload cover'}
-          </button>
+          </Button>
           <div style={{ fontSize: 12, color: 'var(--text-faint-2)', marginTop: 6, lineHeight: 1.4 }}>A great thumbnail lifts views. JPG/PNG.</div>
           {err && <div style={{ color: 'var(--danger-fg)', fontSize: 12.5, marginTop: 4 }}>{err}</div>}
         </div>

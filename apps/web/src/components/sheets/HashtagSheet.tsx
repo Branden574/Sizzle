@@ -1,4 +1,5 @@
 import type { RecipeCard } from '@sizzle/shared';
+import { Button } from '../controls';
 import { discoverHeights } from '../../data';
 import { useHashtagFeed } from '../../data/queries';
 import { useSizzle } from '../../store';
@@ -18,9 +19,9 @@ export function HashtagSheet() {
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 91, background: 'var(--bg)', overflowY: 'auto', animation: 'sz-slideUp .35s cubic-bezier(.16,1,.3,1)' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '52px 18px 10px' }}>
-        <button onClick={() => setOpenTag(null)} style={{ width: 38, height: 38, border: 'none', background: 'var(--surface)', borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+        <Button onClick={() => setOpenTag(null)} style={{ width: 38, height: 38, border: 'none', background: 'var(--surface)', borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <ChevronLeftIcon size={22} stroke="var(--text)" />
-        </button>
+        </Button>
         <div>
           <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 30, color: 'var(--text)', lineHeight: 1 }}>#{tag}</div>
           <div style={{ fontSize: 13, color: 'var(--text-faint)', marginTop: 3 }}>{isLoading ? 'Loading…' : `${formatCount(tiles.length)}${data?.nextCursor ? '+' : ''} recipe${tiles.length === 1 ? '' : 's'}`}</div>
@@ -33,7 +34,7 @@ export function HashtagSheet() {
 
       <div style={{ padding: '8px 18px 110px', columns: 2, columnGap: 14 }}>
         {tiles.map((r: RecipeCard, i: number) => (
-          <button
+          <Button
             key={r.id}
             onClick={() => setOpenRecipe(r.id)}
             style={{ breakInside: 'avoid', width: '100%', marginBottom: 14, border: 'none', padding: 0, cursor: 'pointer', borderRadius: 20, overflow: 'hidden', position: 'relative', height: discoverHeights[i % discoverHeights.length], background: r.bg, display: 'block', textAlign: 'left' }}
@@ -47,7 +48,7 @@ export function HashtagSheet() {
                 <span style={{ color: 'rgba(255,255,255,.85)', fontSize: 12, fontWeight: 600 }}>{formatCount(r.counts.likes)}</span>
               </div>
             </div>
-          </button>
+          </Button>
         ))}
       </div>
     </div>

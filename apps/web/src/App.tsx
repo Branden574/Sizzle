@@ -1,8 +1,10 @@
 import { lazy, Suspense, useEffect, useRef, useState } from 'react';
+import { Button } from './components/controls';
 // Lazy — the authenticated app + admin console are never rendered for logged-out
 // web visitors (who see the marketing site), so keep them out of the entry chunk.
 const AdminDashboard = lazy(() => import('./components/AdminDashboard').then((m) => ({ default: m.AdminDashboard })));
 const AppShell = lazy(() => import('./components/AppShell').then((m) => ({ default: m.AppShell })));
+const ButtonShowcase = lazy(() => import('./components/ButtonShowcase').then((m) => ({ default: m.ButtonShowcase })));
 import { ChooseUsername } from './components/ChooseUsername';
 import { BannedScreen } from './components/BannedScreen';
 import { ErrorBoundary } from './components/ErrorBoundary';
@@ -358,6 +360,9 @@ export default function App() {
   // Web front door: show the marketing site to logged-out visitors until they
   // choose Get started / Log in. Native + authed + password-recovery skip it.
   const showMarketing = !isNative && (authStatus === 'anon' || authStatus === 'guest') && !recovery && !webEntered;
+  if (import.meta.env.DEV && new URLSearchParams(window.location.search).get('showcase') === 'buttons') {
+    return <Suspense fallback={null}><ButtonShowcase /></Suspense>;
+  }
   if (showMarketing) {
     return (
       <div className="sz-stage marketing" data-theme={scheme}>
@@ -437,7 +442,7 @@ function CrashFallback() {
     <div style={{ position: 'absolute', inset: 0, background: '#faf3ea', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 30, textAlign: 'center' }}>
       <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 30, color: '#1b1512' }}>Something went wrong</div>
       <p style={{ color: '#8a7c70', fontSize: 15, margin: '10px 0 22px' }}>Give it a refresh and you'll be right back.</p>
-      <button onClick={() => location.reload()} style={{ height: 50, padding: '0 26px', border: 'none', borderRadius: 16, background: '#1b1512', color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>Reload</button>
+      <Button onClick={() => location.reload()} style={{ height: 50, padding: '0 26px', border: 'none', borderRadius: 16, background: '#1b1512', color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>Reload</Button>
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import { useSizzle } from '../store';
+import { Button, IconButton } from './controls';
 import { theme } from '../theme';
 import { useMediaQuery } from '../lib/useMediaQuery';
 import { isNative } from '../lib/native';
@@ -28,7 +29,9 @@ export function BottomNav() {
   const go = (t: Tab) => () => setTab(t);
 
   return (
-    <div
+    <nav
+      aria-label="Primary navigation"
+      className="sz-bottom-nav"
       style={{
         position: 'absolute',
         bottom: 0,
@@ -54,39 +57,37 @@ export function BottomNav() {
         transition: 'transform .3s cubic-bezier(.16,1,.3,1), opacity .25s ease',
       }}
     >
-      <NavButton label="Home" color={col(tab === 'feed')} onClick={go('feed')}>
+      <NavButton label="Home" active={tab === 'feed'} color={col(tab === 'feed')} onClick={go('feed')}>
         <HomeIcon size={25} fill={tab === 'feed' ? accent : 'none'} stroke={col(tab === 'feed')} strokeWidth={2} />
       </NavButton>
 
-      <NavButton label="Discover" color={col(tab === 'discover')} onClick={go('discover')}>
+      <NavButton label="Discover" active={tab === 'discover'} color={col(tab === 'discover')} onClick={go('discover')}>
         <SearchIcon size={25} stroke={col(tab === 'discover')} strokeWidth={2} />
       </NavButton>
 
-      <button onClick={() => setShowUpload(true)} style={{ background: 'none', border: 'none', cursor: 'pointer', marginTop: -2, padding: 0 }}>
-        <div style={{ width: 50, height: 36, borderRadius: 13, background: `linear-gradient(135deg,${accent},#e23a18)`, display: 'flex', alignItems: 'center', justifyContent: 'center', boxShadow: '0 6px 16px -4px rgba(226,58,24,.6)' }}>
-          <NavPlusIcon size={24} stroke="#fff" strokeWidth={2.6} />
-        </div>
-      </button>
+      <IconButton label="Create post" variant="primary" shape="square" size="md" className="sz-nav-create" onClick={() => setShowUpload(true)}>
+        <NavPlusIcon size={24} stroke="#fff" strokeWidth={2.6} />
+      </IconButton>
 
       <NavButton label="Messages" color={navIdle} onClick={() => setMessagesOpen(true)} badge={dmUnread > 0}>
         <ShareIcon size={23} stroke={navIdle} strokeWidth={1.9} />
       </NavButton>
 
-      <NavButton label="Profile" color={col(tab === 'profile')} onClick={go('profile')}>
+      <NavButton label="Profile" active={tab === 'profile'} color={col(tab === 'profile')} onClick={go('profile')}>
         <PersonIcon size={23} stroke={col(tab === 'profile')} strokeWidth={2} />
       </NavButton>
-    </div>
+    </nav>
   );
 }
 
-function NavButton({ label, color, onClick, badge, children }: { label: string; color: string; onClick: () => void; badge?: boolean; children: React.ReactNode }) {
+function NavButton({ label, color, active = false, onClick, badge, children }: { label: string; color: string; active?: boolean; onClick: () => void; badge?: boolean; children: React.ReactNode }) {
   return (
-    <button onClick={onClick} style={{ background: 'none', border: 'none', cursor: 'pointer', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4, width: 46, padding: 0 }}>
+    <Button aria-current={active ? 'page' : undefined} aria-label={label} onClick={onClick} className="sz-nav-tab" style={{ color }}>
       <span style={{ position: 'relative', display: 'flex' }}>
         {children}
         {badge && <span style={{ position: 'absolute', top: -3, right: -4, width: 8, height: 8, borderRadius: '50%', background: accent }} />}
       </span>
-      <span style={{ fontSize: 10, fontWeight: 700, color }}>{label}</span>
-    </button>
+      <span className="sz-nav-tab__label">{label}</span>
+    </Button>
   );
 }

@@ -1,4 +1,5 @@
 import { useSizzle } from '../../store';
+import { Button, DismissBackdrop } from '../controls';
 import { useSwipeDismiss } from '../../lib/useSwipeDismiss';
 import { showMonetization } from '../../lib/native';
 
@@ -68,11 +69,11 @@ export function RoadmapSheet() {
 
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 94 }}>
-      <div onClick={close} style={{ position: 'absolute', inset: 0, background: 'var(--scrim)', animation: 'sz-fadeIn .3s' }} />
+      <DismissBackdrop onDismiss={close} />
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, top: 56, background: 'var(--bg)', borderRadius: '26px 26px 0 0', overflow: 'hidden', animation: 'sz-slideUp .4s cubic-bezier(.16,1,.3,1)', display: 'flex', flexDirection: 'column', ...swipe.sheetStyle }}>
         <div {...swipe.handlers} style={{ textAlign: 'center', padding: '16px 0 10px', position: 'relative', flex: 'none' , ...swipe.handlers.style}}>
           <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', width: 42, height: 5, borderRadius: 3, background: 'var(--track)' }} />
-          <button onClick={close} style={{ position: 'absolute', right: 18, top: 14, background: 'none', border: 'none', color: 'var(--text-faint)', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>Done</button>
+          <Button onClick={close} style={{ position: 'absolute', right: 18, top: 14, background: 'none', border: 'none', color: 'var(--text-faint)', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>Done</Button>
           <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 26, color: 'var(--text)', marginTop: 8 }}>Where Sizzle is headed</div>
           <div style={{ fontSize: 13.5, color: 'var(--text-faint)', marginTop: 3, padding: '0 30px' }}>{showMonetization ? 'Five phases from launch to creators getting paid.' : 'How Sizzle is growing, phase by phase.'}</div>
         </div>

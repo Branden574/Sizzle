@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { Button, FilterChip } from './controls';
 import { useCollections, useSavedFeed } from '../data/queries';
 import { listOffline } from '../lib/offline';
 import { useShopping } from '../lib/shopping';
@@ -28,27 +29,30 @@ export function Saved() {
       <div style={{ padding: '62px 22px 8px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 38, color: 'var(--text)' }}>Saved</div>
-          <button
+          <Button
             onClick={() => setShowShopping(true)}
-            style={{ display: 'flex', alignItems: 'center', gap: 7, height: 40, padding: '0 14px', borderRadius: 20, border: '1px solid var(--line-2)', background: 'var(--surface)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 14, fontWeight: 700, cursor: 'pointer' }}
+            variant="outline"
+            size="sm"
           >
             🛒 List{shoppingCount > 0 ? ` · ${shoppingCount}` : ''}
-          </button>
+          </Button>
         </div>
         <div style={{ display: 'flex', gap: 8, marginTop: 14 }}>
-          <button
+          <FilterChip
             onClick={() => setFilter('all')}
-            style={{ padding: '9px 15px', borderRadius: 13, border: filter === 'all' ? 'none' : '1px solid var(--line)', background: filter === 'all' ? 'var(--invert-bg)' : 'var(--surface)', color: filter === 'all' ? 'var(--invert-fg)' : 'var(--text-muted)', fontSize: 14, fontWeight: 700, cursor: 'pointer' }}
+            selected={filter === 'all'}
+            count={savedCount}
           >
-            All {savedCount}
-          </button>
-          <button
+            All
+          </FilterChip>
+          <FilterChip
             onClick={() => setFilter('offline')}
-            style={{ padding: '9px 15px', borderRadius: 13, border: filter === 'offline' ? 'none' : '1px solid var(--line)', background: filter === 'offline' ? 'var(--invert-bg)' : 'var(--surface)', color: filter === 'offline' ? 'var(--invert-fg)' : 'var(--text-muted)', fontSize: 14, fontWeight: 600, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6 }}
+            selected={filter === 'offline'}
+            count={downloadCount}
           >
             <DownloadIcon size={14} stroke={filter === 'offline' ? 'var(--invert-fg)' : 'var(--text-muted)'} strokeWidth={2.2} />
-            Offline {downloadCount}
-          </button>
+            Offline
+          </FilterChip>
         </div>
       </div>
 
@@ -57,7 +61,7 @@ export function Saved() {
           <div style={{ fontSize: 12.5, fontWeight: 700, letterSpacing: '.3px', textTransform: 'uppercase', color: 'var(--text-faint-2)', padding: '0 22px 8px' }}>Collections</div>
           <div style={{ display: 'flex', gap: 12, overflowX: 'auto', padding: '0 22px 4px' }}>
             {(collections ?? []).map((col) => (
-              <button
+              <Button
                 key={col.id}
                 onClick={() => setOpenCollection({ id: col.id, name: col.name })}
                 style={{ flex: 'none', width: 124, border: 'none', background: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}
@@ -67,7 +71,7 @@ export function Saved() {
                 </div>
                 <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', marginTop: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{col.name}</div>
                 <div style={{ fontSize: 12, color: 'var(--text-faint)' }}>{col.count} recipe{col.count === 1 ? '' : 's'}</div>
-              </button>
+              </Button>
             ))}
           </div>
         </div>
@@ -85,7 +89,7 @@ export function Saved() {
 
       <div style={{ padding: '16px 18px 110px', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
         {shown.map((r) => (
-          <button
+          <Button
             key={r.id}
             onClick={() => setOpenRecipe(r.id)}
             style={{ border: 'none', padding: 0, cursor: 'pointer', borderRadius: 20, overflow: 'hidden', position: 'relative', height: 200, background: r.bg, textAlign: 'left' }}
@@ -102,7 +106,7 @@ export function Saved() {
               <div style={{ color: 'rgba(255,255,255,.75)', fontSize: 11.5, fontWeight: 600 }}>{r.cuisine} · {r.time}</div>
               <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 20, lineHeight: 1.05, color: '#fff', marginTop: 3 }}>{r.title}</div>
             </div>
-          </button>
+          </Button>
         ))}
       </div>
     </div>

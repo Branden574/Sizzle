@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useRef, useState } from 'react';
+import { Button } from './controls';
 import { CameraIcon, CloseIcon } from './icons';
 
 /** Max length of an in-app recording (longer clips should be uploaded from the library). */
@@ -288,15 +289,15 @@ export function CameraRecorder({ onCapture, onClose }: { onCapture: (file: File)
 
       {/* top bar */}
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '54px 18px 0' }}>
-        <button onClick={onClose} style={{ width: 40, height: 40, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+        <Button onClick={onClose} style={{ width: 40, height: 40, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
           <CloseIcon size={22} stroke="#fff" strokeWidth={2.2} />
-        </button>
+        </Button>
         {status === 'granted' && (
           <div style={{ background: 'rgba(0,0,0,.45)', borderRadius: 20, padding: '6px 14px', color: '#fff', fontSize: 14, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
             {fmt(elapsedMs)} <span style={{ opacity: 0.5 }}>/ {fmt(MAX_SECONDS * 1000)}</span>
           </div>
         )}
-        <button
+        <Button
           onClick={() => { const next = facing === 'user' ? 'environment' : 'user'; setFacing(next); void startStream(next); }}
           disabled={!canFlip}
           aria-label="Flip camera"
@@ -305,7 +306,7 @@ export function CameraRecorder({ onCapture, onClose }: { onCapture: (file: File)
           <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
             <path d="M3 7h13l-2.5-2.5M21 17H8l2.5 2.5" /><circle cx="12" cy="12" r="3" />
           </svg>
-        </button>
+        </Button>
       </div>
 
       {/* segmented progress */}
@@ -340,21 +341,21 @@ export function CameraRecorder({ onCapture, onClose }: { onCapture: (file: File)
           </p>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {status !== 'unsupported' && (
-              <button
+              <Button
                 onClick={() => void startStream(facing)}
                 disabled={status === 'requesting'}
                 style={{ height: 50, border: 'none', borderRadius: 15, background: 'var(--accent)', color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15.5, fontWeight: 700, cursor: status === 'requesting' ? 'default' : 'pointer', opacity: status === 'requesting' ? 0.6 : 1 }}
               >
                 {status === 'requesting' ? 'Asking…' : status === 'denied' ? 'Try again' : 'Allow camera & mic'}
-              </button>
+              </Button>
             )}
             <div style={{ display: 'flex', gap: 10 }}>
-              <button onClick={startDemo} style={{ flex: 1, height: 48, border: '1.5px solid rgba(255,255,255,.25)', borderRadius: 15, background: 'transparent', color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 14.5, fontWeight: 700, cursor: 'pointer' }}>
+              <Button onClick={startDemo} style={{ flex: 1, height: 48, border: '1.5px solid rgba(255,255,255,.25)', borderRadius: 15, background: 'transparent', color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 14.5, fontWeight: 700, cursor: 'pointer' }}>
                 Demo camera
-              </button>
-              <button onClick={onClose} style={{ flex: 1, height: 48, border: '1.5px solid rgba(255,255,255,.25)', borderRadius: 15, background: 'transparent', color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 14.5, fontWeight: 700, cursor: 'pointer' }}>
+              </Button>
+              <Button onClick={onClose} style={{ flex: 1, height: 48, border: '1.5px solid rgba(255,255,255,.25)', borderRadius: 15, background: 'transparent', color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 14.5, fontWeight: 700, cursor: 'pointer' }}>
                 Use library
-              </button>
+              </Button>
             </div>
             <div style={{ color: 'rgba(255,255,255,.4)', fontSize: 12, marginTop: 2 }}>“Demo camera” records a synthetic clip so you can test recording without granting the camera.</div>
           </div>
@@ -365,12 +366,12 @@ export function CameraRecorder({ onCapture, onClose }: { onCapture: (file: File)
       {status === 'granted' && (
         <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 36px 46px' }}>
           {/* retake */}
-          <button onClick={retake} disabled={segments.length === 0 && !recording} style={{ width: 56, color: '#fff', background: 'none', border: 'none', fontSize: 14, fontWeight: 700, cursor: segments.length ? 'pointer' : 'default', opacity: segments.length ? 1 : 0.35 }}>
+          <Button onClick={retake} disabled={segments.length === 0 && !recording} style={{ width: 56, color: '#fff', background: 'none', border: 'none', fontSize: 14, fontWeight: 700, cursor: segments.length ? 'pointer' : 'default', opacity: segments.length ? 1 : 0.35 }}>
             Retake
-          </button>
+          </Button>
 
           {/* record button (hold or tap) */}
-          <button
+          <Button
             onPointerDown={onDown}
             onPointerUp={onUp}
             onPointerCancel={onUp}
@@ -378,12 +379,12 @@ export function CameraRecorder({ onCapture, onClose }: { onCapture: (file: File)
             style={{ width: 84, height: 84, borderRadius: '50%', border: '5px solid rgba(255,255,255,.85)', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', touchAction: 'none', padding: 0 }}
           >
             <div style={{ width: recording ? 32 : 64, height: recording ? 32 : 64, borderRadius: recording ? 8 : '50%', background: 'var(--accent)', transition: 'all .2s cubic-bezier(.34,1.56,.64,1)' }} />
-          </button>
+          </Button>
 
           {/* done */}
-          <button onClick={finalize} disabled={!hasFootage} style={{ width: 56, height: 56, borderRadius: '50%', border: 'none', background: hasFootage ? '#fff' : 'rgba(255,255,255,.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: hasFootage ? 'pointer' : 'default' }}>
+          <Button onClick={finalize} disabled={!hasFootage} style={{ width: 56, height: 56, borderRadius: '50%', border: 'none', background: hasFootage ? '#fff' : 'rgba(255,255,255,.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: hasFootage ? 'pointer' : 'default' }}>
             <svg width={26} height={26} viewBox="0 0 24 24" fill="none" stroke={hasFootage ? '#1b1512' : 'rgba(255,255,255,.5)'} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 6" /></svg>
-          </button>
+          </Button>
         </div>
       )}
 
