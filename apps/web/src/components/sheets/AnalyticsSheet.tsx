@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { PLATFORM_FEE_PCT, PLATFORM_FEE_RATIONALE, type EarningKind, type EarningsSummary } from '@sizzle/shared';
-import { useAnalytics, useEarnings, useMonetizationStatus, useSetGoal, useSetSubPrice, useSetWelcomeDm, useStartOnboarding } from '../../data/queries';
+import { useAnalytics, useBroadcast, useEarnings, useMonetizationStatus, useSetGoal, useSetSubPrice, useSetWelcomeDm, useStartOnboarding } from '../../data/queries';
 import { useSizzle } from '../../store';
 import { formatCount } from '../../lib/format';
 import { theme } from '../../theme';
@@ -152,6 +152,7 @@ function Earnings() {
           </div>
 
           <SubPriceEditor data={data} />
+          {(data?.activeSubs ?? 0) > 0 && <BroadcastComposer count={data!.activeSubs} />}
           <GoalEditor data={data} />
           <WelcomeDmEditor data={data} />
 
@@ -251,6 +252,38 @@ function SubPriceEditor({ data }: { data: EarningsSummary | undefined }) {
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
             <button onClick={() => setSubPrice.mutate(null, { onSuccess: () => setEditing(false) })} style={{ background: 'none', border: 'none', color: 'var(--danger-fg)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', padding: 0 }}>Turn off subscriptions</button>
             <button onClick={() => setEditing(false)} style={{ background: 'none', border: 'none', color: 'var(--text-faint)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', padding: 0 }}>Cancel</button>
+          </div>
+        </div>
+      )}
+    </div>
+  );
+}
+
+/** Broadcast a single DM to every active subscriber — a members-only channel. */
+function BroadcastComposer({ count }: { count: number }) {
+  const broadcast = useBroadcast();
+  const [open, setOpen] = useState(false);
+  const [text, setText] = useState('');
+  const [sent, setSent] = useState<number | null>(null);
+  const send = () => {
+    if (!text.trim() || broadcast.isPending) return;
+    broadcast.mutate(text.trim(), { onSuccess: (r) => { setSent(r.sent); setText(''); setOpen(false); } });
+  };
+  return (
+    <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 16, padding: 16, marginBottom: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10 }}>
+        <div style={{ minWidth: 0 }}>
+          <div style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--text)' }}>Message your subscribers</div>
+          <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 2 }}>{sent != null ? `Sent to ${sent} subscriber${sent === 1 ? '' : 's'} 🎉` : `Send one DM to all ${count} of your subscribers.`}</div>
+        </div>
+        {!open && <button onClick={() => { setOpen(true); setSent(null); }} style={{ flex: 'none', height: 34, padding: '0 14px', border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>Compose</button>}
+      </div>
+      {open && (
+        <div style={{ marginTop: 12 }}>
+          <textarea value={text} onChange={(e) => setText(e.target.value.slice(0, 1000))} rows={3} placeholder="New drop this week, subscribers get it first…" style={{ width: '100%', border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 15, outline: 'none', padding: 12, resize: 'vertical', lineHeight: 1.5, boxSizing: 'border-box' }} />
+          <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
+            <button onClick={send} disabled={broadcast.isPending || !text.trim()} style={{ height: 40, padding: '0 18px', border: 'none', borderRadius: 12, background: `linear-gradient(135deg,${theme.accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 14, fontWeight: 800, cursor: 'pointer', opacity: broadcast.isPending || !text.trim() ? 0.6 : 1 }}>{broadcast.isPending ? 'Sending…' : `Send to ${count}`}</button>
+            <button onClick={() => setOpen(false)} style={{ background: 'none', border: 'none', color: 'var(--text-faint)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
           </div>
         </div>
       )}

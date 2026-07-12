@@ -10,6 +10,7 @@ import { badRequest, dbFail, notFound } from '../lib/errors';
 import { relativeTime } from '../lib/format';
 import { cookSummary, loadBlockedIds, type ProfileRow } from '../mappers';
 import { notify } from '../services/notify';
+import { moderate } from '../services/moderation';
 import { accountActive, cancelSubscriptionAtPeriodEnd, createConnectAccount, createOnboardingLink, createOneOffCheckout, createSubscriptionCheckout, paymentsProvider } from '../services/payments';
 import type { AppEnv } from '../types';
 
@@ -269,6 +270,36 @@ monetize.post('/goal', requireAuth, async (c) => {
     ...(on ? {} : { goal_raised_cents: 0 }),
   }).eq('id', userId);
   return c.json({ ok: true });
+});
+
+const broadcastSchema = z.object({ text: z.string().trim().min(1).max(1000) });
+
+/** POST /monetize/broadcast — send one DM to all of the creator's active subscribers.
+ *  A members-only channel: the creator talks to everyone who pays them, at once. */
+monetize.post('/broadcast', requireAuth, requireNotBanned, rateLimit({ windowMs: 60 * 60_000, max: 6, name: 'broadcast' }), async (c) => {
+  const userId = c.get('userId')!;
+  const parsed = broadcastSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) throw badRequest('Message required');
+  const mod = await moderate(parsed.data.text);
+  if (!mod.ok) throw badRequest(mod.reason!);
+  const { data: subs } = await supabaseAdmin
+    .from('subscriptions')
+    .select('subscriber_id')
+    .eq('creator_id', userId)
+    .eq('status', 'active')
+    .limit(1000); // cap the fan-out per broadcast
+  const ids = [...new Set((subs ?? []).map((s) => s.subscriber_id as string))];
+  for (const sid of ids) {
+    if (sid === userId) continue;
+    const [a, b] = userId < sid ? [userId, sid] : [sid, userId];
+    await supabaseAdmin.from('conversations').upsert({ user_a: a, user_b: b }, { onConflict: 'user_a,user_b', ignoreDuplicates: true });
+    const { data: conv } = await supabaseAdmin.from('conversations').select('id').eq('user_a', a).eq('user_b', b).maybeSingle();
+    if (!conv) continue;
+    await supabaseAdmin.from('messages').insert({ conversation_id: conv.id, sender_id: userId, text: parsed.data.text });
+    await supabaseAdmin.from('conversations').update({ last_message_at: new Date().toISOString() }).eq('id', conv.id).then(() => {}, () => {});
+    await notify({ userId: sid, type: 'message', actorId: userId }).catch(() => {});
+  }
+  return c.json({ ok: true, sent: ids.length });
 });
 
 const welcomeSchema = z.object({ text: z.string().trim().max(500).nullable() });

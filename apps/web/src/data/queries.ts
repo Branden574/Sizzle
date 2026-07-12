@@ -151,6 +151,13 @@ export function useSetGoal() {
   });
 }
 
+/** Broadcast one DM to all of the creator's active subscribers. */
+export function useBroadcast() {
+  return useMutation({
+    mutationFn: (text: string) => apiSend<{ ok: boolean; sent: number }>('POST', '/monetize/broadcast', { text }),
+  });
+}
+
 /** Set (or clear) the auto welcome DM sent to new subscribers. */
 export function useSetWelcomeDm() {
   const qc = useQueryClient();
