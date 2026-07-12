@@ -63,6 +63,7 @@ export function AnalyticsSheet() {
               </div>
 
               <TrendSparkline data={data} />
+              <Funnels data={data} />
 
               <Earnings />
 
@@ -257,6 +258,47 @@ function SubPriceEditor({ data }: { data: EarningsSummary | undefined }) {
             <button onClick={() => setEditing(false)} style={{ background: 'none', border: 'none', color: 'var(--text-faint)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', padding: 0 }}>Cancel</button>
           </div>
         </div>
+      )}
+    </div>
+  );
+}
+
+/** Retention (started→kept→finished) + premium save→unlock funnel as bar rows. */
+function Funnels({ data }: { data: CreatorAnalytics | undefined }) {
+  const r = data?.retention;
+  const f = data?.unlockFunnel ?? null;
+  const showRetention = r && r.started > 0;
+  if (!showRetention && !f) return null;
+  const bar = (label: string, value: number, base: number, note?: string) => {
+    const pct = base > 0 ? Math.round((value / base) * 100) : 0;
+    return (
+      <div key={label} style={{ marginBottom: 8 }}>
+        <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: 'var(--text-faint)', marginBottom: 3 }}>
+          <span>{label}</span><span>{formatCount(value)} · {pct}%{note ? ` ${note}` : ''}</span>
+        </div>
+        <div style={{ height: 8, background: 'var(--track)', borderRadius: 4, overflow: 'hidden' }}>
+          <div style={{ width: `${pct}%`, height: '100%', background: `linear-gradient(90deg,${theme.accent},#e23a18)`, borderRadius: 4 }} />
+        </div>
+      </div>
+    );
+  };
+  return (
+    <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 16, padding: 16, marginBottom: 20 }}>
+      {showRetention && (
+        <>
+          <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--text)', marginBottom: 10 }}>Retention <span style={{ fontSize: 11, fontWeight: 600, color: 'var(--text-faint-2)' }}>(estimated)</span></div>
+          {bar('Started', r!.started, r!.started)}
+          {bar('Kept watching', r!.kept, r!.started)}
+          {bar('Finished', r!.finished, r!.started)}
+        </>
+      )}
+      {f && (
+        <>
+          <div style={{ fontSize: 13, fontWeight: 800, color: 'var(--text)', margin: `${showRetention ? '16px' : '0'} 0 10px` }}>Premium funnel</div>
+          {bar('Viewed', f.views, f.views)}
+          {bar('Saved', f.saves, f.views)}
+          {bar('Unlocked', f.unlocks, f.views)}
+        </>
       )}
     </div>
   );

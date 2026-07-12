@@ -342,6 +342,11 @@ export interface CreatorAnalytics {
   trend: { day: string; views: number }[];
   /** The single best day-of-week (0=Sun) + hour to post, by past views. */
   bestTime: { dow: number; hour: number; views: number } | null;
+  /** Coarse retention from watch signals: everyone who started → kept watching
+   *  (didn't skip) → finished. An estimate from dwell, not per-second pings. */
+  retention: { started: number; kept: number; finished: number };
+  /** Premium save→unlock funnel (null when the creator has no premium recipes). */
+  unlockFunnel: { views: number; saves: number; unlocks: number } | null;
 }
 
 /** User-controllable push categories (account/moderation pushes always send). */

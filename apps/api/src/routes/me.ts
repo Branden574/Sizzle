@@ -173,13 +173,14 @@ me.post('/notif-prefs', async (c) => {
 /** GET /me/analytics — creator insights: totals + per-post engagement. */
 me.get('/analytics', async (c) => {
   const userId = c.get('userId')!;
-  const [recsRes, profRes, viewRes, trendRes, bestRes] = await Promise.all([
+  const [recsRes, profRes, viewRes, trendRes, bestRes, funnelRes] = await Promise.all([
     supabaseAdmin.from('recipes').select('id, title, like_count, comment_count, save_count, share_count, created_at').eq('cook_id', userId).eq('status', 'published').order('created_at', { ascending: false }).limit(100),
     supabaseAdmin.from('profiles').select('follower_count').eq('id', userId).maybeSingle(),
     // Watch-time & completion, aggregated per recipe (data already logged in recipe_views).
     supabaseAdmin.rpc('creator_view_stats', { p_creator: userId }),
     supabaseAdmin.rpc('creator_view_trend', { uid: userId, days: 28 }),
     supabaseAdmin.rpc('creator_best_time', { uid: userId }),
+    supabaseAdmin.rpc('creator_unlock_funnel', { uid: userId }),
   ]);
   const trend = ((trendRes.data ?? []) as { day: string; views: number }[]).map((t) => ({ day: t.day, views: Number(t.views) }));
   const bestRow = (Array.isArray(bestRes.data) ? bestRes.data[0] : null) as { dow: number; hour: number; views: number } | null;
@@ -209,7 +210,13 @@ me.get('/analytics', async (c) => {
   const totalViews = sum('views');
   // Watch-time / completion totals are view-weighted across posts.
   const totalCompleted = (viewRes.data ?? []).reduce((n: number, v: ViewStat) => n + Number(v.completed_count ?? 0), 0);
+  const totalSkipped = (viewRes.data ?? []).reduce((n: number, v: ViewStat) => n + Number(v.skipped_count ?? 0), 0);
   const totalDwell = (viewRes.data ?? []).reduce((n: number, v: ViewStat) => n + Number(v.avg_dwell_ms ?? 0) * Number(v.views ?? 0), 0);
+  const retention = { started: totalViews, kept: Math.max(0, totalViews - totalSkipped), finished: totalCompleted };
+  const funnelRow = (Array.isArray(funnelRes.data) ? funnelRes.data[0] : null) as { views: number; saves: number; unlocks: number } | null;
+  const unlockFunnel = funnelRow && Number(funnelRow.views) > 0
+    ? { views: Number(funnelRow.views), saves: Number(funnelRow.saves), unlocks: Number(funnelRow.unlocks) }
+    : null;
   return c.json<CreatorAnalytics>({
     totals: {
       recipes: posts.length,
@@ -222,6 +229,8 @@ me.get('/analytics', async (c) => {
     posts,
     trend,
     bestTime,
+    retention,
+    unlockFunnel,
   });
 });
 
