@@ -32,29 +32,34 @@ signature — I can scaffold those but can't create accounts or handle secrets).
 
 ---
 
-## 1. The one real decision before you submit: payments on mobile
+## 1. Payments on mobile — DONE (Option A: web-only purchases)
 
 Sizzle's monetization (creator **subscriptions**, **recipe unlocks**, and
-**Support/tips**) currently runs on **Stripe**. Both stores restrict this:
+**Support/tips**) runs on **Stripe**. Both stores forbid that *inside* the app:
 
-- **Apple 3.1.1** — digital content and subscriptions consumed *inside* the app
-  must use **Apple In-App Purchase**, not Stripe. Selling subscriptions or recipe
-  unlocks through Stripe on iOS is a near-certain rejection.
-- **Google Play** — same rule via **Play Billing** for in-app digital goods.
-- Person-to-person **tips** are a grey area; Apple sometimes allows them outside
-  IAP, but subscriptions and paid recipes are unambiguously "digital content."
+- **Apple 3.1.1** — digital content/subscriptions consumed in-app must use **Apple
+  In-App Purchase**, not Stripe.
+- **Google Play** — same via **Play Billing**.
 
-You have three viable paths. Pick one before the first submission:
+**Resolution (implemented): Option A — hide in-app payments on native.** A single
+flag `showMonetization` (= `!isNative`, in `apps/web/src/lib/native.ts`) gates every
+purchase and creator-payout surface. On the native build they're hidden; on the web
+app they're unchanged, so **creators still keep the full 90% with no store cut**.
+Verified on the iOS Simulator (creator profile shows no Support/Subscribe/Shop;
+insights show no Earnings center; feed rail has no tip) and on web (all still shown).
+Flip the one flag — or wire it to real StoreKit/Play Billing — to re-enable in-app
+purchases later.
 
-| Option | Effort | Revenue on mobile | Notes |
-|---|---|---|---|
-| **A. Ship v1 with purchases hidden on native** (recommended) | Low | Web only | Detect `Capacitor.isNativePlatform()` and hide Support/Subscribe/Unlock CTAs in the iOS/Android build. App ships as a free social app; creators still earn via the web app. Fastest route to "live." |
-| **B. Integrate IAP / Play Billing** | High | Mobile + web | Add StoreKit + Play Billing (e.g. via RevenueCat), create products in both consoles, and reconcile with the Stripe ledger. Apple/Google take ~15–30%. Weeks of work. |
-| **C. Submit as-is and argue tips-only** | Low | Risky | High rejection risk for the subscription/unlock flows. Not recommended. |
+Why not the alternatives: **B. Integrate IAP/Play Billing** — full mobile revenue
+but weeks of work, ~15–30% store cut, and ledger reconciliation; the right
+fast-follow once in-app conversion justifies the tax. **C. Submit as-is** — near
+certain rejection of the sub/unlock flows.
 
-**Recommendation: Option A for launch, Option B as a fast-follow.** If you want
-A, say so and I'll add the native purchase-gate (one flag, fully reversible) and
-re-verify on the simulator. Everything else below is ready regardless.
+Gated on native (see the "Hide in-app payments on native" commit): TipSheet,
+CookSheet (Support/Subscribe/Shop/goal), RecipeSheet locked cards (neutral, no
+purchase path), AnalyticsSheet earnings center, EditPostSheet premium config, and
+the Roadmap "Get Paid" phase. Tip *receipts* and the tip notification-preference
+toggle stay (creators still receive web-originated tips).
 
 ---
 
@@ -197,9 +202,9 @@ cross-app tracking):
 - **Identifiers:** user ID; push token (if notifications enabled).
 - **Usage/diagnostics:** watch time and engagement (powers ranking + creator
   insights); crash/error logs.
-- **Purchases:** handled by **Stripe** (payment data goes to Stripe, not stored
-  by Sizzle). *(If you choose Option A and hide purchases on mobile, mark
-  purchases as not-collected for the app build.)*
+- **Purchases:** none in the native app (Option A — purchases are web-only), so
+  mark **purchases: not collected** on the App Privacy / Data Safety forms for the
+  store build. (On the web, payments are handled by **Stripe**, not stored by Sizzle.)
 
 Third parties that process data: **Supabase** (database/auth), **Cloudflare**
 (video), **Stripe** (payments), **Firebase Cloud Messaging** (push),
@@ -218,7 +223,7 @@ and **Yes** to in-app account deletion (deep-link: Settings → Delete account).
 | Privacy policy + terms reachable in-app and by URL | ✅ getsizzle.app/privacy, /terms |
 | Encryption/export compliance | ✅ `ITSAppUsesNonExemptEncryption=false` |
 | Permission purpose strings | ✅ all present with human reasons |
-| Digital purchases use IAP / Play Billing | ⚠️ **decision in §1** |
+| Digital purchases use IAP / Play Billing | ✅ resolved via Option A — in-app payments hidden on native (§1) |
 | Push production entitlement (if using push) | ⚠️ flip to production before archive (§2.6) |
 | No placeholder/demo copy in legal docs | ⚠️ replace the demo privacy blurb in `AppSettingsSheet` with the hosted policy |
 
