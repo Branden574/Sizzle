@@ -287,6 +287,9 @@ button {
   justify-content: center;
   max-width: 100%;
   border: 0;
+  /* Reset the native <button> ButtonFace background — otherwise `plain` variants
+     (the default) fall back to a solid gray in dark mode. Variants set their own. */
+  background-color: transparent;
   margin: 0;
   white-space: nowrap;
   text-decoration: none;
@@ -398,7 +401,10 @@ button {
 }
 .sz-reaction--media { color: #fff; text-shadow: 0 1px 4px rgba(0,0,0,.66); }
 .sz-reaction__material { display: grid; place-items: center; width: 40px; height: 40px; border-radius: 50%; transition: transform var(--button-motion-state) cubic-bezier(.2,.9,.25,1.25), background var(--button-motion-hover) ease; }
-.sz-reaction--media .sz-reaction__material { background: linear-gradient(180deg,rgba(24,18,14,.48),rgba(8,6,5,.38)); box-shadow: inset 0 1px 0 rgba(255,255,255,.2), 0 4px 14px rgba(0,0,0,.18); -webkit-backdrop-filter: blur(10px) saturate(135%); backdrop-filter: blur(10px) saturate(135%); }
+/* Over video the action rail is clean floating icons — no chip. A drop-shadow
+   keeps white glyphs legible on bright food without a heavy background. */
+.sz-reaction--media .sz-reaction__material { background: none; box-shadow: none; -webkit-backdrop-filter: none; backdrop-filter: none; filter: drop-shadow(0 2px 5px rgba(0,0,0,.55)); }
+.sz-reaction--media .sz-reaction__material > svg { width: 30px; height: 30px; }
 .sz-reaction.is-selected .sz-reaction__material { transform: scale(1.08); }
 .sz-reaction__count { min-width: 3ch; font-size: 12px; line-height: 1; font-weight: 750; font-variant-numeric: tabular-nums; }
 .sz-follow { min-width: 112px; }
@@ -408,8 +414,11 @@ button {
 .sz-bottom-nav .sz-nav-create { margin-top: -2px; width: 52px; min-height: 40px; height: 40px; border-radius: 13px !important; }
 .sz-nav-tab { width: 48px; min-height: var(--button-touch-target) !important; display: flex; flex-direction: column; align-items: center; justify-content: flex-start; gap: 4px; padding: 0; color: inherit; }
 .sz-nav-tab__label { font-size: 10px; font-weight: 700; color: inherit; }
-.sz-desktop-nav__item { display: flex; align-items: center; justify-content: flex-start; gap: 14px; width: 100%; min-height: 48px !important; padding: 0 14px !important; border-radius: var(--button-radius-standard) !important; color: rgba(255,255,255,.68); font-size: 16px; }
-.sz-desktop-nav__item[aria-current='page'] { color: #fff; }
+.sz-desktop-nav__item { display: flex; align-items: center; justify-content: flex-start; gap: 14px; width: 100%; min-height: 48px !important; padding: 0 14px !important; border-radius: var(--button-radius-standard) !important; color: rgba(255,255,255,.68); font-size: 16px; font-weight: 600; background: transparent; transition: background var(--button-motion-hover) ease, color var(--button-motion-hover) ease; }
+@media (hover: hover) and (pointer: fine) {
+  .sz-desktop-nav__item:not([aria-current='page']):hover { background: rgba(255,255,255,.06); color: rgba(255,255,255,.9); }
+}
+.sz-desktop-nav__item[aria-current='page'] { color: #fff; background: rgba(255,255,255,.09); }
 
 .sz-button-group { display: flex; align-items: center; gap: var(--button-group-gap); }
 .sz-dismiss-backdrop { position: absolute; inset: 0; width: 100%; height: 100%; padding: 0; border: 0; background: var(--scrim); cursor: default; animation: sz-fadeIn .3s; }
@@ -426,11 +435,11 @@ button {
 @keyframes sz-control-state-in { from { opacity: 0; transform: scale(.94); } to { opacity: 1; transform: scale(1); } }
 
 @supports not ((backdrop-filter: blur(2px)) or (-webkit-backdrop-filter: blur(2px))) {
-  .sz-button[data-variant='glass'], .sz-reaction--media .sz-reaction__material { background: rgba(24, 18, 14, .94); }
+  .sz-button[data-variant='glass'] { background: rgba(24, 18, 14, .94); }
 }
 
 @media (prefers-reduced-transparency: reduce) {
-  .sz-button[data-variant='glass'], .sz-reaction--media .sz-reaction__material { -webkit-backdrop-filter: none; backdrop-filter: none; background: rgba(24,18,14,.96); }
+  .sz-button[data-variant='glass'] { -webkit-backdrop-filter: none; backdrop-filter: none; background: rgba(24,18,14,.96); }
 }
 
 @media (prefers-contrast: more) {

@@ -57,7 +57,7 @@ export function DesktopSidebar() {
           <Button
             key={it.key}
             onClick={() => setTab(it.key)}
-            variant={active ? 'glass' : 'plain'}
+            variant="plain"
             aria-current={active ? 'page' : undefined}
             className="sz-desktop-nav__item"
           >
