@@ -300,6 +300,14 @@ export interface SubscriptionDTO {
 }
 
 /** The creator's earnings dashboard payload. */
+/** A creator subscription tier (name + price + perks). */
+export interface TierDTO {
+  id: string;
+  name: string;
+  priceCents: number;
+  perks: string | null;
+}
+
 /** A creator's digital product (cookbook, meal plan, guide). */
 export interface ProductDTO {
   id: string;

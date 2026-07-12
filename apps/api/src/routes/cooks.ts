@@ -148,6 +148,13 @@ cooks.get('/:id', optionalAuth, async (c) => {
   return c.json(res);
 });
 
+/** GET /cooks/:id/tiers — a creator's public subscription tiers. */
+cooks.get('/:id/tiers', optionalAuth, async (c) => {
+  const id = assertUuid(c.req.param('id'), 'cook');
+  const { data } = await supabaseAdmin.from('creator_tiers').select('id, name, price_cents, perks').eq('creator_id', id).eq('active', true).order('sort', { ascending: true });
+  return c.json((data ?? []).map((t) => ({ id: t.id, name: t.name, priceCents: t.price_cents, perks: t.perks })));
+});
+
 /** GET /cooks/:id/products — a creator's digital products (public; file URL only if owned). */
 cooks.get('/:id/products', optionalAuth, async (c) => {
   const id = assertUuid(c.req.param('id'), 'cook');

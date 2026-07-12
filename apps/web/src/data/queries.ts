@@ -1,5 +1,5 @@
 import { QueryClient, useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query';
-import type { AdminAppealDTO, AdminContentReportDTO, AdminLogDTO, AdminReportGroupDTO, AdminStats, AdminUserDTO, CollectionDTO, CommentDTO, ConversationDTO, CookProfile, CookSummary, CreateRecipeInput, CreatorAnalytics, DirectUploadTicket, DraftCard, EarningsSummary, FeedResponse, MeProfile, MessageDTO, MonetizationStatus, NotificationDTO, NotifPrefKey, PostControls, ProductDTO, RecipeCard, RecipeDetail, ReportInput, SearchResults, SuggestedCook, SupportRequestDTO, ThreadDTO, TipConfig, TrendingTag, VerificationTier, VideoAssetStatus, VideoUploadConfig } from '@sizzle/shared';
+import type { AdminAppealDTO, AdminContentReportDTO, AdminLogDTO, AdminReportGroupDTO, AdminStats, AdminUserDTO, CollectionDTO, CommentDTO, ConversationDTO, CookProfile, CookSummary, CreateRecipeInput, CreatorAnalytics, DirectUploadTicket, DraftCard, EarningsSummary, FeedResponse, MeProfile, MessageDTO, MonetizationStatus, NotificationDTO, NotifPrefKey, PostControls, ProductDTO, RecipeCard, RecipeDetail, ReportInput, SearchResults, SuggestedCook, SupportRequestDTO, ThreadDTO, TierDTO, TipConfig, TrendingTag, VerificationTier, VideoAssetStatus, VideoUploadConfig } from '@sizzle/shared';
 import { useAuth } from '../auth/useAuth';
 import { useSizzle } from '../store';
 import { apiGet, apiSend } from '../lib/api';
@@ -106,12 +106,40 @@ export function useUnlockRecipe() {
   });
 }
 
+/** A creator's public subscription tiers (empty = single flat price). */
+export function useCookTiers(cookId: string | null) {
+  return useQuery({ queryKey: ['cook', cookId, 'tiers'], queryFn: () => apiGet<TierDTO[]>(`/cooks/${cookId}/tiers`), enabled: !!cookId });
+}
+
+/** The creator's own subscription tiers. */
+export function useMyTiers(enabled: boolean) {
+  return useQuery({ queryKey: ['monetize', 'tiers'], queryFn: () => apiGet<{ tiers: TierDTO[] }>('/monetize/tiers'), enabled });
+}
+
+/** Create a subscription tier. */
+export function useCreateTier() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { name: string; priceCents: number; perks?: string | null }) => apiSend('POST', '/monetize/tiers', v),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['monetize', 'tiers'] }); void qc.invalidateQueries({ queryKey: ['cook'] }); },
+  });
+}
+
+/** Delete a subscription tier. */
+export function useDeleteTier() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => apiSend('DELETE', `/monetize/tiers/${id}`),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: ['monetize', 'tiers'] }); void qc.invalidateQueries({ queryKey: ['cook'] }); },
+  });
+}
+
 /** Subscribe to a creator (opens Stripe checkout, or activates instantly in test mode). */
 export function useSubscribe() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (creatorId: string) => apiSend<{ url: string | null; status: string }>('POST', '/monetize/subscribe', { creatorId }),
-    onSuccess: (res, creatorId) => {
+    mutationFn: ({ creatorId, tierId }: { creatorId: string; tierId?: string }) => apiSend<{ url: string | null; status: string }>('POST', '/monetize/subscribe', { creatorId, tierId }),
+    onSuccess: (res, { creatorId }) => {
       if (res.url) {
         window.open(res.url, '_blank', 'noopener');
         invalidateOnReturn(qc, [keys.cook(creatorId), ['feed'], ['recipe']]);

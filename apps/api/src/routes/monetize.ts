@@ -359,6 +359,39 @@ monetize.post('/products/:id/buy', requireAuth, requireNotBanned, rateLimit({ wi
   return c.json({ url, status: 'pending' as const });
 });
 
+const tierSchema = z.object({
+  name: z.string().trim().min(1).max(60),
+  priceCents: z.number().int().min(100).max(50_000),
+  perks: z.string().trim().max(500).nullable().optional(),
+});
+
+/** POST /monetize/tiers — create a subscription tier (creator, payouts active). */
+monetize.post('/tiers', requireAuth, requireNotBanned, async (c) => {
+  const userId = c.get('userId')!;
+  const parsed = tierSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) throw badRequest('Invalid tier');
+  const { data: me } = await supabaseAdmin.from('profiles').select('monetization_status').eq('id', userId).maybeSingle();
+  if (me?.monetization_status !== 'active') throw badRequest('Set up payouts first');
+  const { count } = await supabaseAdmin.from('creator_tiers').select('*', { count: 'exact', head: true }).eq('creator_id', userId).eq('active', true);
+  const { data, error } = await supabaseAdmin.from('creator_tiers').insert({ creator_id: userId, name: parsed.data.name, price_cents: parsed.data.priceCents, perks: parsed.data.perks ?? null, sort: count ?? 0 }).select('id').single();
+  if (error || !data) throw dbFail(error?.message ?? 'Failed to create tier');
+  return c.json({ id: data.id }, 201);
+});
+
+/** GET /monetize/tiers — the creator's own tiers. */
+monetize.get('/tiers', requireAuth, async (c) => {
+  const userId = c.get('userId')!;
+  const { data } = await supabaseAdmin.from('creator_tiers').select('*').eq('creator_id', userId).eq('active', true).order('sort', { ascending: true });
+  return c.json({ tiers: (data ?? []).map((t) => ({ id: t.id, name: t.name, priceCents: t.price_cents, perks: t.perks })) });
+});
+
+/** DELETE /monetize/tiers/:id — deactivate a tier. */
+monetize.delete('/tiers/:id', requireAuth, async (c) => {
+  const userId = c.get('userId')!;
+  await supabaseAdmin.from('creator_tiers').update({ active: false }).eq('id', c.req.param('id')).eq('creator_id', userId);
+  return c.json({ ok: true });
+});
+
 const broadcastSchema = z.object({ text: z.string().trim().min(1).max(1000) });
 
 /** POST /monetize/broadcast — send one DM to all of the creator's active subscribers.
@@ -400,7 +433,7 @@ monetize.post('/welcome', requireAuth, async (c) => {
   return c.json({ ok: true });
 });
 
-const subscribeSchema = z.object({ creatorId: z.string().uuid() });
+const subscribeSchema = z.object({ creatorId: z.string().uuid(), tierId: z.string().uuid().optional() });
 
 /** POST /monetize/subscribe — start a monthly subscription to a creator. */
 monetize.post('/subscribe', requireAuth, requireNotBanned, rateLimit({ windowMs: 60_000, max: 6, name: 'subscribe' }), async (c) => {
@@ -416,16 +449,24 @@ monetize.post('/subscribe', requireAuth, requireNotBanned, rateLimit({ windowMs:
     .select('display_name, banned, monetization_status, stripe_account_id, sub_price_cents')
     .eq('id', creatorId)
     .maybeSingle();
-  if (!creator || creator.banned || creator.monetization_status !== 'active' || !creator.sub_price_cents) throw badRequest('This creator does not offer subscriptions');
+  // A tier sets its own price; otherwise fall back to the creator's base sub price.
+  let priceCents = (creator?.sub_price_cents as number | null) ?? null;
+  let tierId: string | null = null;
+  if (parsed.data.tierId) {
+    const { data: tier } = await supabaseAdmin.from('creator_tiers').select('price_cents').eq('id', parsed.data.tierId).eq('creator_id', creatorId).eq('active', true).maybeSingle();
+    if (!tier) throw badRequest('That tier is unavailable');
+    priceCents = tier.price_cents as number;
+    tierId = parsed.data.tierId;
+  }
+  if (!creator || creator.banned || creator.monetization_status !== 'active' || !priceCents) throw badRequest('This creator does not offer subscriptions');
   const { data: existing } = await supabaseAdmin.from('subscriptions').select('id, status').eq('subscriber_id', userId).eq('creator_id', creatorId).maybeSingle();
   if (existing && existing.status === 'active') return c.json({ url: null, status: 'active' as const });
 
-  const priceCents = creator.sub_price_cents as number;
   if (!stripeConfigured) {
     // Mock: activate + record the first month instantly (no provider_ref → no unique clash on re-sub).
     const feeCents = platformFeeCents(priceCents);
     await supabaseAdmin.from('subscriptions').upsert(
-      { subscriber_id: userId, creator_id: creatorId, price_cents: priceCents, status: 'active', current_period_end: new Date(Date.now() + 30 * 86_400_000).toISOString() },
+      { subscriber_id: userId, creator_id: creatorId, price_cents: priceCents, tier_id: tierId, status: 'active', current_period_end: new Date(Date.now() + 30 * 86_400_000).toISOString() },
       { onConflict: 'subscriber_id,creator_id' },
     );
     await supabaseAdmin.from('tips').insert({ tipper_id: userId, creator_id: creatorId, amount_cents: priceCents, fee_cents: feeCents, net_cents: priceCents - feeCents, provider: 'mock', status: 'succeeded', succeeded_at: new Date().toISOString(), kind: 'subscription' });

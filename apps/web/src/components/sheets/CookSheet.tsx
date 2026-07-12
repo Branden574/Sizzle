@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useBuyProduct, useCancelSubscription, useCook, useCookProducts, useMe, useSubscribe, useToggleBlock, useToggleFollow, useToggleMute } from '../../data/queries';
+import { useBuyProduct, useCancelSubscription, useCook, useCookProducts, useCookTiers, useMe, useSubscribe, useToggleBlock, useToggleFollow, useToggleMute } from '../../data/queries';
 import { useRequireAuth } from '../../auth/useRequireAuth';
 import { useSizzle } from '../../store';
 import { VerifiedBadge } from '../VerifiedBadge';
@@ -23,7 +23,6 @@ export function CookSheet() {
   const follow = useToggleFollow();
   const block = useToggleBlock();
   const mute = useToggleMute();
-  const subscribe = useSubscribe();
   const cancelSub = useCancelSubscription();
   const { data: me } = useMe();
   const [menuOpen, setMenuOpen] = useState(false);
@@ -138,14 +137,7 @@ export function CookSheet() {
                 <button onClick={() => { if (window.confirm(`Cancel your subscription to ${ck.name}? You keep access until the month ends.`)) cancelSub.mutate(ck.id); }} disabled={cancelSub.isPending} style={{ background: 'none', border: 'none', color: 'var(--text-faint)', fontFamily: "'Hanken Grotesk'", fontSize: 13, fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}>Cancel</button>
               </div>
             ) : (
-              <button
-                onClick={() => { if (requireAuth()) subscribe.mutate(ck.id); }}
-                disabled={subscribe.isPending}
-                className="sz-press"
-                style={{ ...pressVars(0.97), width: '100%', marginTop: 16, height: 50, borderRadius: 15, border: 'none', background: `linear-gradient(135deg,${accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15.5, fontWeight: 800, cursor: 'pointer' }}
-              >
-                {subscribe.isPending ? 'Starting…' : `⭐ Subscribe · $${(ck.subPriceCents / 100).toFixed(2)}/mo`}
-              </button>
+              <SubscribeTiers cookId={ck.id} basePriceCents={ck.subPriceCents} />
             )
           )}
 
@@ -248,5 +240,33 @@ function ProductShelf({ cookId }: { cookId: string }) {
         ))}
       </div>
     </div>
+  );
+}
+
+/** Subscribe UI — a tier picker when the creator offers tiers, else the flat price. */
+function SubscribeTiers({ cookId, basePriceCents }: { cookId: string; basePriceCents: number }) {
+  const requireAuth = useRequireAuth();
+  const subscribe = useSubscribe();
+  const { data: tiers } = useCookTiers(cookId);
+  const go = (tierId?: string) => { if (requireAuth()) subscribe.mutate({ creatorId: cookId, tierId }); };
+  if (tiers && tiers.length > 0) {
+    return (
+      <div style={{ marginTop: 16, display: 'flex', flexDirection: 'column', gap: 8 }}>
+        {tiers.map((t) => (
+          <button key={t.id} onClick={() => go(t.id)} disabled={subscribe.isPending} className="sz-press" style={{ ...pressVars(0.98), textAlign: 'left', border: '1px solid var(--line)', borderRadius: 16, background: 'var(--surface)', padding: '13px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)' }}>{t.name}</div>
+              {t.perks && <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 2 }}>{t.perks}</div>}
+            </div>
+            <div style={{ flex: 'none', padding: '7px 14px', borderRadius: 12, background: `linear-gradient(135deg,${accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 14, fontWeight: 800 }}>${(t.priceCents / 100).toFixed(2)}/mo</div>
+          </button>
+        ))}
+      </div>
+    );
+  }
+  return (
+    <button onClick={() => go()} disabled={subscribe.isPending} className="sz-press" style={{ ...pressVars(0.97), width: '100%', marginTop: 16, height: 50, borderRadius: 15, border: 'none', background: `linear-gradient(135deg,${accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15.5, fontWeight: 800, cursor: 'pointer' }}>
+      {subscribe.isPending ? 'Starting…' : `⭐ Subscribe · $${(basePriceCents / 100).toFixed(2)}/mo`}
+    </button>
   );
 }

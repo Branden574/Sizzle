@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { PLATFORM_FEE_PCT, PLATFORM_FEE_RATIONALE, type CreatorAnalytics, type EarningKind, type EarningsSummary } from '@sizzle/shared';
-import { useAnalytics, useBroadcast, useCreateProduct, useDeleteProduct, useEarnings, useMonetizationStatus, useMyProducts, usePayout, useSetGoal, useSetSubPrice, useSetWelcomeDm, useStartOnboarding } from '../../data/queries';
+import { useAnalytics, useBroadcast, useCreateProduct, useCreateTier, useDeleteProduct, useDeleteTier, useEarnings, useMonetizationStatus, useMyProducts, useMyTiers, usePayout, useSetGoal, useSetSubPrice, useSetWelcomeDm, useStartOnboarding } from '../../data/queries';
 import { useSizzle } from '../../store';
 import { formatCount } from '../../lib/format';
 import { theme } from '../../theme';
@@ -157,6 +157,7 @@ function Earnings() {
           <PayoutCard />
           <ProductsManager />
           <SubPriceEditor data={data} />
+          <TiersManager />
           {(data?.activeSubs ?? 0) > 0 && <BroadcastComposer count={data!.activeSubs} />}
           <GoalEditor data={data} />
           <WelcomeDmEditor data={data} />
@@ -327,6 +328,58 @@ function TrendSparkline({ data }: { data: CreatorAnalytics | undefined }) {
       </div>
       {best && best.views > 0 && (
         <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 10 }}>⏰ Best time to post: <b style={{ color: 'var(--text)' }}>{DOW[best.dow]} around {hourLabel(best.hour)}</b></div>
+      )}
+    </div>
+  );
+}
+
+/** Manage subscription tiers (e.g. Home Cook / Sous Chef / Pro). */
+function TiersManager() {
+  const { data } = useMyTiers(true);
+  const create = useCreateTier();
+  const del = useDeleteTier();
+  const [adding, setAdding] = useState(false);
+  const [name, setName] = useState('');
+  const [price, setPrice] = useState('');
+  const [perks, setPerks] = useState('');
+  const tiers = data?.tiers ?? [];
+  const save = () => {
+    const cents = Math.round(parseFloat(price) * 100);
+    if (!name.trim() || !(cents >= 100)) return;
+    create.mutate({ name: name.trim(), priceCents: Math.min(cents, 50_000), perks: perks.trim() || null }, { onSuccess: () => { setName(''); setPrice(''); setPerks(''); setAdding(false); } });
+  };
+  return (
+    <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 16, padding: 16, marginBottom: 12 }}>
+      <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
+        <div style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--text)' }}>Subscription tiers</div>
+        {!adding && <button onClick={() => setAdding(true)} style={{ height: 34, padding: '0 14px', border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>+ Add</button>}
+      </div>
+      {tiers.length === 0 && !adding && <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 4 }}>Optional — offer multiple tiers (e.g. Home Cook / Pro) with different perks.</div>}
+      {tiers.map((t) => (
+        <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 0', borderBottom: '1px solid var(--line)' }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{t.name}</div>
+            {t.perks && <div style={{ fontSize: 12, color: 'var(--text-faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.perks}</div>}
+          </div>
+          <div style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--text)' }}>{usd(t.priceCents)}/mo</div>
+          <button onClick={() => { if (window.confirm(`Remove "${t.name}"?`)) del.mutate(t.id); }} aria-label="Remove" style={{ background: 'none', border: 'none', color: 'var(--danger-fg)', cursor: 'pointer', fontSize: 15, fontWeight: 800 }}>✕</button>
+        </div>
+      ))}
+      {adding && (
+        <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
+          <div style={{ display: 'flex', gap: 8 }}>
+            <input value={name} onChange={(e) => setName(e.target.value.slice(0, 60))} placeholder="Tier name" style={{ flex: 1, height: 44, border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 15, outline: 'none', padding: '0 12px', minWidth: 0 }} />
+            <div style={{ display: 'flex', alignItems: 'center', width: 100, background: 'var(--bg)', border: '1.5px solid var(--line-2)', borderRadius: 12, padding: '0 10px' }}>
+              <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-faint)' }}>$</span>
+              <input value={price} onChange={(e) => setPrice(e.target.value.replace(/[^0-9.]/g, '').slice(0, 6))} inputMode="decimal" placeholder="9.99" style={{ flex: 1, height: 44, border: 'none', background: 'transparent', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 800, outline: 'none', padding: '0 4px', minWidth: 0 }} />
+            </div>
+          </div>
+          <input value={perks} onChange={(e) => setPerks(e.target.value.slice(0, 200))} placeholder="Perks (e.g. all premium recipes + monthly Q&A)" style={{ height: 44, border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 13.5, outline: 'none', padding: '0 12px' }} />
+          <div style={{ display: 'flex', justifyContent: 'space-between' }}>
+            <button onClick={save} disabled={create.isPending} style={{ height: 40, padding: '0 18px', border: 'none', borderRadius: 12, background: `linear-gradient(135deg,${theme.accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 14, fontWeight: 800, cursor: 'pointer', opacity: create.isPending ? 0.7 : 1 }}>{create.isPending ? '…' : 'Add tier'}</button>
+            <button onClick={() => setAdding(false)} style={{ background: 'none', border: 'none', color: 'var(--text-faint)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>Cancel</button>
+          </div>
+        </div>
       )}
     </div>
   );
