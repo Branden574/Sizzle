@@ -175,7 +175,7 @@ me.post('/notif-prefs', async (c) => {
 me.get('/analytics', async (c) => {
   const userId = c.get('userId')!;
   const [recsRes, profRes, viewRes, trendRes, bestRes, funnelRes] = await Promise.all([
-    supabaseAdmin.from('recipes').select('id, title, like_count, comment_count, save_count, share_count, created_at').eq('cook_id', userId).eq('status', 'published').order('created_at', { ascending: false }).limit(100),
+    supabaseAdmin.from('recipes').select('id, title, like_count, comment_count, save_count, share_count, cook_count, created_at').eq('cook_id', userId).eq('status', 'published').order('created_at', { ascending: false }).limit(100),
     supabaseAdmin.from('profiles').select('follower_count').eq('id', userId).maybeSingle(),
     // Watch-time & completion, aggregated per recipe (data already logged in recipe_views).
     supabaseAdmin.rpc('creator_view_stats', { p_creator: userId }),
@@ -205,6 +205,7 @@ me.get('/analytics', async (c) => {
       comments: (r.comment_count as number) ?? 0,
       saves: (r.save_count as number) ?? 0,
       shares: (r.share_count as number) ?? 0,
+      cooks: (r.cook_count as number) ?? 0,
     };
   });
   const sum = (k: 'likes' | 'comments' | 'saves' | 'shares' | 'views') => posts.reduce((n, p) => n + p[k], 0);
@@ -226,6 +227,7 @@ me.get('/analytics', async (c) => {
       likes: sum('likes'), comments: sum('comments'), saves: sum('saves'), shares: sum('shares'),
       avgWatchMs: totalViews ? Math.round(totalDwell / totalViews) : 0,
       completionPct: totalViews ? Math.round((totalCompleted / totalViews) * 100) : 0,
+      cooks: posts.reduce((n, p) => n + p.cooks, 0),
     },
     posts,
     trend,

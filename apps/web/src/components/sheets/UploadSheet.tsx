@@ -37,6 +37,10 @@ export function UploadSheet() {
   const user = useAuth((s) => s.user);
   const [processing, setProcessing] = useState(false);
 
+  // "Cook this" lineage: pre-fill the composer from the origin recipe.
+  const uploadPrefill = useSizzle((s) => s.uploadPrefill);
+  const setUploadPrefill = useSizzle((s) => s.setUploadPrefill);
+
   const [postType, setPostType] = useState<PostType>('recipe');
   const [scheduleAt, setScheduleAt] = useState('');
   const [rating, setRating] = useState(0);
@@ -45,8 +49,8 @@ export function UploadSheet() {
   const [time, setTime] = useState('');
   const [servings, setServings] = useState('');
   const [caption, setCaption] = useState('');
-  const [ingredients, setIngredients] = useState('');
-  const [steps, setSteps] = useState('');
+  const [ingredients, setIngredients] = useState(() => uploadPrefill?.ingredients ?? '');
+  const [steps, setSteps] = useState(() => uploadPrefill?.steps ?? '');
 
   const isReview = postType === 'review';
 
@@ -100,6 +104,7 @@ export function UploadSheet() {
 
   const close = () => {
     if (videoUrl) URL.revokeObjectURL(videoUrl);
+    setUploadPrefill(null);
     setShowUpload(false);
   };
 
@@ -190,11 +195,13 @@ export function UploadSheet() {
         video,
         videoAssetId,
         images,
+        originRecipeId: uploadPrefill?.originRecipeId,
       },
       {
         onSuccess: () => {
           if (videoUrl) URL.revokeObjectURL(videoUrl);
           photos.forEach((p) => URL.revokeObjectURL(p.url));
+          setUploadPrefill(null);
           setShowUpload(false);
           setFeed('foryou');
           setTab('feed');
@@ -226,6 +233,14 @@ export function UploadSheet() {
       </div>
 
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 16px' }}>
+        {uploadPrefill && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '10px 0 2px', padding: '9px 13px', background: 'var(--surface, rgba(255,255,255,.06))', border: '1px solid var(--line-2, rgba(255,255,255,.14))', borderRadius: 12 }}>
+            <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-muted, rgba(255,255,255,.75))', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+              🍳 Cooking @{uploadPrefill.originHandle}'s “{uploadPrefill.originTitle}” — your post will credit the original
+            </span>
+            <Button onClick={() => setUploadPrefill(null)} aria-label="Remove recipe credit" style={{ flex: 'none', border: 'none', background: 'none', color: 'var(--text-faint, rgba(255,255,255,.5))', fontSize: 16, cursor: 'pointer', padding: 2 }}>✕</Button>
+          </div>
+        )}
         <input ref={fileRef} type="file" accept="video/*" onChange={pickVideo} style={{ display: 'none' }} />
         <input ref={photoInputRef} type="file" accept="image/*" multiple onChange={pickPhotos} style={{ display: 'none' }} />
 

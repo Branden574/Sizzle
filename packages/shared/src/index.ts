@@ -61,6 +61,8 @@ export interface RecipeCounts {
   comments: number;
   saves: number;
   shares: number;
+  /** Qualified cooks — distinct users who finished cooking this in cook mode. */
+  cooks: number;
 }
 
 /** The viewer's relationship to a recipe/cook (all false for guests). */
@@ -137,6 +139,9 @@ export interface RecipeCard {
   visibility: 'public' | 'subscribers';
   /** Set when this card appears in your feed because a mutual-follow friend reposted it. */
   repost: RepostInfo | null;
+  /** Lineage: set when this post was cooked from another recipe ("Cook this").
+   *  The credit chip links back to the original. */
+  origin: { id: string; title: string; cookHandle: string } | null;
 }
 
 /** A post is either a recipe/tutorial or a foodie review. */
@@ -354,11 +359,11 @@ export interface TipConfig {
 
 /** Creator insights (own profile). */
 export interface CreatorAnalytics {
-  totals: { recipes: number; followers: number; views: number; likes: number; comments: number; saves: number; shares: number; avgWatchMs: number; completionPct: number };
+  totals: { recipes: number; followers: number; views: number; likes: number; comments: number; saves: number; shares: number; avgWatchMs: number; completionPct: number; cooks: number };
   posts: {
     id: string; title: string; createdAt: string;
     views: number; avgWatchMs: number; completionPct: number; skipPct: number;
-    likes: number; comments: number; saves: number; shares: number;
+    likes: number; comments: number; saves: number; shares: number; cooks: number;
   }[];
   /** Daily views over the trailing window (for a sparkline). */
   trend: { day: string; views: number }[];
@@ -604,6 +609,8 @@ export interface CreateRecipeInput {
   postType?: PostType;
   /** 1–5 star rating; only valid when postType is 'review'. */
   rating?: number;
+  /** Lineage: the recipe this post was cooked from ("Cook this"). */
+  originRecipeId?: string;
   /** Publish now (default), save as a draft, or schedule for later. */
   status?: 'draft' | 'scheduled' | 'published';
   /** ISO time to auto-publish when status is 'scheduled'. */

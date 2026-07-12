@@ -113,6 +113,10 @@ export interface RecipeRow {
   counts_visible: boolean | null;
   price_cents: number | null;
   visibility: string | null;
+  /** Qualified cooks — distinct users who finished this recipe in cook mode. */
+  cook_count: number | null;
+  /** Lineage: the recipe this post was cooked from ("Cook this"). */
+  origin_recipe_id: string | null;
   created_at: string;
 }
 
@@ -209,7 +213,7 @@ function viewerState(recipeId: string, cookId: string, ctx: ViewerCtx): RecipeVi
   };
 }
 
-function toCard(r: RecipeRow, cook: ProfileRow, video: VideoRow | null, ctx: ViewerCtx, viewerId?: string): RecipeCard {
+function toCard(r: RecipeRow, cook: ProfileRow, video: VideoRow | null, ctx: ViewerCtx, viewerId?: string, origin?: RecipeCard['origin']): RecipeCard {
   // Premium gating: a priced recipe is locked unless you own it, unlocked it, or
   // subscribe to the creator. Locked cards keep their poster but never expose the
   // playable video or photos (the detail route also withholds ingredients/steps).
@@ -234,7 +238,7 @@ function toCard(r: RecipeRow, cook: ProfileRow, video: VideoRow | null, ctx: Vie
     cook: cookSummary(cook),
     video: locked && dto ? { ...dto, hlsUrl: null, mp4Url: null } : dto,
     images: locked ? [] : r.image_urls ?? [],
-    counts: { likes: r.like_count, dislikes: r.dislike_count, comments: r.comment_count, saves: r.save_count, shares: r.share_count },
+    counts: { likes: r.like_count, dislikes: r.dislike_count, comments: r.comment_count, saves: r.save_count, shares: r.share_count, cooks: r.cook_count ?? 0 },
     viewer: viewerState(r.id, r.cook_id, ctx),
     controls: {
       likesEnabled: r.likes_enabled ?? true,
@@ -254,6 +258,7 @@ function toCard(r: RecipeRow, cook: ProfileRow, video: VideoRow | null, ctx: Vie
     subscribersOnly,
     visibility: (r.visibility === 'subscribers' ? 'subscribers' : 'public'),
     repost: null,
+    origin: origin ?? null,
   };
 }
 
@@ -328,6 +333,24 @@ export async function buildCards(db: SupabaseClient, viewerId: string | undefine
 
   const ctx = await loadViewerCtx(db, viewerId, rows.map((r) => r.id), cookIds);
 
+  // Lineage credit chips: batch-load the origin recipes ("Cook this" sources)
+  // for any cards that have one — title + author handle, two small queries.
+  const originIds = [...new Set(rows.map((r) => r.origin_recipe_id).filter((x): x is string => !!x))];
+  const originMap = new Map<string, { id: string; title: string; cookHandle: string }>();
+  if (originIds.length) {
+    const { data: origins } = await db.from('recipes').select('id, title, cook_id, status').in('id', originIds);
+    const originCookIds = [...new Set((origins ?? []).map((o) => o.cook_id as string))];
+    const { data: originCooks } = originCookIds.length
+      ? await db.from('profiles').select('id, handle, banned').in('id', originCookIds)
+      : { data: [] as { id: string; handle: string; banned: boolean }[] };
+    const handleById = new Map((originCooks ?? []).filter((p) => !p.banned).map((p) => [p.id as string, p.handle as string]));
+    for (const o of origins ?? []) {
+      if (o.status !== 'published') continue; // no credit chips to unpublished/removed sources
+      const handle = handleById.get(o.cook_id as string);
+      if (handle) originMap.set(o.id as string, { id: o.id as string, title: o.title as string, cookHandle: handle });
+    }
+  }
+
   const cards: RecipeCard[] = [];
   for (const r of rows) {
     const cook = cookMap.get(r.cook_id);
@@ -340,7 +363,14 @@ export async function buildCards(db: SupabaseClient, viewerId: string | undefine
     // Auto-hidden (pending review) and removed posts are visible only to their
     // owner — and to admins, so moderators can open the exact content to review.
     if ((r.auto_hidden || r.status === 'removed') && r.cook_id !== viewerId && !viewerIsAdmin) continue;
-    cards.push(toCard(r, cook, r.video_asset_id ? videoMap.get(r.video_asset_id) ?? null : null, ctx, viewerId));
+    cards.push(toCard(
+      r,
+      cook,
+      r.video_asset_id ? videoMap.get(r.video_asset_id) ?? null : null,
+      ctx,
+      viewerId,
+      r.origin_recipe_id ? originMap.get(r.origin_recipe_id) : undefined,
+    ));
   }
   return cards;
 }

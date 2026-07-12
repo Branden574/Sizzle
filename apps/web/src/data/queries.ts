@@ -374,6 +374,49 @@ export function useRecipe(id: string | null) {
   return useQuery({ queryKey: keys.recipe(id ?? ''), queryFn: () => apiGet<RecipeDetail>(`/recipes/${id}`), enabled: !!id });
 }
 
+/** Fire a cook-intent signal (cook_start / cook_finish / list_add). Finish
+ *  updates the recipe's qualified-cooks count in the cache. */
+export function useCookEvent() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ recipeId, kind }: { recipeId: string; kind: 'cook_start' | 'cook_finish' | 'list_add' }) =>
+      apiSend<{ cooks: number }>('POST', `/recipes/${recipeId}/cook-events`, { kind }),
+    onSuccess: (res, { recipeId, kind }) => {
+      if (kind !== 'cook_finish') return;
+      const detail = qc.getQueryData<RecipeDetail>(keys.recipe(recipeId));
+      if (detail) qc.setQueryData(keys.recipe(recipeId), { ...detail, counts: { ...detail.counts, cooks: res.cooks } });
+    },
+  });
+}
+
+/** The "Cooked by N others" rail — published posts that stamped this recipe as
+ *  their origin ("Cook this" lineage). */
+export function useDerivatives(recipeId: string | null) {
+  return useQuery({
+    queryKey: ['derivatives', recipeId],
+    queryFn: () => apiGet<{ items: RecipeCard[]; total: number }>(`/recipes/${recipeId}/derivatives`),
+    enabled: !!recipeId,
+    staleTime: 60_000,
+  });
+}
+
+/** Pantry search: recipes ranked by how many of the given ingredients they use. */
+export function usePantrySearch(ings: string[], filters: { maxTime?: number; cuisine?: string; tag?: string }) {
+  const key = [...ings].sort().join(',');
+  return useQuery({
+    queryKey: ['pantry', key, filters.maxTime ?? 0, filters.cuisine ?? '', filters.tag ?? ''],
+    queryFn: () => {
+      const p = new URLSearchParams({ ings: ings.join(',') });
+      if (filters.maxTime) p.set('maxTime', String(filters.maxTime));
+      if (filters.cuisine) p.set('cuisine', filters.cuisine);
+      if (filters.tag) p.set('tag', filters.tag);
+      return apiGet<{ recipes: RecipeCard[]; matched: Record<string, string[]> }>(`/search/pantry?${p}`);
+    },
+    enabled: ings.length > 0,
+    staleTime: 30_000,
+  });
+}
+
 export function useCook(id: string | null) {
   return useQuery({ queryKey: keys.cook(id ?? ''), queryFn: () => apiGet<CookProfile>(`/cooks/${id}`), enabled: !!id });
 }

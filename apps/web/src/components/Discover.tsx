@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Button, FilterChip, IconButton } from './controls';
 import type { RecipeCard } from '@sizzle/shared';
 import { discoverHeights } from '../data';
-import { useForYouFeed, useSearch, useTrendingTags } from '../data/queries';
+import { useForYouFeed, usePantrySearch, useSearch, useTrendingTags } from '../data/queries';
 import { useSizzle } from '../store';
 import { formatCount } from '../lib/format';
 import { HeartIcon, SearchIcon } from './icons';
@@ -18,14 +18,32 @@ export function Discover() {
   const { data: results, isFetching } = useSearch(q);
   const { data: trending } = useTrendingTags();
 
-  const tiles = query ? results?.recipes ?? [] : feed?.pages.flatMap((p) => p.items) ?? [];
+  // Pantry search: "what can I make with what I have" — ingredient chips +
+  // a time filter, ranked by how many of your ingredients each recipe uses.
+  const [pantry, setPantry] = useState<string[]>([]);
+  const [pantryInput, setPantryInput] = useState('');
+  const [maxTime, setMaxTime] = useState(0);
+  const pantryActive = !query && pantry.length > 0;
+  const pantryQuery = usePantrySearch(pantryActive ? pantry : [], { maxTime: maxTime || undefined });
+  const addPantry = () => {
+    const t = pantryInput.trim().toLowerCase().replace(/[%_(),.#]/g, '').slice(0, 40);
+    setPantryInput('');
+    if (t.length >= 2 && !pantry.includes(t) && pantry.length < 8) setPantry((prev) => [...prev, t]);
+  };
+
+  const tiles = query
+    ? results?.recipes ?? []
+    : pantryActive
+      ? pantryQuery.data?.recipes ?? []
+      : feed?.pages.flatMap((p) => p.items) ?? [];
   const cooks = query ? results?.cooks ?? [] : [];
+  const pantryMatched = pantryActive ? pantryQuery.data?.matched ?? {} : {};
 
   // Infinite scroll for the default (non-search) grid — load the next page when
   // the sentinel nears the viewport, mirroring the Feed. Search results aren't paged.
   const sentinelRef = useRef<HTMLDivElement>(null);
   useEffect(() => {
-    if (query) return;
+    if (query || pantryActive) return;
     const el = sentinelRef.current;
     if (!el) return;
     const io = new IntersectionObserver(
@@ -52,7 +70,36 @@ export function Discover() {
             <IconButton label="Clear search" variant="text" size="sm" onClick={() => setQ('')}>×</IconButton>
           )}
         </div>
-        {!query && (trending?.length ?? 0) > 0 && (
+        {!query && (
+          <>
+            <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-faint-2)', textTransform: 'uppercase', letterSpacing: '.4px', margin: '18px 0 10px' }}>What&apos;s in your kitchen?</div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 9, background: 'var(--surface)', border: '1.5px solid var(--line)', borderRadius: 16, padding: '10px 14px' }}>
+              <span aria-hidden="true" style={{ fontSize: 16 }}>🥕</span>
+              <input
+                value={pantryInput}
+                onChange={(e) => setPantryInput(e.target.value)}
+                onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ',') { e.preventDefault(); addPantry(); } }}
+                onBlur={() => { if (pantryInput.trim()) addPantry(); }}
+                placeholder={pantry.length ? 'Add another ingredient…' : 'chicken, rice, gochujang…'}
+                aria-label="Add an ingredient you have"
+                style={{ flex: 1, border: 'none', outline: 'none', background: 'none', fontFamily: "'Hanken Grotesk'", fontSize: 15, color: 'var(--text)' }}
+              />
+              {pantryInput.trim().length >= 2 && (
+                <Button onClick={addPantry} style={{ flex: 'none', border: 'none', background: 'var(--accent,#ff5a36)', color: '#fff', borderRadius: 10, padding: '6px 12px', fontFamily: "'Hanken Grotesk'", fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>Add</Button>
+              )}
+            </div>
+            {pantry.length > 0 && (
+              <div style={{ display: 'flex', gap: 8, flexWrap: 'wrap', marginTop: 10 }}>
+                {pantry.map((t) => (
+                  <FilterChip key={t} selected onClick={() => setPantry((prev) => prev.filter((x) => x !== t))}>{t} ✕</FilterChip>
+                ))}
+                <FilterChip selected={maxTime === 30} onClick={() => setMaxTime(maxTime === 30 ? 0 : 30)}>≤ 30 min</FilterChip>
+                <FilterChip selected={maxTime === 60} onClick={() => setMaxTime(maxTime === 60 ? 0 : 60)}>≤ 60 min</FilterChip>
+              </div>
+            )}
+          </>
+        )}
+        {!query && !pantryActive && (trending?.length ?? 0) > 0 && (
           <>
             <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-faint-2)', textTransform: 'uppercase', letterSpacing: '.4px', margin: '18px 0 10px' }}>Trending</div>
             <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap' }}>
@@ -84,6 +131,13 @@ export function Discover() {
         </div>
       )}
 
+      {pantryActive && pantryQuery.isFetching && tiles.length === 0 && (
+        <div style={{ padding: '40px 22px', textAlign: 'center', color: 'var(--text-faint-2)', fontSize: 15 }}>Finding what you can make…</div>
+      )}
+      {pantryActive && !pantryQuery.isFetching && tiles.length === 0 && (
+        <div style={{ padding: '40px 22px', textAlign: 'center', color: 'var(--text-faint-2)', fontSize: 15 }}>Nothing matches those ingredients yet — try removing one.</div>
+      )}
+
       {query && isFetching && tiles.length === 0 && cooks.length === 0 && (
         <div style={{ padding: '40px 22px', textAlign: 'center', color: 'var(--text-faint-2)', fontSize: 15 }}>Searching…</div>
       )}
@@ -103,6 +157,11 @@ export function Discover() {
             <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, transparent 40%, rgba(0,0,0,.7))' }} />
             <div style={{ position: 'absolute', left: 13, right: 13, bottom: 12 }}>
               <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 19, lineHeight: 1.05, color: '#fff' }}>{r.title}</div>
+              {pantryActive && (pantryMatched[r.id]?.length ?? 0) > 0 && (
+                <div style={{ display: 'inline-block', marginTop: 6, background: 'rgba(0,0,0,.45)', border: '1px solid rgba(255,255,255,.25)', borderRadius: 8, padding: '3px 8px', color: '#fff', fontSize: 11, fontWeight: 700 }}>
+                  ✓ {pantryMatched[r.id]!.length} of {pantry.length} ingredient{pantry.length === 1 ? '' : 's'}
+                </div>
+              )}
               {r.controls.countsVisible && (
                 <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 6 }}>
                   <HeartIcon width={12} height={12} fill="#fff" />
@@ -114,7 +173,7 @@ export function Discover() {
         ))}
       </div>
       {/* Infinite-scroll sentinel for the default grid. */}
-      {!query && <div ref={sentinelRef} aria-hidden="true" style={{ height: 1 }} />}
+      {!query && !pantryActive && <div ref={sentinelRef} aria-hidden="true" style={{ height: 1 }} />}
     </div>
   );
 }

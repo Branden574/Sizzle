@@ -72,6 +72,8 @@ const createSchema = z.object({
   rating: z.number().int().min(1).max(5).optional(),
   status: z.enum(['draft', 'scheduled', 'published']).default('published'),
   scheduledAt: z.string().datetime().optional(),
+  /** Lineage: the recipe this post was cooked from ("Cook this"). */
+  originRecipeId: z.string().uuid().optional(),
 }).refine((v) => v.postType === 'review' || v.rating === undefined, {
   message: 'rating is only allowed on a review',
   path: ['rating'],
@@ -125,6 +127,18 @@ recipes.post('/', requireAuth, requireNotBanned, rateLimit({ windowMs: 60_000, m
     if (!imgMod.ok) throw badRequest(imgMod.reason!);
   }
 
+  // Lineage: the origin must be a real, published recipe. Self-lineage is
+  // allowed (a creator can iterate on their own dish).
+  let originRecipeId: string | null = null;
+  if (input.originRecipeId) {
+    const { data: origin } = await supabaseAdmin
+      .from('recipes')
+      .select('id, status')
+      .eq('id', input.originRecipeId)
+      .maybeSingle();
+    if (origin && origin.status === 'published') originRecipeId = origin.id as string;
+  }
+
   const bg = POSTER_GRADIENTS[Math.abs(hash(input.title)) % POSTER_GRADIENTS.length]!;
   const tags = parseHashtags(input.caption, input.title);
 
@@ -152,6 +166,7 @@ recipes.post('/', requireAuth, requireNotBanned, rateLimit({ windowMs: 60_000, m
       rating: input.postType === 'review' ? (input.rating ?? null) : null,
       status,
       scheduled_at: willSchedule ? scheduledAt!.toISOString() : null,
+      origin_recipe_id: originRecipeId,
     })
     .select('id')
     .single();
@@ -234,6 +249,52 @@ async function recipeCookIdUnblocked(recipeId: string, userId: string): Promise<
   if (blocked.has(cookId)) throw notFound('Recipe not found');
   return cookId;
 }
+
+const cookEventSchema = z.object({ kind: z.enum(['cook_start', 'cook_finish', 'list_add']) });
+
+/** POST /recipes/:id/cook-events — first-class cook-intent signals. cook_start /
+ *  cook_finish come from cook mode, list_add from the shopping list. A user's
+ *  first cook_finish bumps the recipe's qualified-cooks counter (DB trigger). */
+recipes.post('/:id/cook-events', requireAuth, requireNotBanned, rateLimit({ windowMs: 60_000, max: 40, name: 'cook-event' }), async (c) => {
+  const recipeId = assertUuid(c.req.param('id'), 'recipe');
+  const userId = c.get('userId')!;
+  const parsed = cookEventSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) throw badRequest('Invalid cook event');
+
+  const { data: recipe } = await supabaseAdmin.from('recipes').select('id, status').eq('id', recipeId).maybeSingle();
+  if (!recipe || recipe.status !== 'published') throw notFound('Recipe not found');
+
+  const { error } = await supabaseAdmin.from('cook_events').insert({ user_id: userId, recipe_id: recipeId, kind: parsed.data.kind });
+  if (error) throw dbFail(error.message);
+
+  const { data: fresh } = await supabaseAdmin.from('recipes').select('cook_count').eq('id', recipeId).single();
+  return c.json({ cooks: (fresh?.cook_count as number) ?? 0 });
+});
+
+/** GET /recipes/:id/derivatives — the "Cooked by N others" rail: published posts
+ *  that stamped this recipe as their origin. Flows through buildCards, so
+ *  blocks/privacy/bans apply as everywhere else. */
+recipes.get('/:id/derivatives', optionalAuth, async (c) => {
+  const recipeId = assertUuid(c.req.param('id'), 'recipe');
+  const viewerId = c.get('userId');
+  const [{ data: rows }, { count }] = await Promise.all([
+    supabaseAdmin
+      .from('recipes')
+      .select('*')
+      .eq('origin_recipe_id', recipeId)
+      .eq('status', 'published')
+      .order('cook_count', { ascending: false })
+      .order('created_at', { ascending: false })
+      .limit(12),
+    supabaseAdmin
+      .from('recipes')
+      .select('id', { count: 'exact', head: true })
+      .eq('origin_recipe_id', recipeId)
+      .eq('status', 'published'),
+  ]);
+  const items = await buildCards(supabaseAdmin, viewerId, (rows ?? []) as RecipeRow[]);
+  return c.json({ items, total: count ?? items.length });
+});
 
 recipes.post('/:id/like', requireAuth, requireNotBanned, async (c) => {
   const id = c.req.param('id');

@@ -1,7 +1,8 @@
 import { useEffect, useRef, useState } from 'react';
 import { Button, DismissBackdrop } from '../controls';
 import { useRequireAuth } from '../../auth/useRequireAuth';
-import { useAppealRecipe, useDeleteRecipe, useMe, useRecipe, useToggleDownload, useToggleSave, useUnlockRecipe } from '../../data/queries';
+import { useAuth } from '../../auth/useAuth';
+import { useAppealRecipe, useCookEvent, useDeleteRecipe, useDerivatives, useMe, useRecipe, useToggleDownload, useToggleSave, useUnlockRecipe } from '../../data/queries';
 import { getOffline } from '../../lib/offline';
 import { showMonetization } from '../../lib/native';
 import { formatCount } from '../../lib/format';
@@ -31,8 +32,13 @@ export function RecipeSheet() {
   const save = useToggleSave();
   const download = useToggleDownload();
   const unlock = useUnlockRecipe();
+  const cookEvent = useCookEvent();
+  const setUploadPrefill = useSizzle((s) => s.setUploadPrefill);
+  const setShowUpload = useSizzle((s) => s.setShowUpload);
+  const authed = useAuth((s) => s.status === 'authed');
 
   const { data, isLoading } = useRecipe(openRecipe);
+  const derivatives = useDerivatives(openRecipe);
   const { data: me } = useMe();
   const appeal = useAppealRecipe();
   const del = useDeleteRecipe();
@@ -151,6 +157,14 @@ export function RecipeSheet() {
                   <div style={{ fontSize: 12.5, color: 'var(--text-soft)' }}>@{r.cook.handle}</div>
                 </div>
               </Button>
+              {r.origin && (
+                <Button
+                  onClick={() => setOpenRecipe(r.origin!.id)}
+                  style={{ display: 'inline-flex', alignItems: 'center', gap: 7, marginTop: 12, padding: '7px 13px', border: '1px solid var(--line-2)', borderRadius: 999, background: 'var(--surface)', color: 'var(--text-muted)', fontFamily: "'Hanken Grotesk'", fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}
+                >
+                  🍳 Cooked from @{r.origin.cookHandle}'s “{r.origin.title.length > 32 ? `${r.origin.title.slice(0, 32)}…` : r.origin.title}”
+                </Button>
+              )}
               {r.hashtags.length > 0 && (
                 <div style={{ marginTop: 16 }}>
                   <Hashtags tags={r.hashtags} size={14} />
@@ -176,6 +190,12 @@ export function RecipeSheet() {
                     <StatCard label="Serves" value={formatServes(r.servings * scale)} />
                     <StatCard label="Level" value={r.level} />
                   </div>
+
+                  {r.counts.cooks > 0 && (
+                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, padding: '10px 14px', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 14, fontSize: 13.5, fontWeight: 700, color: 'var(--text-muted)' }}>
+                      🍳 {formatCount(r.counts.cooks)} {r.counts.cooks === 1 ? 'person' : 'people'} cooked this
+                    </div>
+                  )}
 
                   {r.locked && r.subscribersOnly && (
                     <div style={{ marginTop: 22, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 18, padding: 20, textAlign: 'center' }}>
@@ -263,6 +283,8 @@ export function RecipeSheet() {
                       onClick={() => {
                         const lines = scale === 1 && units === 'original' ? r.ingredients : r.ingredients.map((ing) => scaleIngredient(ing, scale, units));
                         addToShopping(lines, { id: r.id, title: r.title });
+                        // Cook-intent signal: list-adds feed the ranker + creator analytics.
+                        if (authed) cookEvent.mutate({ recipeId: r.id, kind: 'list_add' });
                         setAddedToList(true);
                         window.setTimeout(() => setAddedToList(false), 1800);
                       }}
@@ -299,6 +321,54 @@ export function RecipeSheet() {
                       </div>
                     ))}
                   </div>
+
+                  {/* "Cook this": post your own take — the composer opens pre-filled
+                      with this recipe's ingredients/steps and credits the original. */}
+                  {!isOwner && (
+                    <Button
+                      onClick={() => {
+                        if (!requireAuth()) return;
+                        setUploadPrefill({
+                          originRecipeId: r.id,
+                          originTitle: r.title,
+                          originHandle: r.cook.handle,
+                          ingredients: r.ingredients.join('\n'),
+                          steps: r.steps.join('\n'),
+                        });
+                        setOpenRecipe(null);
+                        setShowUpload(true);
+                      }}
+                      className="sz-press"
+                      style={{ ...pressVars(0.98), width: '100%', height: 50, marginTop: 18, border: '1.5px solid var(--line-2)', borderRadius: 16, background: 'var(--surface)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 14.5, fontWeight: 700, cursor: 'pointer' }}
+                    >
+                      🍳 Cook this — post your take
+                    </Button>
+                  )}
+
+                  {(derivatives.data?.total ?? 0) > 0 && (
+                    <>
+                      <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 26, color: 'var(--text)', margin: '26px 0 12px' }}>
+                        Cooked by {formatCount(derivatives.data!.total)} {derivatives.data!.total === 1 ? 'other' : 'others'}
+                      </div>
+                      <div style={{ display: 'flex', gap: 10, overflowX: 'auto', margin: '0 -24px', padding: '0 24px 6px' }}>
+                        {derivatives.data!.items.map((d) => (
+                          <Button
+                            key={d.id}
+                            onClick={() => setOpenRecipe(d.id)}
+                            style={{ flex: 'none', width: 128, border: 'none', background: 'none', padding: 0, cursor: 'pointer', textAlign: 'left' }}
+                          >
+                            <div style={{ width: 128, height: 170, borderRadius: 14, overflow: 'hidden', background: d.bg, position: 'relative' }}>
+                              {(d.video?.posterUrl || d.images[0]) && (
+                                <img src={d.video?.posterUrl ?? d.images[0]} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />
+                              )}
+                              <div style={{ position: 'absolute', left: 8, right: 8, bottom: 7, color: '#fff', fontFamily: "'Instrument Serif',serif", fontSize: 15, lineHeight: 1.15, textShadow: '0 1px 4px rgba(0,0,0,.7)' }}>{d.title}</div>
+                            </div>
+                            <div style={{ fontSize: 12, fontWeight: 700, color: 'var(--text-faint)', marginTop: 5 }}>@{d.cook.handle}</div>
+                          </Button>
+                        ))}
+                      </div>
+                    </>
+                  )}
                   </>
                   )}
                 </>

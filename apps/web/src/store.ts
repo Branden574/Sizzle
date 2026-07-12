@@ -93,6 +93,8 @@ export interface SizzleState {
   showRoadmap: boolean;
   showAdmin: boolean;
   /** Direct-messages inbox overlay. */
+  /** "Cook this": pre-fill the composer from an existing recipe (lineage). */
+  uploadPrefill: { originRecipeId: string; originTitle: string; originHandle: string; ingredients: string; steps: string } | null;
   messagesOpen: boolean;
   /** Open DM thread — the OTHER user's id (null = closed). */
   threadWith: string | null;
@@ -188,6 +190,7 @@ export interface SizzleState {
   setShowAnalytics: (v: boolean) => void;
   setShowRoadmap: (v: boolean) => void;
   setShowAdmin: (v: boolean) => void;
+  setUploadPrefill: (v: SizzleState['uploadPrefill']) => void;
   setMessagesOpen: (v: boolean) => void;
   setThreadWith: (id: string | null) => void;
 
@@ -231,6 +234,7 @@ export const useSizzle = create<SizzleState>((set) => ({
   showAnalytics: false,
   showRoadmap: false,
   showAdmin: false,
+  uploadPrefill: null,
   messagesOpen: false,
   threadWith: null,
   commentsFor: null,
@@ -350,6 +354,7 @@ export const useSizzle = create<SizzleState>((set) => ({
   setShowAnalytics: (v) => set({ showAnalytics: v }),
   setShowRoadmap: (v) => set({ showRoadmap: v }),
   setShowAdmin: (v) => set({ showAdmin: v }),
+  setUploadPrefill: (v) => set({ uploadPrefill: v }),
   setMessagesOpen: (v) => set({ messagesOpen: v }),
   setThreadWith: (id) => set({ threadWith: id }),
 

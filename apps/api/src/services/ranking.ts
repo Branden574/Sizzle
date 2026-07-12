@@ -33,6 +33,10 @@ export const RANK_WEIGHTS = {
   affinity: 2.0,
   hashtag: 4.0,
   popular: 1.5,
+  // Qualified cooks: someone actually finished cooking it. The strongest
+  // quality signal on the platform — weighted above raw popularity, and
+  // log-scaled so early recipes aren't buried by old hits.
+  cooked: 2.5,
   // Admin boost: factor 1 ≈ the pull of a follow. Bounded to [0,3] in the DB.
   boost: 5.0,
   seenPenalty: 4.0,
@@ -50,6 +54,10 @@ function popularityScore(likeCount: number): number {
   return Math.min(1, Math.log10(likeCount + 1) / 6); // ~1.0 around 1M likes
 }
 
+function cookedScore(cookCount: number): number {
+  return Math.min(1, Math.log10(cookCount + 1) / 3); // ~1.0 around 1K cooks
+}
+
 export function scoreRecipe(r: RecipeRow, s: ViewerSignals, now: number): number {
   const W = RANK_WEIGHTS;
   let score = W.recency * recencyScore(r.created_at, now);
@@ -63,6 +71,7 @@ export function scoreRecipe(r: RecipeRow, s: ViewerSignals, now: number): number
   for (const t of r.tags ?? []) tagPull += s.tagAffinity.get(t) ?? 0;
   if (tagPull > 0) score += W.hashtag * Math.min(1, tagPull / 5);
   score += W.popular * popularityScore(r.like_count);
+  score += W.cooked * cookedScore(r.cook_count ?? 0);
   // Admin boost — one more positive signal, so a boosted creator still competes
   // with taste/follow/recency (and the diversity cap) instead of pinning to #1.
   const boost = s.boosts.get(r.cook_id) ?? 0;

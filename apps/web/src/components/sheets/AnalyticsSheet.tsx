@@ -29,6 +29,7 @@ export function AnalyticsSheet() {
   // Watch metrics lead — they're what a video creator optimizes against.
   const cards = [
     { label: 'Views', value: formatCount(t?.views ?? 0) },
+    { label: 'Cooks', value: formatCount(t?.cooks ?? 0) },
     { label: 'Avg watch', value: fmtWatch(t?.avgWatchMs ?? 0) },
     { label: 'Completion', value: `${t?.completionPct ?? 0}%` },
     { label: 'Followers', value: formatCount(t?.followers ?? 0) },
@@ -87,6 +88,7 @@ export function AnalyticsSheet() {
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px', fontSize: 12.5, color: 'var(--text-faint)' }}>
                       <span>{p.completionPct}% finished</span>
                       <span>{fmtWatch(p.avgWatchMs)} avg</span>
+                      <span>🍳 {formatCount(p.cooks)}</span>
                       <span>♥ {formatCount(p.likes)}</span>
                       <span>💬 {formatCount(p.comments)}</span>
                       <span>🔖 {formatCount(p.saves)}</span>

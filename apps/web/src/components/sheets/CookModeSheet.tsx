@@ -1,6 +1,7 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '../controls';
-import { useRecipe } from '../../data/queries';
+import { useCookEvent, useRecipe } from '../../data/queries';
+import { useAuth } from '../../auth/useAuth';
 import { getOffline } from '../../lib/offline';
 import { scaleIngredient } from '../../lib/ingredients';
 import { useSizzle } from '../../store';
@@ -28,6 +29,18 @@ export function CookModeSheet() {
   const setCookFor = useSizzle((s) => s.setCookFor);
   const { data } = useRecipe(cookFor?.id ?? null);
   const r = data ?? getOffline(cookFor?.id ?? null);
+  const cookEvent = useCookEvent();
+  const authed = useAuth((s) => s.status === 'authed');
+  const finished = useRef(false);
+
+  // Cook-intent signals: opening cook mode logs a start; "Finish cooking" logs
+  // the qualified finish (first finish per user bumps the recipe's Cooks count).
+  useEffect(() => {
+    if (!cookFor?.id || !authed) return;
+    finished.current = false;
+    cookEvent.mutate({ recipeId: cookFor.id, kind: 'cook_start' });
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [cookFor?.id, authed]);
 
   const [step, setStep] = useState(0);
   const [showIngredients, setShowIngredients] = useState(false);
@@ -170,7 +183,17 @@ export function CookModeSheet() {
             Back
           </Button>
           <Button
-            onClick={() => (last ? close() : setStep((s) => s + 1))}
+            onClick={() => {
+              if (last) {
+                if (authed && cookFor?.id && !finished.current) {
+                  finished.current = true;
+                  cookEvent.mutate({ recipeId: cookFor.id, kind: 'cook_finish' });
+                }
+                close();
+                return;
+              }
+              setStep((s) => s + 1);
+            }}
             style={{ flex: 1, height: 54, borderRadius: 16, border: 'none', background: 'var(--accent)', color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 700, cursor: 'pointer' }}
           >
             {last ? 'Finish cooking' : 'Next step'}
