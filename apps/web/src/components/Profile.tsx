@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { RecipeCard } from '@sizzle/shared';
 import { useAuth } from '../auth/useAuth';
 import { useRequireAuth } from '../auth/useRequireAuth';
-import { useCook, useDeleteRecipe, useDrafts, useLikedFeed, useMe, useNotifications, usePublishDraft, useRequestVerification, useSavedFeed } from '../data/queries';
+import { useCook, useCookLive, useDeleteRecipe, useDrafts, useEndLive, useLikedFeed, useMe, useNotifications, usePublishDraft, useRequestVerification, useSavedFeed, useStartLive } from '../data/queries';
 import { useSizzle } from '../store';
 import { formatCount } from '../lib/format';
 import { VerifiedBadge } from './VerifiedBadge';
@@ -107,6 +107,7 @@ export function Profile() {
         >
           📊 View insights
         </button>
+        {me && <GoLiveButton meId={me.id} />}
         {!me?.verifiedTier && <VerifyButton />}
         <DraftsStrip />
         {me?.role === 'admin' && (
@@ -230,5 +231,28 @@ function VerifyButton() {
       </button>
       {msg && <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 6, textAlign: 'center' }}>{msg}</div>}
     </div>
+  );
+}
+
+/** Go live / end a live cooking session. */
+function GoLiveButton({ meId }: { meId: string }) {
+  const { data: live } = useCookLive(meId);
+  const start = useStartLive();
+  const end = useEndLive();
+  if (live) {
+    return (
+      <button onClick={() => end.mutate()} disabled={end.isPending} style={{ width: '100%', height: 46, marginTop: 10, border: 'none', borderRadius: 14, background: 'linear-gradient(135deg,#e0143c,#a30f2c)', color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 14.5, fontWeight: 800, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+        ⏹ End live · {formatCount(live.viewers)} watching
+      </button>
+    );
+  }
+  const go = () => {
+    const title = window.prompt('What are you cooking live?');
+    if (title && title.trim()) start.mutate(title.trim());
+  };
+  return (
+    <button onClick={go} disabled={start.isPending} style={{ width: '100%', height: 46, marginTop: 10, border: '1.5px solid var(--line-2)', borderRadius: 14, background: 'var(--surface)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 14.5, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8 }}>
+      🔴 {start.isPending ? 'Starting…' : 'Go live'}
+    </button>
   );
 }

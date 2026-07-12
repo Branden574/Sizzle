@@ -219,6 +219,34 @@ export function useBuyProduct(cookId: string) {
   });
 }
 
+/** Start a live cooking session (mock playback until Cloudflare Stream Live is keyed). */
+export function useStartLive() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (title: string) => apiSend<{ id: string; playbackUrl: string | null; provider: string }>('POST', '/live/start', { title }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['live'] }),
+  });
+}
+
+/** End your current live session. */
+export function useEndLive() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiSend('POST', '/live/end', {}),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['live'] }),
+  });
+}
+
+/** A creator's current live session, or null. */
+export function useCookLive(cookId: string | null) {
+  return useQuery({
+    queryKey: ['live', cookId],
+    queryFn: () => apiGet<{ id: string; title: string; playbackUrl: string | null; viewers: number; startedAt: string } | null>(`/live/${cookId}`),
+    enabled: !!cookId,
+    refetchInterval: 20_000,
+  });
+}
+
 /** Self-serve verification — auto-grants at follower thresholds. */
 export function useRequestVerification() {
   const qc = useQueryClient();

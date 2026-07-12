@@ -1,9 +1,10 @@
 import { useState } from 'react';
-import { useBuyProduct, useCancelSubscription, useCook, useCookProducts, useCookTiers, useMe, useSubscribe, useToggleBlock, useToggleFollow, useToggleMute } from '../../data/queries';
+import { useBuyProduct, useCancelSubscription, useCook, useCookProducts, useCookLive, useCookTiers, useMe, useSubscribe, useToggleBlock, useToggleFollow, useToggleMute } from '../../data/queries';
 import { useRequireAuth } from '../../auth/useRequireAuth';
 import { useSizzle } from '../../store';
 import { VerifiedBadge } from '../VerifiedBadge';
 import { SocialLinks } from '../SocialLinks';
+import { VideoPlayer } from '../VideoPlayer';
 import { theme } from '../../theme';
 import { formatCount } from '../../lib/format';
 import { ChevronLeftIcon, DotsIcon } from '../icons';
@@ -129,6 +130,7 @@ export function CookSheet() {
           </div>
           <p style={{ color: 'var(--text-muted)', fontSize: 15, lineHeight: 1.5, margin: '14px 0 0' }}>{ck.bio}</p>
           <SocialLinks links={ck.links} size={34} />
+          <LiveBanner cookId={ck.id} name={ck.name} />
 
           {!isOwn && ck.subPriceCents != null && (
             ck.viewer.subscribed ? (
@@ -268,5 +270,26 @@ function SubscribeTiers({ cookId, basePriceCents }: { cookId: string; basePriceC
     <button onClick={() => go()} disabled={subscribe.isPending} className="sz-press" style={{ ...pressVars(0.97), width: '100%', marginTop: 16, height: 50, borderRadius: 15, border: 'none', background: `linear-gradient(135deg,${accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15.5, fontWeight: 800, cursor: 'pointer' }}>
       {subscribe.isPending ? 'Starting…' : `⭐ Subscribe · $${(basePriceCents / 100).toFixed(2)}/mo`}
     </button>
+  );
+}
+
+/** Live banner + player shown on a creator's profile while they're live. */
+function LiveBanner({ cookId, name }: { cookId: string; name: string }) {
+  const { data: live } = useCookLive(cookId);
+  if (!live) return null;
+  return (
+    <div style={{ marginTop: 18, borderRadius: 18, overflow: 'hidden', border: '2px solid #e0143c', position: 'relative' }}>
+      <div style={{ position: 'relative', width: '100%', aspectRatio: '9/16', maxHeight: 380, background: '#000' }}>
+        {live.playbackUrl && <VideoPlayer src={live.playbackUrl} active immersive={false} />}
+        <div style={{ position: 'absolute', top: 10, left: 10, zIndex: 30, display: 'flex', alignItems: 'center', gap: 6, background: '#e0143c', color: '#fff', padding: '4px 10px', borderRadius: 8, fontSize: 12, fontWeight: 900, letterSpacing: '.04em' }}>
+          <span style={{ width: 7, height: 7, borderRadius: '50%', background: '#fff' }} /> LIVE
+        </div>
+        <div style={{ position: 'absolute', top: 10, right: 10, zIndex: 30, background: 'rgba(0,0,0,.5)', color: '#fff', padding: '4px 10px', borderRadius: 8, fontSize: 12, fontWeight: 700 }}>{formatCount(live.viewers)} watching</div>
+      </div>
+      <div style={{ padding: '10px 14px', background: 'var(--surface)' }}>
+        <div style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--text)' }}>{live.title}</div>
+        <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 2 }}>{name} is cooking live now</div>
+      </div>
+    </div>
   );
 }
