@@ -90,14 +90,18 @@ export function CookSheet() {
       ) : (
         <div style={{ padding: '0 22px 60px', marginTop: -44, position: 'relative', zIndex: 1 }}>
           <div style={{ width: 88, height: 88, borderRadius: 28, background: ck.avatarUrl ? `url(${ck.avatarUrl}) center/cover` : ck.avatarColor, border: '4px solid var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Instrument Serif',serif", fontSize: 36, color: '#fff', overflow: 'hidden' }}>{ck.avatarUrl ? '' : ck.init}</div>
-          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', marginTop: 12 }}>
-            <div>
-              <div style={{ display: 'flex', alignItems: 'center', gap: 7 }}>
-                <span style={{ fontFamily: "'Instrument Serif',serif", fontSize: 30, color: 'var(--text)' }}>{ck.name}</span>
-                <VerifiedBadge tier={ck.verifiedTier} size={20} />
-                {ck.viewer.muted && <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-faint-2)', background: 'var(--surface-2)', padding: '2px 8px', borderRadius: 8 }}>Muted</span>}
+          <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, marginTop: 12 }}>
+            <div style={{ flex: 1, minWidth: 0 }}>
+              {/* Badge flows inline with the name so it hugs the last word even when
+                  the name wraps to two lines (instead of floating in the gap). */}
+              <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 30, lineHeight: 1.1, color: 'var(--text)' }}>
+                {ck.name}
+                <span style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: 6, position: 'relative', top: -2 }}>
+                  <VerifiedBadge tier={ck.verifiedTier} size={20} />
+                </span>
+                {ck.viewer.muted && <span style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: 8, fontFamily: "'Hanken Grotesk'", fontSize: 11, fontWeight: 700, color: 'var(--text-faint-2)', background: 'var(--surface-2)', padding: '2px 8px', borderRadius: 8 }}>Muted</span>}
               </div>
-              <div style={{ color: 'var(--text-faint)', fontSize: 14.5 }}>@{ck.handle}</div>
+              <div style={{ color: 'var(--text-faint)', fontSize: 14.5, marginTop: 2 }}>@{ck.handle}</div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
               {showMonetization && ck.acceptsTips && (
@@ -171,7 +175,7 @@ export function CookSheet() {
               <button
                 key={d.id}
                 onClick={() => setOpenRecipe(d.id)}
-                style={{ border: 'none', padding: 0, cursor: 'pointer', borderRadius: 18, overflow: 'hidden', position: 'relative', height: 180, background: d.bg, textAlign: 'left' }}
+                style={{ border: 'none', padding: 0, cursor: 'pointer', borderRadius: 18, overflow: 'hidden', position: 'relative', height: 180, background: d.images && d.images.length > 0 ? `center/cover no-repeat url(${d.images[0]})` : d.bg, textAlign: 'left' }}
               >
                 <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg,transparent 42%, rgba(0,0,0,.72))' }} />
                 {d.removed ? (
