@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import { Button } from '../controls';
 import { useCookEvent, useRecipe } from '../../data/queries';
 import { useAuth } from '../../auth/useAuth';
+import { MadeItPrompt } from '../MadeItPrompt';
 import { getOffline } from '../../lib/offline';
 import { scaleIngredient } from '../../lib/ingredients';
 import { useSizzle } from '../../store';
@@ -32,6 +33,7 @@ export function CookModeSheet() {
   const cookEvent = useCookEvent();
   const authed = useAuth((s) => s.status === 'authed');
   const finished = useRef(false);
+  const [madeIt, setMadeIt] = useState<{ id: string; title: string } | null>(null);
 
   // Cook-intent signals: opening cook mode logs a start; "Finish cooking" logs
   // the qualified finish (first finish per user bumps the recipe's Cooks count).
@@ -188,6 +190,9 @@ export function CookModeSheet() {
                 if (authed && cookFor?.id && !finished.current) {
                   finished.current = true;
                   cookEvent.mutate({ recipeId: cookFor.id, kind: 'cook_finish' });
+                  // Offer the Made-It Journal entry before leaving cook mode.
+                  setMadeIt({ id: cookFor.id, title: r?.title ?? 'this recipe' });
+                  return;
                 }
                 close();
                 return;
@@ -199,6 +204,14 @@ export function CookModeSheet() {
             {last ? 'Finish cooking' : 'Next step'}
           </Button>
         </div>
+      )}
+
+      {madeIt && (
+        <MadeItPrompt
+          recipeId={madeIt.id}
+          recipeTitle={madeIt.title}
+          onClose={() => { setMadeIt(null); close(); }}
+        />
       )}
     </div>
   );

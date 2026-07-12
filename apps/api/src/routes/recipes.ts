@@ -1,12 +1,13 @@
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
-import type { CommentDTO, RecipeDetail } from '@sizzle/shared';
+import type { CommentDTO, CookLogDTO, RecipeDetail } from '@sizzle/shared';
 import { optionalAuth, requireAuth, requireNotBanned } from '../middleware/auth';
 import { env } from '../env';
 import { supabaseAdmin } from '../lib/supabase';
 import { badRequest, dbFail, forbidden, notFound } from '../lib/errors';
 import { assertUuid } from '../lib/validate';
 import { buildCards, canViewCookContent, commentDTO, loadBlockedIds, type CommentRow, type ProfileRow, type RecipeRow } from '../mappers';
+import { initialsOf, relativeTime } from '../lib/format';
 import { rateLimit } from '../middleware/rateLimit';
 import { moderate, moderateImages } from '../services/moderation';
 import { fileReport } from '../services/reports';
@@ -294,6 +295,97 @@ recipes.get('/:id/derivatives', optionalAuth, async (c) => {
   ]);
   const items = await buildCards(supabaseAdmin, viewerId, (rows ?? []) as RecipeRow[]);
   return c.json({ items, total: count ?? items.length });
+});
+
+const cookLogSchema = z.object({
+  note: z.string().trim().max(400).optional(),
+  rating: z.number().int().min(1).max(5).optional(),
+  photoUrl: z.string().url().max(1000).optional(),
+  isPublic: z.boolean().default(true),
+});
+
+/** POST /recipes/:id/cook-log — a Made-It Journal entry (proof-of-cook). Also
+ *  logs a qualified cook_finish (deduped by the DB trigger), so "I made this"
+ *  without cook mode still counts toward the Cooks metric. */
+recipes.post('/:id/cook-log', requireAuth, requireNotBanned, rateLimit({ windowMs: 60_000, max: 10, name: 'cook-log' }), async (c) => {
+  const recipeId = assertUuid(c.req.param('id'), 'recipe');
+  const userId = c.get('userId')!;
+  const parsed = cookLogSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) throw badRequest('Invalid cook log', parsed.error.flatten());
+  const input = parsed.data;
+
+  const { data: recipe } = await supabaseAdmin.from('recipes').select('id, status').eq('id', recipeId).maybeSingle();
+  if (!recipe || recipe.status !== 'published') throw notFound('Recipe not found');
+
+  // Same trust boundary as photo posts: the photo must live in OUR storage
+  // under the author's own folder, and it goes through image moderation.
+  if (input.photoUrl) {
+    const ownFolder = `${env.SUPABASE_URL.replace(/\/$/, '')}/storage/v1/object/public/videos/${userId}/`;
+    if (!input.photoUrl.startsWith(ownFolder)) throw badRequest('Invalid photo upload');
+    const imgMod = await moderateImages([input.photoUrl]);
+    if (!imgMod.ok) throw badRequest(imgMod.reason!);
+  }
+  if (input.note) {
+    const mod = await moderate(input.note);
+    if (!mod.ok) throw badRequest(mod.reason!);
+  }
+
+  const { data: row, error } = await supabaseAdmin
+    .from('cook_logs')
+    .insert({ user_id: userId, recipe_id: recipeId, note: input.note ?? null, rating: input.rating ?? null, photo_url: input.photoUrl ?? null, is_public: input.isPublic })
+    .select('*')
+    .single();
+  if (error || !row) throw dbFail(error?.message ?? 'Could not save your entry');
+
+  // Making it = a qualified cook (the trigger dedups repeat finishes).
+  await supabaseAdmin.from('cook_events').insert({ user_id: userId, recipe_id: recipeId, kind: 'cook_finish' });
+
+  return c.json({ id: row.id as string }, 201);
+});
+
+/** GET /recipes/:id/cook-log — recent public Made-It entries (+ total). */
+recipes.get('/:id/cook-log', optionalAuth, async (c) => {
+  const recipeId = assertUuid(c.req.param('id'), 'recipe');
+  const viewerId = c.get('userId');
+  const [{ data: rows }, { count }] = await Promise.all([
+    supabaseAdmin.from('cook_logs').select('*').eq('recipe_id', recipeId).eq('is_public', true).order('created_at', { ascending: false }).limit(12),
+    supabaseAdmin.from('cook_logs').select('id', { count: 'exact', head: true }).eq('recipe_id', recipeId).eq('is_public', true),
+  ]);
+  const blocked = await loadBlockedIds(supabaseAdmin, viewerId);
+  const authorIds = [...new Set((rows ?? []).map((r) => r.user_id as string))];
+  const { data: authors } = authorIds.length
+    ? await supabaseAdmin.from('profiles').select('id, display_name, handle, avatar_color, avatar_url, banned').in('id', authorIds)
+    : { data: [] as Record<string, unknown>[] };
+  const authorMap = new Map((authors ?? []).map((a) => [a.id as string, a]));
+  const items = (rows ?? [])
+    .filter((r) => !blocked.has(r.user_id as string))
+    .map((r): CookLogDTO | null => {
+      const a = authorMap.get(r.user_id as string);
+      if (!a || a.banned) return null;
+      const name = (a.display_name as string) || (a.handle as string);
+      return {
+        id: r.id as string,
+        recipeId,
+        author: { id: a.id as string, name, handle: a.handle as string, init: initialsOf(name), avatarColor: a.avatar_color as string, avatarUrl: (a.avatar_url as string) ?? null },
+        note: (r.note as string) ?? null,
+        rating: (r.rating as number) ?? null,
+        photoUrl: (r.photo_url as string) ?? null,
+        isPublic: true,
+        time: relativeTime(new Date(r.created_at as string)),
+        createdAt: r.created_at as string,
+      };
+    })
+    .filter((x): x is CookLogDTO => !!x);
+  return c.json({ items, total: count ?? items.length });
+});
+
+/** DELETE /cook-logs/:id — remove your own journal entry. */
+recipes.delete('/cook-logs/:id', requireAuth, async (c) => {
+  const id = assertUuid(c.req.param('id'), 'entry');
+  const userId = c.get('userId')!;
+  const { error } = await supabaseAdmin.from('cook_logs').delete().eq('id', id).eq('user_id', userId);
+  if (error) throw dbFail(error.message);
+  return c.json({ ok: true });
 });
 
 recipes.post('/:id/like', requireAuth, requireNotBanned, async (c) => {

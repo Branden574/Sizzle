@@ -416,6 +416,25 @@ export interface MeProfile {
   private: boolean;
 }
 
+/** A Made-It Journal entry: proof-of-cook with optional photo/note/stars. */
+export interface CookLogDTO {
+  id: string;
+  recipeId: string;
+  author: { id: string; name: string; handle: string; init: string; avatarColor: string; avatarUrl: string | null };
+  note: string | null;
+  rating: number | null;
+  photoUrl: string | null;
+  isPublic: boolean;
+  /** Relative label, e.g. "2d". */
+  time: string;
+  createdAt: string;
+}
+
+/** A journal entry on the owner's profile — the entry + its recipe context. */
+export interface JournalEntryDTO extends CookLogDTO {
+  recipe: { id: string; title: string; poster: string | null; bg: string };
+}
+
 export type NotificationKind = 'follow' | 'like' | 'comment' | 'verified' | 'repost' | 'removed' | 'restored' | 'banned' | 'message' | 'tip' | 'follow_request';
 
 export interface NotificationDTO {

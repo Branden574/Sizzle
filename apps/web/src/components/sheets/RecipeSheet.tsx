@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import { Button, DismissBackdrop } from '../controls';
 import { useRequireAuth } from '../../auth/useRequireAuth';
 import { useAuth } from '../../auth/useAuth';
-import { useAppealRecipe, useCookEvent, useDeleteRecipe, useDerivatives, useMe, useRecipe, useToggleDownload, useToggleSave, useUnlockRecipe } from '../../data/queries';
+import { useAppealRecipe, useCookEvent, useCookLog, useDeleteRecipe, useDerivatives, useMe, useRecipe, useToggleDownload, useToggleSave, useUnlockRecipe } from '../../data/queries';
 import { getOffline } from '../../lib/offline';
 import { showMonetization } from '../../lib/native';
 import { formatCount } from '../../lib/format';
@@ -15,6 +15,7 @@ import { Hashtags } from '../Hashtags';
 import { ImageCarousel } from '../ImageCarousel';
 import { VerifiedBadge } from '../VerifiedBadge';
 import { StarRow } from '../Stars';
+import { MadeItPrompt } from '../MadeItPrompt';
 import { pressVars } from '../ui';
 
 const accent = theme.accent;
@@ -39,6 +40,8 @@ export function RecipeSheet() {
 
   const { data, isLoading } = useRecipe(openRecipe);
   const derivatives = useDerivatives(openRecipe);
+  const cookLog = useCookLog(openRecipe);
+  const [showMadeIt, setShowMadeIt] = useState(false);
   const { data: me } = useMe();
   const appeal = useAppealRecipe();
   const del = useDeleteRecipe();
@@ -191,9 +194,39 @@ export function RecipeSheet() {
                     <StatCard label="Level" value={r.level} />
                   </div>
 
-                  {r.counts.cooks > 0 && (
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, padding: '10px 14px', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 14, fontSize: 13.5, fontWeight: 700, color: 'var(--text-muted)' }}>
-                      🍳 {formatCount(r.counts.cooks)} {r.counts.cooks === 1 ? 'person' : 'people'} cooked this
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, padding: '8px 8px 8px 14px', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 14 }}>
+                    <span style={{ flex: 1, fontSize: 13.5, fontWeight: 700, color: 'var(--text-muted)' }}>
+                      {r.counts.cooks > 0
+                        ? `🍳 ${formatCount(r.counts.cooks)} ${r.counts.cooks === 1 ? 'person' : 'people'} cooked this`
+                        : '🍳 Be the first to cook this'}
+                    </span>
+                    {!isOwner && (
+                      <Button
+                        onClick={() => { if (requireAuth()) setShowMadeIt(true); }}
+                        style={{ flex: 'none', border: 'none', borderRadius: 10, background: 'var(--surface-2)', color: 'var(--text)', padding: '8px 13px', fontFamily: "'Hanken Grotesk'", fontSize: 12.5, fontWeight: 800, cursor: 'pointer' }}
+                      >
+                        I made this
+                      </Button>
+                    )}
+                  </div>
+
+                  {(cookLog.data?.items.length ?? 0) > 0 && (
+                    <div style={{ display: 'flex', gap: 10, overflowX: 'auto', margin: '12px -24px 0', padding: '0 24px 4px' }}>
+                      {cookLog.data!.items.map((e) => (
+                        <div key={e.id} style={{ flex: 'none', width: e.photoUrl ? 150 : 190, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 14, overflow: 'hidden' }}>
+                          {e.photoUrl && <img src={e.photoUrl} alt={`${e.author.name}'s dish`} style={{ width: '100%', height: 110, objectFit: 'cover', display: 'block' }} loading="lazy" />}
+                          <div style={{ padding: '9px 11px' }}>
+                            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                              <div style={{ width: 20, height: 20, flex: 'none', borderRadius: '50%', background: e.author.avatarColor, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: '#fff', fontFamily: "'Instrument Serif',serif" }}>
+                                {e.author.avatarUrl ? <img src={e.author.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : e.author.init}
+                              </div>
+                              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.author.name}</span>
+                              {e.rating != null && <span style={{ flex: 'none', fontSize: 11, color: '#f4a52c', fontWeight: 800 }}>{'★'.repeat(e.rating)}</span>}
+                            </div>
+                            {e.note && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4, lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{e.note}</div>}
+                          </div>
+                        </div>
+                      ))}
                     </div>
                   )}
 
@@ -436,6 +469,10 @@ export function RecipeSheet() {
             <Button variant="outline" fullWidth onClick={() => setConfirmDel(false)} style={{ marginTop: 10 }}>Cancel</Button>
           </div>
         </div>
+      )}
+
+      {showMadeIt && r && (
+        <MadeItPrompt recipeId={r.id} recipeTitle={r.title} onClose={() => setShowMadeIt(false)} />
       )}
     </div>
   );

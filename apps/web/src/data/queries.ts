@@ -1,5 +1,5 @@
 import { QueryClient, useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query';
-import type { AdminAppealDTO, AdminContentReportDTO, AdminLogDTO, AdminReportGroupDTO, AdminStats, AdminUserDTO, CollectionDTO, CommentDTO, ConversationDTO, CookProfile, CookSummary, CreateRecipeInput, CreatorAnalytics, DirectUploadTicket, DraftCard, EarningsSummary, FeedResponse, MeProfile, MessageDTO, MonetizationStatus, NotificationDTO, NotifPrefKey, PostControls, ProductDTO, RecipeCard, RecipeDetail, ReportInput, SearchResults, SuggestedCook, SupportRequestDTO, ThreadDTO, TierDTO, TipConfig, TrendingTag, VerificationTier, VideoAssetStatus, VideoUploadConfig } from '@sizzle/shared';
+import type { AdminAppealDTO, AdminContentReportDTO, AdminLogDTO, AdminReportGroupDTO, AdminStats, AdminUserDTO, CollectionDTO, CommentDTO, ConversationDTO, CookProfile, CookSummary, CreateRecipeInput, CreatorAnalytics, DirectUploadTicket, DraftCard, EarningsSummary, FeedResponse, MeProfile, MessageDTO, MonetizationStatus, NotificationDTO, NotifPrefKey, PostControls, ProductDTO, RecipeCard, RecipeDetail, ReportInput, SearchResults, SuggestedCook, SupportRequestDTO, ThreadDTO, TierDTO, TipConfig, TrendingTag, VerificationTier, VideoAssetStatus, VideoUploadConfig, CookLogDTO, JournalEntryDTO } from '@sizzle/shared';
 import { useAuth } from '../auth/useAuth';
 import { useSizzle } from '../store';
 import { apiGet, apiSend } from '../lib/api';
@@ -414,6 +414,46 @@ export function usePantrySearch(ings: string[], filters: { maxTime?: number; cui
     },
     enabled: ings.length > 0,
     staleTime: 30_000,
+  });
+}
+
+/** Public Made-It entries on a recipe ("what N cooks made"). */
+export function useCookLog(recipeId: string | null) {
+  return useQuery({
+    queryKey: ['cook-log', recipeId],
+    queryFn: () => apiGet<{ items: CookLogDTO[]; total: number }>(`/recipes/${recipeId}/cook-log`),
+    enabled: !!recipeId,
+    staleTime: 30_000,
+  });
+}
+
+/** Save a Made-It Journal entry (also counts as a qualified cook). */
+export function useCreateCookLog() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ recipeId, ...input }: { recipeId: string; note?: string; rating?: number; photoUrl?: string; isPublic: boolean }) =>
+      apiSend<{ id: string }>('POST', `/recipes/${recipeId}/cook-log`, input),
+    onSuccess: (_res, { recipeId }) => {
+      void qc.invalidateQueries({ queryKey: ['cook-log', recipeId] });
+      void qc.invalidateQueries({ queryKey: keys.recipe(recipeId) });
+      void qc.invalidateQueries({ queryKey: ['journal'] });
+    },
+  });
+}
+
+/** Your full cooking journal (public + private entries). */
+export function useMyJournal(enabled: boolean) {
+  return useQuery({ queryKey: ['journal'], queryFn: () => apiGet<JournalEntryDTO[]>('/me/journal'), enabled });
+}
+
+export function useDeleteCookLog() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id }: { id: string; recipeId: string }) => apiSend('DELETE', `/recipes/cook-logs/${id}`),
+    onSuccess: (_r, { recipeId }) => {
+      void qc.invalidateQueries({ queryKey: ['journal'] });
+      void qc.invalidateQueries({ queryKey: ['cook-log', recipeId] });
+    },
   });
 }
 

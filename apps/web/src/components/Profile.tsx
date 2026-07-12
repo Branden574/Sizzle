@@ -3,7 +3,7 @@ import { Button, IconButton } from './controls';
 import type { RecipeCard } from '@sizzle/shared';
 import { useAuth } from '../auth/useAuth';
 import { useRequireAuth } from '../auth/useRequireAuth';
-import { useCook, useCookLive, useDeleteRecipe, useDrafts, useEndLive, useLikedFeed, useMe, useNotifications, usePublishDraft, useRequestVerification, useSavedFeed, useStartLive } from '../data/queries';
+import { useCook, useCookLive, useDeleteCookLog, useDeleteRecipe, useDrafts, useEndLive, useLikedFeed, useMe, useMyJournal, useNotifications, usePublishDraft, useRequestVerification, useSavedFeed, useStartLive } from '../data/queries';
 import { useSizzle } from '../store';
 import { formatCount } from '../lib/format';
 import { cookShareUrl } from '../lib/share';
@@ -44,7 +44,7 @@ export function Profile() {
   const likedItems = liked?.items ?? [];
   const postItems = myCook?.recipes ?? [];
   const unread = (notifications ?? []).filter((n) => !n.read).length;
-  const [tab, setTab] = useState<'posts' | 'liked' | 'saved'>('posts');
+  const [tab, setTab] = useState<'posts' | 'liked' | 'saved' | 'journal'>('posts');
   const gridItems = tab === 'posts' ? postItems : tab === 'liked' ? likedItems : savedItems;
 
   if (!authed) {
@@ -144,7 +144,7 @@ export function Profile() {
         )}
         {/* Posts / Liked / Saved tabs — TikTok-style thumbnail grids. */}
         <div style={{ display: 'flex', margin: '24px 0 14px', borderBottom: '1px solid var(--line-2)' }}>
-          {([['posts', GridIcon, 'Posts'], ['liked', HeartIcon, 'Liked'], ['saved', BookmarkIcon, 'Saved']] as const).map(([key, Icon, label]) => {
+          {([['posts', GridIcon, 'Posts'], ['liked', HeartIcon, 'Liked'], ['saved', BookmarkIcon, 'Saved'], ['journal', GridIcon, 'Journal']] as const).map(([key, Icon, label]) => {
             const on = tab === key;
             return (
               <Button
@@ -159,11 +159,15 @@ export function Profile() {
             );
           })}
         </div>
-        <RecipeGrid
-          items={gridItems}
-          empty={tab === 'posts' ? 'Videos you post will show up here.' : tab === 'liked' ? 'Videos you like will show up here.' : 'Recipes you save will collect here.'}
-          onOpenAt={(i) => setViewer({ items: gridItems, index: i })}
-        />
+        {tab === 'journal' ? (
+          <JournalGrid />
+        ) : (
+          <RecipeGrid
+            items={gridItems}
+            empty={tab === 'posts' ? 'Videos you post will show up here.' : tab === 'liked' ? 'Videos you like will show up here.' : 'Recipes you save will collect here.'}
+            onOpenAt={(i) => setViewer({ items: gridItems, index: i })}
+          />
+        )}
       </div>
     </div>
   );
@@ -190,6 +194,48 @@ function RecipeGrid({ items, empty, onOpenAt }: { items: RecipeCard[]; empty: st
             <HeartIcon size={12} fill="#fff" stroke="#fff" strokeWidth={1.4} /> {formatCount(r.counts.likes)}
           </div>
         </Button>
+      ))}
+    </div>
+  );
+}
+
+/** Your Made-It Journal: every cook you logged — photo (or the recipe's poster),
+ *  stars, note, and a quiet delete. Entries open their recipe. */
+function JournalGrid() {
+  const { data: entries, isLoading } = useMyJournal(true);
+  const setOpenRecipe = useSizzle((s) => s.setOpenRecipe);
+  const del = useDeleteCookLog();
+  if (isLoading) return <div style={{ padding: 30, textAlign: 'center', color: 'var(--text-faint-2)', fontSize: 14 }}>Loading…</div>;
+  if (!entries || entries.length === 0) {
+    return <div style={{ padding: 30, textAlign: 'center', background: 'var(--surface)', border: '1px dashed var(--line-2)', borderRadius: 20, color: 'var(--text-faint-2)', fontSize: 14 }}>Finish cooking a recipe and it lands here — your cooking journal.</div>;
+  }
+  return (
+    <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
+      {entries.map((e) => (
+        <div key={e.id} style={{ display: 'flex', gap: 12, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 16, padding: 10 }}>
+          <Button onClick={() => setOpenRecipe(e.recipe.id)} style={{ flex: 'none', width: 64, height: 84, border: 'none', padding: 0, borderRadius: 12, overflow: 'hidden', cursor: 'pointer', background: e.recipe.bg, position: 'relative' }}>
+            {(e.photoUrl || e.recipe.poster) && <img src={e.photoUrl ?? e.recipe.poster!} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
+          </Button>
+          <div style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
+            <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
+              <Button onClick={() => setOpenRecipe(e.recipe.id)} style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer', flex: 1, minWidth: 0, textAlign: 'left', fontFamily: "'Hanken Grotesk'", fontSize: 14.5, fontWeight: 800, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.recipe.title}</Button>
+              <span style={{ flex: 'none', fontSize: 11.5, color: 'var(--text-faint-2)', fontWeight: 600 }}>{e.time}</span>
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3 }}>
+              {e.rating != null && <span style={{ fontSize: 12, color: '#f4a52c', fontWeight: 800 }}>{'★'.repeat(e.rating)}</span>}
+              {!e.isPublic && <span style={{ fontSize: 11, fontWeight: 700, color: 'var(--text-faint)' }}>🔒 Just me</span>}
+            </div>
+            {e.note && <div style={{ fontSize: 13, color: 'var(--text-muted)', marginTop: 4, lineHeight: 1.4, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{e.note}</div>}
+          </div>
+          <Button
+            onClick={() => { if (!del.isPending) del.mutate({ id: e.id, recipeId: e.recipe.id }); }}
+            aria-label="Delete journal entry"
+            title="Delete entry"
+            style={{ flex: 'none', alignSelf: 'flex-start', border: 'none', background: 'none', cursor: 'pointer', color: 'var(--text-faint-2)', fontSize: 15, padding: 4 }}
+          >
+            ✕
+          </Button>
+        </div>
       ))}
     </div>
   );

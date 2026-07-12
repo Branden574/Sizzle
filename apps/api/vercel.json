@@ -1,5 +1,14 @@
 {
   "$schema": "https://openapi.vercel.sh/vercel.json",
   "buildCommand": "node scripts/build-vercel.mjs",
-  "crons": [{ "path": "/internal/publish-scheduled", "schedule": "* * * * *" }]
+  "crons": [
+    {
+      "path": "/internal/publish-scheduled",
+      "schedule": "* * * * *"
+    },
+    {
+      "path": "/internal/save-nudges",
+      "schedule": "0 21 * * *"
+    }
+  ]
 }

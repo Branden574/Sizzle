@@ -1,6 +1,6 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
-import type { CollectionDTO, CreatorAnalytics, FeedResponse, MeProfile, NotificationDTO } from '@sizzle/shared';
+import type { CollectionDTO, CreatorAnalytics, FeedResponse, JournalEntryDTO, MeProfile, NotificationDTO } from '@sizzle/shared';
 import { requireAuth } from '../middleware/auth';
 import { supabaseAdmin, userClient } from '../lib/supabase';
 import { badRequest, notFound } from '../lib/errors';
@@ -169,6 +169,53 @@ me.post('/notif-prefs', async (c) => {
   const { error } = await supabaseAdmin.from('profiles').update({ notif_prefs: next }).eq('id', userId);
   if (error) throw badRequest('Could not update notification setting');
   return c.json({ ok: true, notifPrefs: next });
+});
+
+/** GET /me/journal — your Made-It Journal: every cook-log entry (public and
+ *  private), newest first, with its recipe context. */
+me.get('/journal', async (c) => {
+  const userId = c.get('userId')!;
+  const { data: rows } = await supabaseAdmin
+    .from('cook_logs')
+    .select('*')
+    .eq('user_id', userId)
+    .order('created_at', { ascending: false })
+    .limit(200);
+  const recipeIds = [...new Set((rows ?? []).map((r) => r.recipe_id as string))];
+  const { data: recipes } = recipeIds.length
+    ? await supabaseAdmin.from('recipes').select('id, title, bg, image_urls, video_asset_id').in('id', recipeIds)
+    : { data: [] as Record<string, unknown>[] };
+  const videoIds = (recipes ?? []).map((r) => r.video_asset_id).filter((x): x is string => !!x);
+  const { data: vids } = videoIds.length
+    ? await supabaseAdmin.from('video_assets').select('id, poster_url').in('id', videoIds)
+    : { data: [] as Record<string, unknown>[] };
+  const posterMap = new Map((vids ?? []).map((v) => [v.id as string, (v.poster_url as string) ?? null]));
+  const recipeMap = new Map((recipes ?? []).map((r) => [r.id as string, r]));
+
+  const { data: prof } = await supabaseAdmin.from('profiles').select('id, display_name, handle, avatar_color, avatar_url').eq('id', userId).single();
+  const name = (prof?.display_name as string) || (prof?.handle as string) || 'cook';
+  const author = { id: userId, name, handle: (prof?.handle as string) ?? '', init: initialsOf(name), avatarColor: (prof?.avatar_color as string) ?? '', avatarUrl: (prof?.avatar_url as string) ?? null };
+
+  const entries = (rows ?? [])
+    .map((r): JournalEntryDTO | null => {
+      const rec = recipeMap.get(r.recipe_id as string);
+      if (!rec) return null;
+      const poster = (rec.video_asset_id && posterMap.get(rec.video_asset_id as string)) || ((rec.image_urls as string[] | null)?.[0] ?? null);
+      return {
+        id: r.id as string,
+        recipeId: r.recipe_id as string,
+        author,
+        note: (r.note as string) ?? null,
+        rating: (r.rating as number) ?? null,
+        photoUrl: (r.photo_url as string) ?? null,
+        isPublic: (r.is_public as boolean) ?? true,
+        time: relativeTime(new Date(r.created_at as string)),
+        createdAt: r.created_at as string,
+        recipe: { id: rec.id as string, title: rec.title as string, poster, bg: rec.bg as string },
+      };
+    })
+    .filter((x): x is JournalEntryDTO => !!x);
+  return c.json(entries);
 });
 
 /** GET /me/analytics — creator insights: totals + per-post engagement. */

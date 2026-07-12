@@ -188,3 +188,57 @@ export async function sendPushForNotification(opts: {
     console.error('[push] sendPushForNotification error:', (err as Error).message);
   }
 }
+
+/**
+ * Send a one-off push with explicit copy to a user's devices (used by the
+ * save-to-cook nudge cron). Honors the master push toggle; category prefs
+ * don't apply (nudges are their own thing, capped at one per recipe ever).
+ */
+export async function sendDirectPush(opts: {
+  userId: string;
+  title: string;
+  body: string;
+  data?: Record<string, string>;
+}): Promise<boolean> {
+  const acct = account();
+  if (!acct) return false;
+  try {
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('push_enabled')
+      .eq('id', opts.userId)
+      .single();
+    if (profile && profile.push_enabled === false) return false;
+
+    const { data: tokens } = await supabaseAdmin.from('push_tokens').select('token').eq('user_id', opts.userId);
+    if (!tokens || tokens.length === 0) return false;
+
+    const oauth = await accessToken(acct);
+    if (!oauth) return false;
+    const url = `https://fcm.googleapis.com/v1/projects/${acct.project_id}/messages:send`;
+    await Promise.all(
+      tokens.map(async ({ token }) => {
+        const message = {
+          token,
+          notification: { title: opts.title, body: opts.body },
+          data: opts.data ?? {},
+          apns: { payload: { aps: { sound: 'default' } } },
+          android: { notification: { sound: 'default' }, priority: 'high' as const },
+        };
+        const res = await fetch(url, {
+          method: 'POST',
+          headers: { Authorization: `Bearer ${oauth}`, 'Content-Type': 'application/json' },
+          body: JSON.stringify({ message }),
+        });
+        if (!res.ok) {
+          const text = await res.text().catch(() => '');
+          if (res.status === 404 || /UNREGISTERED|INVALID_ARGUMENT/i.test(text)) await deleteToken(token);
+        }
+      }),
+    );
+    return true;
+  } catch (err) {
+    console.error('[push] sendDirectPush error:', (err as Error).message);
+    return false;
+  }
+}
