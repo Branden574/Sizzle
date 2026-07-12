@@ -4,7 +4,7 @@ import { useAuth } from '../../auth/useAuth';
 import { useSizzle, type FeedKindPref, type ThemePref, type UnitPref } from '../../store';
 import { clearOffline } from '../../lib/offline';
 import { apiGet, apiSend } from '../../lib/api';
-import { queryClient, useBlockedList, useMe, useToggleBlock, useUpdateNotifPref } from '../../data/queries';
+import { queryClient, useBlockedList, useMe, useToggleBlock, useUpdateNotifPref, useUpdateProfile } from '../../data/queries';
 import { enablePush, disablePush } from '../../lib/push';
 import { biometricAvailability, biometricVerify, clearBiometricToken } from '../../lib/biometric';
 import { isNative } from '../../lib/native';
@@ -127,6 +127,7 @@ export function AppSettingsSheet() {
   const [pushBusy, setPushBusy] = useState(false);
   const pushOn = pushLocal ?? me.data?.pushEnabled ?? true;
   const updatePref = useUpdateNotifPref();
+  const updateProfile = useUpdateProfile();
 
   const togglePush = async () => {
     if (pushBusy) return;
@@ -351,6 +352,13 @@ export function AppSettingsSheet() {
           <RowButton label="Clear cache" hint={cacheCleared ? '✓ Cleared' : 'Reload fresh data'} onClick={() => { queryClient.clear(); setCacheCleared(true); window.setTimeout(() => setCacheCleared(false), 1800); }} />
 
           <SectionLabel>Privacy &amp; safety</SectionLabel>
+          <ToggleRow
+            title="Private account"
+            sub={me.data?.private ? 'Only approved followers see your recipes' : 'Anyone can see your recipes and follow you'}
+            icon={<span style={{ fontSize: 20 }}>🔐</span>}
+            on={me.data?.private ?? false}
+            onToggle={() => updateProfile.mutate({ private: !(me.data?.private ?? false) })}
+          />
           <RowButton label="Blocked accounts" hint="Manage who you've blocked" onClick={() => setShowBlocked(true)} />
 
           <SectionLabel>Account</SectionLabel>

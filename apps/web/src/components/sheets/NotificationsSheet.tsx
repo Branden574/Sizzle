@@ -1,13 +1,14 @@
 import { useEffect } from 'react';
 import { useSwipeDismiss } from '../../lib/useSwipeDismiss';
 import type { NotificationDTO } from '@sizzle/shared';
-import { useMarkNotificationsRead, useNotifications } from '../../data/queries';
+import { useMarkNotificationsRead, useNotifications, useRespondFollowRequest } from '../../data/queries';
 import { useSizzle } from '../../store';
 import { CloseIcon } from '../icons';
 
 function text(n: NotificationDTO): string {
   const who = n.actor.name;
   if (n.type === 'follow') return `${who} started following you`;
+  if (n.type === 'follow_request') return `${who} requested to follow you`;
   if (n.type === 'like') return n.recipeTitle ? `${who} liked “${n.recipeTitle}”` : `${who} liked your recipe`;
   if (n.type === 'verified') return `${who} reached a verification milestone`;
   if (n.type === 'repost') return n.recipeTitle ? `${who} reposted “${n.recipeTitle}”` : `${who} reposted your recipe`;
@@ -25,6 +26,7 @@ export function NotificationsSheet() {
 
   const { data: notifications, isLoading } = useNotifications();
   const markRead = useMarkNotificationsRead();
+  const respond = useRespondFollowRequest();
 
   // Mark-all-read only once the list has loaded AND there is something unread —
   // not unconditionally on mount (which fired needless writes on every open).
@@ -72,6 +74,24 @@ export function NotificationsSheet() {
                 <div style={{ fontSize: 14.5, color: 'var(--text)', lineHeight: 1.4 }}>{text(n)}</div>
                 <div style={{ fontSize: 12.5, color: 'var(--text-faint-2)', marginTop: 2 }}>{n.time}</div>
               </div>
+              {n.type === 'follow_request' && (
+                <div style={{ display: 'flex', gap: 6, flex: 'none' }}>
+                  <span
+                    role="button"
+                    onClick={(e) => { e.stopPropagation(); if (!respond.isPending) respond.mutate({ followerId: n.actor.id, accept: true }); }}
+                    style={{ padding: '8px 14px', borderRadius: 12, background: 'var(--accent,#ff5a36)', color: '#fff', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}
+                  >
+                    Accept
+                  </span>
+                  <span
+                    role="button"
+                    onClick={(e) => { e.stopPropagation(); if (!respond.isPending) respond.mutate({ followerId: n.actor.id, accept: false }); }}
+                    style={{ padding: '8px 14px', borderRadius: 12, background: 'var(--surface-2)', border: '1px solid var(--line-2)', color: 'var(--text)', fontSize: 13, fontWeight: 800, cursor: 'pointer' }}
+                  >
+                    Decline
+                  </span>
+                </div>
+              )}
               {!n.read && <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--accent,#ff5a36)', flex: 'none' }} />}
             </button>
           ))}

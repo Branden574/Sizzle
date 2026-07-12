@@ -5,9 +5,10 @@ import { useRequireAuth } from '../auth/useRequireAuth';
 import { useCook, useCookLive, useDeleteRecipe, useDrafts, useEndLive, useLikedFeed, useMe, useNotifications, usePublishDraft, useRequestVerification, useSavedFeed, useStartLive } from '../data/queries';
 import { useSizzle } from '../store';
 import { formatCount } from '../lib/format';
+import { cookShareUrl } from '../lib/share';
 import { VerifiedBadge } from './VerifiedBadge';
 import { SocialLinks } from './SocialLinks';
-import { BellIcon, BookmarkIcon, GearIcon, HeartIcon } from './icons';
+import { BellIcon, BookmarkIcon, GearIcon, HeartIcon, ShareIcon } from './icons';
 
 const BANNER = 'radial-gradient(120% 120% at 70% 0%, var(--saffron,#f4a52c), var(--accent,#ff5a36) 60%, #c23a1a)';
 
@@ -94,6 +95,18 @@ export function Profile() {
           >
             <BellIcon size={20} stroke="var(--text-muted)" />
             {unread > 0 && <div style={{ position: 'absolute', top: 9, right: 9, width: 9, height: 9, borderRadius: '50%', background: 'var(--accent,#ff5a36)', border: '2px solid var(--surface)' }} />}
+          </button>
+          <button
+            onClick={() => {
+              if (!me) return;
+              const url = cookShareUrl(me.handle);
+              if (navigator.share) void navigator.share({ title: `${me.name} on Sizzle`, url }).catch(() => {});
+              else void navigator.clipboard?.writeText(url).catch(() => {});
+            }}
+            title="Share profile"
+            style={{ width: 48, height: 48, border: '1.5px solid var(--line-2)', borderRadius: 14, background: 'var(--surface)', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+          >
+            <ShareIcon size={19} stroke="var(--text-muted)" strokeWidth={2} />
           </button>
           <button
             onClick={() => setShowAppSettings(true)}

@@ -2,6 +2,7 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import { optionalAuth, requireAuth, requireNotBanned } from '../middleware/auth';
 import { supabaseAdmin } from '../lib/supabase';
+import { canViewCookContent } from '../mappers';
 import { badRequest, dbFail } from '../lib/errors';
 import { assertUuid } from '../lib/validate';
 import { cloudflareConfigured } from '../env';
@@ -39,16 +40,35 @@ live.post('/end', requireAuth, async (c) => {
   return c.json({ ok: true });
 });
 
-/** GET /live/:cookId — a creator's current live session, or null. */
+/** GET /live/:cookId — a creator's current live session, or null. Private
+ *  creators' sessions (playback URL + title) are visible to followers only. */
 live.get('/:cookId', optionalAuth, async (c) => {
   const cookId = assertUuid(c.req.param('cookId'), 'cook');
+  if (!(await canViewCookContent(supabaseAdmin, cookId, c.get('userId')))) return c.json(null);
   const { data } = await supabaseAdmin.from('live_sessions').select('id, title, playback_url, viewer_count, started_at').eq('creator_id', cookId).eq('status', 'live').maybeSingle();
   if (!data) return c.json(null);
   return c.json({ id: data.id, title: data.title, playbackUrl: data.playback_url, viewers: data.viewer_count, startedAt: data.started_at });
 });
 
-/** GET /live — everyone currently live (a 'Live now' rail). */
+/** GET /live — everyone currently live (a 'Live now' rail). Private creators
+ *  only surface to their accepted followers. */
 live.get('/', optionalAuth, async (c) => {
+  const viewerId = c.get('userId');
   const { data } = await supabaseAdmin.from('live_sessions').select('id, creator_id, title, started_at').eq('status', 'live').order('started_at', { ascending: false }).limit(50);
-  return c.json(data ?? []);
+  const rows = data ?? [];
+  if (!rows.length) return c.json([]);
+  // Drop private creators the viewer doesn't follow. One query for the private
+  // set + one for the viewer's follows, then filter in memory.
+  const creatorIds = [...new Set(rows.map((r) => r.creator_id as string))];
+  const { data: privs } = await supabaseAdmin.from('profiles').select('id').eq('private', true).in('id', creatorIds);
+  const privateSet = new Set((privs ?? []).map((p) => p.id as string));
+  if (privateSet.size) {
+    let followed = new Set<string>();
+    if (viewerId) {
+      const { data: f } = await supabaseAdmin.from('follows').select('cook_id').eq('follower_id', viewerId).in('cook_id', [...privateSet]);
+      followed = new Set((f ?? []).map((x) => x.cook_id as string));
+    }
+    return c.json(rows.filter((r) => !privateSet.has(r.creator_id as string) || r.creator_id === viewerId || followed.has(r.creator_id as string)));
+  }
+  return c.json(rows);
 });

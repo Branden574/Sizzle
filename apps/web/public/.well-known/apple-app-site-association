@@ -4,7 +4,8 @@
       {
         "appIDs": ["REPLACE_WITH_APPLE_TEAM_ID.app.sizzle.mobile"],
         "components": [
-          { "/": "/r/*", "comment": "Shared recipe deep links open the Sizzle app" }
+          { "/": "/r/*", "comment": "Shared recipe deep links open the Sizzle app" },
+          { "/": "/u/*", "comment": "Shared profile deep links open the Sizzle app" }
         ]
       }
     ]

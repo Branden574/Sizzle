@@ -47,7 +47,7 @@ import { biometricAvailability } from './lib/biometric';
 import { BiometricLock } from './components/BiometricLock';
 import { DesktopSidebar } from './components/DesktopSidebar';
 import { useMediaQuery } from './lib/useMediaQuery';
-import { parseRecipeDeepLink } from './lib/share';
+import { parseCookDeepLink, parseRecipeDeepLink } from './lib/share';
 import { App as CapApp } from '@capacitor/app';
 import { useSizzle } from './store';
 
@@ -195,36 +195,53 @@ export default function App() {
     return () => { void handle.then((l) => l.remove()); };
   }, [setAppUnlocked]);
 
-  // ── Shareable deep links (/r/:id) ──────────────────────────────────────────
-  // Open the shared recipe immediately if signed in; otherwise remember it and
+  // ── Shareable deep links (/r/:id recipes, /u/:handle profiles) ─────────────
+  // Open the shared content immediately if signed in; otherwise remember it and
   // open it once the user authenticates.
   const pendingRecipe = useRef<string | null>(null);
+  const pendingCook = useRef<string | null>(null);
   const openSharedRecipe = (id: string) => {
     if (useAuth.getState().status === 'authed') useSizzle.getState().setOpenRecipe(id);
     else pendingRecipe.current = id;
   };
+  const openSharedCook = (handle: string) => {
+    // The cooks API accepts a handle wherever an id goes; CookSheet re-reads ck.id.
+    if (useAuth.getState().status === 'authed') useSizzle.getState().setOpenCook(handle);
+    else pendingCook.current = handle;
+  };
   // Parse the URL the app booted with (web share links), then clean it.
   useEffect(() => {
-    const id = parseRecipeDeepLink(window.location.pathname + window.location.search);
-    if (!id) return;
+    const path = window.location.pathname + window.location.search;
+    const id = parseRecipeDeepLink(path);
+    const cook = id ? null : parseCookDeepLink(path);
+    if (!id && !cook) return;
     window.history.replaceState(null, '', '/');
-    openSharedRecipe(id);
+    if (id) openSharedRecipe(id);
+    else if (cook) openSharedCook(cook);
   }, []);
   // Native: links that launch/foreground the app (universal link / custom scheme).
   useEffect(() => {
     if (!isNative) return;
     const handle = CapApp.addListener('appUrlOpen', ({ url }) => {
       const id = parseRecipeDeepLink(url);
-      if (id) openSharedRecipe(id);
+      if (id) { openSharedRecipe(id); return; }
+      const cook = parseCookDeepLink(url);
+      if (cook) openSharedCook(cook);
     });
     return () => { void handle.then((l) => l.remove()); };
   }, []);
-  // Flush a pending shared recipe once the user is authed.
+  // Flush pending shared content once the user is authed.
   useEffect(() => {
-    if (authStatus === 'authed' && pendingRecipe.current) {
+    if (authStatus !== 'authed') return;
+    if (pendingRecipe.current) {
       const id = pendingRecipe.current;
       pendingRecipe.current = null;
       useSizzle.getState().setOpenRecipe(id);
+    }
+    if (pendingCook.current) {
+      const cook = pendingCook.current;
+      pendingCook.current = null;
+      useSizzle.getState().setOpenCook(cook);
     }
   }, [authStatus]);
 

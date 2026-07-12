@@ -55,6 +55,7 @@ me.get('/', async (c) => {
     pushEnabled: profile.push_enabled ?? true,
     notifPrefs: (profile.notif_prefs ?? {}) as MeProfile['notifPrefs'],
     needsUsername: profile.handle_auto ?? false,
+    private: profile.private ?? false,
   };
   return c.json(dto);
 });
@@ -524,6 +525,7 @@ const patchSchema = z.object({
   phone: z.string().trim().max(30).optional(),
   avatarUrl: z.string().url().max(1000).nullable().optional(),
   bannerUrl: z.string().url().max(1000).nullable().optional(),
+  private: z.boolean().optional(),
   links: z
     .object({
       instagram: linkOrNull, tiktok: linkOrNull, x: linkOrNull,
@@ -567,6 +569,7 @@ me.patch('/', async (c) => {
   if (body.data.phone !== undefined) updates.phone = body.data.phone;
   if (body.data.avatarUrl !== undefined) updates.avatar_url = body.data.avatarUrl;
   if (body.data.bannerUrl !== undefined) updates.banner_url = body.data.bannerUrl;
+  if (body.data.private !== undefined) updates.private = body.data.private;
   if (body.data.links) {
     for (const key of PROFILE_LINK_KEYS) {
       const raw = body.data.links[key];

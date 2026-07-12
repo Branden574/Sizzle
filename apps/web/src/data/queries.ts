@@ -714,11 +714,25 @@ export function useMarkNotificationsRead() {
 export function useUpdateProfile() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (input: { displayName?: string; handle?: string; bio?: string; phone?: string; avatarUrl?: string | null; bannerUrl?: string | null; links?: Record<string, string | null> }) =>
+    mutationFn: (input: { displayName?: string; handle?: string; bio?: string; phone?: string; avatarUrl?: string | null; bannerUrl?: string | null; private?: boolean; links?: Record<string, string | null> }) =>
       apiSend('PATCH', '/me', input),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['me'] });
       void qc.invalidateQueries({ queryKey: ['feed'] });
+      void qc.invalidateQueries({ queryKey: ['cook'] });
+    },
+  });
+}
+
+/** Accept or decline a pending follow request (private accounts). */
+export function useRespondFollowRequest() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ followerId, accept }: { followerId: string; accept: boolean }) =>
+      apiSend('POST', `/cooks/requests/${followerId}/respond`, { accept }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['notifications'] });
+      void qc.invalidateQueries({ queryKey: ['me'] });
       void qc.invalidateQueries({ queryKey: ['cook'] });
     },
   });
@@ -987,8 +1001,9 @@ export function usePublishDraft() {
 export function useToggleFollow() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: ({ cookId, following }: { cookId: string; following: boolean }) =>
-      apiSend(following ? 'DELETE' : 'POST', `/cooks/${cookId}/follow`),
+    mutationFn: ({ cookId, following, requested }: { cookId: string; following: boolean; requested?: boolean }) =>
+      // DELETE unfollows — and also cancels a pending follow request.
+      apiSend(following || requested ? 'DELETE' : 'POST', `/cooks/${cookId}/follow`),
     onMutate: async ({ cookId, following }) => {
       // Scope to cook queries (the feed's following flags self-heal via the
       // onSettled feed invalidation); don't cancel the whole client.

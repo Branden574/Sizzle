@@ -67,6 +67,8 @@ export interface ProfileRow {
   role: 'user' | 'admin';
   boost: number;
   banned: boolean;
+  /** Private account: content visible to accepted followers only. */
+  private: boolean;
   banned_reason: string | null;
   delete_at: string | null;
   ban_appeal_status: 'none' | 'pending' | 'denied';
@@ -284,6 +286,28 @@ export async function loadMutedIds(db: SupabaseClient, viewerId: string | undefi
   return new Set((data ?? []).map((r) => r.muted_id as string));
 }
 
+/**
+ * True when `viewerId` may see `cookId`'s content (recipes, comments, live,
+ * products, tiers). Public cooks: always. Private cooks: the owner, accepted
+ * followers, and admins only. Every content endpoint that does NOT flow through
+ * buildCards (comments, interactions, live, monetize, product/tier listings)
+ * must call this — buildCards enforces the same rule for card lists.
+ * Short-circuits with one query in the common (public) case.
+ */
+export async function canViewCookContent(
+  db: SupabaseClient,
+  cookId: string,
+  viewerId: string | undefined,
+  viewerIsAdmin = false,
+): Promise<boolean> {
+  const { data: owner } = await db.from('profiles').select('private').eq('id', cookId).maybeSingle();
+  if (!owner?.private) return true;
+  if (!viewerId) return false;
+  if (viewerId === cookId || viewerIsAdmin) return true;
+  const { data: f } = await db.from('follows').select('cook_id').eq('follower_id', viewerId).eq('cook_id', cookId).maybeSingle();
+  return !!f;
+}
+
 export async function buildCards(db: SupabaseClient, viewerId: string | undefined, rows: RecipeRow[], viewerIsAdmin = false): Promise<RecipeCard[]> {
   if (rows.length === 0) return [];
 
@@ -309,6 +333,10 @@ export async function buildCards(db: SupabaseClient, viewerId: string | undefine
     const cook = cookMap.get(r.cook_id);
     if (!cook || cook.banned) continue; // banned creators' content is hidden everywhere
     if (blocked.has(r.cook_id)) continue; // blocked in either direction — hidden everywhere
+    // Private account: content is visible only to accepted followers (and the
+    // owner/admins). Enforced here — the choke point every card-serving route
+    // (feed, search, hashtags, profile, collections) flows through.
+    if (cook.private && r.cook_id !== viewerId && !ctx.follows.has(r.cook_id) && !viewerIsAdmin) continue;
     // Auto-hidden (pending review) and removed posts are visible only to their
     // owner — and to admins, so moderators can open the exact content to review.
     if ((r.auto_hidden || r.status === 'removed') && r.cook_id !== viewerId && !viewerIsAdmin) continue;

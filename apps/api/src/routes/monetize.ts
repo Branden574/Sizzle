@@ -8,7 +8,7 @@ import { env, stripeConfigured } from '../env';
 import { supabaseAdmin } from '../lib/supabase';
 import { badRequest, dbFail, notFound } from '../lib/errors';
 import { relativeTime } from '../lib/format';
-import { cookSummary, loadBlockedIds, type ProfileRow } from '../mappers';
+import { canViewCookContent, cookSummary, loadBlockedIds, type ProfileRow } from '../mappers';
 import { notify } from '../services/notify';
 import { moderate } from '../services/moderation';
 import { accountActive, cancelSubscriptionAtPeriodEnd, createConnectAccount, createOnboardingLink, createOneOffCheckout, createSubscriptionCheckout, paymentsProvider } from '../services/payments';
@@ -109,6 +109,8 @@ monetize.post('/tip', requireAuth, requireNotBanned, rateLimit({ windowMs: 60_00
 
   const blocked = await loadBlockedIds(supabaseAdmin, userId);
   if (blocked.has(creatorId)) throw notFound('User not found');
+  // Private creator's monetization is follower-only — a non-follower can't tip.
+  if (!(await canViewCookContent(supabaseAdmin, creatorId, userId))) throw notFound('User not found');
   const { data: creator } = await supabaseAdmin
     .from('profiles')
     .select('id, display_name, banned, monetization_status, stripe_account_id')
@@ -191,6 +193,9 @@ monetize.post('/unlock', requireAuth, requireNotBanned, rateLimit({ windowMs: 60
 
   const { data: rec } = await supabaseAdmin.from('recipes').select('id, cook_id, title, price_cents, status').eq('id', recipeId).maybeSingle();
   if (!rec || rec.status !== 'published') throw notFound('Recipe not found');
+  // Can't buy an unlock for a private creator's recipe you can't even view —
+  // gate before probing price so a non-follower can't confirm it exists.
+  if (rec.cook_id !== userId && !(await canViewCookContent(supabaseAdmin, rec.cook_id as string, userId))) throw notFound('Recipe not found');
   if (!rec.price_cents) throw badRequest('This recipe is free');
   if (rec.cook_id === userId) throw badRequest('You already own this recipe');
   const { data: already } = await supabaseAdmin.from('recipe_unlocks').select('recipe_id').eq('user_id', userId).eq('recipe_id', recipeId).maybeSingle();
@@ -337,6 +342,8 @@ monetize.post('/products/:id/buy', requireAuth, requireNotBanned, rateLimit({ wi
   const { data: prod } = await supabaseAdmin.from('creator_products').select('*').eq('id', id).eq('active', true).maybeSingle();
   if (!prod) throw notFound('Product not found');
   if (prod.creator_id === userId) throw badRequest("You can't buy your own product");
+  // Private creator's products are follower-only.
+  if (!(await canViewCookContent(supabaseAdmin, prod.creator_id as string, userId))) throw notFound('Product not found');
   const { data: already } = await supabaseAdmin.from('product_purchases').select('product_id').eq('user_id', userId).eq('product_id', id).maybeSingle();
   if (already) return c.json({ url: null, status: 'succeeded' as const });
 
@@ -444,6 +451,8 @@ monetize.post('/subscribe', requireAuth, requireNotBanned, rateLimit({ windowMs:
   if (creatorId === userId) throw badRequest('You cannot subscribe to yourself');
   const blocked = await loadBlockedIds(supabaseAdmin, userId);
   if (blocked.has(creatorId)) throw notFound('User not found');
+  // Private creator: subscriptions are follower-only (matches the hidden UI).
+  if (!(await canViewCookContent(supabaseAdmin, creatorId, userId))) throw notFound('User not found');
   const { data: creator } = await supabaseAdmin
     .from('profiles')
     .select('display_name, banned, monetization_status, stripe_account_id, sub_price_cents')

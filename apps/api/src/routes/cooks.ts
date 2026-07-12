@@ -4,7 +4,7 @@ import { optionalAuth, requireAuth, requireNotBanned } from '../middleware/auth'
 import { supabaseAdmin } from '../lib/supabase';
 import { badRequest, dbFail, notFound } from '../lib/errors';
 import { assertUuid } from '../lib/validate';
-import { buildCards, cookSummary, loadBlockedIds, profileLinks, type ProfileRow, type RecipeRow } from '../mappers';
+import { buildCards, canViewCookContent, cookSummary, loadBlockedIds, profileLinks, type ProfileRow, type RecipeRow } from '../mappers';
 import { matchTastes } from '../services/taste';
 import { notify } from '../services/notify';
 import type { AppEnv } from '../types';
@@ -44,7 +44,9 @@ cooks.get('/suggested', optionalAuth, async (c) => {
   }
 
   const ranked = (profiles as ProfileRow[])
-    .filter((p) => p.id !== viewerId && !following.has(p.id) && !blocked.has(p.id))
+    // Private cooks opt out of discovery — never suggest them, and their recipe
+    // titles/cuisines must not feed the taste-match chips.
+    .filter((p) => p.id !== viewerId && !following.has(p.id) && !blocked.has(p.id) && !p.private)
     .map((p) => {
       const matched = matchTastes(`${p.bio ?? ''} ${blobs.get(p.id) ?? ''}`, tastes);
       return { p, matched };
@@ -72,15 +74,29 @@ cooks.get('/handle-available', async (c) => {
   return c.json({ available: !!data });
 });
 
-/** GET /cooks/:id — public cook profile + recipe grid + viewer.following. */
+const UUID_RE = /^[0-9a-fA-F-]{36}$/;
+
+/** Resolve a path param that is either a profile UUID or a handle (share links
+ *  use `/u/:handle`). Handles are [A-Za-z0-9_], matched case-insensitively. */
+async function resolveCook(param: string): Promise<ProfileRow | null> {
+  if (UUID_RE.test(param)) {
+    const { data } = await supabaseAdmin.from('profiles').select('*').eq('id', param).maybeSingle();
+    return (data as ProfileRow) ?? null;
+  }
+  const handle = param.trim().replace(/[^A-Za-z0-9_]/g, '');
+  if (handle.length < 3 || handle.length > 30) return null;
+  const { data } = await supabaseAdmin.from('profiles').select('*').ilike('handle', handle.replace(/_/g, '\\_')).maybeSingle();
+  return (data as ProfileRow) ?? null;
+}
+
+/** GET /cooks/:id — public cook profile + recipe grid + viewer.following.
+ *  `:id` may be a UUID or a handle (profile share links). */
 cooks.get('/:id', optionalAuth, async (c) => {
-  const id = assertUuid(c.req.param('id'), 'cook');
   const viewerId = c.get('userId');
 
-  const { data: profile, error } = await supabaseAdmin.from('profiles').select('*').eq('id', id).maybeSingle();
-  if (error) throw dbFail(error.message);
-  if (!profile) throw notFound('Cook not found');
-  const p = profile as ProfileRow;
+  const p = await resolveCook(c.req.param('id'));
+  if (!p) throw notFound('Cook not found');
+  const id = p.id;
 
   // Block state. If THEY blocked the viewer, the profile is unavailable (don't
   // reveal it exists). If the VIEWER blocked them, show a blocked shell (so they
@@ -112,16 +128,26 @@ cooks.get('/:id', optionalAuth, async (c) => {
 
   let following = false;
   let subscribed = false;
+  let requested = false;
   if (viewerId) {
-    const [{ data: f }, { data: sub }] = await Promise.all([
+    const [{ data: f }, { data: sub }, { data: req }] = await Promise.all([
       supabaseAdmin.from('follows').select('cook_id').eq('follower_id', viewerId).eq('cook_id', id).maybeSingle(),
       supabaseAdmin.from('subscriptions').select('id').eq('subscriber_id', viewerId).eq('creator_id', id).eq('status', 'active').maybeSingle(),
+      supabaseAdmin.from('follow_requests').select('cook_id').eq('follower_id', viewerId).eq('cook_id', id).maybeSingle(),
     ]);
     following = !!f;
     subscribed = !!sub;
+    requested = !!req;
   }
 
-  const monetized = (p as { monetization_status?: string }).monetization_status === 'active';
+  // Private account: non-followers get the limited profile — bio/counts stay,
+  // recipe cards are withheld (buildCards also drops them; this is the explicit
+  // route-level gate so the count of hidden cards can't be probed).
+  const privateLocked = !!p.private && !isOwner && !following;
+
+  // On a locked private profile the monetization surface is hidden too — a
+  // non-follower can't tip/subscribe/see the funding goal, so don't leak them.
+  const monetized = !privateLocked && (p as { monetization_status?: string }).monetization_status === 'active';
   const summary = cookSummary(p);
   const res: CookProfile = {
     ...summary,
@@ -134,7 +160,8 @@ cooks.get('/:id', optionalAuth, async (c) => {
       likes: p.total_likes,
       recipes: rows.length,
     },
-    viewer: { following, blocked: blockedByMe, muted, subscribed },
+    viewer: { following, blocked: blockedByMe, muted, subscribed, requested },
+    isPrivate: !!p.private,
     acceptsTips: monetized,
     subPriceCents: monetized ? ((p as { sub_price_cents?: number | null }).sub_price_cents ?? null) : null,
     goal: (() => {
@@ -143,22 +170,26 @@ cooks.get('/:id', optionalAuth, async (c) => {
         ? { label: g.goal_label ?? '', targetCents: g.goal_cents, raisedCents: g.goal_raised_cents ?? 0 }
         : null;
     })(),
-    recipes: cards,
+    recipes: privateLocked ? [] : cards,
   };
   return c.json(res);
 });
 
-/** GET /cooks/:id/tiers — a creator's public subscription tiers. */
+/** GET /cooks/:id/tiers — a creator's public subscription tiers (private
+ *  creators: accepted followers only). */
 cooks.get('/:id/tiers', optionalAuth, async (c) => {
   const id = assertUuid(c.req.param('id'), 'cook');
+  if (!(await canViewCookContent(supabaseAdmin, id, c.get('userId')))) return c.json([]);
   const { data } = await supabaseAdmin.from('creator_tiers').select('id, name, price_cents, perks').eq('creator_id', id).eq('active', true).order('sort', { ascending: true });
   return c.json((data ?? []).map((t) => ({ id: t.id, name: t.name, priceCents: t.price_cents, perks: t.perks })));
 });
 
-/** GET /cooks/:id/products — a creator's digital products (public; file URL only if owned). */
+/** GET /cooks/:id/products — a creator's digital products (public; file URL only
+ *  if owned. Private creators: accepted followers only). */
 cooks.get('/:id/products', optionalAuth, async (c) => {
   const id = assertUuid(c.req.param('id'), 'cook');
   const viewerId = c.get('userId');
+  if (!(await canViewCookContent(supabaseAdmin, id, viewerId))) return c.json([]);
   const { data: rows } = await supabaseAdmin.from('creator_products').select('*').eq('creator_id', id).eq('active', true).order('created_at', { ascending: false });
   const products = rows ?? [];
   let owned = new Set<string>();
@@ -173,9 +204,22 @@ cooks.get('/:id/products', optionalAuth, async (c) => {
   }));
 });
 
-/** GET /cooks/:id/followers — the people who follow this cook (blocked hidden). */
+/** True when `viewerId` may see a private account's social graph: the owner and
+ *  accepted followers only. Public accounts are visible to everyone. */
+async function canViewPrivate(ownerId: string, viewerId: string | undefined): Promise<boolean> {
+  const { data: owner } = await supabaseAdmin.from('profiles').select('private').eq('id', ownerId).maybeSingle();
+  if (!owner?.private) return true;
+  if (!viewerId) return false;
+  if (viewerId === ownerId) return true;
+  const { data: f } = await supabaseAdmin.from('follows').select('cook_id').eq('follower_id', viewerId).eq('cook_id', ownerId).maybeSingle();
+  return !!f;
+}
+
+/** GET /cooks/:id/followers — the people who follow this cook (blocked hidden;
+ *  private accounts show their lists to accepted followers only). */
 cooks.get('/:id/followers', optionalAuth, async (c) => {
   const id = assertUuid(c.req.param('id'), 'cook');
+  if (!(await canViewPrivate(id, c.get('userId')))) return c.json([]);
   const { data: rows } = await supabaseAdmin.from('follows').select('follower_id').eq('cook_id', id).limit(200);
   const ids = (rows ?? []).map((r) => r.follower_id as string);
   if (ids.length === 0) return c.json([]);
@@ -184,9 +228,11 @@ cooks.get('/:id/followers', optionalAuth, async (c) => {
   return c.json((profiles ?? []).filter((p) => !blocked.has(p.id as string)).map((p) => cookSummary(p as ProfileRow)));
 });
 
-/** GET /cooks/:id/following — the cooks this user follows (blocked hidden). */
+/** GET /cooks/:id/following — the cooks this user follows (blocked hidden;
+ *  private accounts show their lists to accepted followers only). */
 cooks.get('/:id/following', optionalAuth, async (c) => {
   const id = assertUuid(c.req.param('id'), 'cook');
+  if (!(await canViewPrivate(id, c.get('userId')))) return c.json([]);
   const { data: rows } = await supabaseAdmin.from('follows').select('cook_id').eq('follower_id', id).limit(200);
   const ids = (rows ?? []).map((r) => r.cook_id as string);
   if (ids.length === 0) return c.json([]);
@@ -195,13 +241,14 @@ cooks.get('/:id/following', optionalAuth, async (c) => {
   return c.json((profiles ?? []).filter((p) => !blocked.has(p.id as string)).map((p) => cookSummary(p as ProfileRow)));
 });
 
-/** POST /cooks/:id/follow */
+/** POST /cooks/:id/follow — follows a public account immediately; for a private
+ *  account this files a follow REQUEST the owner must accept. */
 cooks.post('/:id/follow', requireAuth, requireNotBanned, async (c) => {
   const cookId = assertUuid(c.req.param('id'), 'cook');
   const userId = c.get('userId')!;
   if (cookId === userId) throw badRequest('You cannot follow yourself');
 
-  const { data: cook } = await supabaseAdmin.from('profiles').select('id').eq('id', cookId).maybeSingle();
+  const { data: cook } = await supabaseAdmin.from('profiles').select('id, private').eq('id', cookId).maybeSingle();
   if (!cook) throw notFound('Cook not found');
 
   // Can't follow someone you've blocked or who has blocked you.
@@ -214,33 +261,90 @@ cooks.post('/:id/follow', requireAuth, requireNotBanned, async (c) => {
     .eq('follower_id', userId)
     .eq('cook_id', cookId)
     .maybeSingle();
+  if (existing) return c.json({ following: true, requested: false });
 
-  if (!existing) {
-    const { error } = await supabaseAdmin.from('follows').insert({ follower_id: userId, cook_id: cookId });
+  if (cook.private) {
+    // upsert: tapping "Request" twice stays a single pending request.
+    const { error } = await supabaseAdmin.from('follow_requests').upsert({ follower_id: userId, cook_id: cookId }, { onConflict: 'follower_id,cook_id' });
     if (error) throw dbFail(error.message);
-    await supabaseAdmin.rpc('adjust_follow_counters', { p_follower: userId, p_cook: cookId, delta: 1 });
-    await notify({ userId: cookId, type: 'follow', actorId: userId });
+    await notify({ userId: cookId, type: 'follow_request', actorId: userId });
+    return c.json({ following: false, requested: true });
   }
-  return c.json({ following: true });
+
+  const { error } = await supabaseAdmin.from('follows').insert({ follower_id: userId, cook_id: cookId });
+  if (error) throw dbFail(error.message);
+  await supabaseAdmin.rpc('adjust_follow_counters', { p_follower: userId, p_cook: cookId, delta: 1 });
+  // Clear any request left over from when this account was private (now public).
+  await supabaseAdmin.from('follow_requests').delete().eq('follower_id', userId).eq('cook_id', cookId);
+  await notify({ userId: cookId, type: 'follow', actorId: userId });
+  return c.json({ following: true, requested: false });
 });
 
-/** DELETE /cooks/:id/follow */
+/** DELETE /cooks/:id/follow — unfollow; also cancels a pending follow request. */
 cooks.delete('/:id/follow', requireAuth, requireNotBanned, async (c) => {
   const cookId = assertUuid(c.req.param('id'), 'cook');
   const userId = c.get('userId')!;
 
-  const { data: existing } = await supabaseAdmin
+  // Atomic delete-then-decrement: the DELETE is authoritative and returns the row
+  // only to the caller that actually removed it, so two concurrent unfollows can't
+  // both decrement (read-then-delete would double-count).
+  const { data: removed } = await supabaseAdmin
     .from('follows')
-    .select('cook_id')
+    .delete()
     .eq('follower_id', userId)
     .eq('cook_id', cookId)
-    .maybeSingle();
+    .select('cook_id');
 
-  if (existing) {
-    await supabaseAdmin.from('follows').delete().eq('follower_id', userId).eq('cook_id', cookId);
+  if (removed && removed.length) {
     await supabaseAdmin.rpc('adjust_follow_counters', { p_follower: userId, p_cook: cookId, delta: -1 });
+  } else {
+    // No follow — cancel any pending request (and clear its notification).
+    await supabaseAdmin.from('follow_requests').delete().eq('follower_id', userId).eq('cook_id', cookId);
+    await supabaseAdmin.from('notifications').delete().eq('user_id', cookId).eq('actor_id', userId).eq('type', 'follow_request');
   }
-  return c.json({ following: false });
+  return c.json({ following: false, requested: false });
+});
+
+/** POST /cooks/requests/:followerId/respond {accept} — the private account owner
+ *  accepts or declines a pending follow request. */
+cooks.post('/requests/:followerId/respond', requireAuth, requireNotBanned, async (c) => {
+  const followerId = assertUuid(c.req.param('followerId'), 'user');
+  const userId = c.get('userId')!;
+  const body = (await c.req.json().catch(() => null)) as { accept?: boolean } | null;
+  if (typeof body?.accept !== 'boolean') throw badRequest('accept must be a boolean');
+
+  const { data: req } = await supabaseAdmin
+    .from('follow_requests')
+    .select('follower_id')
+    .eq('follower_id', followerId)
+    .eq('cook_id', userId)
+    .maybeSingle();
+  if (!req) throw notFound('Request not found');
+
+  // A block in either direction voids the request — accepting a blocked user
+  // would silently grant them follower access to a private account.
+  const blocked = await loadBlockedIds(supabaseAdmin, userId);
+  if (blocked.has(followerId)) {
+    await supabaseAdmin.from('follow_requests').delete().eq('follower_id', followerId).eq('cook_id', userId);
+    await supabaseAdmin.from('notifications').delete().eq('user_id', userId).eq('actor_id', followerId).eq('type', 'follow_request');
+    throw notFound('Request not found');
+  }
+
+  await supabaseAdmin.from('follow_requests').delete().eq('follower_id', followerId).eq('cook_id', userId);
+
+  if (body.accept) {
+    const { error } = await supabaseAdmin.from('follows').insert({ follower_id: followerId, cook_id: userId });
+    if (!error) {
+      await supabaseAdmin.rpc('adjust_follow_counters', { p_follower: followerId, p_cook: userId, delta: 1 });
+      // The requester learns they're in; the owner's request row becomes a follow.
+      await notify({ userId: followerId, type: 'follow', actorId: userId });
+      await supabaseAdmin.from('notifications').update({ type: 'follow' }).eq('user_id', userId).eq('actor_id', followerId).eq('type', 'follow_request');
+    }
+  } else {
+    // Declined: drop the request notification quietly (no notification to the requester).
+    await supabaseAdmin.from('notifications').delete().eq('user_id', userId).eq('actor_id', followerId).eq('type', 'follow_request');
+  }
+  return c.json({ accepted: !!body.accept });
 });
 
 /**
@@ -264,6 +368,10 @@ cooks.post('/:id/block', requireAuth, requireNotBanned, async (c) => {
     if (removed && removed.length) {
       await supabaseAdmin.rpc('adjust_follow_counters', { p_follower: follower, p_cook: cook, delta: -1 });
     }
+    // Pending follow requests (private accounts) die with the block too —
+    // otherwise a stale request could later be accepted across the block.
+    await supabaseAdmin.from('follow_requests').delete().eq('follower_id', follower).eq('cook_id', cook);
+    await supabaseAdmin.from('notifications').delete().eq('user_id', cook).eq('actor_id', follower).eq('type', 'follow_request');
   }
   return c.json({ blocked: true });
 });

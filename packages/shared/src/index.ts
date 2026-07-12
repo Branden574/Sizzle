@@ -236,7 +236,9 @@ export interface CookProfile {
     likes: number;
     recipes: number;
   };
-  viewer: { following: boolean; blocked: boolean; muted: boolean; subscribed: boolean };
+  viewer: { following: boolean; blocked: boolean; muted: boolean; subscribed: boolean; requested: boolean };
+  /** Private account: content is visible to accepted followers only. */
+  isPrivate: boolean;
   /** True when this creator has payouts set up and can receive support/tips. */
   acceptsTips: boolean;
   /** Monthly subscription price in cents, or null if they don't offer subs. */
@@ -405,9 +407,11 @@ export interface MeProfile {
   /** True when the handle was auto-derived (e.g. Google sign-up) and the user
    *  hasn't chosen one yet — the app shows a "pick a username" step. */
   needsUsername: boolean;
+  /** Private account: only accepted followers see your posts; follows need approval. */
+  private: boolean;
 }
 
-export type NotificationKind = 'follow' | 'like' | 'comment' | 'verified' | 'repost' | 'removed' | 'restored' | 'banned' | 'message' | 'tip';
+export type NotificationKind = 'follow' | 'like' | 'comment' | 'verified' | 'repost' | 'removed' | 'restored' | 'banned' | 'message' | 'tip' | 'follow_request';
 
 export interface NotificationDTO {
   id: string;

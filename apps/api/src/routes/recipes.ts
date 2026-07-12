@@ -6,7 +6,7 @@ import { env } from '../env';
 import { supabaseAdmin } from '../lib/supabase';
 import { badRequest, dbFail, forbidden, notFound } from '../lib/errors';
 import { assertUuid } from '../lib/validate';
-import { buildCards, commentDTO, loadBlockedIds, type CommentRow, type ProfileRow, type RecipeRow } from '../mappers';
+import { buildCards, canViewCookContent, commentDTO, loadBlockedIds, type CommentRow, type ProfileRow, type RecipeRow } from '../mappers';
 import { rateLimit } from '../middleware/rateLimit';
 import { moderate, moderateImages } from '../services/moderation';
 import { fileReport } from '../services/reports';
@@ -211,8 +211,13 @@ async function recipeCookId(recipeId: string, viewerId?: string): Promise<string
   if (!data) throw notFound('Recipe not found');
   // Non-owners can only interact with publicly-visible recipes — a draft, removed,
   // or auto-hidden post must 404 for everyone but its owner, matching the feed gate.
-  if (viewerId && data.cook_id !== viewerId && (data.status !== 'published' || data.auto_hidden)) {
-    throw notFound('Recipe not found');
+  if (viewerId && data.cook_id !== viewerId) {
+    if (data.status !== 'published' || data.auto_hidden) throw notFound('Recipe not found');
+    // Private account: only accepted followers may interact with the content
+    // (like, save, comment, view, …). Same gate buildCards applies to the read
+    // path — without it a non-follower could like/comment/inflate counters on a
+    // post they cannot see.
+    if (!(await canViewCookContent(supabaseAdmin, data.cook_id as string, viewerId))) throw notFound('Recipe not found');
   }
   return data.cook_id as string;
 }
@@ -221,9 +226,10 @@ async function recipeCookId(recipeId: string, viewerId?: string): Promise<string
  * Resolve a recipe's owner, but 404 if the viewer and owner are in a block
  * relationship (either direction). Blocks forbid the blocked user from
  * interacting with the blocker's content (liking, reposting, viewing, etc.).
+ * Passes the viewer through so the status + private-account gates apply too.
  */
 async function recipeCookIdUnblocked(recipeId: string, userId: string): Promise<string> {
-  const cookId = await recipeCookId(recipeId);
+  const cookId = await recipeCookId(recipeId, userId);
   const blocked = await loadBlockedIds(supabaseAdmin, userId);
   if (blocked.has(cookId)) throw notFound('Recipe not found');
   return cookId;
@@ -409,6 +415,10 @@ recipes.get('/:id/comments', optionalAuth, async (c) => {
     viewerIsModerator = vp?.role === 'admin';
   }
   if (rec.status !== 'published' && rec.cook_id !== viewerId && !viewerIsModerator) throw notFound('Recipe not found');
+  // Private account: its comment threads are follower-only, like the recipe itself.
+  if (rec.cook_id !== viewerId && !viewerIsModerator && !(await canViewCookContent(supabaseAdmin, rec.cook_id as string, viewerId))) {
+    throw notFound('Recipe not found');
+  }
 
   const { data: rows, error } = await supabaseAdmin
     .from('comments')

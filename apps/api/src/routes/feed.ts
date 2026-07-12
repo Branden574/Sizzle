@@ -14,6 +14,26 @@ interface FeedItem {
   sortTime: string;
 }
 
+/**
+ * Remove recipes by private cooks the viewer doesn't follow, before ranking or
+ * impression-logging. buildCards enforces the same rule on the final response;
+ * doing it up front keeps private posts from consuming ranked slots or leaving
+ * impression rows for content the viewer never sees.
+ */
+async function dropUnfollowedPrivate(rows: RecipeRow[], viewerId: string | undefined): Promise<RecipeRow[]> {
+  if (!rows.length) return rows;
+  const cookIds = [...new Set(rows.map((r) => r.cook_id))];
+  const { data: privs } = await supabaseAdmin.from('profiles').select('id').eq('private', true).in('id', cookIds);
+  const privateSet = new Set((privs ?? []).map((p) => p.id as string));
+  if (!privateSet.size) return rows;
+  let followed = new Set<string>();
+  if (viewerId) {
+    const { data: f } = await supabaseAdmin.from('follows').select('cook_id').eq('follower_id', viewerId).in('cook_id', [...privateSet]);
+    followed = new Set((f ?? []).map((x) => x.cook_id as string));
+  }
+  return rows.filter((r) => !privateSet.has(r.cook_id) || r.cook_id === viewerId || followed.has(r.cook_id));
+}
+
 /** Build feed items for the recent reposts of a set of users (mutual friends). */
 async function buildRepostItems(viewerId: string, reposterIds: string[]): Promise<FeedItem[]> {
   if (reposterIds.length === 0) return [];
@@ -157,8 +177,11 @@ feed.get('/for-you', optionalAuth, async (c) => {
     if (error) throw dbFail(error.message);
 
     // Drop blocked + muted cooks BEFORE ranking/impressions so they neither
-    // surface nor pollute the viewer's signal history.
-    const candidates = ((data ?? []) as RecipeRow[]).filter((r) => !blocked.has(r.cook_id) && !muted.has(r.cook_id));
+    // surface nor pollute the viewer's signal history. Private cooks the viewer
+    // doesn't follow are dropped here too — otherwise they'd take ranked slots and
+    // get impressions logged, only for buildCards to strip them from the response.
+    const prelim = ((data ?? []) as RecipeRow[]).filter((r) => !blocked.has(r.cook_id) && !muted.has(r.cook_id));
+    const candidates = await dropUnfollowedPrivate(prelim, userId);
     const ranked = rankRecipes(candidates, signals, Date.now()).slice(0, PAGE);
     if (ranked.length) {
       await supabaseAdmin.from('recipe_impressions').insert(ranked.map((r) => ({ user_id: userId, recipe_id: r.id })));
@@ -203,14 +226,24 @@ feed.get('/trending-tags', optionalAuth, async (c) => {
   const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString();
   const { data, error } = await supabaseAdmin
     .from('recipes')
-    .select('tags')
+    .select('cook_id, tags')
     .eq('status', 'published')
     .gt('created_at', since)
     .order('created_at', { ascending: false })
     .limit(2000);
   if (error) throw dbFail(error.message);
+  // Private cooks' hashtags must not surface in the public Discover trends.
+  const cookIds = [...new Set((data ?? []).map((r) => r.cook_id as string))];
+  let privateSet = new Set<string>();
+  if (cookIds.length) {
+    const { data: privs } = await supabaseAdmin.from('profiles').select('id').eq('private', true).in('id', cookIds);
+    privateSet = new Set((privs ?? []).map((p) => p.id as string));
+  }
   const counts = new Map<string, number>();
-  for (const r of data ?? []) for (const t of (r.tags ?? []) as string[]) counts.set(t, (counts.get(t) ?? 0) + 1);
+  for (const r of data ?? []) {
+    if (privateSet.has(r.cook_id as string)) continue;
+    for (const t of (r.tags ?? []) as string[]) counts.set(t, (counts.get(t) ?? 0) + 1);
+  }
   const top: TrendingTag[] = [...counts.entries()]
     .map(([tag, count]) => ({ tag, count }))
     .sort((a, b) => b.count - a.count || a.tag.localeCompare(b.tag))

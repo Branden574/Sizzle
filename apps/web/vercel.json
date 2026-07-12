@@ -1,11 +1,23 @@
 {
   "rewrites": [
-    { "source": "/r/:id", "destination": "https://sizzle-chi.vercel.app/r/:id" }
+    {
+      "source": "/r/:id",
+      "destination": "https://sizzle-chi.vercel.app/r/:id"
+    },
+    {
+      "source": "/u/:handle",
+      "destination": "https://sizzle-chi.vercel.app/u/:handle"
+    }
   ],
   "headers": [
     {
       "source": "/.well-known/apple-app-site-association",
-      "headers": [{ "key": "Content-Type", "value": "application/json" }]
+      "headers": [
+        {
+          "key": "Content-Type",
+          "value": "application/json"
+        }
+      ]
     }
   ]
 }

@@ -9,6 +9,16 @@ const esc = (s: string) =>
   s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 
 /**
+ * Serialize an object for embedding in a `<script type="application/ld+json">`
+ * block. HTML-escaping doesn't apply inside a raw-text <script>, so a `</script>`
+ * (or a `<!--`) sitting in a bio/title/name would otherwise break out of the
+ * block — classic stored XSS. Escaping `<` to the JS `<` unicode escape
+ * keeps the JSON valid while making a closing tag impossible.
+ */
+const jsonLdScript = (obj: unknown): string =>
+  JSON.stringify(obj).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026');
+
+/**
  * GET /r/:id — a crawlable, server-rendered recipe page. Turns every post into an
  * evergreen Google / Pinterest funnel: Open Graph + Twitter cards so links unfurl
  * as rich previews, and schema.org/Recipe JSON-LD so search engines index the dish.
@@ -28,10 +38,12 @@ seo.get('/:id', async (c) => {
   if (!r || r.status !== 'published') return c.html(page404(), 404);
 
   const [{ data: cook }, { data: video }, { data: ings }] = await Promise.all([
-    supabaseAdmin.from('profiles').select('display_name, handle, avatar_url').eq('id', r.cook_id).maybeSingle(),
+    supabaseAdmin.from('profiles').select('display_name, handle, avatar_url, private').eq('id', r.cook_id).maybeSingle(),
     r.video_asset_id ? supabaseAdmin.from('video_assets').select('poster_url').eq('id', r.video_asset_id).maybeSingle() : Promise.resolve({ data: null }),
     supabaseAdmin.from('recipe_ingredients').select('text').eq('recipe_id', id).order('position', { ascending: true }),
   ]);
+  // A private account's posts are follower-only — nothing to crawl or unfurl.
+  if (cook?.private) return c.html(page404(), 404);
   const { data: steps } = await supabaseAdmin.from('recipe_steps').select('text').eq('recipe_id', id).order('position', { ascending: true });
 
   const gated = r.price_cents != null || r.visibility === 'subscribers';
@@ -76,7 +88,7 @@ seo.get('/:id', async (c) => {
 <meta name="twitter:title" content="${esc(title)}">
 <meta name="twitter:description" content="${esc(desc)}">
 <meta name="twitter:image" content="${esc(poster)}">
-<script type="application/ld+json">${JSON.stringify(jsonLd)}</script>
+<script type="application/ld+json">${jsonLdScript(jsonLd)}</script>
 <style>
   :root{color-scheme:dark}
   body{margin:0;background:#0c0a09;color:#faf3ea;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;line-height:1.5}
@@ -109,3 +121,120 @@ seo.get('/:id', async (c) => {
 function page404(): string {
   return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Recipe not found · Sizzle</title><meta name="robots" content="noindex"><style>body{margin:0;background:#0c0a09;color:#faf3ea;font-family:-apple-system,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center;text-align:center}a{color:#ff5a36}</style></head><body><div><h1>Recipe not found</h1><p>It may be private or removed. <a href="${env.APP_ORIGIN}">Explore Sizzle</a></p></div></body></html>`;
 }
+
+/**
+ * GET /u/:handle — a crawlable, server-rendered profile page for shared profile
+ * links. Public profiles unfurl with the cook's name/bio/avatar and their latest
+ * dishes; private profiles render a minimal "this account is private" card
+ * (noindex) so the link still lands somewhere sensible without leaking content.
+ */
+export const seoProfile = new Hono<AppEnv>();
+
+seoProfile.get('/:handle', async (c) => {
+  const handle = (c.req.param('handle') ?? '').trim().replace(/[^A-Za-z0-9_]/g, '');
+  if (handle.length < 3 || handle.length > 30) return c.html(page404(), 404);
+
+  const { data: p } = await supabaseAdmin
+    .from('profiles')
+    .select('id, display_name, handle, bio, avatar_url, banner_url, follower_count, private, banned')
+    .ilike('handle', handle.replace(/_/g, '\\_'))
+    .maybeSingle();
+  if (!p || p.banned) return c.html(page404(), 404);
+
+  const name = (p.display_name as string) || `@${p.handle}`;
+  const url = `${env.APP_ORIGIN}/u/${p.handle}`;
+  const appLink = `${env.APP_ORIGIN}/?u=${p.handle}`;
+  const avatar = (p.avatar_url as string) || `${env.APP_ORIGIN}/og-default.jpg`;
+
+  if (p.private) {
+    const html = `<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(name)} (@${esc(p.handle as string)}) · Sizzle</title>
+<meta name="robots" content="noindex">
+<meta property="og:type" content="profile">
+<meta property="og:title" content="${esc(name)} on Sizzle">
+<meta property="og:description" content="This account is private — follow ${esc(name)} on Sizzle to see their recipes.">
+<meta property="og:image" content="${esc(avatar)}">
+<meta property="og:url" content="${esc(url)}">
+<style>body{margin:0;background:#0c0a09;color:#faf3ea;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center;text-align:center;padding:20px}img{width:96px;height:96px;border-radius:28px;object-fit:cover}a{display:inline-block;background:linear-gradient(135deg,#ff5a36,#e23a18);color:#fff;text-decoration:none;font-weight:800;padding:14px 26px;border-radius:16px;margin-top:18px}</style>
+</head><body><div>
+  <img src="${esc(avatar)}" alt="${esc(name)}">
+  <h1 style="margin:14px 0 2px">${esc(name)}</h1>
+  <div style="color:#b8a99b">@${esc(p.handle as string)}</div>
+  <p style="color:#b8a99b">🔒 This account is private. Request to follow in the app.</p>
+  <a href="${esc(appLink)}">Open in Sizzle</a>
+</div></body></html>`;
+    c.header('Cache-Control', 'public, max-age=600');
+    return c.html(html);
+  }
+
+  const { data: recipes } = await supabaseAdmin
+    .from('recipes')
+    .select('id, title, image_urls, video_asset_id')
+    .eq('cook_id', p.id)
+    .eq('status', 'published')
+    .order('created_at', { ascending: false })
+    .limit(6);
+  const vidIds = (recipes ?? []).map((r) => r.video_asset_id).filter(Boolean) as string[];
+  const posters = new Map<string, string>();
+  if (vidIds.length) {
+    const { data: vids } = await supabaseAdmin.from('video_assets').select('id, poster_url').in('id', vidIds);
+    for (const v of vids ?? []) if (v.poster_url) posters.set(v.id as string, v.poster_url as string);
+  }
+  const dishes = (recipes ?? []).map((r) => ({
+    id: r.id as string,
+    title: (r.title as string) || 'A recipe',
+    img: (r.video_asset_id && posters.get(r.video_asset_id as string)) || (Array.isArray(r.image_urls) && (r.image_urls[0] as string)) || '',
+  }));
+
+  const desc = (p.bio as string) || `${name} cooks on Sizzle — watch their recipes, then actually cook them.`;
+  const jsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'ProfilePage',
+    mainEntity: { '@type': 'Person', name, alternateName: `@${p.handle}`, description: desc, image: avatar, url },
+  };
+
+  const html = `<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(name)} (@${esc(p.handle as string)}) · Sizzle</title>
+<meta name="description" content="${esc(desc)}">
+<link rel="canonical" href="${esc(url)}">
+<meta property="og:type" content="profile">
+<meta property="og:title" content="${esc(name)} on Sizzle">
+<meta property="og:description" content="${esc(desc)}">
+<meta property="og:image" content="${esc(avatar)}">
+<meta property="og:url" content="${esc(url)}">
+<meta property="og:site_name" content="Sizzle">
+<meta name="twitter:card" content="summary">
+<meta name="twitter:title" content="${esc(name)} on Sizzle">
+<meta name="twitter:description" content="${esc(desc)}">
+<meta name="twitter:image" content="${esc(avatar)}">
+<script type="application/ld+json">${jsonLdScript(jsonLd)}</script>
+<style>
+  :root{color-scheme:dark}
+  body{margin:0;background:#0c0a09;color:#faf3ea;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;line-height:1.5}
+  .wrap{max-width:680px;margin:0 auto;padding:24px 20px 64px;text-align:center}
+  .avatar{width:104px;height:104px;border-radius:30px;object-fit:cover;background:#1a1613}
+  h1{font-size:28px;margin:14px 0 2px;font-weight:800}
+  .by{color:#b8a99b;font-size:15px}
+  .bio{color:#d9cabb;margin:12px auto;max-width:480px}
+  .cta{display:block;text-align:center;background:linear-gradient(135deg,#ff5a36,#e23a18);color:#fff;text-decoration:none;font-weight:800;padding:15px;border-radius:16px;margin:22px 0;font-size:16px}
+  .grid{display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin-top:10px}
+  .grid a{display:block;position:relative;border-radius:14px;overflow:hidden;aspect-ratio:3/4;background:#1a1613}
+  .grid img{width:100%;height:100%;object-fit:cover}
+  .grid span{position:absolute;left:8px;right:8px;bottom:7px;color:#fff;font-size:12px;font-weight:700;text-shadow:0 1px 6px rgba(0,0,0,.8);text-align:left}
+</style>
+</head><body><div class="wrap">
+  <img class="avatar" src="${esc(avatar)}" alt="${esc(name)}">
+  <h1>${esc(name)}</h1>
+  <div class="by">@${esc(p.handle as string)} · ${Number(p.follower_count ?? 0).toLocaleString()} followers</div>
+  ${p.bio ? `<p class="bio">${esc(p.bio as string)}</p>` : ''}
+  <a class="cta" href="${esc(appLink)}">Follow ${esc(name)} on Sizzle</a>
+  ${dishes.length ? `<div class="grid">${dishes.map((d) => `<a href="${env.APP_ORIGIN}/r/${d.id}">${d.img ? `<img src="${esc(d.img)}" alt="${esc(d.title)}" loading="lazy">` : ''}<span>${esc(d.title)}</span></a>`).join('')}</div>` : ''}
+</div></body></html>`;
+
+  c.header('Cache-Control', 'public, max-age=600, s-maxage=3600');
+  return c.html(html);
+});

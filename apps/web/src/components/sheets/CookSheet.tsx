@@ -8,7 +8,8 @@ import { SocialLinks } from '../SocialLinks';
 import { VideoPlayer } from '../VideoPlayer';
 import { theme } from '../../theme';
 import { formatCount } from '../../lib/format';
-import { ChevronLeftIcon, DotsIcon } from '../icons';
+import { cookShareUrl } from '../../lib/share';
+import { ChevronLeftIcon, DotsIcon, ShareIcon } from '../icons';
 import { pressVars } from '../ui';
 
 const accent = theme.accent;
@@ -33,7 +34,19 @@ export function CookSheet() {
 
   if (!openCook) return null;
   const close = () => setOpenCook(null);
-  const isOwn = !!me && me.id === openCook;
+  // openCook may be a handle (profile share links), so compare against the
+  // resolved profile id, not the raw route param.
+  const isOwn = !!me && !!ck && me.id === ck.id;
+  // Private account, viewed by a non-follower: limited profile, no content.
+  const privateLocked = !!ck && ck.isPrivate && !isOwn && !ck.viewer.following;
+
+  // Native share sheet where available, otherwise copy the link to the clipboard.
+  const onShare = () => {
+    if (!ck) return;
+    const url = cookShareUrl(ck.handle);
+    if (navigator.share) void navigator.share({ title: `${ck.name} on Sizzle`, url }).catch(() => {});
+    else void navigator.clipboard?.writeText(url).catch(() => {});
+  };
 
   const onBlock = () => {
     setMenuOpen(false);
@@ -54,6 +67,11 @@ export function CookSheet() {
         <button onClick={close} style={{ position: 'absolute', top: 54, left: 18, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.3)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
           <ChevronLeftIcon size={20} stroke="#fff" strokeWidth={2.2} />
         </button>
+        {ck && (
+          <button onClick={onShare} aria-label="Share profile" style={{ position: 'absolute', top: 54, right: isOwn ? 18 : 64, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.3)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+            <ShareIcon size={19} stroke="#fff" strokeWidth={2} />
+          </button>
+        )}
         {ck && !isOwn && (
           <button onClick={() => setMenuOpen((o) => !o)} aria-label="More" style={{ position: 'absolute', top: 54, right: 18, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.3)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
             <DotsIcon size={20} />
@@ -124,20 +142,20 @@ export function CookSheet() {
               <button
                 onClick={() => {
                   if (!requireAuth()) return;
-                  follow.mutate({ cookId: ck.id, following: ck.viewer.following });
+                  follow.mutate({ cookId: ck.id, following: ck.viewer.following, requested: ck.viewer.requested });
                 }}
                 className="sz-press"
-                style={{ ...pressVars(0.94), padding: '12px 24px', borderRadius: 15, border: `1.5px solid ${ck.viewer.following ? 'var(--invert-bg)' : accent}`, background: ck.viewer.following ? 'var(--invert-bg)' : accent, color: ck.viewer.following ? 'var(--invert-fg)' : '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 700, cursor: 'pointer', transition: 'transform .2s cubic-bezier(.34,1.56,.64,1)' }}
+                style={{ ...pressVars(0.94), padding: '12px 24px', borderRadius: 15, border: `1.5px solid ${ck.viewer.following || ck.viewer.requested ? 'var(--invert-bg)' : accent}`, background: ck.viewer.following || ck.viewer.requested ? 'var(--invert-bg)' : accent, color: ck.viewer.following || ck.viewer.requested ? 'var(--invert-fg)' : '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 700, cursor: 'pointer', transition: 'transform .2s cubic-bezier(.34,1.56,.64,1)' }}
               >
-                {ck.viewer.following ? 'Following' : 'Follow'}
+                {ck.viewer.following ? 'Following' : ck.viewer.requested ? 'Requested' : ck.isPrivate ? 'Request' : 'Follow'}
               </button>
             </div>
           </div>
           <p style={{ color: 'var(--text-muted)', fontSize: 15, lineHeight: 1.5, margin: '14px 0 0' }}>{ck.bio}</p>
           <SocialLinks links={ck.links} size={34} />
-          <LiveBanner cookId={ck.id} name={ck.name} />
+          {!privateLocked && <LiveBanner cookId={ck.id} name={ck.name} />}
 
-          {showMonetization && !isOwn && ck.subPriceCents != null && (
+          {!privateLocked && showMonetization && !isOwn && ck.subPriceCents != null && (
             ck.viewer.subscribed ? (
               <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 10, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 16, padding: '12px 16px' }}>
                 <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', flex: 1 }}>⭐ Subscribed · unlocks {ck.name}'s premium recipes</span>
@@ -148,9 +166,9 @@ export function CookSheet() {
             )
           )}
 
-          {showMonetization && !isOwn && <ProductShelf cookId={ck.id} />}
+          {!privateLocked && showMonetization && !isOwn && <ProductShelf cookId={ck.id} />}
 
-          {showMonetization && ck.goal && ck.goal.targetCents > 0 && (
+          {!privateLocked && showMonetization && ck.goal && ck.goal.targetCents > 0 && (
             <div style={{ marginTop: 16, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 16, padding: '13px 16px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
                 <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--text)' }}>🎯 {ck.goal.label}</span>
@@ -163,12 +181,25 @@ export function CookSheet() {
           )}
 
           <div style={{ display: 'flex', marginTop: 18, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 18, overflow: 'hidden' }}>
-            <CookStat value={formatCount(ck.counts.followers)} label="Followers" border onClick={() => setFollowList({ id: ck.id, mode: 'followers', name: ck.name })} />
-            <CookStat value={formatCount(ck.counts.following)} label="Following" border onClick={() => setFollowList({ id: ck.id, mode: 'following', name: ck.name })} />
+            {/* A private account's follower/following lists open only for accepted followers. */}
+            <CookStat value={formatCount(ck.counts.followers)} label="Followers" border onClick={privateLocked ? undefined : () => setFollowList({ id: ck.id, mode: 'followers', name: ck.name })} />
+            <CookStat value={formatCount(ck.counts.following)} label="Following" border onClick={privateLocked ? undefined : () => setFollowList({ id: ck.id, mode: 'following', name: ck.name })} />
             <CookStat value={formatCount(ck.counts.likes)} label="Likes" border />
             <CookStat value={String(ck.counts.recipes)} label="Recipes" />
           </div>
 
+          {privateLocked ? (
+            <div style={{ marginTop: 24, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 18, padding: '26px 20px', textAlign: 'center' }}>
+              <div style={{ fontSize: 30 }}>🔒</div>
+              <div style={{ fontSize: 16, fontWeight: 800, color: 'var(--text)', marginTop: 6 }}>This account is private</div>
+              <div style={{ fontSize: 13.5, color: 'var(--text-faint)', marginTop: 4, lineHeight: 1.5 }}>
+                {ck.viewer.requested
+                  ? `Your follow request is pending — you'll see ${ck.name}'s recipes once they accept.`
+                  : `Request to follow ${ck.name} to see their recipes.`}
+              </div>
+            </div>
+          ) : (
+          <>
           <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', margin: '24px 0 12px' }}>Recipes</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
             {ck.recipes.map((d) => (
@@ -197,6 +228,8 @@ export function CookSheet() {
               </button>
             ))}
           </div>
+          </>
+          )}
         </div>
       )}
     </div>
