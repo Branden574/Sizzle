@@ -288,9 +288,36 @@ export const useSizzle = create<SizzleState>((set) => ({
       likes: { ...s.likes, [id]: false },
     })),
 
-  // Leaving the current view drops any open comments sheet — it's tied to one
-  // recipe and shouldn't linger over the next screen.
-  setTab: (tab) => set({ tab, immersive: false, commentsFor: null }),
+  // Switching tabs dismisses every overlay covering the tab area (Messages
+  // inbox, DM thread, cook/recipe views, pickers, notification/settings
+  // sheets) — otherwise the nav appears to do nothing under an open sheet.
+  // Sheets holding unsaved work (upload, edit post, edit profile) stay open.
+  setTab: (tab) => set({
+    tab,
+    immersive: false,
+    commentsFor: null,
+    tipFor: null,
+    reportFor: null,
+    moreFor: null,
+    repostFor: null,
+    collectionPickerFor: null,
+    cookFor: null,
+    followList: null,
+    showShopping: false,
+    settingsFor: null,
+    openCollection: null,
+    openTag: null,
+    threadWith: null,
+    messagesOpen: false,
+    showNotifications: false,
+    showAnalytics: false,
+    showRoadmap: false,
+    showAdmin: false,
+    showAppSettings: false,
+    viewer: null,
+    openCook: null,
+    openRecipe: null,
+  }),
   setFeed: (feed) => set({ feed, immersive: false, commentsFor: null }),
   setImmersive: (on) => set({ immersive: on }),
   setAppUnlocked: (v) => set({ appUnlocked: v }),
