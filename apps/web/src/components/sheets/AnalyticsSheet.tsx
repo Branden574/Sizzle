@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { PLATFORM_FEE_PCT, PLATFORM_FEE_RATIONALE, type EarningKind, type EarningsSummary } from '@sizzle/shared';
-import { useAnalytics, useBroadcast, useEarnings, useMonetizationStatus, useSetGoal, useSetSubPrice, useSetWelcomeDm, useStartOnboarding } from '../../data/queries';
+import { useAnalytics, useBroadcast, useEarnings, useMonetizationStatus, usePayout, useSetGoal, useSetSubPrice, useSetWelcomeDm, useStartOnboarding } from '../../data/queries';
 import { useSizzle } from '../../store';
 import { formatCount } from '../../lib/format';
 import { theme } from '../../theme';
@@ -151,6 +151,7 @@ function Earnings() {
             <div style={{ fontSize: 12, color: 'var(--text-faint-2)', lineHeight: 1.55, marginTop: 10 }}>{PLATFORM_FEE_RATIONALE}</div>
           </div>
 
+          <PayoutCard />
           <SubPriceEditor data={data} />
           {(data?.activeSubs ?? 0) > 0 && <BroadcastComposer count={data!.activeSubs} />}
           <GoalEditor data={data} />
@@ -255,6 +256,28 @@ function SubPriceEditor({ data }: { data: EarningsSummary | undefined }) {
           </div>
         </div>
       )}
+    </div>
+  );
+}
+
+/** Payout & tax center — balance, next payout date, dashboard link, tax note. */
+function PayoutCard() {
+  const { data } = usePayout(true);
+  if (!data) return null;
+  const next = new Date(data.nextPayoutDate);
+  return (
+    <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 16, padding: 16, marginBottom: 12 }}>
+      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
+        <span style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--text)' }}>Payouts</span>
+        <span style={{ fontFamily: "'Instrument Serif',serif", fontSize: 24, color: 'var(--text)' }}>{usd(data.availableCents)}</span>
+      </div>
+      <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 4 }}>
+        Available balance · next payout {next.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+      </div>
+      {data.dashboardUrl && (
+        <button onClick={() => window.open(data.dashboardUrl!, '_blank', 'noopener')} style={{ marginTop: 10, height: 38, padding: '0 14px', border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>Open payout dashboard →</button>
+      )}
+      <div style={{ fontSize: 11.5, color: 'var(--text-faint-2)', lineHeight: 1.5, marginTop: 10 }}>{data.taxNote}</div>
     </div>
   );
 }

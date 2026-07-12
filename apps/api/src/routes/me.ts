@@ -245,6 +245,23 @@ me.get('/export', async (c) => {
   });
 });
 
+/** POST /me/verify — self-serve verification. Auto-grants the badge at follower
+ *  thresholds (blue at 100k, gold at 1M), so creators don't wait on an admin. */
+me.post('/verify', async (c) => {
+  const userId = c.get('userId')!;
+  const { data: prof } = await supabaseAdmin.from('profiles').select('follower_count, verified_tier').eq('id', userId).maybeSingle();
+  const followers = (prof?.follower_count as number) ?? 0;
+  const eligible: 'gold' | 'blue' | null = followers >= 1_000_000 ? 'gold' : followers >= 100_000 ? 'blue' : null;
+  if (!eligible) {
+    return c.json({ granted: false, tier: (prof?.verified_tier as string | null) ?? null, needed: 100_000 - followers, message: `Reach 100k followers to get verified (you have ${followers.toLocaleString()}).` });
+  }
+  // Never downgrade an admin-granted gold to blue.
+  const current = prof?.verified_tier as string | null;
+  const tier = current === 'gold' ? 'gold' : eligible;
+  await supabaseAdmin.from('profiles').update({ verified_tier: tier }).eq('id', userId);
+  return c.json({ granted: true, tier });
+});
+
 /** GET /me/drafts — the creator's own draft + scheduled posts (never public). */
 me.get('/drafts', async (c) => {
   const userId = c.get('userId')!;

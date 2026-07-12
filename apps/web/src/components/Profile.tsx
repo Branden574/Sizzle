@@ -2,7 +2,7 @@ import { useState } from 'react';
 import type { RecipeCard } from '@sizzle/shared';
 import { useAuth } from '../auth/useAuth';
 import { useRequireAuth } from '../auth/useRequireAuth';
-import { useCook, useDeleteRecipe, useDrafts, useLikedFeed, useMe, useNotifications, usePublishDraft, useSavedFeed } from '../data/queries';
+import { useCook, useDeleteRecipe, useDrafts, useLikedFeed, useMe, useNotifications, usePublishDraft, useRequestVerification, useSavedFeed } from '../data/queries';
 import { useSizzle } from '../store';
 import { formatCount } from '../lib/format';
 import { VerifiedBadge } from './VerifiedBadge';
@@ -107,6 +107,7 @@ export function Profile() {
         >
           📊 View insights
         </button>
+        {!me?.verifiedTier && <VerifyButton />}
         <DraftsStrip />
         {me?.role === 'admin' && (
           <button
@@ -213,3 +214,21 @@ function DraftsStrip() {
 }
 
 const draftBtn: React.CSSProperties = { flex: 'none', height: 32, padding: '0 12px', border: '1.5px solid var(--line-2)', borderRadius: 10, background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 12.5, fontWeight: 800, cursor: 'pointer' };
+
+/** Self-serve verification — auto-grants at follower thresholds, else shows how far off. */
+function VerifyButton() {
+  const verify = useRequestVerification();
+  const [msg, setMsg] = useState<string | null>(null);
+  return (
+    <div style={{ marginTop: 10 }}>
+      <button
+        onClick={() => verify.mutate(undefined, { onSuccess: (r) => setMsg(r.granted ? `You're verified! ✓` : (r.message ?? null)) })}
+        disabled={verify.isPending}
+        style={{ width: '100%', height: 46, border: '1.5px solid var(--line-2)', borderRadius: 14, background: 'var(--surface)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 14.5, fontWeight: 700, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, opacity: verify.isPending ? 0.6 : 1 }}
+      >
+        ✓ Get verified
+      </button>
+      {msg && <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 6, textAlign: 'center' }}>{msg}</div>}
+    </div>
+  );
+}

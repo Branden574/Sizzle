@@ -151,6 +151,24 @@ export function useSetGoal() {
   });
 }
 
+/** Self-serve verification — auto-grants at follower thresholds. */
+export function useRequestVerification() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: () => apiSend<{ granted: boolean; tier: string | null; message?: string }>('POST', '/me/verify', {}),
+    onSuccess: () => { void qc.invalidateQueries({ queryKey: keys.me }); void qc.invalidateQueries({ queryKey: ['cook'] }); },
+  });
+}
+
+/** Payout balance + next payout date + dashboard link. */
+export function usePayout(enabled: boolean) {
+  return useQuery({
+    queryKey: ['monetize', 'payout'],
+    queryFn: () => apiGet<{ provider: string; availableCents: number; pendingCents: number; nextPayoutDate: string; dashboardUrl: string | null; taxNote: string }>('/monetize/payout'),
+    enabled,
+  });
+}
+
 /** Broadcast one DM to all of the creator's active subscribers. */
 export function useBroadcast() {
   return useMutation({

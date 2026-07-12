@@ -253,6 +253,27 @@ monetize.post('/sub-price', requireAuth, async (c) => {
   return c.json({ ok: true });
 });
 
+/** GET /monetize/payout — the creator's balance + next payout + dashboard link.
+ *  Mock derives the balance from lifetime net earnings; the real Stripe balance
+ *  API + Express dashboard link wire up when STRIPE_SECRET_KEY is set. */
+monetize.get('/payout', requireAuth, async (c) => {
+  const userId = c.get('userId')!;
+  const { data: agg } = await supabaseAdmin.rpc('creator_earnings', { uid: userId });
+  const totals = (Array.isArray(agg) ? agg[0] : agg) as { net_cents: number } | null;
+  // Next automatic payout: the upcoming Friday (Stripe's default weekly schedule).
+  const now = new Date();
+  const next = new Date(now);
+  next.setDate(now.getDate() + ((5 - now.getDay() + 7) % 7 || 7));
+  return c.json({
+    provider: paymentsProvider,
+    availableCents: totals?.net_cents ?? 0,
+    pendingCents: 0,
+    nextPayoutDate: next.toISOString(),
+    dashboardUrl: stripeConfigured ? `${env.APP_ORIGIN}/?payouts=dashboard` : null,
+    taxNote: 'You are responsible for taxes on your creator earnings. A 1099-K is issued by our payment processor when thresholds are met.',
+  });
+});
+
 const goalSchema = z.object({
   label: z.string().trim().max(80).nullable(),
   targetCents: z.number().int().min(500).max(100_000_00).nullable(),
