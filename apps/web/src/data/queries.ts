@@ -174,6 +174,20 @@ export function useSetRecipePrice() {
   });
 }
 
+/** Set a custom cover still for the creator's own video post. */
+export function useSetRecipePoster() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ recipeId, posterUrl }: { recipeId: string; posterUrl: string }) =>
+      apiSend('PATCH', `/recipes/${recipeId}/poster`, { posterUrl }),
+    onSuccess: (_d, { recipeId }) => {
+      void qc.invalidateQueries({ queryKey: keys.recipe(recipeId) });
+      void qc.invalidateQueries({ queryKey: ['feed'] });
+      void qc.invalidateQueries({ queryKey: ['cook'] });
+    },
+  });
+}
+
 /** Make the creator's own recipe subscribers-only, or public again. */
 export function useSetRecipeVisibility() {
   const qc = useQueryClient();

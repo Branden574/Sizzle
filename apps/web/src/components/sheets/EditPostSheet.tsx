@@ -1,6 +1,7 @@
-import { useEffect, useState, type CSSProperties } from 'react';
-import { PLATFORM_FEE_PCT } from '@sizzle/shared';
-import { useEditRecipe, useMonetizationStatus, useRecipe, useSetRecipePrice, useSetRecipeVisibility } from '../../data/queries';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { PLATFORM_FEE_PCT, type RecipeDetail } from '@sizzle/shared';
+import { useEditRecipe, useMe, useMonetizationStatus, useRecipe, useSetRecipePoster, useSetRecipePrice, useSetRecipeVisibility } from '../../data/queries';
+import { uploadRecipeImage } from '../../lib/storage';
 import { useSizzle } from '../../store';
 import { theme } from '../../theme';
 
@@ -118,6 +119,7 @@ export function EditPostSheet() {
       ) : (
         <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 32px' }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+            {r?.video && <PosterEditor recipe={r} />}
             <div>
               <label style={labelStyle}>{isReview ? 'Dish or place' : 'Title'}</label>
               <input value={title} onChange={(e) => setTitle(e.target.value)} style={field} />
@@ -226,6 +228,53 @@ function StarPicker({ value, onChange }: { value: number; onChange: (n: number) 
           </button>
         );
       })}
+    </div>
+  );
+}
+
+/** Cover-still picker for a video post — the thumbnail is the biggest tap-through
+ *  lever, and the video itself is immutable, so this lets the creator swap the poster. */
+function PosterEditor({ recipe }: { recipe: RecipeDetail }) {
+  const { data: me } = useMe();
+  const setPoster = useSetRecipePoster();
+  const fileRef = useRef<HTMLInputElement>(null);
+  const [busy, setBusy] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
+
+  const onPick = async (file: File | undefined) => {
+    if (!file || !me) return;
+    setBusy(true);
+    setErr(null);
+    try {
+      const url = await uploadRecipeImage(me.id, file);
+      await setPoster.mutateAsync({ recipeId: recipe.id, posterUrl: url });
+    } catch (e) {
+      setErr(e instanceof Error ? e.message : 'Could not update the cover');
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const poster = recipe.video?.posterUrl;
+  return (
+    <div>
+      <label style={labelStyle}>Cover image</label>
+      <div style={{ display: 'flex', alignItems: 'center', gap: 12 }}>
+        <div style={{ width: 60, height: 78, borderRadius: 12, flex: 'none', background: poster ? `url(${poster}) center/cover` : 'var(--surface-2)', border: '1px solid var(--line)' }} />
+        <div style={{ flex: 1, minWidth: 0 }}>
+          <button
+            type="button"
+            onClick={() => fileRef.current?.click()}
+            disabled={busy}
+            style={{ height: 40, padding: '0 16px', border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 14, fontWeight: 800, cursor: 'pointer', opacity: busy ? 0.6 : 1 }}
+          >
+            {busy ? 'Uploading…' : poster ? 'Change cover' : 'Upload cover'}
+          </button>
+          <div style={{ fontSize: 12, color: 'var(--text-faint-2)', marginTop: 6, lineHeight: 1.4 }}>A great thumbnail lifts views. JPG/PNG.</div>
+          {err && <div style={{ color: 'var(--danger-fg)', fontSize: 12.5, marginTop: 4 }}>{err}</div>}
+        </div>
+      </div>
+      <input ref={fileRef} type="file" accept="image/*" hidden onChange={(e) => onPick(e.target.files?.[0])} />
     </div>
   );
 }

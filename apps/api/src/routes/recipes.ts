@@ -319,6 +319,30 @@ recipes.patch('/:id/controls', requireAuth, async (c) => {
   return c.json({ ok: true });
 });
 
+const posterSchema = z.object({ posterUrl: z.string().url().max(1000) });
+
+/** PATCH /recipes/:id/poster — owner sets a custom cover still for their video post.
+ *  The thumbnail is the #1 tap-through lever and video is otherwise immutable, so this
+ *  lets a creator fix a bad auto-poster without deleting + re-posting. */
+recipes.patch('/:id/poster', requireAuth, async (c) => {
+  const userId = c.get('userId')!;
+  const id = assertUuid(c.req.param('id'), 'recipe');
+  const parsed = posterSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) throw badRequest('Invalid cover image');
+  const { data: rec } = await supabaseAdmin.from('recipes').select('cook_id, video_asset_id').eq('id', id).maybeSingle();
+  if (!rec) throw notFound('Recipe not found');
+  if (rec.cook_id !== userId) throw forbidden('You can only change your own posts');
+  if (!rec.video_asset_id) throw badRequest('This post has no video to set a cover for');
+  // Must be the caller's own storage upload, and moderated (it's shown to everyone).
+  const ownFolder = `${env.SUPABASE_URL.replace(/\/$/, '')}/storage/v1/object/public/videos/${userId}/`;
+  if (!parsed.data.posterUrl.startsWith(ownFolder)) throw badRequest('Cover must be your own uploaded image');
+  const mod = await moderateImages([parsed.data.posterUrl]);
+  if (!mod.ok) throw badRequest(mod.reason!);
+  const { error } = await supabaseAdmin.from('video_assets').update({ poster_url: parsed.data.posterUrl }).eq('id', rec.video_asset_id);
+  if (error) throw dbFail(error.message);
+  return c.json({ ok: true });
+});
+
 const viewSchema = z.object({
   dwellMs: z.number().int().min(0).max(3_600_000).default(0),
   completed: z.boolean().default(false),
