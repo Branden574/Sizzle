@@ -173,22 +173,47 @@ me.post('/notif-prefs', async (c) => {
 /** GET /me/analytics — creator insights: totals + per-post engagement. */
 me.get('/analytics', async (c) => {
   const userId = c.get('userId')!;
-  const [recsRes, profRes] = await Promise.all([
+  const [recsRes, profRes, viewRes] = await Promise.all([
     supabaseAdmin.from('recipes').select('id, title, like_count, comment_count, save_count, share_count, created_at').eq('cook_id', userId).eq('status', 'published').order('created_at', { ascending: false }).limit(100),
     supabaseAdmin.from('profiles').select('follower_count').eq('id', userId).maybeSingle(),
+    // Watch-time & completion, aggregated per recipe (data already logged in recipe_views).
+    supabaseAdmin.rpc('creator_view_stats', { p_creator: userId }),
   ]);
-  const posts = (recsRes.data ?? []).map((r) => ({
-    id: r.id as string,
-    title: r.title as string,
-    likes: (r.like_count as number) ?? 0,
-    comments: (r.comment_count as number) ?? 0,
-    saves: (r.save_count as number) ?? 0,
-    shares: (r.share_count as number) ?? 0,
-    createdAt: r.created_at as string,
-  }));
-  const sum = (k: 'likes' | 'comments' | 'saves' | 'shares') => posts.reduce((n, p) => n + p[k], 0);
+  type ViewStat = { recipe_id: string; views: number; avg_dwell_ms: number; completed_count: number; skipped_count: number };
+  const viewMap = new Map<string, ViewStat>();
+  for (const v of (viewRes.data ?? []) as ViewStat[]) viewMap.set(v.recipe_id, v);
+
+  const posts = (recsRes.data ?? []).map((r) => {
+    const v = viewMap.get(r.id as string);
+    const views = Number(v?.views ?? 0);
+    return {
+      id: r.id as string,
+      title: r.title as string,
+      createdAt: r.created_at as string,
+      views,
+      avgWatchMs: Math.round(Number(v?.avg_dwell_ms ?? 0)),
+      completionPct: views ? Math.round((Number(v?.completed_count ?? 0) / views) * 100) : 0,
+      skipPct: views ? Math.round((Number(v?.skipped_count ?? 0) / views) * 100) : 0,
+      likes: (r.like_count as number) ?? 0,
+      comments: (r.comment_count as number) ?? 0,
+      saves: (r.save_count as number) ?? 0,
+      shares: (r.share_count as number) ?? 0,
+    };
+  });
+  const sum = (k: 'likes' | 'comments' | 'saves' | 'shares' | 'views') => posts.reduce((n, p) => n + p[k], 0);
+  const totalViews = sum('views');
+  // Watch-time / completion totals are view-weighted across posts.
+  const totalCompleted = (viewRes.data ?? []).reduce((n: number, v: ViewStat) => n + Number(v.completed_count ?? 0), 0);
+  const totalDwell = (viewRes.data ?? []).reduce((n: number, v: ViewStat) => n + Number(v.avg_dwell_ms ?? 0) * Number(v.views ?? 0), 0);
   return c.json<CreatorAnalytics>({
-    totals: { recipes: posts.length, followers: (profRes.data?.follower_count as number) ?? 0, likes: sum('likes'), comments: sum('comments'), saves: sum('saves'), shares: sum('shares') },
+    totals: {
+      recipes: posts.length,
+      followers: (profRes.data?.follower_count as number) ?? 0,
+      views: totalViews,
+      likes: sum('likes'), comments: sum('comments'), saves: sum('saves'), shares: sum('shares'),
+      avgWatchMs: totalViews ? Math.round(totalDwell / totalViews) : 0,
+      completionPct: totalViews ? Math.round((totalCompleted / totalViews) * 100) : 0,
+    },
     posts,
   });
 });

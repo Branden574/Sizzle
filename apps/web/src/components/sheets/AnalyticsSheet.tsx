@@ -7,6 +7,11 @@ import { theme } from '../../theme';
 import { CloseIcon } from '../icons';
 
 const usd = (cents: number) => `$${(cents / 100).toFixed(2)}`;
+/** ms → "0:12" (mm:ss) or "12s" watch-time label. */
+const fmtWatch = (ms: number) => {
+  const s = Math.round(ms / 1000);
+  return s >= 60 ? `${Math.floor(s / 60)}:${String(s % 60).padStart(2, '0')}` : `${s}s`;
+};
 
 /** Short label for a ledger row by earning type. */
 const KIND_LABEL: Record<EarningKind, string> = { support: 'Support', subscription: 'Subscription', unlock: 'Recipe unlock' };
@@ -17,13 +22,17 @@ export function AnalyticsSheet() {
   const { data, isLoading } = useAnalytics(true);
   const close = () => setShowAnalytics(false);
   const t = data?.totals;
+  // Watch metrics lead — they're what a video creator optimizes against.
   const cards = [
-    { label: 'Followers', value: t?.followers ?? 0 },
-    { label: 'Posts', value: t?.recipes ?? 0 },
-    { label: 'Likes', value: t?.likes ?? 0 },
-    { label: 'Comments', value: t?.comments ?? 0 },
-    { label: 'Saves', value: t?.saves ?? 0 },
-    { label: 'Shares', value: t?.shares ?? 0 },
+    { label: 'Views', value: formatCount(t?.views ?? 0) },
+    { label: 'Avg watch', value: fmtWatch(t?.avgWatchMs ?? 0) },
+    { label: 'Completion', value: `${t?.completionPct ?? 0}%` },
+    { label: 'Followers', value: formatCount(t?.followers ?? 0) },
+    { label: 'Posts', value: formatCount(t?.recipes ?? 0) },
+    { label: 'Likes', value: formatCount(t?.likes ?? 0) },
+    { label: 'Comments', value: formatCount(t?.comments ?? 0) },
+    { label: 'Saves', value: formatCount(t?.saves ?? 0) },
+    { label: 'Shares', value: formatCount(t?.shares ?? 0) },
   ];
   const posts = data?.posts ?? [];
 
@@ -47,7 +56,7 @@ export function AnalyticsSheet() {
               <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 10, marginBottom: 20 }}>
                 {cards.map((c) => (
                   <div key={c.label} style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 16, padding: '14px 12px', textAlign: 'center' }}>
-                    <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 26, color: 'var(--text)' }}>{formatCount(c.value)}</div>
+                    <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 26, color: 'var(--text)' }}>{c.value}</div>
                     <div style={{ fontSize: 12, color: 'var(--text-faint)', marginTop: 2 }}>{c.label}</div>
                   </div>
                 ))}
@@ -60,12 +69,19 @@ export function AnalyticsSheet() {
                 <div style={{ color: 'var(--text-faint-2)', fontSize: 14, padding: 16, textAlign: 'center' }}>Post a recipe to see its stats here.</div>
               ) : (
                 posts.map((p) => (
-                  <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '10px 4px', borderBottom: '1px solid var(--line)' }}>
-                    <div style={{ flex: 1, minWidth: 0, fontSize: 14.5, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</div>
-                    <PostStat glyph="♥" n={p.likes} />
-                    <PostStat glyph="💬" n={p.comments} />
-                    <PostStat glyph="🔖" n={p.saves} />
-                    <PostStat glyph="↗" n={p.shares} />
+                  <div key={p.id} style={{ padding: '11px 4px', borderBottom: '1px solid var(--line)' }}>
+                    <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6 }}>
+                      <div style={{ flex: 1, minWidth: 0, fontSize: 14.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</div>
+                      <div style={{ flex: 'none', fontSize: 13.5, fontWeight: 800, color: 'var(--text)' }}>👁 {formatCount(p.views)}</div>
+                    </div>
+                    <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px', fontSize: 12.5, color: 'var(--text-faint)' }}>
+                      <span>{p.completionPct}% finished</span>
+                      <span>{fmtWatch(p.avgWatchMs)} avg</span>
+                      <span>♥ {formatCount(p.likes)}</span>
+                      <span>💬 {formatCount(p.comments)}</span>
+                      <span>🔖 {formatCount(p.saves)}</span>
+                      <span>↗ {formatCount(p.shares)}</span>
+                    </div>
                   </div>
                 ))
               )}
@@ -75,10 +91,6 @@ export function AnalyticsSheet() {
       </div>
     </div>
   );
-}
-
-function PostStat({ glyph, n }: { glyph: string; n: number }) {
-  return <div style={{ minWidth: 46, textAlign: 'right', fontSize: 13, color: 'var(--text-faint)' }}>{glyph} {formatCount(n)}</div>;
 }
 
 /**

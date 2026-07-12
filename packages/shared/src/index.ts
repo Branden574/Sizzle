@@ -313,8 +313,12 @@ export interface TipConfig {
 
 /** Creator insights (own profile). */
 export interface CreatorAnalytics {
-  totals: { recipes: number; followers: number; likes: number; comments: number; saves: number; shares: number };
-  posts: { id: string; title: string; likes: number; comments: number; saves: number; shares: number; createdAt: string }[];
+  totals: { recipes: number; followers: number; views: number; likes: number; comments: number; saves: number; shares: number; avgWatchMs: number; completionPct: number };
+  posts: {
+    id: string; title: string; createdAt: string;
+    views: number; avgWatchMs: number; completionPct: number; skipPct: number;
+    likes: number; comments: number; saves: number; shares: number;
+  }[];
 }
 
 /** User-controllable push categories (account/moderation pushes always send). */
