@@ -467,7 +467,8 @@ export function FeedCard({ card, onClose }: { card: RecipeCard; onClose?: () => 
             selected={viewer.following}
             variant={viewer.following ? 'tonal' : 'primary'}
             size="xs"
-            style={{ position: 'absolute', bottom: -14, left: '50%', transform: 'translateX(-50%)' }}
+            className="sz-follow-badge"
+            style={{ position: 'absolute', bottom: -9, left: '50%', transform: 'translateX(-50%)' }}
           >
             {viewer.following ? <CheckIcon size={13} stroke="#1b1512" strokeWidth={3} /> : <PlusIcon size={14} stroke="#fff" strokeWidth={3} />}
           </IconButton>

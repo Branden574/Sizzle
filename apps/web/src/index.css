@@ -390,6 +390,20 @@ button {
 .sz-icon-button__glyph > svg { width: 1.35em; height: 1.35em; }
 .sz-icon-button.is-selected { color: var(--button-primary-fg); background: var(--button-primary-bg); }
 
+/* Follow badge on the feed avatar — a tiny 22px pin over the avatar's bottom
+   edge (the avatar itself is the big tap target), so it must opt out of the
+   icon-button touch-target minimums or it covers the entire avatar. */
+.sz-icon-button.sz-follow-badge {
+  width: 22px !important;
+  min-width: 22px !important;
+  height: 22px;
+  min-height: 22px !important;
+  box-shadow: 0 1px 5px rgba(0,0,0,.35);
+}
+.sz-follow-badge .sz-icon-button__glyph > svg { width: 14px; height: 14px; }
+/* Following state: white pin with a dark check (not the primary orange). */
+.sz-icon-button.sz-follow-badge.is-selected { background: rgba(255,255,255,.92); color: #1b1512; }
+
 .sz-reaction {
   min-width: var(--button-touch-target);
   min-height: var(--button-touch-target) !important;
