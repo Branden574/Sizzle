@@ -1,5 +1,16 @@
 apply plugin: 'com.android.application'
 
+// Release signing is read from android/keystore.properties (gitignored). Copy
+// keystore.properties.example, generate an upload keystore, and fill in the
+// four values. When the file is absent (e.g. CI without secrets, or a plain
+// debug build) release builds fall back to debug signing so the project still
+// assembles — but the Play Store only accepts an upload-key-signed AAB.
+def keystorePropsFile = rootProject.file("keystore.properties")
+def keystoreProps = new Properties()
+if (keystorePropsFile.exists()) {
+    keystoreProps.load(new FileInputStream(keystorePropsFile))
+}
+
 android {
     namespace = "app.sizzle.mobile"
     compileSdk = rootProject.ext.compileSdkVersion
@@ -16,8 +27,21 @@ android {
             ignoreAssetsPattern = '!.svn:!.git:!.ds_store:!*.scc:.*:!CVS:!thumbs.db:!picasa.ini:!*~'
         }
     }
+    signingConfigs {
+        release {
+            if (keystoreProps.getProperty("storeFile")) {
+                storeFile rootProject.file(keystoreProps.getProperty("storeFile"))
+                storePassword keystoreProps.getProperty("storePassword")
+                keyAlias keystoreProps.getProperty("keyAlias")
+                keyPassword keystoreProps.getProperty("keyPassword")
+            }
+        }
+    }
     buildTypes {
         release {
+            // Use the real upload key when keystore.properties is present;
+            // otherwise fall back to debug signing so the build still runs.
+            signingConfig keystoreProps.getProperty("storeFile") ? signingConfigs.release : signingConfigs.debug
             minifyEnabled false
             proguardFiles getDefaultProguardFile('proguard-android.txt'), 'proguard-rules.pro'
         }

@@ -42,6 +42,10 @@
 
     <uses-permission android:name="android.permission.INTERNET" />
 
+    <!-- Push notifications. Required on Android 13+ (API 33) or FCM banners are
+         silently dropped; the FirebaseMessaging plugin requests it at runtime. -->
+    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
+
     <!-- Recording recipe/review videos -->
     <uses-permission android:name="android.permission.CAMERA" />
     <uses-permission android:name="android.permission.RECORD_AUDIO" />
