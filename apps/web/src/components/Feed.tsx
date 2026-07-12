@@ -446,7 +446,7 @@ export function FeedCard({ card, onClose }: { card: RecipeCard; onClose?: () => 
         <DotsIcon size={20} />
       </button>
 
-      <div style={{ position: 'absolute', right: 14, bottom: 118, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20, zIndex: 20, ...overlayFade }}>
+      <div style={{ position: 'absolute', right: 14, bottom: 'calc(118px + var(--sab, 0px))', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 20, zIndex: 20, ...overlayFade }}>
         <div style={{ position: 'relative', marginBottom: 4 }}>
           <button
             onClick={() => setOpenCook(cook.id)}
@@ -509,7 +509,7 @@ export function FeedCard({ card, onClose }: { card: RecipeCard; onClose?: () => 
         </button>
       </div>
 
-      <div style={{ position: 'absolute', left: 18, right: 80, bottom: 108, zIndex: 15, ...overlayFade }}>
+      <div style={{ position: 'absolute', left: 18, right: 80, bottom: 'calc(108px + var(--sab, 0px))', zIndex: 15, ...overlayFade }}>
         <button onClick={() => setOpenCook(cook.id)} style={{ background: 'none', border: 'none', padding: 0, cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 6, marginBottom: 12 }}>
           <span style={{ color: '#fff', fontSize: 15, fontWeight: 700, textShadow: '0 1px 4px rgba(0,0,0,.5)' }}>{cook.name}</span>
           <VerifiedBadge tier={cook.verifiedTier} size={15} />
