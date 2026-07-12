@@ -110,6 +110,7 @@ export interface RecipeRow {
   comments_enabled: boolean | null;
   counts_visible: boolean | null;
   price_cents: number | null;
+  visibility: string | null;
   created_at: string;
 }
 
@@ -211,7 +212,13 @@ function toCard(r: RecipeRow, cook: ProfileRow, video: VideoRow | null, ctx: Vie
   // subscribe to the creator. Locked cards keep their poster but never expose the
   // playable video or photos (the detail route also withholds ingredients/steps).
   const price = r.price_cents ?? null;
-  const locked = price != null && r.cook_id !== viewerId && !ctx.unlocked.has(r.id) && !ctx.subscribedTo.has(r.cook_id);
+  const isOwner = r.cook_id === viewerId;
+  const subscribed = ctx.subscribedTo.has(r.cook_id);
+  // Subscribers-only: locked for everyone but the owner and active subscribers.
+  const subscribersOnly = r.visibility === 'subscribers' && !isOwner && !subscribed;
+  // Premium price: subscribers get it for free (subscription already grants access).
+  const premiumLocked = price != null && !isOwner && !ctx.unlocked.has(r.id) && !subscribed;
+  const locked = subscribersOnly || premiumLocked;
   const dto = videoDTO(video);
   return {
     id: r.id,
@@ -242,6 +249,8 @@ function toCard(r: RecipeRow, cook: ProfileRow, video: VideoRow | null, ctx: Vie
     autoHidden: r.auto_hidden ?? false,
     price,
     locked,
+    subscribersOnly,
+    visibility: (r.visibility === 'subscribers' ? 'subscribers' : 'public'),
     repost: null,
   };
 }

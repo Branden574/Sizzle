@@ -1,6 +1,6 @@
 import { useEffect, useState, type CSSProperties } from 'react';
 import { PLATFORM_FEE_PCT } from '@sizzle/shared';
-import { useEditRecipe, useMonetizationStatus, useRecipe, useSetRecipePrice } from '../../data/queries';
+import { useEditRecipe, useMonetizationStatus, useRecipe, useSetRecipePrice, useSetRecipeVisibility } from '../../data/queries';
 import { useSizzle } from '../../store';
 import { theme } from '../../theme';
 
@@ -26,6 +26,7 @@ export function EditPostSheet() {
   const { data: r } = useRecipe(editPostFor);
   const edit = useEditRecipe();
   const setRecipePrice = useSetRecipePrice();
+  const setRecipeVisibility = useSetRecipeVisibility();
   const monetize = useMonetizationStatus(!!editPostFor);
   const canMonetize = monetize.data?.status === 'active';
 
@@ -39,6 +40,7 @@ export function EditPostSheet() {
   const [rating, setRating] = useState(0);
   const [premium, setPremium] = useState(false);
   const [price, setPrice] = useState('');
+  const [subOnly, setSubOnly] = useState(false);
   const [ready, setReady] = useState(false);
 
   // Pre-fill from the recipe once it loads (keyed on id so switching posts re-fills).
@@ -54,6 +56,7 @@ export function EditPostSheet() {
     setRating(r.rating ?? 0);
     setPremium(r.price != null);
     setPrice(r.price != null ? (r.price / 100).toFixed(2) : '');
+    setSubOnly(r.visibility === 'subscribers');
     setReady(true);
   }, [r?.id]);
 
@@ -77,6 +80,11 @@ export function EditPostSheet() {
     // Persist the price only if it actually changed (avoids a needless PATCH).
     if (nextPrice !== (r.price ?? null)) {
       setRecipePrice.mutate({ recipeId: r.id, priceCents: nextPrice });
+    }
+    // Persist subscribers-only visibility if it changed.
+    const nextVisibility = canMonetize && subOnly && !isReview ? 'subscribers' : 'public';
+    if (nextVisibility !== (r.visibility ?? 'public')) {
+      setRecipeVisibility.mutate({ recipeId: r.id, visibility: nextVisibility });
     }
     edit.mutate(
       {
@@ -179,6 +187,15 @@ export function EditPostSheet() {
                         </div>
                       </div>
                     )}
+                    {/* Subscribers-only: an ongoing perk for monthly subscribers. */}
+                    <div style={{ height: 1, background: 'var(--line)', margin: '14px 0' }} />
+                    <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}>
+                      <div style={{ minWidth: 0, paddingRight: 12 }}>
+                        <div style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--text)' }}>Subscribers only</div>
+                        <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 2, lineHeight: 1.45 }}>Only your monthly subscribers can watch — everyone else sees a locked teaser inviting them to subscribe.</div>
+                      </div>
+                      <input type="checkbox" checked={subOnly} onChange={(e) => setSubOnly(e.target.checked)} style={{ width: 20, height: 20, accentColor: accent, flex: 'none', cursor: 'pointer' }} />
+                    </label>
                   </div>
                 ) : (
                   <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 14, padding: 14, fontSize: 12.5, color: 'var(--text-faint)', lineHeight: 1.45 }}>

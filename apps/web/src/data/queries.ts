@@ -156,6 +156,20 @@ export function useSetRecipePrice() {
   });
 }
 
+/** Make the creator's own recipe subscribers-only, or public again. */
+export function useSetRecipeVisibility() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ recipeId, visibility }: { recipeId: string; visibility: 'public' | 'subscribers' }) =>
+      apiSend('PATCH', `/recipes/${recipeId}/controls`, { visibility }),
+    onSuccess: (_d, { recipeId }) => {
+      void qc.invalidateQueries({ queryKey: keys.recipe(recipeId) });
+      void qc.invalidateQueries({ queryKey: ['feed'] });
+      void qc.invalidateQueries({ queryKey: ['cook'] });
+    },
+  });
+}
+
 /** Toggle a single push category (likes / comments / follows / reposts / messages). */
 export function useUpdateNotifPref() {
   const qc = useQueryClient();

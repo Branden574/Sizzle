@@ -127,9 +127,14 @@ export interface RecipeCard {
   autoHidden: boolean;
   /** Premium price in cents (null = free). Set by the creator. */
   price: number | null;
-  /** True when this is a premium recipe the viewer can't see yet (not the owner,
-   *  hasn't unlocked it, isn't subscribed) — the client shows an unlock CTA. */
+  /** True when this recipe is gated (premium price OR subscribers-only) and the
+   *  viewer can't see it yet — the client shows an unlock/subscribe CTA. */
   locked: boolean;
+  /** True when the lock is because the post is subscribers-only (vs a one-time
+   *  premium price) — the client shows a "Subscribe to watch" CTA instead of a price. */
+  subscribersOnly: boolean;
+  /** Raw visibility setting (so the owner's edit UI can show the current state). */
+  visibility: 'public' | 'subscribers';
   /** Set when this card appears in your feed because a mutual-follow friend reposted it. */
   repost: RepostInfo | null;
 }

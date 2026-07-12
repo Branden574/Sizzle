@@ -175,7 +175,23 @@ export function RecipeSheet() {
                     <StatCard label="Level" value={r.level} />
                   </div>
 
-                  {r.locked && r.price != null && (
+                  {r.locked && r.subscribersOnly && (
+                    <div style={{ marginTop: 22, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 18, padding: 20, textAlign: 'center' }}>
+                      <div style={{ fontSize: 30 }}>🔒</div>
+                      <div style={{ fontSize: 16.5, fontWeight: 800, color: 'var(--text)', marginTop: 6 }}>Subscribers only</div>
+                      <div style={{ fontSize: 13.5, color: 'var(--text-faint)', margin: '4px 0 14px', lineHeight: 1.5 }}>
+                        Subscribe to {r.cook.name} to watch this — plus every subscriber-only post, video, ingredients & steps.
+                      </div>
+                      <button
+                        onClick={() => { if (requireAuth()) setOpenCook(r.cook.id); }}
+                        style={{ width: '100%', height: 50, border: 'none', borderRadius: 14, background: `linear-gradient(135deg,${accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15.5, fontWeight: 800, cursor: 'pointer' }}
+                      >
+                        Subscribe to {r.cook.name}
+                      </button>
+                    </div>
+                  )}
+
+                  {r.locked && !r.subscribersOnly && r.price != null && (
                     <div style={{ marginTop: 22, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 18, padding: 20, textAlign: 'center' }}>
                       <div style={{ fontSize: 30 }}>🔒</div>
                       <div style={{ fontSize: 16.5, fontWeight: 800, color: 'var(--text)', marginTop: 6 }}>Premium recipe</div>

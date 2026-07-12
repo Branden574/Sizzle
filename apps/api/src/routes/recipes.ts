@@ -281,6 +281,8 @@ const controlsSchema = z.object({
   countsVisible: z.boolean().optional(),
   // Premium price in cents (≥ $1), or null to make it free again.
   priceCents: z.number().int().min(100).max(50_000).nullable().optional(),
+  // Post visibility: public, or subscribers-only (requires an active sub price).
+  visibility: z.enum(['public', 'subscribers']).optional(),
 });
 
 /** PATCH /recipes/:id/controls — owner toggles likes/comments/count visibility (persisted, enforced for all viewers). */
@@ -292,7 +294,7 @@ recipes.patch('/:id/controls', requireAuth, async (c) => {
   const { data: rec } = await supabaseAdmin.from('recipes').select('cook_id').eq('id', id).maybeSingle();
   if (!rec) throw notFound('Recipe not found');
   if (rec.cook_id !== userId) throw forbidden('You can only change controls on your own posts');
-  const patch: Record<string, boolean | number | null> = {};
+  const patch: Record<string, boolean | number | string | null> = {};
   if (parsed.data.likesEnabled !== undefined) patch.likes_enabled = parsed.data.likesEnabled;
   if (parsed.data.commentsEnabled !== undefined) patch.comments_enabled = parsed.data.commentsEnabled;
   if (parsed.data.countsVisible !== undefined) patch.counts_visible = parsed.data.countsVisible;
@@ -302,6 +304,13 @@ recipes.patch('/:id/controls', requireAuth, async (c) => {
       if (prof?.monetization_status !== 'active') throw badRequest('Set up payouts before pricing a recipe');
     }
     patch.price_cents = parsed.data.priceCents;
+  }
+  if (parsed.data.visibility !== undefined) {
+    if (parsed.data.visibility === 'subscribers') {
+      const { data: prof } = await supabaseAdmin.from('profiles').select('monetization_status, sub_price_cents').eq('id', userId).maybeSingle();
+      if (prof?.monetization_status !== 'active' || !prof?.sub_price_cents) throw badRequest('Set a monthly subscription price before posting subscribers-only');
+    }
+    patch.visibility = parsed.data.visibility;
   }
   if (Object.keys(patch).length) {
     const { error } = await supabaseAdmin.from('recipes').update(patch).eq('id', id);
