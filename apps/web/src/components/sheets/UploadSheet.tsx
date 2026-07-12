@@ -8,6 +8,7 @@ import { useSizzle } from '../../store';
 import { theme } from '../../theme';
 import { probeVideo, uploadPoster, uploadRecipeImage, uploadToCloudflare, uploadVideo } from '../../lib/storage';
 import { CameraRecorder } from '../CameraRecorder';
+import { VideoTrimmer } from '../VideoTrimmer';
 import { CameraIcon } from '../icons';
 
 const accent = theme.accent;
@@ -57,6 +58,7 @@ export function UploadSheet() {
   const [progress, setProgress] = useState(0); // upload % (0–100)
   const [videoErr, setVideoErr] = useState<string | null>(null);
   const [recording, setRecording] = useState(false);
+  const [trimming, setTrimming] = useState(false);
 
   // Photo posts (carousel).
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -207,6 +209,13 @@ export function UploadSheet() {
           onCapture={(file) => { acceptFile(file); setRecording(false); }}
         />
       )}
+      {trimming && videoFile && (
+        <VideoTrimmer
+          file={videoFile}
+          onTrimmed={(f) => { acceptFile(f); setTrimming(false); }}
+          onCancel={() => setTrimming(false)}
+        />
+      )}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '56px 20px 14px', flex: 'none' }}>
         <button onClick={close} style={{ background: 'none', border: 'none', cursor: 'pointer', color: '#fff', fontSize: 16, fontWeight: 600 }}>Cancel</button>
         <div style={{ color: '#fff', fontSize: 16, fontWeight: 700 }}>{isReview ? 'New review' : 'New recipe'}</div>
@@ -293,6 +302,12 @@ export function UploadSheet() {
               style={{ width: '100%', height: '100%', objectFit: previewAspect > 1.05 ? 'contain' : 'cover' }}
             />
             <div style={{ position: 'absolute', bottom: 12, right: 12, display: 'flex', gap: 8 }}>
+              <button
+                onClick={() => setTrimming(true)}
+                style={{ padding: '9px 14px', borderRadius: 12, border: 'none', background: 'rgba(0,0,0,.55)', backdropFilter: 'blur(6px)', color: '#fff', fontSize: 13.5, fontWeight: 700, cursor: 'pointer' }}
+              >
+                ✂️ Trim
+              </button>
               <button
                 onClick={() => setRecording(true)}
                 style={{ padding: '9px 14px', borderRadius: 12, border: 'none', background: 'rgba(0,0,0,.55)', backdropFilter: 'blur(6px)', color: '#fff', fontSize: 13.5, fontWeight: 700, cursor: 'pointer' }}
