@@ -9,7 +9,7 @@ import { assertUuid } from '../lib/validate';
 import { cloudflareConfigured, env } from '../env';
 import { getStreamProvider } from '../services/stream';
 import { rateLimit } from '../middleware/rateLimit';
-import { extractRecipe, generateCaptions } from '../services/transcribe';
+import { generateCaptions } from '../services/transcribe';
 import type { AppEnv } from '../types';
 
 export const uploads = new Hono<AppEnv>();
@@ -169,15 +169,6 @@ async function assertAssetOwner(userId: string, videoAssetId?: string): Promise<
   if (!asset || asset.owner_id !== userId) throw notFound('Video not found');
 }
 
-/** POST /uploads/extract — AI-parse a recipe from the clip so the composer pre-fills
- *  title/ingredients/steps (mock scaffold until OPENAI_API_KEY is set). */
-uploads.post('/extract', requireAuth, rateLimit({ windowMs: 60_000, max: 10, name: 'extract' }), async (c) => {
-  const userId = c.get('userId')!;
-  const body = extractSchema.safeParse(await c.req.json().catch(() => ({})));
-  if (!body.success) throw badRequest('Invalid request');
-  await assertAssetOwner(userId, body.data.videoAssetId);
-  return c.json(await extractRecipe(body.data.videoAssetId ?? ''));
-});
 
 /** POST /uploads/captions — generate WebVTT captions for the clip (mock until keyed). */
 uploads.post('/captions', requireAuth, rateLimit({ windowMs: 60_000, max: 10, name: 'captions' }), async (c) => {

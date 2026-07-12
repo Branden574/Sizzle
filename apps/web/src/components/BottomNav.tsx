@@ -4,7 +4,7 @@ import { useMediaQuery } from '../lib/useMediaQuery';
 import { isNative } from '../lib/native';
 import { useUnreadMessages } from '../data/queries';
 import type { Tab } from '../types';
-import { BookmarkIcon, HomeIcon, NavPlusIcon, PersonIcon, SearchIcon, ShareIcon } from './icons';
+import { HomeIcon, NavPlusIcon, PersonIcon, SearchIcon, ShareIcon } from './icons';
 
 const accent = theme.accent;
 
@@ -67,10 +67,6 @@ export function BottomNav() {
           <NavPlusIcon size={24} stroke="#fff" strokeWidth={2.6} />
         </div>
       </button>
-
-      <NavButton label="Saved" color={col(tab === 'saved')} onClick={go('saved')}>
-        <BookmarkIcon size={23} fill={tab === 'saved' ? accent : 'none'} stroke={col(tab === 'saved')} strokeWidth={2} />
-      </NavButton>
 
       <NavButton label="Messages" color={navIdle} onClick={() => setMessagesOpen(true)} badge={dmUnread > 0}>
         <ShareIcon size={23} stroke={navIdle} strokeWidth={1.9} />

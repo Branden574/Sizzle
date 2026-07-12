@@ -2,7 +2,7 @@ import { useRef, useState, type CSSProperties } from 'react';
 import { MAX_DURATION_SECONDS, MAX_UPLOAD_BYTES, type DirectUploadTicket, type PostType } from '@sizzle/shared';
 import { useAuth } from '../../auth/useAuth';
 import { useRequireAuth } from '../../auth/useRequireAuth';
-import { pollVideoReady, useExtractRecipe, useUploadRecipe, useVideoConfig, type UploadRecipeInput } from '../../data/queries';
+import { pollVideoReady, useUploadRecipe, useVideoConfig, type UploadRecipeInput } from '../../data/queries';
 import { apiSend } from '../../lib/api';
 import { useSizzle } from '../../store';
 import { theme } from '../../theme';
@@ -32,7 +32,6 @@ export function UploadSheet() {
   const setFeed = useSizzle((s) => s.setFeed);
   const requireAuth = useRequireAuth();
   const upload = useUploadRecipe();
-  const extract = useExtractRecipe();
   const { data: videoConfig } = useVideoConfig();
   const user = useAuth((s) => s.user);
   const [processing, setProcessing] = useState(false);
@@ -391,21 +390,6 @@ export function UploadSheet() {
 
           {!isReview && (
             <>
-              {mediaKind === 'video' && (
-                <button
-                  onClick={() => extract.mutate(undefined, {
-                    onSuccess: (r) => {
-                      if (r.title && !title.trim()) setTitle(r.title);
-                      if (r.ingredients.length) setIngredients((cur) => cur.trim() ? cur : r.ingredients.join('\n'));
-                      if (r.steps.length) setSteps((cur) => cur.trim() ? cur : r.steps.join('\n'));
-                    },
-                  })}
-                  disabled={extract.isPending}
-                  style={{ alignSelf: 'flex-start', height: 40, padding: '0 16px', border: `1.5px solid ${accent}`, borderRadius: 12, background: 'rgba(255,90,54,.08)', color: accent, fontFamily: "'Hanken Grotesk'", fontSize: 14, fontWeight: 800, cursor: 'pointer', opacity: extract.isPending ? 0.6 : 1 }}
-                >
-                  {extract.isPending ? 'Reading your video…' : '✨ Fill from video (AI)'}
-                </button>
-              )}
               <div>
                 <label style={labelStyle}>Ingredients · one per line</label>
                 <textarea value={ingredients} onChange={(e) => setIngredients(e.target.value)} rows={4} placeholder={'2 globe eggplants\n3 tbsp white miso'} style={{ ...field, resize: 'vertical', lineHeight: 1.5 }} />

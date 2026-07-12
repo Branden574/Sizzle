@@ -10,28 +10,6 @@ import { env } from '../env';
 
 export const transcribeProvider: 'openai' | 'mock' = env.OPENAI_API_KEY ? 'openai' : 'mock';
 
-export interface ExtractedRecipe {
-  title: string;
-  ingredients: string[];
-  steps: string[];
-  provider: 'openai' | 'mock';
-}
-
-export async function extractRecipe(_videoAssetId: string): Promise<ExtractedRecipe> {
-  if (transcribeProvider === 'openai') {
-    // Real pipeline (wire with a key): pull the asset's audio → Whisper transcript
-    // → GPT structured-output into {title, ingredients, steps}. Kept behind the key.
-    // Falls through to the scaffold on any error so posting is never blocked.
-  }
-  // Mock: a demonstrable scaffold the creator edits before posting. Test-mode.
-  return {
-    title: '',
-    ingredients: ['1 tbsp olive oil', '2 cloves garlic, minced', 'Salt & pepper to taste'],
-    steps: ['Prep your ingredients.', 'Cook over medium heat until done.', 'Plate and serve.'],
-    provider: 'mock',
-  };
-}
-
 export interface Captions {
   vtt: string; // WebVTT captions
   provider: 'openai' | 'mock';

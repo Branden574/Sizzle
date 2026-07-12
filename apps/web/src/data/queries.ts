@@ -965,14 +965,6 @@ export function useUploadRecipe() {
   });
 }
 
-/** AI-extract a recipe from the clip to pre-fill the composer (mock until keyed). */
-export function useExtractRecipe() {
-  return useMutation({
-    mutationFn: (videoAssetId?: string) =>
-      apiSend<{ title: string; ingredients: string[]; steps: string[]; provider: 'openai' | 'mock' }>('POST', '/uploads/extract', videoAssetId ? { videoAssetId } : {}),
-  });
-}
-
 /** The creator's own draft + scheduled posts. */
 export function useDrafts(enabled: boolean) {
   return useQuery({ queryKey: ['me', 'drafts'], queryFn: () => apiGet<{ drafts: DraftCard[] }>('/me/drafts'), enabled });

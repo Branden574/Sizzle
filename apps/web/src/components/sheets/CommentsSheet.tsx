@@ -5,6 +5,7 @@ import { useAddComment, useComments, useDeleteComment, useHideComment, useMe, us
 import { useSizzle } from '../../store';
 import { theme } from '../../theme';
 import { formatCount } from '../../lib/format';
+import { useSwipeDismiss } from '../../lib/useSwipeDismiss';
 import { CloseIcon, HeartIcon, ShareIcon } from '../icons';
 
 const accent = theme.accent;
@@ -26,6 +27,7 @@ export function CommentsSheet() {
 
   const [draft, setDraft] = useState('');
   const [replyTo, setReplyTo] = useState<{ id: string; name: string } | null>(null);
+  const swipe = useSwipeDismiss(() => setCommentsFor(null));
 
   if (!commentsFor) return null;
 
@@ -80,8 +82,8 @@ export function CommentsSheet() {
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 98 }}>
       <div onClick={close} style={{ position: 'absolute', inset: 0, background: 'rgba(0,0,0,.5)', animation: 'sz-fadeIn .3s' }} />
-      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '74%', background: 'var(--bg)', borderRadius: '26px 26px 0 0', overflow: 'hidden', animation: 'sz-slideUp .4s cubic-bezier(.16,1,.3,1)', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ padding: '14px 22px 12px', borderBottom: '1px solid var(--line)', position: 'relative' }}>
+      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, height: '74%', background: 'var(--bg)', borderRadius: '26px 26px 0 0', overflow: 'hidden', animation: 'sz-slideUp .4s cubic-bezier(.16,1,.3,1)', display: 'flex', flexDirection: 'column', ...swipe.sheetStyle }}>
+        <div {...swipe.handlers} style={{ padding: '14px 22px 12px', borderBottom: '1px solid var(--line)', position: 'relative', ...swipe.handlers.style }}>
           <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', width: 42, height: 5, borderRadius: 3, background: 'var(--track)' }} />
           <div style={{ textAlign: 'center', fontSize: 15, fontWeight: 700, color: 'var(--text)', marginTop: 6 }}>{total > 0 ? `${formatCount(total)} comments` : 'Comments'}</div>
           <button onClick={close} style={{ position: 'absolute', top: 14, right: 16, background: 'none', border: 'none', cursor: 'pointer' }}>
