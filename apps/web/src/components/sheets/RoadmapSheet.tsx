@@ -1,5 +1,6 @@
 import { useSizzle } from '../../store';
 import { useSwipeDismiss } from '../../lib/useSwipeDismiss';
+import { showMonetization } from '../../lib/native';
 
 type PhaseStatus = 'shipped' | 'current' | 'planned';
 interface Phase {
@@ -61,6 +62,9 @@ export function RoadmapSheet() {
   const swipe = useSwipeDismiss(() => setOpen(false));
   if (!open) return null;
   const close = () => setOpen(false);
+  // The "Get Paid" phase promotes in-app monetization — drop it on native
+  // (payments live on the web there; Apple 3.1.1 / Play Billing).
+  const phases = showMonetization ? PHASES : PHASES.filter((p) => p.n !== 5);
 
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 94 }}>
@@ -70,13 +74,13 @@ export function RoadmapSheet() {
           <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', width: 42, height: 5, borderRadius: 3, background: 'var(--track)' }} />
           <button onClick={close} style={{ position: 'absolute', right: 18, top: 14, background: 'none', border: 'none', color: 'var(--text-faint)', fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>Done</button>
           <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 26, color: 'var(--text)', marginTop: 8 }}>Where Sizzle is headed</div>
-          <div style={{ fontSize: 13.5, color: 'var(--text-faint)', marginTop: 3, padding: '0 30px' }}>Five phases from launch to creators getting paid.</div>
+          <div style={{ fontSize: 13.5, color: 'var(--text-faint)', marginTop: 3, padding: '0 30px' }}>{showMonetization ? 'Five phases from launch to creators getting paid.' : 'How Sizzle is growing, phase by phase.'}</div>
         </div>
 
         <div style={{ flex: 1, overflowY: 'auto', padding: '8px 22px 36px' }}>
-          {PHASES.map((p, i) => {
+          {phases.map((p, i) => {
             const meta = STATUS_META[p.status];
-            const isLast = i === PHASES.length - 1;
+            const isLast = i === phases.length - 1;
             const isCurrent = p.status === 'current';
             const isPaid = p.n === 5;
             return (
