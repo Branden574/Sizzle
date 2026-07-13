@@ -672,6 +672,12 @@ input {
   80% { transform: translateX(4px); }
 }
 
+/* Staggered rise-in for the first-launch demo-content notice. */
+@keyframes sz-riseIn {
+  from { opacity: 0; transform: translateY(14px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
 /* Indeterminate slide for the upload bar before the first progress event. */
 @keyframes sz-upload-slide {
   0% { transform: translateX(-120%); }

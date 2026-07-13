@@ -50,6 +50,7 @@ import { useOnlineStatus } from './lib/useOnlineStatus';
 import { isNative } from './lib/native';
 import { syncPushRegistration, disablePush } from './lib/push';
 import { PasscodeLock } from './components/PasscodeLock';
+import { DemoContentNotice, useDemoNotice } from './components/DemoContentNotice';
 import { DesktopSidebar } from './components/DesktopSidebar';
 import { useMediaQuery } from './lib/useMediaQuery';
 import { parseBoardDeepLink, parseCookDeepLink, parseRecipeDeepLink } from './lib/share';
@@ -289,6 +290,10 @@ export default function App() {
     if (authStatus === 'anon' || authStatus === 'guest') setAppUnlocked(false);
   }, [authStatus, setAppUnlocked]);
 
+  // One-time first-launch notice about AI demo/filler content (shows once the
+  // user is actually in the app — signed in or browsing as a guest).
+  const demoNotice = useDemoNotice(authStatus === 'authed' || authStatus === 'guest');
+
   const phase = useSizzle((s) => s.phase);
   const tab = useSizzle((s) => s.tab);
   const openRecipe = useSizzle((s) => s.openRecipe);
@@ -431,6 +436,8 @@ export default function App() {
 
           {recovery && <ResetPasswordScreen />}
           {banned && authStatus === 'authed' && <BannedScreen />}
+
+          {demoNotice.show && !recovery && <DemoContentNotice onDismiss={demoNotice.dismiss} />}
 
           {appLockEnabled && authStatus === 'authed' && !appUnlocked && !recovery && (
             <PasscodeLock onUnlock={() => setAppUnlocked(true)} />
