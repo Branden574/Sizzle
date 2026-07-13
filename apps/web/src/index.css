@@ -326,7 +326,10 @@ button {
   min-width: 0;
 }
 .sz-button__measure[aria-hidden='true'] { visibility: hidden; }
-.sz-button__label { overflow: hidden; text-overflow: ellipsis; }
+/* line-height 1.25 (not the button's global 1) — with overflow:hidden, a
+   line-height of 1 shears the descenders off g/p/y ("Forgot password?"). The
+   button's height comes from min-height, so this changes nothing else. */
+.sz-button__label { overflow: hidden; text-overflow: ellipsis; line-height: 1.25; }
 .sz-button__icon { display: inline-flex; align-items: center; justify-content: center; flex: none; }
 .sz-button__icon > svg { width: 1.15em; height: 1.15em; }
 /* Width stability across async states: __ghost stacks an invisible copy of

@@ -310,7 +310,7 @@ function StepAccount() {
       void resetPassword(email).then((ok) => { if (ok) setResetSent(true); });
     };
     return (
-      <div style={{ position: 'absolute', inset: 0, padding: '88px 0 0', display: 'flex', flexDirection: 'column', animation: STEP_IN }}>
+      <div style={{ position: 'absolute', inset: 0, padding: '116px 0 0', display: 'flex', flexDirection: 'column', animation: STEP_IN }}>
         <div style={{ flex: 1, overflowY: 'auto', padding: '0 26px 16px', display: 'flex', flexDirection: 'column' }}>
           <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 42, lineHeight: 1.02, color: 'var(--text)' }}>Reset password.</div>
           <p style={{ margin: '12px 0 22px', color: 'var(--text-soft)', fontSize: 15.5, lineHeight: 1.5, maxWidth: 320 }}>
@@ -413,7 +413,7 @@ function StepAccount() {
   };
 
   return (
-    <div style={{ position: 'absolute', inset: 0, padding: '88px 0 0', display: 'flex', flexDirection: 'column', animation: STEP_IN }}>
+    <div style={{ position: 'absolute', inset: 0, padding: '116px 0 0', display: 'flex', flexDirection: 'column', animation: STEP_IN }}>
       <div style={{ flex: 1, overflowY: 'auto', padding: '0 26px 16px', display: 'flex', flexDirection: 'column' }}>
         {showLegal && <LegalDoc which={showLegal} onClose={() => setShowLegal(null)} />}
         <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 42, lineHeight: 1.02, color: 'var(--text)' }}>
