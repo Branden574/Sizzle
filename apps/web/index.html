@@ -33,14 +33,26 @@
   <body>
     <div id="root">
       <!-- Boot splash: the first paint before React mounts. React clears #root
-           on render, so this is replaced automatically. Uses hardcoded colors
-           (CSS vars aren't loaded yet) and a serif fallback for the wordmark. -->
-      <div style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:#0e0c0b">
+           on render, so this is replaced automatically. CSS vars aren't loaded
+           yet, so the inline script below picks the light/dark bg from the saved
+           theme so the very first frame matches the user's choice. -->
+      <div id="sz-boot" style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:#0e0c0b">
         <div style="font-family:'Instrument Serif',Georgia,'Times New Roman',serif;font-size:48px;line-height:1;background-image:linear-gradient(135deg,#ff5a1f,#f4a52c);-webkit-background-clip:text;background-clip:text;color:transparent">Sizzle</div>
-        <div style="width:26px;height:26px;border-radius:50%;border:2.5px solid rgba(255,255,255,.14);border-top-color:#ff5a1f;animation:sz-boot-spin .8s linear infinite"></div>
+        <div style="width:26px;height:26px;border-radius:50%;border:2.5px solid rgba(150,140,130,.2);border-top-color:#ff5a1f;animation:sz-boot-spin .8s linear infinite"></div>
       </div>
     </div>
     <style>@keyframes sz-boot-spin{to{transform:rotate(360deg)}}</style>
+    <script>
+      (function () {
+        try {
+          var raw = localStorage.getItem('sz-prefs');
+          var theme = raw ? (JSON.parse(raw).theme || 'system') : 'system';
+          var dark = theme === 'dark' || (theme !== 'light' && window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches);
+          var el = document.getElementById('sz-boot');
+          if (el) el.style.background = dark ? '#0e0c0b' : '#faf3ea';
+        } catch (e) {}
+      })();
+    </script>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
