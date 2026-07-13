@@ -110,13 +110,13 @@ type SectionKey = 'appearance' | 'playback' | 'feed' | 'notifications' | 'privac
 const SECTION_ORDER: SectionKey[] = ['appearance', 'playback', 'feed', 'notifications', 'privacy', 'storage', 'account', 'about'];
 const SECTION_META: Record<SectionKey, { title: string; sub: string; icon: string }> = {
   appearance: { title: 'Appearance', sub: 'Theme & motion', icon: '🎨' },
-  playback: { title: 'Playback', sub: 'Autoplay, sound, data', icon: '▶️' },
-  feed: { title: 'Recipes & feed', sub: 'Units & default feed', icon: '🍳' },
+  playback: { title: 'Playback', sub: 'Autoplay & sound', icon: '▶️' },
+  feed: { title: 'Recipes & feed', sub: 'Units & feed', icon: '🍳' },
   notifications: { title: 'Notifications', sub: 'Push alerts', icon: '🔔' },
-  privacy: { title: 'Privacy & safety', sub: 'Privacy, app lock, blocks', icon: '🔐' },
-  storage: { title: 'Storage', sub: 'Downloads & cache', icon: '💾' },
-  account: { title: 'Account', sub: 'Password, data, deletion', icon: '👤' },
-  about: { title: 'About', sub: 'Roadmap, legal & support', icon: 'ℹ️' },
+  privacy: { title: 'Privacy & safety', sub: 'Lock & blocks', icon: '🔐' },
+  storage: { title: 'Storage', sub: 'Cache', icon: '💾' },
+  account: { title: 'Account', sub: 'Password & data', icon: '👤' },
+  about: { title: 'About', sub: 'Legal & support', icon: 'ℹ️' },
 };
 
 /** Small label above a control inside a section. */
@@ -210,6 +210,8 @@ export function AppSettingsSheet() {
     await stashBiometricToken();
   };
 
+  // All hooks must run before the early return below (Rules of Hooks).
+  const [exportBusy, setExportBusy] = useState(false);
   const swipe = useSwipeDismiss(() => setOpen(false));
   if (!open) return null;
   const close = () => setOpen(false);
@@ -223,8 +225,6 @@ export function AppSettingsSheet() {
     if (ok) { setPwMsg('Password updated.'); setPw(''); setPwOpen(false); }
     else setPwMsg('Could not update password — try again.');
   };
-
-  const [exportBusy, setExportBusy] = useState(false);
   const exportData = async () => {
     if (exportBusy) return;
     setExportBusy(true);
@@ -281,7 +281,15 @@ export function AppSettingsSheet() {
   const atSub = !!legal || showBlocked || section !== null;
   const headerTitle = legal ? LEGAL_COPY[legal].title : showBlocked ? 'Blocked accounts' : section ? SECTION_META[section].title : 'Settings';
   const headerSub = legal ? 'Sizzle' : showBlocked ? "People you've blocked" : section ? SECTION_META[section].sub : 'Preferences, privacy & account';
-  const goBack = () => { if (legal) setLegal(null); else if (showBlocked) setShowBlocked(false); else setSection(null); };
+  const goBack = () => {
+    if (legal) { setLegal(null); return; }
+    if (showBlocked) { setShowBlocked(false); return; }
+    // Leaving a section: disarm any half-open sub-flows so re-entering the
+    // section never shows a stale password form or an armed delete confirm.
+    setPwOpen(false); setPw(''); setPwMsg(null);
+    setDelStep(false); setDelConfirm('');
+    setSection(null);
+  };
 
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 93 }}>
