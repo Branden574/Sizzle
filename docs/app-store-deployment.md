@@ -274,9 +274,8 @@ and **Yes** to in-app account deletion (deep-link: Settings → Delete account).
   app contains no purchasing and no external purchase links."
 
 **Branden's pre-submission checklist (needs your accounts — cannot be automated):**
-1. Apple Developer Program: replace `REPLACE_WITH_APPLE_TEAM_ID` in
-   `apps/web/public/.well-known/apple-app-site-association` with the real Team
-   ID and redeploy the web app (universal links are dead until then).
+1. ~~Apple Team ID~~ DONE 2026-07-12: `6R2T984G9S` set in the AASA (deployed)
+   and as `DEVELOPMENT_TEAM` in the Xcode project.
 2. Drop the real Firebase iOS `GoogleService-Info.plist` (bundle id
    `app.sizzle.mobile`) over the placeholder, and flip
    `App.entitlements` `aps-environment` → `production` for the store archive.
