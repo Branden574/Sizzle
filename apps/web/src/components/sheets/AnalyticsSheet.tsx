@@ -277,7 +277,8 @@ function SubPriceEditor({ data }: { data: EarningsSummary | undefined }) {
 /** Retention (started→kept→finished) + premium save→unlock funnel as bar rows. */
 function Funnels({ data }: { data: CreatorAnalytics | undefined }) {
   const r = data?.retention;
-  const f = data?.unlockFunnel ?? null;
+  // Monetization analytics stay web-only alongside every other money surface.
+  const f = showMonetization ? (data?.unlockFunnel ?? null) : null;
   const showRetention = r && r.started > 0;
   if (!showRetention && !f) return null;
   const bar = (label: string, value: number, base: number, note?: string) => {

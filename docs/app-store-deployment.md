@@ -236,3 +236,68 @@ and **Yes** to in-app account deletion (deep-link: Settings → Delete account).
 - Web (Vercel) and the native shells share the same `dist` build — a web deploy
   updates the site instantly, but native users only get changes after a new
   store build. Keep them in step for anything backend-contract-related.
+
+---
+
+## Compliance audit — 2026-07-12 (multi-agent sweep vs App Review Guidelines)
+
+**Fixed in code (commit this date):**
+- **4.8 / 2.1** — "Continue with Apple"/"Continue with Google" hidden on native
+  (`Onboarding.tsx`, `!isNative` gate). Native ships email-only auth until BOTH
+  providers are configured; an unconfigured Apple button is a broken-feature
+  rejection AND Google OAuth cannot run inside the Capacitor WebView
+  (`disallowed_useragent`). When enabling later: use `skipBrowserRedirect` +
+  the system browser + a `https://getsizzle.app/auth/callback` redirect.
+- **ITMS-91053** — `PrivacyInfo.xcprivacy` added + registered in the Xcode
+  project (required-reason APIs: UserDefaults CA92.1, FileTimestamp C617.1,
+  SystemBootTime 35F9.1, DiskSpace E174.1; collected-data types mirror the App
+  Privacy form: email, phone (optional), photos/videos, other UGC, user ID,
+  product interaction — all linked, none tracking).
+- **2.1 (mock features)** — Go Live button + live banners hidden on native
+  while the streaming provider is the mock (`Profile.tsx`, `CookSheet.tsx`).
+  Remove gates when Cloudflare Stream is configured.
+- **5.1.1(ii)** — phone number now OPTIONAL at signup (was required; Apple
+  rejects mandatory personal data not core to app function).
+- **2.1 / 1.2** — in-app legal docs no longer label themselves "placeholder";
+  they summarize + link the authoritative hosted documents. Settings copy
+  fixed likewise. Support email switched to support@getsizzle.app.
+- **3.1.x hardening** — premium unlock funnel in creator insights now gated
+  off native with the rest of the monetization surfaces.
+- **2.4.1** — `TARGETED_DEVICE_FAMILY = 1` (iPhone-only; no iPad layout or
+  screenshots were prepared — iPads run iPhone apps in compatibility mode).
+
+**App Review demo account (already created + confirmed on production):**
+- `review@getsizzle.app` / `SizzleReview!2026` — follows the top 3 cooks.
+  ROTATE THE PASSWORD before/after review. Enter these in App Store Connect →
+  App Review Information, with notes: "Premium/subscriber content is acquired
+  on the Sizzle web app (multiplatform service, Guideline 3.1.3(b)); the iOS
+  app contains no purchasing and no external purchase links."
+
+**Branden's pre-submission checklist (needs your accounts — cannot be automated):**
+1. Apple Developer Program: replace `REPLACE_WITH_APPLE_TEAM_ID` in
+   `apps/web/public/.well-known/apple-app-site-association` with the real Team
+   ID and redeploy the web app (universal links are dead until then).
+2. Drop the real Firebase iOS `GoogleService-Info.plist` (bundle id
+   `app.sizzle.mobile`) over the placeholder, and flip
+   `App.entitlements` `aps-environment` → `production` for the store archive.
+3. Supabase Auth → SMTP: configure Resend so confirmation/reset emails deliver
+   reliably (built-in SMTP is heavily rate-limited; a reviewer creating a
+   fresh account may otherwise never get the confirmation email).
+4. Set `CRON_SECRET` on the `sizzle` Vercel project (cron endpoints are
+   currently open; code enforces the secret once present).
+5. Optional (recommended before wide launch, not required for review):
+   configure Apple Sign-In + publish Google OAuth, then remove the
+   `!isNative` gate in `Onboarding.tsx`.
+6. App Store Connect: App Privacy form using the data inventory above; age
+   rating (UGC: pick 'Infrequent/Mild' user-generated content → 12+);
+   screenshots (6.9" set committed under docs/store-assets), keywords,
+   support URL https://getsizzle.app/contact, marketing URL
+   https://getsizzle.app.
+
+**Known reviewer-dependent risks (accepted, with mitigations):**
+- Account required to browse (5.1.1(ii)): social apps commonly pass; a
+  "browse as guest" mode exists as dead code (`continueAsGuest`) and can be
+  wired if a rejection cites this.
+- Locked premium posts visible on native with neutral copy and no price/CTA:
+  the compliant multiplatform pattern; covered by the review notes above.
+

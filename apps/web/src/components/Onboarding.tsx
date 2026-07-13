@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from 'react';
 import { Button, FilterChip, FollowButton, IconButton } from './controls';
 import { GlowButton } from './glow';
 import { useAuth } from '../auth/useAuth';
+import { isNative } from '../lib/native';
 import { tasteDefs } from '../data';
 import { useSuggestedCooks } from '../data/queries';
 import { apiGet } from '../lib/api';
@@ -389,7 +390,7 @@ function StepAccount() {
 
   const canSubmit = isLogin
     ? email.trim().length > 0 && password.length > 0 && !busy
-    : name.trim().length > 0 && phone.trim().length > 0 && handleState === 'available' && email.trim().length > 0 && pwValid && country !== '' && (subs ? region !== '' : true) && agreed && !busy;
+    : name.trim().length > 0 && handleState === 'available' && email.trim().length > 0 && pwValid && country !== '' && (subs ? region !== '' : true) && agreed && !busy;
 
   const submit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -425,22 +426,32 @@ function StepAccount() {
         </p>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
-          <Button
-            onClick={() => void signInOAuth('apple')}
-            variant="secondary"
-            size="lg"
-            fullWidth
-          >
-            Continue with Apple
-          </Button>
-          <Button
-            onClick={() => void signInOAuth('google')}
-            variant="outline"
-            size="lg"
-            fullWidth
-          >
-            Continue with Google
-          </Button>
+          {/* App Store compliance: social sign-in is WEB-ONLY until the Apple +
+              Google providers are configured in Supabase. Guideline 4.8 requires
+              a working Sign in with Apple whenever Google login is offered on
+              iOS, and an unconfigured provider = a broken button (2.1). Native
+              ships email-only auth for v1 — remove the !isNative gate once both
+              providers are live (docs/app-store-deployment.md §2). */}
+          {!isNative && (
+            <>
+              <Button
+                onClick={() => void signInOAuth('apple')}
+                variant="secondary"
+                size="lg"
+                fullWidth
+              >
+                Continue with Apple
+              </Button>
+              <Button
+                onClick={() => void signInOAuth('google')}
+                variant="outline"
+                size="lg"
+                fullWidth
+              >
+                Continue with Google
+              </Button>
+            </>
+          )}
 
           {/* Social sign-up consent: the email form has its own 13+ checkbox, but
               OAuth skips that form, so capture the same agreement here. */}
@@ -453,17 +464,19 @@ function StepAccount() {
             </p>
           )}
 
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '4px 0' }}>
-            <div style={{ flex: 1, height: 1, background: 'var(--line-2)' }} />
-            <span style={{ color: 'var(--text-faint-2)', fontSize: 13 }}>or</span>
-            <div style={{ flex: 1, height: 1, background: 'var(--line-2)' }} />
-          </div>
+          {!isNative && (
+            <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '4px 0' }}>
+              <div style={{ flex: 1, height: 1, background: 'var(--line-2)' }} />
+              <span style={{ color: 'var(--text-faint-2)', fontSize: 13 }}>or</span>
+              <div style={{ flex: 1, height: 1, background: 'var(--line-2)' }} />
+            </div>
+          )}
 
           <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
             {!isLogin && (
               <>
                 <input type="text" autoComplete="name" placeholder="Full name" value={name} onChange={(e) => setName(e.target.value)} style={inputStyle} />
-                <input type="tel" autoComplete="tel" inputMode="tel" placeholder="Phone number" value={phone} onChange={(e) => setPhone(e.target.value)} style={inputStyle} />
+                <input type="tel" autoComplete="tel" inputMode="tel" placeholder="Phone (optional)" value={phone} onChange={(e) => setPhone(e.target.value)} style={inputStyle} />
                 <div>
                   <div style={{ position: 'relative' }}>
                     <span style={{ position: 'absolute', left: 16, top: 0, bottom: 0, display: 'flex', alignItems: 'center', color: 'var(--text-faint-2)', fontSize: 16, pointerEvents: 'none' }}>@</span>

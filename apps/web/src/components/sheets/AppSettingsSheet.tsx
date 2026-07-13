@@ -12,7 +12,7 @@ import { isNative } from '../../lib/native';
 import { PlayIcon, SpeakerIcon } from '../icons';
 
 const APP_VERSION = '1.0.0';
-const SUPPORT_EMAIL = 'support@sizzle.app';
+const SUPPORT_EMAIL = 'support@getsizzle.app';
 
 function SectionLabel({ children }: { children: ReactNode }) {
   return <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.4px', textTransform: 'uppercase', color: 'var(--text-faint-2)', margin: '16px 2px 10px' }}>{children}</div>;
@@ -83,11 +83,11 @@ function Segmented<T extends string>({ value, options, onChange }: { value: T; o
 const LEGAL_COPY: Record<'terms' | 'privacy', { title: string; body: string }> = {
   terms: {
     title: 'Terms of Service',
-    body: 'Welcome to Sizzle. By using the app you agree to post only content you have the rights to share, to follow our community guidelines, and to use Sizzle lawfully. Recipes and videos you upload remain yours; you grant Sizzle a licence to display them in the app. We may remove content or suspend accounts that violate these terms. Sizzle is provided "as is" without warranties. These demo terms are a placeholder for a full legal agreement.',
+    body: 'Welcome to Sizzle. By using the app you agree to post only content you have the rights to share, to follow our community guidelines, and to use Sizzle lawfully. Recipes and videos you upload remain yours; you grant Sizzle a licence to display them in the app. We may remove content or suspend accounts that violate these terms. Sizzle is provided "as is" without warranties. The full Terms of Service at getsizzle.app/terms are the binding version.',
   },
   privacy: {
     title: 'Privacy Policy',
-    body: 'Your privacy matters. Sizzle stores the account details you provide (name, handle, email, optional phone and links) and the content you create. We use this to operate the app — showing your recipes, ranking your feed, and powering follows and notifications. We do not sell your personal data. You can edit your profile or permanently delete your account and all its content at any time from Settings. This demo policy is a placeholder for a full privacy statement.',
+    body: 'Your privacy matters. Sizzle stores the account details you provide (name, handle, email, optional phone and links) and the content you create. We use this to operate the app — showing your recipes, ranking your feed, and powering follows and notifications. We do not sell your personal data. You can edit your profile or permanently delete your account and all its content at any time from Settings. The full Privacy Policy at getsizzle.app/privacy is the binding version.',
   },
 };
 

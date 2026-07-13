@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Button, DismissBackdrop } from '../controls';
 import { useBuyProduct, useCancelSubscription, useCook, useCookProducts, useCookLive, useCookTiers, useMe, useSubscribe, useToggleBlock, useToggleFollow, useToggleMute } from '../../data/queries';
 import { useRequireAuth } from '../../auth/useRequireAuth';
-import { showMonetization } from '../../lib/native';
+import { isNative, showMonetization } from '../../lib/native';
 import { useSizzle } from '../../store';
 import { VerifiedBadge } from '../VerifiedBadge';
 import { SocialLinks } from '../SocialLinks';
@@ -317,6 +317,8 @@ function SubscribeTiers({ cookId, basePriceCents }: { cookId: string; basePriceC
 
 /** Live banner + player shown on a creator's profile while they're live. */
 function LiveBanner({ cookId, name }: { cookId: string; name: string }) {
+  // Mock-provider gate: no fake livestreams in the native review build.
+  if (isNative) return null;
   const { data: live } = useCookLive(cookId);
   if (!live) return null;
   return (

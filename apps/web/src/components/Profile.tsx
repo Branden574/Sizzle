@@ -7,6 +7,7 @@ import { useCook, useCookLive, useDeleteCookLog, useDeleteRecipe, useDrafts, use
 import { useSizzle } from '../store';
 import { formatCount } from '../lib/format';
 import { cookShareUrl } from '../lib/share';
+import { isNative } from '../lib/native';
 import { VerifiedBadge } from './VerifiedBadge';
 import { SocialLinks } from './SocialLinks';
 import { BellIcon, BookmarkIcon, GearIcon, HeartIcon, ShareIcon } from './icons';
@@ -304,8 +305,12 @@ function VerifyButton() {
   );
 }
 
-/** Go live / end a live cooking session. */
+/** Go live / end a live cooking session. App Store compliance: hidden on
+ *  native while the live provider is the MOCK (a visibly fake stream is a
+ *  2.1 completeness rejection) — remove the gate when Cloudflare Stream is
+ *  configured (docs/app-store-deployment.md §3). */
 function GoLiveButton({ meId }: { meId: string }) {
+  if (isNative) return null;
   const { data: live } = useCookLive(meId);
   const start = useStartLive();
   const end = useEndLive();
