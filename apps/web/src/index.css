@@ -735,3 +735,20 @@ input {
     align-items: flex-start;
   }
 }
+
+/* ── Native camera preview (@capgo/camera-preview, native builds) ──
+   The native AVCaptureSession preview renders BEHIND the WebView. While it's
+   active (class toggled on <html> by NativeCameraRecorder), make the app layers
+   see-through and hide everything except the recorder's own opaque controls, so
+   the live camera shows through the transparent WebView. */
+html.sz-native-cam,
+html.sz-native-cam body,
+html.sz-native-cam #root,
+html.sz-native-cam .sz-stage,
+html.sz-native-cam .sz-upload-sheet {
+  background: transparent !important;
+}
+html.sz-native-cam .sz-app-layer > *:not(.sz-upload-sheet),
+html.sz-native-cam .sz-upload-body {
+  visibility: hidden !important;
+}

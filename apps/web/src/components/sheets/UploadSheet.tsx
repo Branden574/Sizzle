@@ -9,6 +9,7 @@ import { useSizzle } from '../../store';
 import { theme } from '../../theme';
 import { probeVideo, uploadPoster, uploadRecipeImage, uploadToCloudflare, uploadVideo } from '../../lib/storage';
 import { CameraRecorder } from '../CameraRecorder';
+import { NativeCameraRecorder } from '../NativeCameraRecorder';
 import { VideoTrimmer } from '../VideoTrimmer';
 import { isNative } from '../../lib/native';
 import { CameraIcon } from '../icons';
@@ -214,12 +215,19 @@ export function UploadSheet() {
   };
 
   return (
-    <div style={{ position: 'absolute', inset: 0, zIndex: 90, background: '#0c0a09', animation: 'sz-slideUp .4s cubic-bezier(.16,1,.3,1)', display: 'flex', flexDirection: 'column' }}>
+    <div className="sz-upload-sheet" style={{ position: 'absolute', inset: 0, zIndex: 90, background: '#0c0a09', animation: 'sz-slideUp .4s cubic-bezier(.16,1,.3,1)', display: 'flex', flexDirection: 'column' }}>
       {recording && (
-        <CameraRecorder
-          onClose={() => setRecording(false)}
-          onCapture={(file) => { acceptFile(file); setRecording(false); }}
-        />
+        isNative ? (
+          <NativeCameraRecorder
+            onClose={() => setRecording(false)}
+            onCapture={(file) => { acceptFile(file); setRecording(false); }}
+          />
+        ) : (
+          <CameraRecorder
+            onClose={() => setRecording(false)}
+            onCapture={(file) => { acceptFile(file); setRecording(false); }}
+          />
+        )
       )}
       {trimming && videoFile && (
         <VideoTrimmer
@@ -234,7 +242,7 @@ export function UploadSheet() {
         <div style={{ width: 48 }} />
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '0 20px 16px' }}>
+      <div className="sz-upload-body" style={{ flex: 1, overflowY: 'auto', padding: '0 20px 16px' }}>
         {uploadPrefill && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '10px 0 2px', padding: '9px 13px', background: 'var(--surface, rgba(255,255,255,.06))', border: '1px solid var(--line-2, rgba(255,255,255,.14))', borderRadius: 12 }}>
             <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-muted, rgba(255,255,255,.75))', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>

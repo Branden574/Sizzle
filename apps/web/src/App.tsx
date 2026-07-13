@@ -396,7 +396,7 @@ export default function App() {
       <Phone bare={isNative || isMobileWeb} desktop={isDesktop}>
         {/* The fake "9:41" iOS status bar was web-mockup chrome — removed so the
             real app (web + native) doesn't show a fake clock/battery. */}
-        <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
+        <div className="sz-app-layer" style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
           {!online && (
             <div style={{ position: 'absolute', top: 54, left: '50%', transform: 'translateX(-50%)', zIndex: 55, background: 'var(--invert-bg)', color: 'var(--invert-fg)', fontSize: 12.5, fontWeight: 600, padding: '7px 14px', borderRadius: 20, backdropFilter: 'blur(8px)', pointerEvents: 'none', whiteSpace: 'nowrap' }}>
               You're offline · showing downloads
