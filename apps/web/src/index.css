@@ -657,6 +657,12 @@ input {
   }
 }
 
+/* Gentle breathe for the branded loading splash (wordmark). */
+@keyframes sz-breathe {
+  0%, 100% { opacity: 0.55; transform: scale(0.985); }
+  50% { opacity: 1; transform: scale(1); }
+}
+
 /* Indeterminate slide for the upload bar before the first progress event. */
 @keyframes sz-upload-slide {
   0% { transform: translateX(-120%); }

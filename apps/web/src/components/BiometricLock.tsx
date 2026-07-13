@@ -3,6 +3,18 @@ import { Button } from './controls';
 import { biometricVerify } from '../lib/biometric';
 import { useAuth } from '../auth/useAuth';
 
+// Belt-and-suspenders against any remount loop ever trapping the user in
+// endless Face ID prompts: if the lock auto-prompts more than 3 times within
+// 5 seconds, stop auto-prompting and require a manual tap instead. Module
+// scope so the count survives the remounts a loop would cause.
+let autoPromptTimes: number[] = [];
+function autoPromptAllowed(): boolean {
+  const now = Date.now();
+  autoPromptTimes = autoPromptTimes.filter((t) => now - t < 5000);
+  autoPromptTimes.push(now);
+  return autoPromptTimes.length <= 3;
+}
+
 /**
  * Full-screen lock shown on launch / resume when the user has enabled the
  * optional biometric app lock. Auto-prompts the OS biometric check on mount;
@@ -13,20 +25,25 @@ export function BiometricLock({ label, onUnlock }: { label: string; onUnlock: ()
   const signOut = useAuth((s) => s.signOut);
   const [busy, setBusy] = useState(false);
   const [failed, setFailed] = useState(false);
+  const [autoPaused, setAutoPaused] = useState(false);
 
   const attempt = useCallback(async () => {
     if (busy) return;
     setBusy(true);
     setFailed(false);
+    setAutoPaused(false);
     const ok = await biometricVerify('Unlock Sizzle');
     setBusy(false);
     if (ok) onUnlock();
     else setFailed(true);
   }, [busy, onUnlock]);
 
-  // Prompt once automatically when the lock appears.
+  // Prompt once automatically when the lock appears — unless we've auto-prompted
+  // too many times in a row (a loop), in which case wait for a manual tap so the
+  // user is never trapped in an endless Face ID prompt.
   useEffect(() => {
-    void attempt();
+    if (autoPromptAllowed()) void attempt();
+    else setAutoPaused(true);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
@@ -63,7 +80,11 @@ export function BiometricLock({ label, onUnlock }: { label: string; onUnlock: ()
       </div>
       <div style={{ fontSize: 22, fontWeight: 800, color: 'var(--text)', fontFamily: "'Instrument Serif', serif" }}>Sizzle is locked</div>
       <div style={{ fontSize: 14.5, color: 'var(--text-faint)', textAlign: 'center', maxWidth: 280 }}>
-        {failed ? `Couldn't verify — tap to try ${label} again.` : `Unlock with ${label} to continue.`}
+        {autoPaused
+          ? `Tap below to unlock with ${label}.`
+          : failed
+          ? `Couldn't verify — tap to try ${label} again.`
+          : `Unlock with ${label} to continue.`}
       </div>
 
       <Button

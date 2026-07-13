@@ -31,7 +31,16 @@
     />
   </head>
   <body>
-    <div id="root"></div>
+    <div id="root">
+      <!-- Boot splash: the first paint before React mounts. React clears #root
+           on render, so this is replaced automatically. Uses hardcoded colors
+           (CSS vars aren't loaded yet) and a serif fallback for the wordmark. -->
+      <div style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:#0e0c0b">
+        <div style="font-family:'Instrument Serif',Georgia,'Times New Roman',serif;font-size:48px;line-height:1;background-image:linear-gradient(135deg,#ff5a1f,#f4a52c);-webkit-background-clip:text;background-clip:text;color:transparent">Sizzle</div>
+        <div style="width:26px;height:26px;border-radius:50%;border:2.5px solid rgba(255,255,255,.14);border-top-color:#ff5a1f;animation:sz-boot-spin .8s linear infinite"></div>
+      </div>
+    </div>
+    <style>@keyframes sz-boot-spin{to{transform:rotate(360deg)}}</style>
     <script type="module" src="/src/main.tsx"></script>
   </body>
 </html>
