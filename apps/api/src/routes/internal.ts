@@ -1,10 +1,70 @@
 import { Hono } from 'hono';
 import { supabaseAdmin } from '../lib/supabase';
 import { sendDirectPush } from '../services/push';
+import { finalizeProviderAsset } from '../services/videoFinalize';
 import { env } from '../env';
 import type { AppEnv } from '../types';
 
 export const internal = new Hono<AppEnv>();
+
+/**
+ * GET /internal/finalize-videos — Vercel Cron target (every minute). SERVER-SIDE
+ * backstop that drives Cloudflare assets to ready + moderates their thumbnail,
+ * independent of the client. Posting no longer blocks on transcoding, so a user
+ * can record → post → land on their profile → background the app before the clip
+ * finishes transcoding; WKWebView then suspends the composer's foreground poll.
+ * We skip Stream webhooks, so without this cron such a post would be stuck
+ * `pending` forever — unplayable AND never thumbnail-moderated. This sweep closes
+ * that gap (and covers clips whose transcode exceeds the client poll's cap).
+ */
+internal.get('/finalize-videos', async (c) => {
+  if (env.CRON_SECRET) {
+    const auth = c.req.header('authorization');
+    if (auth !== `Bearer ${env.CRON_SECRET}`) return c.json({ error: 'unauthorized' }, 401);
+  }
+  const twoHoursAgo = new Date(Date.now() - 2 * 3_600_000).toISOString();
+  // Recent, still-transcoding Cloudflare assets. Cap the batch; the next tick picks
+  // up the rest. Ordered oldest-first so nothing starves.
+  const { data: pending } = await supabaseAdmin
+    .from('video_assets')
+    .select('id, provider_uid')
+    .eq('provider', 'cloudflare')
+    .in('status', ['pending', 'uploading', 'processing'])
+    .not('provider_uid', 'is', null)
+    .gte('created_at', twoHoursAgo)
+    .order('created_at', { ascending: true })
+    .limit(40);
+
+  let ready = 0;
+  let errored = 0;
+  let processing = 0;
+  if (pending && pending.length) {
+    const results = await Promise.all(
+      pending.map((a) =>
+        finalizeProviderAsset(a.id as string, a.provider_uid as string).catch(() => null),
+      ),
+    );
+    for (const r of results) {
+      if (!r) continue;
+      if (r.status === 'ready') ready += 1;
+      else if (r.status === 'error') errored += 1;
+      else processing += 1;
+    }
+  }
+
+  // Abandon anything still not transcoded after 2h — a real transcode never takes
+  // that long, so these are dead direct-upload slots (composer opened, no bytes
+  // sent). Mark 'error' so the sweep above stops re-polling them forever.
+  const { data: stale } = await supabaseAdmin
+    .from('video_assets')
+    .update({ status: 'error' })
+    .eq('provider', 'cloudflare')
+    .in('status', ['pending', 'uploading', 'processing'])
+    .lt('created_at', twoHoursAgo)
+    .select('id');
+
+  return c.json({ checked: pending?.length ?? 0, ready, errored, processing, abandoned: stale?.length ?? 0 });
+});
 
 /**
  * GET /internal/publish-scheduled — Vercel Cron target (every minute). Flips any

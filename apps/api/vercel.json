@@ -7,6 +7,10 @@
       "schedule": "* * * * *"
     },
     {
+      "path": "/internal/finalize-videos",
+      "schedule": "* * * * *"
+    },
+    {
       "path": "/internal/save-nudges",
       "schedule": "0 21 * * *"
     }

@@ -8,7 +8,7 @@ import { badRequest, dbFail, notFound } from '../lib/errors';
 import { assertUuid } from '../lib/validate';
 import { cloudflareConfigured, env } from '../env';
 import { getStreamProvider } from '../services/stream';
-import { moderateImages } from '../services/moderation';
+import { finalizeProviderAsset } from '../services/videoFinalize';
 import { rateLimit } from '../middleware/rateLimit';
 import { generateCaptions } from '../services/transcribe';
 import type { AppEnv } from '../types';
@@ -112,11 +112,11 @@ uploads.post('/webhook/cloudflare-stream', async (c) => {
   const uid = body.uid;
   if (!uid || !/^[A-Za-z0-9_-]{1,128}$/.test(uid)) return c.json({ ok: false }, 400);
 
-  const a = await getStreamProvider().getAsset(uid);
-  await supabaseAdmin
-    .from('video_assets')
-    .update({ status: a.status, hls_url: a.hlsUrl, poster_url: a.posterUrl, duration_seconds: a.duration })
-    .eq('provider_uid', uid);
+  // Route the webhook through the SAME finalizer as the poll/cron so the thumbnail
+  // is moderated here too — otherwise enabling webhooks would silently bypass the
+  // moderation gate and publish an unmoderated clip.
+  const { data: asset } = await supabaseAdmin.from('video_assets').select('id').eq('provider_uid', uid).maybeSingle();
+  if (asset) await finalizeProviderAsset(asset.id as string, uid);
   return c.json({ ok: true });
 });
 
@@ -147,33 +147,15 @@ uploads.get('/video/:id/status', requireAuth, async (c) => {
   let status = asset.status as VideoAssetStatus['status'];
   let hlsUrl = asset.hls_url as string | null;
   let posterUrl = asset.poster_url as string | null;
-  // Still processing → ask the provider for the latest and persist it.
+  // Still processing → refresh from the provider + moderate the thumbnail on the
+  // ready-hop (finalizeProviderAsset is the single source of truth, shared with the
+  // finalize cron + webhook so a video ALWAYS becomes playable + moderated even if
+  // the client that posted it went away before the transcode finished).
   if (asset.provider_uid && status !== 'ready' && status !== 'error') {
-    const a = await getStreamProvider().getAsset(asset.provider_uid as string);
+    const a = await finalizeProviderAsset(id, asset.provider_uid as string);
     status = a.status;
     hlsUrl = a.hlsUrl;
     posterUrl = a.posterUrl;
-    // Posting no longer blocks on transcoding, so THIS ready-hop is where the clip's
-    // thumbnail gets vision-moderated — and playability is gated on it. A flagged
-    // thumbnail marks the asset errored and pulls any recipe built on it. Nothing was
-    // viewable before now (hls_url was null while processing), so nothing bad played.
-    // moderateImages fails open (no key / provider error → ok), so a legit clip is
-    // never wedged by an outage.
-    if (a.status === 'ready' && a.posterUrl) {
-      const mod = await moderateImages([a.posterUrl]);
-      if (!mod.ok) {
-        await supabaseAdmin
-          .from('video_assets')
-          .update({ status: 'error', poster_url: a.posterUrl, duration_seconds: a.duration })
-          .eq('id', id);
-        await supabaseAdmin.from('recipes').update({ status: 'removed', auto_hidden: true }).eq('video_asset_id', id);
-        return c.json<VideoAssetStatus>({ status: 'error', hlsUrl: null, posterUrl: a.posterUrl, mp4Url: asset.mp4_url as string | null });
-      }
-    }
-    await supabaseAdmin
-      .from('video_assets')
-      .update({ status: a.status, hls_url: a.hlsUrl, poster_url: a.posterUrl, duration_seconds: a.duration })
-      .eq('id', id);
   }
   return c.json<VideoAssetStatus>({ status, hlsUrl, posterUrl, mp4Url: asset.mp4_url as string | null });
 });
