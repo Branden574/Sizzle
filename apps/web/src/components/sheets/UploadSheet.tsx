@@ -227,6 +227,7 @@ export function UploadSheet() {
           <NativeCameraRecorder
             onClose={() => setRecording(false)}
             onCapture={(file) => { acceptFile(file); setRecording(false); }}
+            onLibrary={() => { setRecording(false); fileRef.current?.click(); }}
           />
         ) : (
           <CameraRecorder

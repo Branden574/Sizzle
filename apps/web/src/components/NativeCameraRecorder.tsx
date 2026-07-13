@@ -38,7 +38,7 @@ function fmt(ms: number): string {
  * and restores the WebView, so the camera can never be left running (green dot)
  * and the app can never be left transparent/invisible.
  */
-export function NativeCameraRecorder({ onCapture, onClose }: { onCapture: (file: File) => void; onClose: () => void }) {
+export function NativeCameraRecorder({ onCapture, onClose, onLibrary }: { onCapture: (file: File) => void; onClose: () => void; onLibrary?: () => void }) {
   const [status, setStatus] = useState<Status>('starting');
   const [facing, setFacing] = useState<'rear' | 'front'>('rear');
   const [recording, setRecording] = useState(false);
@@ -302,33 +302,34 @@ export function NativeCameraRecorder({ onCapture, onClose }: { onCapture: (file:
       onTouchEnd={onPinchEnd}
       onTouchCancel={onPinchEnd}
     >
-      {/* darkening at top + bottom so the controls read against the live preview
-          (the preview now fills the whole screen, TikTok/IG-style) */}
-      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: 'linear-gradient(180deg, rgba(0,0,0,.5) 0%, transparent 15%, transparent 58%, rgba(0,0,0,.72) 100%)' }} />
+      {/* subtle top + bottom scrims so the chrome reads against the live preview
+          without dimming the middle (TikTok's full-bleed look) */}
+      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: 'linear-gradient(180deg, rgba(0,0,0,.45) 0%, transparent 14%, transparent 62%, rgba(0,0,0,.55) 88%, rgba(0,0,0,.78) 100%)' }} />
 
-      {/* top bar: close · timer · flip (flip works mid-recording) */}
-      <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '54px 18px 0' }}>
-        <Button onClick={doClose} aria-label="Close camera" style={{ width: 40, height: 40, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
-          <CloseIcon size={22} stroke="#fff" strokeWidth={2.2} />
+      {/* ── TOP BAR: close (left) · recording pill (center) · flip (right) ── */}
+      <div style={{ position: 'relative', display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between', padding: 'calc(env(safe-area-inset-top) + 14px) 16px 0' }}>
+        <Button onClick={doClose} aria-label="Close camera" style={{ width: 42, height: 42, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer', backdropFilter: 'blur(6px)' }}>
+          <CloseIcon size={22} stroke="#fff" strokeWidth={2.4} />
         </Button>
-        {status === 'ready' && (
-          <div style={{ background: 'rgba(0,0,0,.45)', borderRadius: 20, padding: '6px 14px', color: '#fff', fontSize: 14, fontWeight: 700, fontVariantNumeric: 'tabular-nums' }}>
-            {recording && <span style={{ display: 'inline-block', width: 8, height: 8, borderRadius: '50%', background: '#ff453a', marginRight: 7, verticalAlign: 'middle' }} />}
-            {fmt(elapsedMs)} <span style={{ opacity: 0.5 }}>/ {fmt(MAX_SECONDS * 1000)}</span>
+        {status === 'ready' && recording && (
+          <div style={{ display: 'flex', alignItems: 'center', gap: 7, background: '#fe2c55', borderRadius: 8, padding: '6px 12px', marginTop: 2, color: '#fff', fontSize: 14, fontWeight: 800, fontVariantNumeric: 'tabular-nums', boxShadow: '0 2px 12px rgba(254,44,85,.5)' }}>
+            <span style={{ width: 8, height: 8, borderRadius: 2, background: '#fff' }} />
+            {fmt(elapsedMs)}
           </div>
         )}
         <Button
           onClick={() => void flip()}
           disabled={status !== 'ready'}
           aria-label="Flip camera"
-          style={{ width: 40, height: 40, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: status === 'ready' ? 'pointer' : 'default', opacity: status === 'ready' ? 1 : 0.35 }}
+          style={{ width: 42, height: 42, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.35)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: status === 'ready' ? 'pointer' : 'default', opacity: status === 'ready' ? 1 : 0.35, backdropFilter: 'blur(6px)' }}
         >
-          <svg width={22} height={22} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+          <svg width={23} height={23} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
             <path d="M3 7h13l-2.5-2.5M21 17H8l2.5 2.5" /><circle cx="12" cy="12" r="3" />
           </svg>
         </Button>
       </div>
 
+      {/* live preview fills the gap; tap/pinch pass through to the camera */}
       <div style={{ flex: 1 }} />
 
       {/* starting / denied / error states (opaque card over a black bg) */}
@@ -353,39 +354,62 @@ export function NativeCameraRecorder({ onCapture, onClose }: { onCapture: (file:
         </div>
       )}
 
-      {/* iOS-style zoom: lens pills; press-drag opens the ruler dial */}
+      {/* ── BOTTOM CLUSTER: hint · zoom pills · shutter row — each on its own
+             line with real spacing so nothing overlaps (the old bug) ── */}
       {status === 'ready' && (
-        <ZoomDial zoom={zoom} range={zoomRange} lenses={lensValues} onZoom={applyZoom} />
-      )}
+        <div style={{ position: 'relative', paddingBottom: 'calc(env(safe-area-inset-bottom) + 26px)' }}>
+          {/* one-line hint, only before a take starts */}
+          {!recording && (
+            <div style={{ textAlign: 'center', color: 'rgba(255,255,255,.85)', fontSize: 13, fontWeight: 600, marginBottom: 16, textShadow: '0 1px 4px rgba(0,0,0,.6)', pointerEvents: 'none' }}>
+              Hold to record · tap for hands-free
+            </div>
+          )}
 
-      {/* record controls: hold OR tap (web-recorder parity) + ✓ to finish */}
-      {status === 'ready' && (
-        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 36px 46px' }}>
-          <div style={{ width: 56 }} />
-          <Button
-            onPointerDown={onDown}
-            onPointerUp={onUp}
-            onPointerCancel={onUp}
-            aria-label={recording ? 'Stop' : 'Record'}
-            style={{ width: 84, height: 84, borderRadius: '50%', border: '5px solid rgba(255,255,255,.85)', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', touchAction: 'none', padding: 0 }}
-          >
-            <div style={{ width: recording ? 32 : 64, height: recording ? 32 : 64, borderRadius: recording ? 8 : '50%', background: 'var(--accent)', transition: 'all .2s cubic-bezier(.34,1.56,.64,1)' }} />
-          </Button>
-          {/* done — finishes the take */}
-          <Button
-            onPointerDown={(e) => { e.preventDefault(); if (hasFootage) void stopRecording(); }}
-            disabled={!hasFootage}
-            aria-label="Finish recording"
-            style={{ width: 56, height: 56, borderRadius: '50%', border: 'none', background: hasFootage ? '#fff' : 'rgba(255,255,255,.2)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: hasFootage ? 'pointer' : 'default', touchAction: 'none' }}
-          >
-            <svg width={26} height={26} viewBox="0 0 24 24" fill="none" stroke={hasFootage ? '#1b1512' : 'rgba(255,255,255,.5)'} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 6" /></svg>
-          </Button>
-        </div>
-      )}
+          {/* iPhone-style zoom: lens pills; press-drag opens the ruler dial */}
+          <ZoomDial zoom={zoom} range={zoomRange} lenses={lensValues} onZoom={applyZoom} />
 
-      {status === 'ready' && !recording && (
-        <div style={{ position: 'absolute', bottom: 34, left: 0, right: 0, textAlign: 'center', color: 'rgba(255,255,255,.75)', fontSize: 12.5, fontWeight: 600, pointerEvents: 'none' }}>
-          Hold to record · or tap for hands-free
+          {/* shutter row: Upload (left) · Record (center) · Done (right) */}
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '0 30px' }}>
+            {/* Upload from library */}
+            <div style={{ width: 62, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7 }}>
+              <Button
+                onClick={() => onLibrary?.()}
+                disabled={recording}
+                aria-label="Upload from library"
+                style={{ width: 48, height: 48, borderRadius: 13, border: 'none', background: 'rgba(255,255,255,.16)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: recording ? 'default' : 'pointer', opacity: recording ? 0.35 : 1, backdropFilter: 'blur(6px)' }}
+              >
+                <svg width={24} height={24} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={1.9} strokeLinecap="round" strokeLinejoin="round">
+                  <rect x="3" y="3" width="18" height="18" rx="3.5" /><circle cx="8.5" cy="8.5" r="1.6" /><path d="M21 15l-5-5L5 21" />
+                </svg>
+              </Button>
+              <span style={{ color: 'rgba(255,255,255,.9)', fontSize: 11.5, fontWeight: 600, textShadow: '0 1px 3px rgba(0,0,0,.6)' }}>Upload</span>
+            </div>
+
+            {/* Record — hold to record while held, or tap for hands-free */}
+            <Button
+              onPointerDown={onDown}
+              onPointerUp={onUp}
+              onPointerCancel={onUp}
+              aria-label={recording ? 'Stop recording' : 'Record'}
+              style={{ position: 'relative', width: 84, height: 84, borderRadius: '50%', border: 'none', background: 'transparent', cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center', touchAction: 'none', padding: 0 }}
+            >
+              <div style={{ position: 'absolute', inset: 0, borderRadius: '50%', border: '5px solid #fff', opacity: 0.95 }} />
+              <div style={{ width: recording ? 32 : 64, height: recording ? 32 : 64, borderRadius: recording ? 9 : '50%', background: '#fe2c55', transition: 'all .22s cubic-bezier(.34,1.56,.64,1)' }} />
+            </Button>
+
+            {/* Done — finishes the take (enabled once there's footage) */}
+            <div style={{ width: 62, display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 7 }}>
+              <Button
+                onPointerDown={(e) => { e.preventDefault(); if (hasFootage) void stopRecording(); }}
+                disabled={!hasFootage}
+                aria-label="Finish recording"
+                style={{ width: 48, height: 48, borderRadius: '50%', border: 'none', background: hasFootage ? '#fff' : 'rgba(255,255,255,.16)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: hasFootage ? 'pointer' : 'default', touchAction: 'none', backdropFilter: 'blur(6px)' }}
+              >
+                <svg width={26} height={26} viewBox="0 0 24 24" fill="none" stroke={hasFootage ? '#111' : 'rgba(255,255,255,.4)'} strokeWidth={3} strokeLinecap="round" strokeLinejoin="round"><path d="M5 12l5 5L20 6" /></svg>
+              </Button>
+              <span style={{ color: hasFootage ? 'rgba(255,255,255,.9)' : 'rgba(255,255,255,.4)', fontSize: 11.5, fontWeight: 600, textShadow: '0 1px 3px rgba(0,0,0,.6)' }}>Done</span>
+            </div>
+          </div>
         </div>
       )}
     </div>
