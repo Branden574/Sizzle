@@ -6,7 +6,8 @@ import { supabase } from '../lib/supabase';
 import { isNative } from '../lib/native';
 import { nativeSignInOAuth } from '../lib/nativeOAuth';
 import { disablePush } from '../lib/push';
-import { biometricVerify, getBiometricToken, storeBiometricToken, clearBiometricToken } from '../lib/biometric';
+import { clearPasscode } from '../lib/applock';
+import { useSizzle } from '../store';
 
 /**
  * loading — deciding initial session
@@ -46,10 +47,6 @@ interface AuthState {
   resetPassword: (email: string) => Promise<boolean>;
   /** Set a new password (during recovery or while authed). */
   updatePassword: (password: string) => Promise<boolean>;
-  /** Stash the current refresh token in the biometric keychain (for restore). */
-  stashBiometricToken: () => Promise<void>;
-  /** Restore an expired session from the biometric-stashed refresh token. */
-  restoreWithBiometric: () => Promise<boolean>;
 }
 
 export const useAuth = create<AuthState>((set, get) => ({
@@ -166,8 +163,9 @@ export const useAuth = create<AuthState>((set, get) => ({
     // token row would leak — a logged-out device would keep receiving pushes.
     await disablePush().catch(() => {});
     await supabase.auth.signOut();
-    // Drop the biometric-stashed token so a logged-out device can't restore.
-    await clearBiometricToken();
+    // Drop the app-lock passcode so it can't carry over to the next account.
+    await clearPasscode();
+    useSizzle.getState().setAppLockEnabled(false);
     set({ status: 'anon', session: null, user: null, profile: null, error: null });
   },
 
@@ -205,19 +203,4 @@ export const useAuth = create<AuthState>((set, get) => ({
     return true;
   },
 
-  stashBiometricToken: async () => {
-    const rt = get().session?.refresh_token;
-    if (rt) await storeBiometricToken(rt);
-  },
-
-  restoreWithBiometric: async () => {
-    const token = await getBiometricToken();
-    if (!token) return false;
-    if (!(await biometricVerify('Sign in to Sizzle'))) return false;
-    const { data, error } = await supabase.auth.refreshSession({ refresh_token: token });
-    if (error || !data.session) return false;
-    // The refresh token rotates — re-stash the new one for next time.
-    if (data.session.refresh_token) await storeBiometricToken(data.session.refresh_token);
-    return true;
-  },
 }));

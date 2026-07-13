@@ -49,8 +49,7 @@ import { apiSend } from './lib/api';
 import { useOnlineStatus } from './lib/useOnlineStatus';
 import { isNative } from './lib/native';
 import { syncPushRegistration, disablePush } from './lib/push';
-import { biometricAvailability, consumeBiometricPromptResume } from './lib/biometric';
-import { BiometricLock } from './components/BiometricLock';
+import { PasscodeLock } from './components/PasscodeLock';
 import { DesktopSidebar } from './components/DesktopSidebar';
 import { useMediaQuery } from './lib/useMediaQuery';
 import { parseBoardDeepLink, parseCookDeepLink, parseRecipeDeepLink } from './lib/share';
@@ -177,36 +176,19 @@ export default function App() {
     else if (authStatus === 'anon' || authStatus === 'guest') void disablePush();
   }, [authStatus]);
 
-  // ── Biometric app-lock (opt-in) ────────────────────────────────────────────
-  const biometricLock = useSizzle((s) => s.biometricLock);
+  // ── Passcode app-lock (opt-in) ─────────────────────────────────────────────
+  // Replaced the biometric lock: the OS biometric overlay's app-state events
+  // caused re-lock loops on some devices. A passcode screen is pure in-app UI,
+  // so re-locking on EVERY resume is safe — nothing we show can fire a resume.
+  const appLockEnabled = useSizzle((s) => s.appLockEnabled);
   const appUnlocked = useSizzle((s) => s.appUnlocked);
   const setAppUnlocked = useSizzle((s) => s.setAppUnlocked);
-  const stashBiometricToken = useAuth((s) => s.stashBiometricToken);
-  const restoreWithBiometric = useAuth((s) => s.restoreWithBiometric);
-  const [bioLabel, setBioLabel] = useState('biometrics');
-  const [bioRestoreTried, setBioRestoreTried] = useState(false);
-
-  // Resolve the device's biometry label; fail OPEN if biometrics aren't usable
-  // (e.g. disabled at the OS level) so the user is never trapped behind a lock
-  // they can't pass.
-  useEffect(() => {
-    if (!isNative || !biometricLock) return;
-    void biometricAvailability().then(({ available, label }) => {
-      if (available) setBioLabel(label);
-      else setAppUnlocked(true);
-    });
-  }, [biometricLock, setAppUnlocked]);
 
   // Re-lock when the app returns from the background (true app-lock behaviour).
   useEffect(() => {
     if (!isNative) return;
     const handle = CapApp.addListener('appStateChange', ({ isActive }) => {
-      if (!isActive) return;
-      // Consume the resume the biometric prompt itself fires (one-shot, no
-      // wall clock — a timed cooldown looped on devices with slow event
-      // delivery). Only a resume NOT caused by a prompt re-locks.
-      const promptResume = consumeBiometricPromptResume();
-      if (useSizzle.getState().biometricLock && !promptResume) setAppUnlocked(false);
+      if (isActive && useSizzle.getState().appLockEnabled) setAppUnlocked(false);
     });
     return () => { void handle.then((l) => l.remove()); };
   }, [setAppUnlocked]);
@@ -302,23 +284,10 @@ export default function App() {
     return () => window.removeEventListener('keydown', onKey);
   }, []);
 
-  // Keep the keychain refresh token fresh while the lock is on, and re-lock for
-  // the next sign-in once the user logs out.
+  // Re-lock for the next sign-in once the user logs out.
   useEffect(() => {
-    if (authStatus === 'authed') {
-      if (isNative && biometricLock) void stashBiometricToken();
-    } else if (authStatus === 'anon' || authStatus === 'guest') {
-      setAppUnlocked(false);
-    }
-  }, [authStatus, biometricLock, stashBiometricToken, setAppUnlocked]);
-
-  // Faster re-login: if the saved session is gone but the user enabled biometric
-  // unlock, restore it from the keychain token instead of asking for a password.
-  useEffect(() => {
-    if (!isNative || bioRestoreTried || !biometricLock || authStatus !== 'anon') return;
-    setBioRestoreTried(true);
-    void restoreWithBiometric().then((ok) => { if (ok) setAppUnlocked(true); });
-  }, [authStatus, biometricLock, bioRestoreTried, restoreWithBiometric, setAppUnlocked]);
+    if (authStatus === 'anon' || authStatus === 'guest') setAppUnlocked(false);
+  }, [authStatus, setAppUnlocked]);
 
   const phase = useSizzle((s) => s.phase);
   const tab = useSizzle((s) => s.tab);
@@ -463,8 +432,8 @@ export default function App() {
           {recovery && <ResetPasswordScreen />}
           {banned && authStatus === 'authed' && <BannedScreen />}
 
-          {isNative && biometricLock && authStatus === 'authed' && !appUnlocked && !recovery && (
-            <BiometricLock label={bioLabel} onUnlock={() => setAppUnlocked(true)} />
+          {appLockEnabled && authStatus === 'authed' && !appUnlocked && !recovery && (
+            <PasscodeLock onUnlock={() => setAppUnlocked(true)} />
           )}
 
           {!isNative && !isMobileWeb && <HomeIndicator color={homeIndicator} />}

@@ -663,6 +663,15 @@ input {
   50% { opacity: 1; transform: scale(1); }
 }
 
+/* Wrong-passcode shake for the app-lock dots. */
+@keyframes sz-shake {
+  0%, 100% { transform: translateX(0); }
+  20% { transform: translateX(-9px); }
+  40% { transform: translateX(8px); }
+  60% { transform: translateX(-6px); }
+  80% { transform: translateX(4px); }
+}
+
 /* Indeterminate slide for the upload bar before the first progress event. */
 @keyframes sz-upload-slide {
   0% { transform: translateX(-120%); }

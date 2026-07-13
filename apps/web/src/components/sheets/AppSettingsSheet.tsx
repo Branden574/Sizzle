@@ -1,4 +1,4 @@
-import { useState, useEffect, type ReactNode } from 'react';
+import { useState, type ReactNode } from 'react';
 import { Button, DismissBackdrop, SegmentedControl } from '../controls';
 import { useSwipeDismiss } from '../../lib/useSwipeDismiss';
 import { useAuth } from '../../auth/useAuth';
@@ -7,8 +7,9 @@ import { clearOffline } from '../../lib/offline';
 import { apiGet, apiSend } from '../../lib/api';
 import { queryClient, useBlockedList, useMe, useToggleBlock, useUpdateNotifPref, useUpdateProfile } from '../../data/queries';
 import { enablePush, disablePush } from '../../lib/push';
-import { biometricAvailability, biometricVerify, clearBiometricToken } from '../../lib/biometric';
-import { isNative, showMonetization } from '../../lib/native';
+import { clearPasscode } from '../../lib/applock';
+import { PasscodeSetup } from '../PasscodeLock';
+import { showMonetization } from '../../lib/native';
 import { PlayIcon, SpeakerIcon } from '../icons';
 import type { MeProfile } from '@sizzle/shared';
 
@@ -109,15 +110,32 @@ const LEGAL_COPY: Record<'terms' | 'privacy', { title: string; body: string }> =
 type SectionKey = 'appearance' | 'playback' | 'feed' | 'notifications' | 'privacy' | 'storage' | 'account' | 'about';
 const SECTION_ORDER: SectionKey[] = ['appearance', 'playback', 'feed', 'notifications', 'privacy', 'storage', 'account', 'about'];
 const SECTION_META: Record<SectionKey, { title: string; sub: string; icon: string }> = {
-  appearance: { title: 'Appearance', sub: 'Theme & motion', icon: '🎨' },
-  playback: { title: 'Playback', sub: 'Autoplay & sound', icon: '▶️' },
-  feed: { title: 'Recipes & feed', sub: 'Units & feed', icon: '🍳' },
-  notifications: { title: 'Notifications', sub: 'Push alerts', icon: '🔔' },
-  privacy: { title: 'Privacy & safety', sub: 'Lock & blocks', icon: '🔐' },
-  storage: { title: 'Storage', sub: 'Cache', icon: '💾' },
-  account: { title: 'Account', sub: 'Password & data', icon: '👤' },
-  about: { title: 'About', sub: 'Legal & support', icon: 'ℹ️' },
+  appearance: { title: 'Appearance', sub: 'Theme, dark mode & motion', icon: '🎨' },
+  playback: { title: 'Playback', sub: 'Autoplay, sound & data saver', icon: '▶️' },
+  feed: { title: 'Recipes & feed', sub: 'Measurement units & your default feed', icon: '🍳' },
+  notifications: { title: 'Notifications', sub: 'Choose which push alerts you get', icon: '🔔' },
+  privacy: { title: 'Privacy & safety', sub: 'Private account, app lock & blocked accounts', icon: '🔐' },
+  storage: { title: 'Storage', sub: 'Downloaded recipes & cache', icon: '💾' },
+  account: { title: 'Account', sub: 'Password, your data & account deletion', icon: '👤' },
+  about: { title: 'About', sub: 'Roadmap, legal & support', icon: 'ℹ️' },
 };
+
+/** X-style two-line menu row: title with its description underneath. */
+function MenuRow({ icon, title, sub, onClick }: { icon: ReactNode; title: string; sub: string; onClick: () => void }) {
+  return (
+    <Button
+      onClick={onClick}
+      style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '13px 16px', width: '100%', background: 'transparent', border: 'none', borderRadius: 0, textAlign: 'left' }}
+    >
+      <IconChip>{icon}</IconChip>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</div>
+        <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 2, lineHeight: 1.35 }}>{sub}</div>
+      </div>
+      <Chevron />
+    </Button>
+  );
+}
 
 /** Small label above a control inside a section. */
 function FieldLabel({ children, top }: { children: ReactNode; top?: number }) {
@@ -183,31 +201,32 @@ export function AppSettingsSheet() {
     }
   };
 
-  // Biometric app-lock (native only).
-  const biometricLock = useSizzle((s) => s.biometricLock);
-  const setBiometricLock = useSizzle((s) => s.setBiometricLock);
+  // App-lock passcode (4 digits; replaced the biometric lock).
+  const appLockEnabled = useSizzle((s) => s.appLockEnabled);
+  const setAppLockEnabled = useSizzle((s) => s.setAppLockEnabled);
   const setAppUnlocked = useSizzle((s) => s.setAppUnlocked);
-  const stashBiometricToken = useAuth((s) => s.stashBiometricToken);
-  const [bio, setBio] = useState<{ available: boolean; label: string }>({ available: false, label: 'biometrics' });
-  const [bioBusy, setBioBusy] = useState(false);
-  useEffect(() => { void biometricAvailability().then(setBio); }, []);
+  // 'enable' = set a new passcode; 'disable'/'change' first verify the current one.
+  const [passcodeFlow, setPasscodeFlow] = useState<null | 'enable' | 'disable' | 'change-verify' | 'change-set'>(null);
 
-  const toggleBiometric = async () => {
-    if (bioBusy || !bio.available) return;
-    if (biometricLock) {
-      setBiometricLock(false);
-      await clearBiometricToken();
-      return;
+  const onPasscodeDone = async (ok: boolean) => {
+    const flow = passcodeFlow;
+    if (!ok) { setPasscodeFlow(null); return; }
+    if (flow === 'enable') {
+      setAppLockEnabled(true);
+      setAppUnlocked(true); // don't lock the session that just set it up
+      setPasscodeFlow(null);
+    } else if (flow === 'disable') {
+      await clearPasscode();
+      setAppLockEnabled(false);
+      setPasscodeFlow(null);
+    } else if (flow === 'change-verify') {
+      setPasscodeFlow('change-set'); // verified — now set the new code
+    } else if (flow === 'change-set') {
+      setAppUnlocked(true);
+      setPasscodeFlow(null);
+    } else {
+      setPasscodeFlow(null);
     }
-    // Turning ON: require one successful biometric check first, then keep the
-    // current session unlocked so we don't immediately lock the user out.
-    setBioBusy(true);
-    const ok = await biometricVerify(`Enable ${bio.label} unlock`);
-    setBioBusy(false);
-    if (!ok) return;
-    setBiometricLock(true);
-    setAppUnlocked(true);
-    await stashBiometricToken();
   };
 
   // All hooks must run before the early return below (Rules of Hooks).
@@ -320,11 +339,11 @@ export function AppSettingsSheet() {
             <div style={{ height: 8 }} />
             <Group>
               {SECTION_ORDER.map((k) => (
-                <LinkRow
+                <MenuRow
                   key={k}
                   icon={<span style={{ fontSize: 18 }}>{SECTION_META[k].icon}</span>}
-                  label={SECTION_META[k].title}
-                  hint={SECTION_META[k].sub}
+                  title={SECTION_META[k].title}
+                  sub={SECTION_META[k].sub}
                   onClick={() => setSection(k)}
                 />
               ))}
@@ -453,13 +472,15 @@ export function AppSettingsSheet() {
                   onToggle={() => updateProfile.mutate({ private: !(me.data?.private ?? false) })}
                 />
                 <ToggleRow
-                  title={`Unlock with ${bio.available ? bio.label : 'Face ID / Touch ID'}`}
-                  sub={bio.available ? 'Require it each time you open Sizzle' : isNative ? 'Not set up on this device' : 'Available in the Sizzle app'}
+                  title="App lock passcode"
+                  sub={appLockEnabled ? 'A 4-digit code is required to open Sizzle' : 'Require a 4-digit code to open Sizzle'}
                   icon={<span style={{ fontSize: 19 }}>🔒</span>}
-                  on={biometricLock}
-                  onToggle={() => void toggleBiometric()}
-                  dim={!bio.available}
+                  on={appLockEnabled}
+                  onToggle={() => setPasscodeFlow(appLockEnabled ? 'disable' : 'enable')}
                 />
+                {appLockEnabled && (
+                  <LinkRow icon={<span style={{ fontSize: 18 }}>🔢</span>} label="Change passcode" onClick={() => setPasscodeFlow('change-verify')} />
+                )}
                 <LinkRow icon={<span style={{ fontSize: 18 }}>🚫</span>} label="Blocked accounts" hint="Manage list" onClick={() => setShowBlocked(true)} />
               </Group>
             )}
@@ -538,6 +559,14 @@ export function AppSettingsSheet() {
           </div>
         )}
       </div>
+
+      {passcodeFlow && (
+        <PasscodeSetup
+          mode={passcodeFlow === 'enable' || passcodeFlow === 'change-set' ? 'set' : 'verify'}
+          title={passcodeFlow === 'change-set' ? 'Set your new passcode' : undefined}
+          onDone={(ok) => void onPasscodeDone(ok)}
+        />
+      )}
     </div>
   );
 }
