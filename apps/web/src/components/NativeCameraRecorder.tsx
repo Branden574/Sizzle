@@ -34,7 +34,23 @@ export function NativeCameraRecorder({ onCapture, onClose }: { onCapture: (file:
   const [recording, setRecording] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [zoom, setZoom] = useState(1);
+  const [lensValues, setLensValues] = useState<number[]>([]);
+  const [zoomRange, setZoomRange] = useState<{ min: number; max: number }>({ min: 1, max: 8 });
   const codecRef = useRef<'hvc1' | 'avc1'>('avc1');
+
+  // Pull the device's lens buttons (0.5/1/2/3 per available lenses) + zoom range.
+  const loadZoomInfo = useCallback(async () => {
+    try {
+      const [btn, z] = await Promise.all([CameraPreview.getZoomButtonValues(), CameraPreview.getZoom()]);
+      if (!active.current) return;
+      setLensValues(Array.isArray(btn?.values) ? btn.values : []);
+      setZoomRange({ min: z?.min ?? 1, max: z?.max ?? 8 });
+      setZoom(z?.current ?? 1);
+    } catch {
+      setLensValues([]);
+      setZoom(1);
+    }
+  }, []);
   const tickRef = useRef<number | null>(null);
   const startedAt = useRef(0);
   const stopping = useRef(false);
@@ -52,12 +68,24 @@ export function NativeCameraRecorder({ onCapture, onClose }: { onCapture: (file:
         const perm = await CameraPreview.requestPermissions({});
         if (perm.camera !== 'granted') { if (active.current) setStatus('denied'); return; }
         document.documentElement.classList.add('sz-native-cam');
-        await CameraPreview.start({ position: 'rear', toBack: true, aspectMode: 'cover', disableAudio: false });
+        // Explicit full-screen dimensions + cover so the preview fills the whole
+        // screen (without them the preview was letterboxed with a black band below).
+        await CameraPreview.start({
+          position: 'rear',
+          toBack: true,
+          x: 0,
+          y: 0,
+          width: Math.round(window.innerWidth),
+          height: Math.round(window.innerHeight),
+          aspectMode: 'cover',
+          disableAudio: false,
+        });
         // Prefer HEVC when the device supports it (half the size at equal quality).
         try {
           const { codecs } = await CameraPreview.getSupportedVideoCodecs();
           if (codecs.includes('hvc1')) codecRef.current = 'hvc1';
         } catch { /* keep H.264 */ }
+        await loadZoomInfo();
         if (active.current) setStatus('ready');
       } catch {
         document.documentElement.classList.remove('sz-native-cam');
@@ -77,14 +105,14 @@ export function NativeCameraRecorder({ onCapture, onClose }: { onCapture: (file:
   const flip = useCallback(async () => {
     if (status !== 'ready') return;
     const next = facing === 'rear' ? 'front' : 'rear';
-    try { await CameraPreview.flip(); setFacing(next); setZoom(1); } catch { /* stay put */ }
-  }, [facing, status]);
+    try { await CameraPreview.flip(); setFacing(next); await loadZoomInfo(); } catch { /* stay put */ }
+  }, [facing, status, loadZoomInfo]);
 
   const applyZoom = useCallback(async (level: number) => {
-    const v = Math.max(1, Math.min(8, Math.round(level * 10) / 10));
+    const v = Math.max(zoomRange.min, Math.min(zoomRange.max, Math.round(level * 10) / 10));
     setZoom(v);
     try { await CameraPreview.setZoom({ level: v, ramp: false }); } catch { /* device rejected */ }
-  }, []);
+  }, [zoomRange]);
 
   const startTick = () => {
     startedAt.current = performance.now();
@@ -162,8 +190,6 @@ export function NativeCameraRecorder({ onCapture, onClose }: { onCapture: (file:
     onClose();
   };
 
-  const hasFootage = elapsedMs > 600;
-
   return (
     <div
       className="sz-cam-overlay"
@@ -222,13 +248,41 @@ export function NativeCameraRecorder({ onCapture, onClose }: { onCapture: (file:
         </div>
       )}
 
-      {/* zoom slider */}
-      {status === 'ready' && (
-        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 12, padding: '0 32px 16px' }}>
-          <span style={{ color: '#fff', fontSize: 12.5, fontWeight: 800, minWidth: 40, textAlign: 'center', background: 'rgba(0,0,0,.4)', borderRadius: 12, padding: '4px 0', fontVariantNumeric: 'tabular-nums' }}>
-            {zoom.toFixed(1)}×
-          </span>
-          <input type="range" min={1} max={8} step={0.1} value={zoom} onChange={(e) => void applyZoom(parseFloat(e.target.value))} aria-label="Zoom" style={{ flex: 1, accentColor: 'var(--accent)', height: 28 }} />
+      {/* iPhone-style lens buttons just above the record button (0.5/1/2/3 per the
+          device's real lenses; pinch still zooms and highlights the nearest lens). */}
+      {status === 'ready' && lensValues.length > 0 && (
+        <div style={{ position: 'relative', display: 'flex', justifyContent: 'center', padding: '0 0 16px' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(0,0,0,.4)', borderRadius: 26, padding: 5, backdropFilter: 'blur(6px)' }}>
+            {lensValues.map((val) => {
+              const on = Math.abs(zoom - val) < 0.15;
+              return (
+                <Button
+                  key={val}
+                  onClick={() => void applyZoom(val)}
+                  aria-label={`${val}× zoom`}
+                  style={{
+                    minWidth: on ? 48 : 38,
+                    height: on ? 48 : 38,
+                    borderRadius: '50%',
+                    border: 'none',
+                    padding: '0 6px',
+                    background: on ? 'rgba(255,214,10,.95)' : 'rgba(255,255,255,.12)',
+                    color: on ? '#1b1512' : '#fff',
+                    fontWeight: 800,
+                    fontSize: on ? 14 : 12.5,
+                    cursor: 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    transition: 'all .15s',
+                    fontVariantNumeric: 'tabular-nums',
+                  }}
+                >
+                  {on ? `${zoom.toFixed(1)}×` : `${val}`}
+                </Button>
+              );
+            })}
+          </div>
         </div>
       )}
 
@@ -245,11 +299,6 @@ export function NativeCameraRecorder({ onCapture, onClose }: { onCapture: (file:
         </div>
       )}
 
-      {status === 'ready' && !recording && !hasFootage && (
-        <div style={{ position: 'absolute', bottom: 150, left: 0, right: 0, textAlign: 'center', color: 'rgba(255,255,255,.8)', fontSize: 13.5, fontWeight: 600, pointerEvents: 'none' }}>
-          Tap to record · flip anytime · pinch to zoom
-        </div>
-      )}
     </div>
   );
 }
