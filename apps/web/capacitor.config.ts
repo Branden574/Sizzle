@@ -23,6 +23,17 @@ const config: CapacitorConfig = {
     FirebaseMessaging: {
       presentationOptions: ['badge', 'sound', 'alert'],
     },
+    // OTA live updates via Capgo Cloud. Checks the `production` channel in the
+    // background and applies a downloaded JS/CSS bundle on the next resume —
+    // ships hot-fixes without an App Store review (Apple 3.3.2: web-layer only,
+    // no change to the app's reviewed purpose). notifyAppReady() in main.tsx
+    // arms the auto-rollback if a bad bundle fails to boot. Push with:
+    //   npx @capgo/cli bundle upload app.sizzle.mobile --path dist --channel production
+    CapacitorUpdater: {
+      appId: 'app.sizzle.mobile',
+      autoUpdate: 'atBackground',
+      defaultChannel: 'production',
+    },
   },
 };
 
