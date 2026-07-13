@@ -24,9 +24,11 @@ export async function finalizeProviderAsset(assetId: string, providerUid: string
   if (a.status === 'ready' && a.posterUrl) {
     const mod = await moderateImages([a.posterUrl]);
     if (!mod.ok) {
+      // Do NOT persist the flagged thumbnail URL — null it so the DB never holds a
+      // pointer to known-unsafe content.
       await supabaseAdmin
         .from('video_assets')
-        .update({ status: 'error', poster_url: a.posterUrl, duration_seconds: a.duration })
+        .update({ status: 'error', poster_url: null, hls_url: null, duration_seconds: a.duration })
         .eq('id', assetId);
       await supabaseAdmin
         .from('recipes')

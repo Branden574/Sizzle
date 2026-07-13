@@ -113,10 +113,13 @@ export function CameraRecorder({ onCapture, onClose }: { onCapture: (file: File)
     if (!track || !zoomRange) return;
     const v = Math.max(zoomRange.min, Math.min(zoomRange.max, Math.round(value * 100) / 100));
     setZoom(v);
+    // applyConstraints returns a Promise — a device rejection rejects it (a sync
+    // try/catch wouldn't catch that), so swallow it here to avoid an unhandled
+    // rejection; the preview just stays put.
     try {
-      void track.applyConstraints({ advanced: [{ zoom: v } as MediaTrackConstraintSet & { zoom: number }] });
+      void track.applyConstraints({ advanced: [{ zoom: v } as MediaTrackConstraintSet & { zoom: number }] }).catch(() => {});
     } catch {
-      /* device rejected the zoom constraint — leave the preview as-is */
+      /* older engine threw synchronously — ignore */
     }
   }, [zoomRange]);
 

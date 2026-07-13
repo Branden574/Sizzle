@@ -1049,11 +1049,14 @@ export async function pollVideoReady(assetId: string, tries = 60, intervalMs = 2
  * Detached from the composer so posting feels instant — the user has already
  * navigated to their profile by the time this resolves.
  */
-export function finalizeVideoAsset(assetId: string, qc: QueryClient): void {
+export function finalizeVideoAsset(assetId: string, qc: QueryClient, recipeId?: string): void {
   void pollVideoReady(assetId).finally(() => {
     for (const key of [['feed'], ['cook'], keys.me, ['me', 'drafts']] as const) {
       void qc.invalidateQueries({ queryKey: key });
     }
+    // Also refresh the recipe-detail sheet — a creator who opens their just-posted
+    // clip should see it flip from poster → playable without leaving the page.
+    if (recipeId) void qc.invalidateQueries({ queryKey: keys.recipe(recipeId) });
   });
 }
 
@@ -1081,7 +1084,7 @@ export function useUploadRecipe() {
       // Cloudflare posts are created before transcoding finishes — keep polling in
       // the background so the card becomes playable (and its thumbnail is moderated)
       // without the composer having to wait.
-      if (variables.videoAssetId) finalizeVideoAsset(variables.videoAssetId, qc);
+      if (variables.videoAssetId) finalizeVideoAsset(variables.videoAssetId, qc, _detail?.id);
     },
   });
 }
