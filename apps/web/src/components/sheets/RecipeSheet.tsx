@@ -41,6 +41,9 @@ export function RecipeSheet() {
   const { data, isLoading } = useRecipe(openRecipe);
   const derivatives = useDerivatives(openRecipe);
   const cookLog = useCookLog(openRecipe);
+  // Remix diff: when this post was cooked from another recipe, fetch the origin
+  // and show what changed (added/removed ingredients) — GitHub-fork style.
+  const originDetail = useRecipe(data?.origin?.id ?? null);
   const [showMadeIt, setShowMadeIt] = useState(false);
   const { data: me } = useMe();
   const appeal = useAppealRecipe();
@@ -160,6 +163,21 @@ export function RecipeSheet() {
                   <div style={{ fontSize: 12.5, color: 'var(--text-soft)' }}>@{r.cook.handle}</div>
                 </div>
               </Button>
+              {r.origin && originDetail.data && !isReview && (() => {
+                const norm = (x: string) => x.trim().toLowerCase();
+                const mine = new Set((r.ingredients ?? []).map(norm));
+                const theirs = new Set((originDetail.data.ingredients ?? []).map(norm));
+                const added = (r.ingredients ?? []).filter((x) => !theirs.has(norm(x))).slice(0, 5);
+                const removed = (originDetail.data.ingredients ?? []).filter((x) => !mine.has(norm(x))).slice(0, 5);
+                if (!added.length && !removed.length) return null;
+                return (
+                  <div style={{ marginTop: 12, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 14, padding: '11px 14px' }}>
+                    <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.4px', textTransform: 'uppercase', color: 'var(--text-faint)' }}>What changed from the original</div>
+                    {added.map((x, i) => <div key={`a${i}`} style={{ fontSize: 13, marginTop: 4, color: '#1d6b3c' }}>+ {x}</div>)}
+                    {removed.map((x, i) => <div key={`r${i}`} style={{ fontSize: 13, marginTop: 4, color: '#b8291b', textDecoration: 'line-through', textDecorationColor: 'rgba(184,41,27,.45)' }}>− {x}</div>)}
+                  </div>
+                );
+              })()}
               {r.origin && (
                 <Button
                   onClick={() => setOpenRecipe(r.origin!.id)}
@@ -281,6 +299,13 @@ export function RecipeSheet() {
 
                   {!r.locked && (
                   <>
+                  {r.chefsNote && (
+                    <div style={{ marginTop: 18, background: '#fff4dc', border: '1px solid #f0dfb8', borderRadius: 16, padding: '12px 15px' }}>
+                      <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.4px', textTransform: 'uppercase', color: '#9a6b00' }}>📌 Chef's note · {r.chefsNote.authorName}</div>
+                      <div style={{ fontSize: 14, color: '#5a4a1f', lineHeight: 1.5, marginTop: 4 }}>{r.chefsNote.text}</div>
+                    </div>
+                  )}
+
                   <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', margin: '26px 0 12px' }} data-locked-gate="ingredients">
                     <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 26, color: 'var(--text)' }}>Ingredients</div>
                     {/* Type or step a target serving count; ingredients scale to it. */}

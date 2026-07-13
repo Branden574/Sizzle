@@ -7,6 +7,10 @@
     {
       "source": "/u/:handle",
       "destination": "https://sizzle-chi.vercel.app/u/:handle"
+    },
+    {
+      "source": "/b/:id",
+      "destination": "https://sizzle-chi.vercel.app/b/:id"
     }
   ],
   "headers": [

@@ -14,6 +14,23 @@ export function Discover() {
 
   const [q, setQ] = useState('');
   const query = q.trim();
+  // Recent searches (client-only, last 8). Recorded on submit-ish signals:
+  // picking a result would be ideal; recording on 1.2s settled input is enough.
+  const [recents, setRecents] = useState<string[]>(() => {
+    try { return JSON.parse(localStorage.getItem('sz-recent-searches') ?? '[]') as string[]; } catch { return []; }
+  });
+  useEffect(() => {
+    if (query.length < 3) return;
+    const t = window.setTimeout(() => {
+      setRecents((prev) => {
+        const next = [query, ...prev.filter((x) => x.toLowerCase() !== query.toLowerCase())].slice(0, 8);
+        try { localStorage.setItem('sz-recent-searches', JSON.stringify(next)); } catch { /* ignore */ }
+        return next;
+      });
+    }, 1200);
+    return () => window.clearTimeout(t);
+  }, [query]);
+  const clearRecents = () => { setRecents([]); try { localStorage.removeItem('sz-recent-searches'); } catch { /* ignore */ } };
   const { data: feed, hasNextPage, isFetchingNextPage, fetchNextPage } = useForYouFeed();
   const { data: results, isFetching } = useSearch(q);
   const { data: trending } = useTrendingTags();
@@ -70,6 +87,19 @@ export function Discover() {
             <IconButton label="Clear search" variant="text" size="sm" onClick={() => setQ('')}>×</IconButton>
           )}
         </div>
+        {!query && recents.length > 0 && pantry.length === 0 && (
+          <>
+            <div style={{ display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', margin: '18px 0 10px' }}>
+              <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-faint-2)', textTransform: 'uppercase', letterSpacing: '.4px' }}>Recent</span>
+              <Button onClick={clearRecents} style={{ border: 'none', background: 'none', cursor: 'pointer', fontSize: 12, fontWeight: 700, color: 'var(--text-faint-2)' }}>Clear</Button>
+            </div>
+            <div style={{ display: 'flex', gap: 9, flexWrap: 'wrap' }}>
+              {recents.map((rq) => (
+                <FilterChip key={rq} onClick={() => setQ(rq)}>{rq}</FilterChip>
+              ))}
+            </div>
+          </>
+        )}
         {!query && (
           <>
             <div style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-faint-2)', textTransform: 'uppercase', letterSpacing: '.4px', margin: '18px 0 10px' }}>What&apos;s in your kitchen?</div>

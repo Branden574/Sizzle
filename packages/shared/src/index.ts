@@ -152,9 +152,18 @@ export interface RecipeDetail extends RecipeCard {
   caption: string | null;
   ingredients: string[];
   steps: string[];
+  /** The owner-pinned comment, surfaced on the sheet and in cook mode. */
+  chefsNote: { text: string; authorName: string } | null;
 }
 
 /** A saved collection ("cookbook") summary. */
+export interface BoardDTO {
+  id: string;
+  name: string;
+  owner: CookSummary;
+  recipes: RecipeCard[];
+}
+
 export interface CollectionDTO {
   id: string;
   name: string;
@@ -165,6 +174,8 @@ export interface CollectionDTO {
   createdAt: string;
   /** Whether a specific recipe is in this collection (only set by the picker query). */
   hasRecipe?: boolean;
+  /** Public board: shareable at /b/:id. */
+  isPublic: boolean;
 }
 
 /** A trending hashtag with its post count. */
@@ -192,6 +203,8 @@ export interface CommentDTO {
   parentId: string | null;
   /** Number of replies (top-level comments only). */
   replyCount: number;
+  /** Pinned by the recipe owner — surfaced as the Chef's note. */
+  pinned: boolean;
   /** Hidden by the post owner/admin. Only ever true for the owner/admin viewer
    *  (the public never receives hidden comments; the author sees their own as
    *  normal), so the UI can show a "Hidden" badge + unhide control. */
@@ -463,6 +476,8 @@ export interface MessageDTO {
   createdAt: string;
   /** Relative label, e.g. "2h". */
   time: string;
+  /** Send-to-friend: an embedded recipe card (tap to open the recipe). */
+  recipe?: { id: string; title: string; poster: string | null; bg: string; cookHandle: string } | null;
 }
 
 /** One row in the messages inbox. */

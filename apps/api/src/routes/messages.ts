@@ -136,12 +136,35 @@ messages.get('/with/:userId', requireAuth, async (c) => {
       .limit(300);
     if (myCleared) q = q.gt('created_at', myCleared);
     const { data: rows } = await q;
+    // Batch-embed recipe cards for send-to-friend messages.
+    const recipeIds = [...new Set((rows ?? []).map((m) => m.recipe_id as string | null).filter((x): x is string => !!x))];
+    const embeds = new Map<string, NonNullable<MessageDTO['recipe']>>();
+    if (recipeIds.length) {
+      const { data: recs } = await supabaseAdmin.from('recipes').select('id, title, bg, image_urls, video_asset_id, status, cook_id').in('id', recipeIds);
+      const vidIds = (recs ?? []).map((r) => r.video_asset_id).filter((x): x is string => !!x);
+      const { data: vids } = vidIds.length ? await supabaseAdmin.from('video_assets').select('id, poster_url').in('id', vidIds) : { data: [] as Record<string, unknown>[] };
+      const posters = new Map((vids ?? []).map((v) => [v.id as string, (v.poster_url as string) ?? null]));
+      const cookIds = [...new Set((recs ?? []).map((r) => r.cook_id as string))];
+      const { data: cooks } = cookIds.length ? await supabaseAdmin.from('profiles').select('id, handle').in('id', cookIds) : { data: [] as Record<string, unknown>[] };
+      const handles = new Map((cooks ?? []).map((p) => [p.id as string, p.handle as string]));
+      for (const r of recs ?? []) {
+        if (r.status !== 'published') continue; // unpublished since sending — card disappears, text stays
+        embeds.set(r.id as string, {
+          id: r.id as string,
+          title: r.title as string,
+          poster: (r.video_asset_id && posters.get(r.video_asset_id as string)) || ((r.image_urls as string[] | null)?.[0] ?? null),
+          bg: r.bg as string,
+          cookHandle: handles.get(r.cook_id as string) ?? '',
+        });
+      }
+    }
     msgs = (rows ?? []).slice().reverse().map((m) => ({
       id: m.id as string,
       fromMe: m.sender_id === userId,
       text: m.text as string,
       createdAt: m.created_at as string,
       time: relativeTime(new Date(m.created_at as string)),
+      recipe: m.recipe_id ? embeds.get(m.recipe_id as string) ?? null : null,
     }));
     // Opening the thread marks the viewer's side read.
     const col = userId === a ? 'a_last_read_at' : 'b_last_read_at';
@@ -151,7 +174,24 @@ messages.get('/with/:userId', requireAuth, async (c) => {
   return c.json<ThreadDTO>({ conversationId: conv?.id ?? '', otherUser: cookSummary(other as ProfileRow), messages: msgs, otherLastReadAt });
 });
 
-const sendSchema = z.object({ text: z.string().trim().min(1).max(2000) });
+/** Small embed for a single just-sent recipe card. */
+async function recipeCardEmbed(recipeId: string): Promise<MessageDTO['recipe']> {
+  const { data: r } = await supabaseAdmin.from('recipes').select('id, title, bg, image_urls, video_asset_id, cook_id').eq('id', recipeId).maybeSingle();
+  if (!r) return null;
+  let poster: string | null = (r.image_urls as string[] | null)?.[0] ?? null;
+  if (r.video_asset_id) {
+    const { data: v } = await supabaseAdmin.from('video_assets').select('poster_url').eq('id', r.video_asset_id).maybeSingle();
+    poster = (v?.poster_url as string) ?? poster;
+  }
+  const { data: p } = await supabaseAdmin.from('profiles').select('handle').eq('id', r.cook_id).maybeSingle();
+  return { id: r.id as string, title: r.title as string, poster, bg: r.bg as string, cookHandle: (p?.handle as string) ?? '' };
+}
+
+const sendSchema = z.object({
+  text: z.string().trim().max(2000).default(''),
+  /** Send-to-friend: attach a recipe card. Text becomes optional. */
+  recipeId: z.string().uuid().optional(),
+}).refine((v) => v.text.length > 0 || !!v.recipeId, { message: 'Message text required' });
 
 /** POST /messages/with/:userId {text} — send a message (creates the conversation). */
 messages.post('/with/:userId', requireAuth, requireNotBanned, rateLimit({ windowMs: 60_000, max: 60, name: 'dm' }), async (c) => {
@@ -160,8 +200,20 @@ messages.post('/with/:userId', requireAuth, requireNotBanned, rateLimit({ window
   if (otherId === userId) throw badRequest('You cannot message yourself');
   const parsed = sendSchema.safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) throw badRequest('Message text required');
-  const mod = await moderate(parsed.data.text);
-  if (!mod.ok) throw badRequest(mod.reason!);
+  if (parsed.data.text) {
+    const mod = await moderate(parsed.data.text);
+    if (!mod.ok) throw badRequest(mod.reason!);
+  }
+
+  // Send-to-friend: the recipe must be real, published, and not premium-locked
+  // media the sender is leaking — the card carries only public metadata, so
+  // published is the right gate.
+  let sendRecipe: { id: string; title: string } | null = null;
+  if (parsed.data.recipeId) {
+    const { data: r } = await supabaseAdmin.from('recipes').select('id, title, status').eq('id', parsed.data.recipeId).maybeSingle();
+    if (!r || r.status !== 'published') throw notFound('Recipe not found');
+    sendRecipe = { id: r.id as string, title: r.title as string };
+  }
 
   // Can't message someone you've blocked or who has blocked you.
   const blocked = await loadBlockedIds(supabaseAdmin, userId);
@@ -178,10 +230,13 @@ messages.post('/with/:userId', requireAuth, requireNotBanned, rateLimit({ window
   const now = new Date().toISOString();
   const { data: msg, error } = await supabaseAdmin
     .from('messages')
-    .insert({ conversation_id: conv.id, sender_id: userId, text: parsed.data.text })
+    .insert({ conversation_id: conv.id, sender_id: userId, text: parsed.data.text, recipe_id: sendRecipe?.id ?? null })
     .select('*')
     .single();
   if (error || !msg) throw dbFail(error?.message ?? 'Could not send message');
+
+  // Sends-per-reach: a DM send is the strongest personal endorsement — count it.
+  if (sendRecipe) await supabaseAdmin.rpc('increment_send', { rid: sendRecipe.id });
 
   // Bump the denormalized summary + mark the sender's own side read. Sending also
   // un-deletes the thread for the sender (if they'd cleared it before).
@@ -189,7 +244,7 @@ messages.post('/with/:userId', requireAuth, requireNotBanned, rateLimit({ window
   const senderClearedCol = userId === a ? 'a_cleared_at' : 'b_cleared_at';
   await supabaseAdmin
     .from('conversations')
-    .update({ last_message_at: now, last_message_text: parsed.data.text, last_message_sender_id: userId, [senderCol]: now, [senderClearedCol]: null })
+    .update({ last_message_at: now, last_message_text: parsed.data.text || (sendRecipe ? `🍳 ${sendRecipe.title}` : ''), last_message_sender_id: userId, [senderCol]: now, [senderClearedCol]: null })
     .eq('id', conv.id);
 
   // Push the recipient (best-effort, respects their prefs). DMs live in their own
@@ -197,7 +252,7 @@ messages.post('/with/:userId', requireAuth, requireNotBanned, rateLimit({ window
   await sendPushForNotification({ userId: otherId, type: 'message', actorId: userId }).catch(() => {});
 
   return c.json<MessageDTO>(
-    { id: msg.id as string, fromMe: true, text: msg.text as string, createdAt: msg.created_at as string, time: relativeTime(new Date(msg.created_at as string)) },
+    { id: msg.id as string, fromMe: true, text: msg.text as string, createdAt: msg.created_at as string, time: relativeTime(new Date(msg.created_at as string)), recipe: sendRecipe ? await recipeCardEmbed(sendRecipe.id) : null },
     201,
   );
 });

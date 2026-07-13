@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Button, DismissBackdrop } from '../controls';
 import type { CommentDTO } from '@sizzle/shared';
 import { useRequireAuth } from '../../auth/useRequireAuth';
-import { useAddComment, useComments, useDeleteComment, useHideComment, useMe, useRecipe, useToggleCommentLike } from '../../data/queries';
+import { useAddComment, useComments, useDeleteComment, useHideComment, useMe, useRecipe, useToggleCommentLike, useTogglePinComment } from '../../data/queries';
 import { useSizzle } from '../../store';
 import { theme } from '../../theme';
 import { formatCount } from '../../lib/format';
@@ -36,6 +36,9 @@ export function CommentsSheet() {
   // admin) delete OR hide/unhide any comment on the recipe — TikTok-style.
   const myId = me?.id;
   const isOwnerOrAdmin = !!myId && (recipe?.cook.id === myId || me?.role === 'admin');
+  const isPostOwner = !!myId && recipe?.cook.id === myId;
+  const pin = useTogglePinComment(commentsFor ?? '');
+  const onPin = (id: string, pinned: boolean) => { if (!pin.isPending) pin.mutate({ commentId: id, pinned }); };
   const canDelete = (cm: CommentDTO) => !!myId && (cm.authorId === myId || isOwnerOrAdmin);
   const onDelete = (id: string) => {
     if (!requireAuth()) return;
@@ -96,7 +99,7 @@ export function CommentsSheet() {
           {isLoading && <div style={{ color: 'var(--text-faint-2)', fontSize: 14 }}>Loading comments…</div>}
           {!isLoading && list.length === 0 && <div style={{ color: 'var(--text-faint-2)', fontSize: 14, textAlign: 'center', marginTop: 30 }}>No comments yet — be the first.</div>}
           {list.map((cm) => (
-            <CommentItem key={cm.id} cm={cm} onLike={onLike} onReply={onReply} onAuthor={onAuthor} canDelete={canDelete} onDelete={onDelete} canModerate={isOwnerOrAdmin} onHide={onHide} onReport={onReport} myId={myId} />
+            <CommentItem key={cm.id} cm={cm} onLike={onLike} onReply={onReply} onAuthor={onAuthor} canDelete={canDelete} onDelete={onDelete} canModerate={isOwnerOrAdmin} onHide={onHide} onReport={onReport} myId={myId} canPin={isPostOwner} onPin={onPin} />
           ))}
         </div>
 
@@ -130,7 +133,7 @@ export function CommentsSheet() {
 
 const actionBtn = { background: 'none', border: 'none', padding: 0, cursor: 'pointer', fontSize: 12.5, color: 'var(--text-faint-2)', fontWeight: 600 } as const;
 
-function CommentItem({ cm, onLike, onReply, onAuthor, canDelete, onDelete, canModerate, onHide, onReport, myId, isReply }: { cm: CommentDTO; onLike: (id: string) => void; onReply: (parentId: string, name: string) => void; onAuthor: (id: string) => void; canDelete: (cm: CommentDTO) => boolean; onDelete: (id: string) => void; canModerate: boolean; onHide: (id: string, hidden: boolean) => void; onReport: (id: string) => void; myId?: string; isReply?: boolean }) {
+function CommentItem({ cm, onLike, onReply, onAuthor, canDelete, onDelete, canModerate, onHide, onReport, myId, isReply, canPin, onPin }: { cm: CommentDTO; onLike: (id: string) => void; onReply: (parentId: string, name: string) => void; onAuthor: (id: string) => void; canDelete: (cm: CommentDTO) => boolean; onDelete: (id: string) => void; canModerate: boolean; onHide: (id: string, hidden: boolean) => void; onReport: (id: string) => void; myId?: string; isReply?: boolean; canPin?: boolean; onPin?: (id: string, pinned: boolean) => void }) {
   const size = isReply ? 30 : 38;
   // A hidden comment (only the owner/admin ever sees this flag) is dimmed and
   // tagged so it reads as moderated, with an Unhide action.
@@ -145,6 +148,9 @@ function CommentItem({ cm, onLike, onReply, onAuthor, canDelete, onDelete, canMo
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, opacity: dim }}>
             <Button onClick={() => onAuthor(cm.authorId)} style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', cursor: 'pointer' }}>{cm.authorName}</Button>
             <span style={{ fontSize: 12, color: 'var(--text-faint-2)' }}>{cm.time}</span>
+            {cm.pinned && (
+              <span style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.3px', textTransform: 'uppercase', color: '#9a6b00', background: '#fff4dc', padding: '2px 7px', borderRadius: 7 }}>📌 Chef's note</span>
+            )}
             {cm.hidden && (
               <span style={{ fontSize: 10.5, fontWeight: 700, letterSpacing: '.3px', textTransform: 'uppercase', color: 'var(--text-faint-2)', background: 'var(--track)', padding: '2px 7px', borderRadius: 7 }}>Hidden</span>
             )}
@@ -152,6 +158,9 @@ function CommentItem({ cm, onLike, onReply, onAuthor, canDelete, onDelete, canMo
           <div style={{ fontSize: 14.5, color: 'var(--text-2)', lineHeight: 1.45, marginTop: 3, opacity: dim }}>{cm.text}</div>
           <div style={{ display: 'flex', alignItems: 'center', gap: 16, marginTop: 5 }}>
             <Button onClick={() => onReply(cm.parentId ?? cm.id, cm.authorName)} style={actionBtn}>Reply</Button>
+            {canPin && !isReply && onPin && (
+              <Button onClick={() => onPin(cm.id, !cm.pinned)} style={actionBtn}>{cm.pinned ? 'Unpin' : 'Pin'}</Button>
+            )}
             {canModerate && (
               <Button onClick={() => onHide(cm.id, !cm.hidden)} style={actionBtn}>{cm.hidden ? 'Unhide' : 'Hide'}</Button>
             )}

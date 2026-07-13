@@ -27,6 +27,7 @@
                 <category android:name="android.intent.category.BROWSABLE" />
                 <data android:scheme="https" android:host="getsizzle.app" android:pathPrefix="/r/" />
                 <data android:scheme="https" android:host="getsizzle.app" android:pathPrefix="/u/" />
+                <data android:scheme="https" android:host="getsizzle.app" android:pathPrefix="/b/" />
             </intent-filter>
         </activity>
 

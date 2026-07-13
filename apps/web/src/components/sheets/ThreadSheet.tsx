@@ -11,6 +11,7 @@ const accent = theme.accent;
 
 /** A 1:1 chat thread. */
 export function ThreadSheet() {
+  const setOpenRecipe = useSizzle((s) => s.setOpenRecipe);
   const threadWith = useSizzle((s) => s.threadWith);
   const setThreadWith = useSizzle((s) => s.setThreadWith);
   const setOpenCook = useSizzle((s) => s.setOpenCook);
@@ -87,11 +88,30 @@ export function ThreadSheet() {
         )}
         {msgs.map((m) => (
           <div key={m.id}>
+            {/* Send-to-friend: a recipe card bubble — tap to open the recipe. */}
+            {m.recipe && (
+              <div style={{ display: 'flex', justifyContent: m.fromMe ? 'flex-end' : 'flex-start', marginBottom: m.text ? 4 : 0 }}>
+                <Button
+                  onClick={() => setOpenRecipe(m.recipe!.id)}
+                  style={{ width: 190, border: '1px solid var(--line)', borderRadius: 18, overflow: 'hidden', padding: 0, cursor: 'pointer', background: 'var(--surface)', textAlign: 'left', display: 'block' }}
+                >
+                  <div style={{ height: 130, background: m.recipe.bg, position: 'relative' }}>
+                    {m.recipe.poster && <img src={m.recipe.poster} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover', display: 'block' }} loading="lazy" />}
+                  </div>
+                  <div style={{ padding: '9px 12px 11px' }}>
+                    <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 16.5, lineHeight: 1.1, color: 'var(--text)' }}>{m.recipe.title}</div>
+                    <div style={{ fontSize: 11.5, fontWeight: 700, color: 'var(--text-faint)', marginTop: 3 }}>@{m.recipe.cookHandle} · Sizzle</div>
+                  </div>
+                </Button>
+              </div>
+            )}
+            {m.text && (
             <div style={{ display: 'flex', justifyContent: m.fromMe ? 'flex-end' : 'flex-start' }}>
               <div style={{ maxWidth: '76%', padding: '9px 14px', borderRadius: m.fromMe ? '18px 18px 5px 18px' : '18px 18px 18px 5px', background: m.fromMe ? accent : 'var(--surface)', color: m.fromMe ? '#fff' : 'var(--text)', border: m.fromMe ? 'none' : '1px solid var(--line)', fontSize: 15, lineHeight: 1.4, wordBreak: 'break-word' }}>
                 {m.text}
               </div>
             </div>
+            )}
             {lastMine && m.id === lastMine.id && (
               <div style={{ fontSize: 11, color: 'var(--text-faint-2)', marginTop: 3, textAlign: 'right', paddingRight: 4 }}>
                 {readByOther ? 'Read' : 'Delivered'}

@@ -1,4 +1,5 @@
-import { useCollectionRecipes, useDeleteCollection, useRenameCollection, useToggleCollectionRecipe } from '../../data/queries';
+import { useCollections, useCollectionRecipes, useDeleteCollection, useRenameCollection, useSetCollectionPublic, useToggleCollectionRecipe } from '../../data/queries';
+import { boardShareUrl } from '../../lib/share';
 import { Button } from '../controls';
 import { useSizzle } from '../../store';
 import { ChevronLeftIcon } from '../icons';
@@ -11,6 +12,9 @@ export function CollectionSheet() {
   const del = useDeleteCollection();
   const rename = useRenameCollection();
   const removeRecipe = useToggleCollectionRecipe();
+  const setPublic = useSetCollectionPublic();
+  const { data: allCollections } = useCollections();
+  const isPublic = allCollections?.find((col) => col.id === openCollection?.id)?.isPublic ?? false;
 
   if (!openCollection) return null;
   const close = () => setOpenCollection(null);
@@ -33,6 +37,12 @@ export function CollectionSheet() {
     removeRecipe.mutate({ collectionId: openCollection.id, recipeId, inCollection: true });
   };
 
+  const onShareBoard = () => {
+    const url = boardShareUrl(openCollection.id);
+    if (navigator.share) void navigator.share({ title: `${openCollection.name} · Sizzle`, url }).catch(() => {});
+    else void navigator.clipboard?.writeText(url).catch(() => {});
+  };
+
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 86, background: 'var(--bg)', overflowY: 'auto', animation: 'sz-slideUp .35s cubic-bezier(.16,1,.3,1)' }}>
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '54px 16px 8px', position: 'sticky', top: 0, background: 'var(--bg)', zIndex: 2 }}>
@@ -48,6 +58,24 @@ export function CollectionSheet() {
       <div style={{ padding: '4px 22px 6px' }}>
         <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 34, color: 'var(--text)' }}>{openCollection.name}</div>
         <div style={{ fontSize: 13.5, color: 'var(--text-faint)', marginTop: 2 }}>{items.length} recipe{items.length === 1 ? '' : 's'}</div>
+
+        {/* Public board: shareable at /b/:id — Pinterest's core loop. */}
+        <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 12, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 14, padding: '10px 14px' }}>
+          <div style={{ flex: 1, minWidth: 0 }}>
+            <div style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--text)' }}>{isPublic ? '🌍 Public board' : '🔒 Private collection'}</div>
+            <div style={{ fontSize: 12, color: 'var(--text-faint)', marginTop: 1 }}>{isPublic ? 'Anyone with the link can browse it' : 'Only you can see this'}</div>
+          </div>
+          {isPublic && (
+            <Button onClick={onShareBoard} style={{ flex: 'none', border: 'none', borderRadius: 10, background: 'var(--surface-2)', color: 'var(--text)', padding: '8px 13px', fontFamily: "'Hanken Grotesk'", fontSize: 12.5, fontWeight: 800, cursor: 'pointer' }}>Share</Button>
+          )}
+          <Button
+            onClick={() => { if (!setPublic.isPending) setPublic.mutate({ id: openCollection.id, isPublic: !isPublic }); }}
+            aria-pressed={isPublic}
+            style={{ flex: 'none', border: 'none', borderRadius: 999, background: isPublic ? 'var(--accent,#ff5a36)' : 'var(--surface-2)', color: isPublic ? '#fff' : 'var(--text)', padding: '8px 15px', fontFamily: "'Hanken Grotesk'", fontSize: 12.5, fontWeight: 800, cursor: 'pointer' }}
+          >
+            {isPublic ? 'Make private' : 'Make public'}
+          </Button>
+        </div>
       </div>
 
       {!isLoading && items.length === 0 && (

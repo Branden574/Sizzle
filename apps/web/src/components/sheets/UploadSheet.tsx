@@ -29,6 +29,7 @@ const labelStyle: CSSProperties = { display: 'block', color: 'rgba(255,255,255,.
 
 export function UploadSheet() {
   const setShowUpload = useSizzle((s) => s.setShowUpload);
+  const setShareAfterPost = useSizzle((s) => s.setShareAfterPost);
   const setTab = useSizzle((s) => s.setTab);
   const setFeed = useSizzle((s) => s.setFeed);
   const requireAuth = useRequireAuth();
@@ -198,13 +199,16 @@ export function UploadSheet() {
         originRecipeId: uploadPrefill?.originRecipeId,
       },
       {
-        onSuccess: () => {
+        onSuccess: (detail) => {
           if (videoUrl) URL.revokeObjectURL(videoUrl);
           photos.forEach((p) => URL.revokeObjectURL(p.url));
           setUploadPrefill(null);
           setShowUpload(false);
           setFeed('foryou');
           setTab('feed');
+          // Share Everywhere: published posts get the one-tap share moment
+          // (drafts/scheduled posts aren't public yet — nothing to share).
+          if (mode === 'publish' && !scheduleAt && detail?.id) setShareAfterPost({ id: detail.id, title: detail.title });
         },
         onSettled: () => setSubmitMode(null),
       },

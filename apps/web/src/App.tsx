@@ -32,6 +32,9 @@ import { HashtagSheet } from './components/sheets/HashtagSheet';
 import { MoreSheet } from './components/sheets/MoreSheet';
 import { NotificationsSheet } from './components/sheets/NotificationsSheet';
 import { MessagesSheet } from './components/sheets/MessagesSheet';
+import { SendToFriendSheet } from './components/sheets/SendToFriendSheet';
+import { BoardSheet } from './components/sheets/BoardSheet';
+import { SharePostCard } from './components/SharePostCard';
 import { ThreadSheet } from './components/sheets/ThreadSheet';
 import { RecipeSheet } from './components/sheets/RecipeSheet';
 import { ReportSheet } from './components/sheets/ReportSheet';
@@ -49,7 +52,7 @@ import { biometricAvailability } from './lib/biometric';
 import { BiometricLock } from './components/BiometricLock';
 import { DesktopSidebar } from './components/DesktopSidebar';
 import { useMediaQuery } from './lib/useMediaQuery';
-import { parseCookDeepLink, parseRecipeDeepLink } from './lib/share';
+import { parseBoardDeepLink, parseCookDeepLink, parseRecipeDeepLink } from './lib/share';
 import { App as CapApp } from '@capacitor/app';
 import { useSizzle } from './store';
 
@@ -89,6 +92,9 @@ function closeTopmostOverlay(): boolean {
     [s.settingsFor, () => s.setSettingsFor(null)],
     [s.openCollection, () => s.setOpenCollection(null)],
     [s.openTag, () => s.setOpenTag(null)],
+    [s.sendRecipeFor, () => s.setSendRecipeFor(null)],
+    [s.shareAfterPost, () => s.setShareAfterPost(null)],
+    [s.openBoard, () => s.setOpenBoard(null)],
     [s.threadWith, () => s.setThreadWith(null)],
     [s.messagesOpen, () => s.setMessagesOpen(false)],
     [s.showNotifications, () => s.setShowNotifications(false)],
@@ -202,6 +208,7 @@ export default function App() {
   // open it once the user authenticates.
   const pendingRecipe = useRef<string | null>(null);
   const pendingCook = useRef<string | null>(null);
+  const pendingBoard = useRef<string | null>(null);
   const openSharedRecipe = (id: string) => {
     if (useAuth.getState().status === 'authed') useSizzle.getState().setOpenRecipe(id);
     else pendingRecipe.current = id;
@@ -211,15 +218,21 @@ export default function App() {
     if (useAuth.getState().status === 'authed') useSizzle.getState().setOpenCook(handle);
     else pendingCook.current = handle;
   };
+  const openSharedBoard = (id: string) => {
+    if (useAuth.getState().status === 'authed') useSizzle.getState().setOpenBoard(id);
+    else pendingBoard.current = id;
+  };
   // Parse the URL the app booted with (web share links), then clean it.
   useEffect(() => {
     const path = window.location.pathname + window.location.search;
     const id = parseRecipeDeepLink(path);
     const cook = id ? null : parseCookDeepLink(path);
-    if (!id && !cook) return;
+    const board = id || cook ? null : parseBoardDeepLink(path);
+    if (!id && !cook && !board) return;
     window.history.replaceState(null, '', '/');
     if (id) openSharedRecipe(id);
     else if (cook) openSharedCook(cook);
+    else if (board) openSharedBoard(board);
   }, []);
   // Native: links that launch/foreground the app (universal link / custom scheme).
   useEffect(() => {
@@ -228,7 +241,9 @@ export default function App() {
       const id = parseRecipeDeepLink(url);
       if (id) { openSharedRecipe(id); return; }
       const cook = parseCookDeepLink(url);
-      if (cook) openSharedCook(cook);
+      if (cook) { openSharedCook(cook); return; }
+      const board = parseBoardDeepLink(url);
+      if (board) openSharedBoard(board);
     });
     return () => { void handle.then((l) => l.remove()); };
   }, []);
@@ -244,6 +259,11 @@ export default function App() {
       const cook = pendingCook.current;
       pendingCook.current = null;
       useSizzle.getState().setOpenCook(cook);
+    }
+    if (pendingBoard.current) {
+      const board = pendingBoard.current;
+      pendingBoard.current = null;
+      useSizzle.getState().setOpenBoard(board);
     }
   }, [authStatus]);
 
@@ -300,6 +320,9 @@ export default function App() {
   const showUpload = useSizzle((s) => s.showUpload);
   const showNotifications = useSizzle((s) => s.showNotifications);
   const messagesOpen = useSizzle((s) => s.messagesOpen);
+  const sendRecipeFor = useSizzle((s) => s.sendRecipeFor);
+  const openBoard = useSizzle((s) => s.openBoard);
+  const shareAfterPost = useSizzle((s) => s.shareAfterPost);
   const threadWith = useSizzle((s) => s.threadWith);
   const showEditProfile = useSizzle((s) => s.showEditProfile);
   const showAppSettings = useSizzle((s) => s.showAppSettings);
@@ -405,6 +428,9 @@ export default function App() {
           {showUpload && <UploadSheet />}
           {showNotifications && <NotificationsSheet />}
           {messagesOpen && <MessagesSheet />}
+          {sendRecipeFor && <SendToFriendSheet />}
+          {openBoard && <BoardSheet />}
+          {shareAfterPost && <SharePostCard />}
           {threadWith && <ThreadSheet />}
           {showEditProfile && <EditProfileSheet />}
           {showAppSettings && <AppSettingsSheet />}

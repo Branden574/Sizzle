@@ -93,6 +93,12 @@ export interface SizzleState {
   showRoadmap: boolean;
   showAdmin: boolean;
   /** Direct-messages inbox overlay. */
+  /** Send-to-friend sheet: the recipe being sent. */
+  sendRecipeFor: { id: string; title: string } | null;
+  /** A shared public board being viewed. */
+  openBoard: string | null;
+  /** Post-publish share card ("Share Everywhere"). */
+  shareAfterPost: { id: string; title: string } | null;
   /** "Cook this": pre-fill the composer from an existing recipe (lineage). */
   uploadPrefill: { originRecipeId: string; originTitle: string; originHandle: string; ingredients: string; steps: string } | null;
   messagesOpen: boolean;
@@ -190,6 +196,9 @@ export interface SizzleState {
   setShowAnalytics: (v: boolean) => void;
   setShowRoadmap: (v: boolean) => void;
   setShowAdmin: (v: boolean) => void;
+  setSendRecipeFor: (v: { id: string; title: string } | null) => void;
+  setOpenBoard: (id: string | null) => void;
+  setShareAfterPost: (v: { id: string; title: string } | null) => void;
   setUploadPrefill: (v: SizzleState['uploadPrefill']) => void;
   setMessagesOpen: (v: boolean) => void;
   setThreadWith: (id: string | null) => void;
@@ -234,6 +243,9 @@ export const useSizzle = create<SizzleState>((set) => ({
   showAnalytics: false,
   showRoadmap: false,
   showAdmin: false,
+  sendRecipeFor: null,
+  openBoard: null,
+  shareAfterPost: null,
   uploadPrefill: null,
   messagesOpen: false,
   threadWith: null,
@@ -321,6 +333,8 @@ export const useSizzle = create<SizzleState>((set) => ({
     viewer: null,
     openCook: null,
     openRecipe: null,
+    sendRecipeFor: null,
+    openBoard: null,
   }),
   setFeed: (feed) => set({ feed, immersive: false, commentsFor: null }),
   setImmersive: (on) => set({ immersive: on }),
@@ -354,6 +368,9 @@ export const useSizzle = create<SizzleState>((set) => ({
   setShowAnalytics: (v) => set({ showAnalytics: v }),
   setShowRoadmap: (v) => set({ showRoadmap: v }),
   setShowAdmin: (v) => set({ showAdmin: v }),
+  setSendRecipeFor: (v) => set({ sendRecipeFor: v }),
+  setOpenBoard: (id) => set({ openBoard: id }),
+  setShareAfterPost: (v) => set({ shareAfterPost: v }),
   setUploadPrefill: (v) => set({ uploadPrefill: v }),
   setMessagesOpen: (v) => set({ messagesOpen: v }),
   setThreadWith: (id) => set({ threadWith: id }),

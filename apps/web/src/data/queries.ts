@@ -1,5 +1,5 @@
 import { QueryClient, useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query';
-import type { AdminAppealDTO, AdminContentReportDTO, AdminLogDTO, AdminReportGroupDTO, AdminStats, AdminUserDTO, CollectionDTO, CommentDTO, ConversationDTO, CookProfile, CookSummary, CreateRecipeInput, CreatorAnalytics, DirectUploadTicket, DraftCard, EarningsSummary, FeedResponse, MeProfile, MessageDTO, MonetizationStatus, NotificationDTO, NotifPrefKey, PostControls, ProductDTO, RecipeCard, RecipeDetail, ReportInput, SearchResults, SuggestedCook, SupportRequestDTO, ThreadDTO, TierDTO, TipConfig, TrendingTag, VerificationTier, VideoAssetStatus, VideoUploadConfig, CookLogDTO, JournalEntryDTO } from '@sizzle/shared';
+import type { AdminAppealDTO, AdminContentReportDTO, AdminLogDTO, AdminReportGroupDTO, AdminStats, AdminUserDTO, CollectionDTO, CommentDTO, ConversationDTO, CookProfile, CookSummary, CreateRecipeInput, CreatorAnalytics, DirectUploadTicket, DraftCard, EarningsSummary, FeedResponse, MeProfile, MessageDTO, MonetizationStatus, NotificationDTO, NotifPrefKey, PostControls, ProductDTO, RecipeCard, RecipeDetail, ReportInput, SearchResults, SuggestedCook, SupportRequestDTO, ThreadDTO, TierDTO, TipConfig, TrendingTag, VerificationTier, VideoAssetStatus, VideoUploadConfig, CookLogDTO, JournalEntryDTO, BoardDTO } from '@sizzle/shared';
 import { useAuth } from '../auth/useAuth';
 import { useSizzle } from '../store';
 import { apiGet, apiSend } from '../lib/api';
@@ -1146,6 +1146,52 @@ export function useBlockedList() {
 /* ─────────────────────────── direct messages ─────────────────────────── */
 
 /** The DM inbox — polls while open so new messages surface without a manual refresh. */
+/** Send-to-friend: DM a recipe card (optionally with a note) to a user. */
+export function useSendRecipe() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ toUserId, recipeId, text }: { toUserId: string; recipeId: string; text?: string }) =>
+      apiSend<MessageDTO>('POST', `/messages/with/${toUserId}`, { recipeId, text: text ?? '' }),
+    onSuccess: (_msg, { toUserId }) => {
+      void qc.invalidateQueries({ queryKey: ['thread', toUserId] });
+      void qc.invalidateQueries({ queryKey: ['conversations'] });
+    },
+  });
+}
+
+/** A shared public board (collection flipped public by its owner). */
+export function useBoard(id: string | null) {
+  return useQuery({
+    queryKey: ['board', id],
+    queryFn: () => apiGet<BoardDTO>(`/boards/${id}`),
+    enabled: !!id,
+    staleTime: 60_000,
+  });
+}
+
+/** Owner: pin/unpin a comment as the Chef's note. */
+export function useTogglePinComment(recipeId: string) {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ commentId, pinned }: { commentId: string; pinned: boolean }) =>
+      apiSend('POST', `/recipes/${recipeId}/comments/${commentId}/pin`, { pinned }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['comments', recipeId] });
+      void qc.invalidateQueries({ queryKey: keys.recipe(recipeId) });
+    },
+  });
+}
+
+/** Owner: flip a collection's public-board toggle. */
+export function useSetCollectionPublic() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ id, isPublic }: { id: string; isPublic: boolean }) =>
+      apiSend('PATCH', `/me/collections/${id}`, { isPublic }),
+    onSuccess: () => void qc.invalidateQueries({ queryKey: ['collections'] }),
+  });
+}
+
 export function useConversations(enabled: boolean) {
   return useQuery({
     queryKey: ['conversations'],

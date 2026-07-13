@@ -109,6 +109,13 @@ export function CookModeSheet() {
 
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 99, background: 'var(--feed-bg)', display: 'flex', flexDirection: 'column', animation: 'sz-slideUp .35s cubic-bezier(.16,1,.3,1)' }}>
+      {/* Chef's note — the owner-pinned tip, surfaced where it matters: mid-cook. */}
+      {r?.chefsNote && (
+        <div style={{ flex: 'none', margin: '6px 20px 0', background: 'rgba(244,165,44,.14)', border: '1px solid rgba(244,165,44,.35)', borderRadius: 14, padding: '10px 14px' }}>
+          <div style={{ fontSize: 10.5, fontWeight: 800, letterSpacing: '.4px', textTransform: 'uppercase', color: '#f4a52c' }}>📌 Chef's note</div>
+          <div style={{ fontSize: 13.5, color: 'rgba(255,255,255,.92)', lineHeight: 1.45, marginTop: 3 }}>{r.chefsNote.text}</div>
+        </div>
+      )}
       {/* header */}
       <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '54px 20px 10px', flex: 'none' }}>
         <div style={{ minWidth: 40 }}>

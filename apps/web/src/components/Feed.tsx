@@ -4,9 +4,8 @@ import { GlowButton } from './glow';
 import type { RecipeCard } from '@sizzle/shared';
 import { useAuth } from '../auth/useAuth';
 import { useRequireAuth } from '../auth/useRequireAuth';
-import { useForYouFeed, useFollowingFeed, useMe, useShareRecipe, useToggleDislike, useToggleFollow, useToggleLike, useToggleRepost, useToggleSave } from '../data/queries';
+import { useForYouFeed, useFollowingFeed, useMe, useToggleDislike, useToggleFollow, useToggleLike, useToggleRepost, useToggleSave } from '../data/queries';
 import { apiSend } from '../lib/api';
-import { recipeShareUrl } from '../lib/share';
 import { useSizzle } from '../store';
 import { theme } from '../theme';
 import { formatCount } from '../lib/format';
@@ -313,7 +312,6 @@ export function FeedCard({ card, onClose }: { card: RecipeCard; onClose?: () => 
   const save = useToggleSave();
   const follow = useToggleFollow();
   const repost = useToggleRepost();
-  const share = useShareRecipe();
 
   // Drive video playback (active when ≥60% on screen) and log a watch event
   // (dwell → completed/skipped) when the card is scrolled past.
@@ -375,16 +373,12 @@ export function FeedCard({ card, onClose }: { card: RecipeCard; onClose?: () => 
     fn();
   };
 
-  // Native share sheet where available, otherwise copy the link to the clipboard.
+  // The share arrow opens the send-to-friend sheet (DM a recipe card — the
+  // strongest endorsement signal); copy-link / native share live inside it.
+  const setSendRecipeFor = useSizzle((s) => s.setSendRecipeFor);
   const onShare = () => {
-    const url = recipeShareUrl(card.id);
-    const title = card.title;
-    if (navigator.share) {
-      void navigator.share({ title, url }).then(() => share.mutate(card.id)).catch(() => {});
-    } else {
-      void navigator.clipboard?.writeText(url).catch(() => {});
-      share.mutate(card.id);
-    }
+    if (!requireAuth()) return;
+    setSendRecipeFor({ id: card.id, title: card.title });
   };
 
   return (

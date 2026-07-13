@@ -19,9 +19,10 @@ import { admin } from './routes/admin';
 import { support } from './routes/support';
 import { reports } from './routes/reports';
 import { monetize } from './routes/monetize';
-import { seo, seoProfile } from './routes/seo';
+import { seo, seoBoard, seoProfile } from './routes/seo';
 import { internal } from './routes/internal';
 import { live } from './routes/live';
+import { boards } from './routes/boards';
 
 export function createApp() {
   const app = new Hono<AppEnv>();
@@ -71,8 +72,10 @@ export function createApp() {
   app.route('/monetize', monetize);
   app.route('/r', seo); // crawlable server-rendered recipe pages (SEO)
   app.route('/u', seoProfile); // crawlable profile pages for shared profile links
+  app.route('/b', seoBoard); // crawlable public-board pages
   app.route('/internal', internal); // cron targets
   app.route('/live', live); // live cooking sessions
+  app.route('/boards', boards); // public collection boards
 
   return app;
 }

@@ -36,10 +36,16 @@ async function getRecipeDetail(viewerId: string | undefined, recipeId: string): 
   const [card] = await buildCards(supabaseAdmin, viewerId, [row as RecipeRow], viewerIsAdmin);
   if (!card) return null;
 
-  const [{ data: ings }, { data: steps }] = await Promise.all([
+  const [{ data: ings }, { data: steps }, { data: pinnedRow }] = await Promise.all([
     supabaseAdmin.from('recipe_ingredients').select('text,position').eq('recipe_id', recipeId).order('position'),
     supabaseAdmin.from('recipe_steps').select('text,position').eq('recipe_id', recipeId).order('position'),
+    supabaseAdmin.from('comments').select('text, author_id, hidden').eq('recipe_id', recipeId).eq('pinned', true).limit(1).maybeSingle(),
   ]);
+  let chefsNote: RecipeDetail['chefsNote'] = null;
+  if (pinnedRow && !pinnedRow.hidden) {
+    const { data: author } = await supabaseAdmin.from('profiles').select('display_name, handle, banned').eq('id', pinnedRow.author_id).maybeSingle();
+    if (author && !author.banned) chefsNote = { text: pinnedRow.text as string, authorName: (author.display_name as string) || `@${author.handle}` };
+  }
 
   // Premium gating: withhold the recipe body from a locked card (the client shows
   // an unlock CTA). The card's media was already stripped in the mapper.
@@ -48,6 +54,7 @@ async function getRecipeDetail(viewerId: string | undefined, recipeId: string): 
     caption: (row.caption as string | null) ?? null,
     ingredients: card.locked ? [] : (ings ?? []).map((i) => i.text as string),
     steps: card.locked ? [] : (steps ?? []).map((s) => s.text as string),
+    chefsNote: card.locked ? null : chefsNote,
   };
 }
 
@@ -295,6 +302,33 @@ recipes.get('/:id/derivatives', optionalAuth, async (c) => {
   ]);
   const items = await buildCards(supabaseAdmin, viewerId, (rows ?? []) as RecipeRow[]);
   return c.json({ items, total: count ?? items.length });
+});
+
+const pinSchema = z.object({ pinned: z.boolean() });
+
+/** POST /recipes/:id/comments/:commentId/pin — the recipe owner pins ONE
+ *  comment as the Chef's note (pinning a new one unpins the old). */
+recipes.post('/:id/comments/:commentId/pin', requireAuth, requireNotBanned, async (c) => {
+  const recipeId = assertUuid(c.req.param('id'), 'recipe');
+  const commentId = assertUuid(c.req.param('commentId'), 'comment');
+  const userId = c.get('userId')!;
+  const parsed = pinSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) throw badRequest('pinned must be a boolean');
+
+  const { data: recipe } = await supabaseAdmin.from('recipes').select('cook_id').eq('id', recipeId).maybeSingle();
+  if (!recipe) throw notFound('Recipe not found');
+  if (recipe.cook_id !== userId) throw forbidden('Only the recipe owner can pin a comment');
+  const { data: comment } = await supabaseAdmin.from('comments').select('id').eq('id', commentId).eq('recipe_id', recipeId).maybeSingle();
+  if (!comment) throw notFound('Comment not found');
+
+  if (parsed.data.pinned) {
+    // Single pin per recipe: clear any existing pin first.
+    await supabaseAdmin.from('comments').update({ pinned: false }).eq('recipe_id', recipeId).eq('pinned', true);
+    await supabaseAdmin.from('comments').update({ pinned: true }).eq('id', commentId);
+  } else {
+    await supabaseAdmin.from('comments').update({ pinned: false }).eq('id', commentId);
+  }
+  return c.json({ ok: true, pinned: parsed.data.pinned });
 });
 
 const cookLogSchema = z.object({
@@ -577,6 +611,7 @@ recipes.get('/:id/comments', optionalAuth, async (c) => {
     .from('comments')
     .select('*')
     .eq('recipe_id', id)
+    .order('pinned', { ascending: false }) // the Chef's note leads the thread
     .order('created_at', { ascending: false })
     .limit(400);
   if (error) throw dbFail(error.message);

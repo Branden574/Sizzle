@@ -12,6 +12,24 @@ export const recipeShareUrl = (id: string): string => `${SITE_ORIGIN}/r/${id}`;
 /** Canonical link to a profile (opens the app to that cook). */
 export const cookShareUrl = (handle: string): string => `${SITE_ORIGIN}/u/${handle}`;
 
+/** Canonical link to a public board. */
+export const boardShareUrl = (id: string): string => `${SITE_ORIGIN}/b/${id}`;
+
+/** Extract a board id from a `/b/:id` path or `?b=:id` query. */
+export function parseBoardDeepLink(input: string): string | null {
+  try {
+    const u = new URL(input, SITE_ORIGIN);
+    const m = u.pathname.match(/^\/b\/([0-9a-fA-F-]{36})\/?$/);
+    if (m) return m[1];
+    const q = u.searchParams.get('b');
+    if (q && /^[0-9a-fA-F-]{36}$/.test(q)) return q;
+    return null;
+  } catch {
+    const m = input.match(/^\/b\/([0-9a-fA-F-]{36})\/?$/);
+    return m ? m[1] : null;
+  }
+}
+
 const HANDLE = /^[A-Za-z0-9_]{3,30}$/;
 
 /** Extract a cook handle from a `/u/:handle` path, a `?u=:handle` query (the SEO

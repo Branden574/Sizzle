@@ -399,7 +399,7 @@ async function ownCollection(id: string, userId: string) {
 me.get('/collections', async (c) => {
   const userId = c.get('userId')!;
   const recipeId = c.req.query('recipeId');
-  const { data: cols } = await supabaseAdmin.from('collections').select('id, name, created_at').eq('user_id', userId).order('created_at', { ascending: false });
+  const { data: cols } = await supabaseAdmin.from('collections').select('id, name, created_at, is_public').eq('user_id', userId).order('created_at', { ascending: false });
   const list = cols ?? [];
   const ids = list.map((x) => x.id as string);
 
@@ -430,6 +430,7 @@ me.get('/collections', async (c) => {
       createdAt: col.created_at as string,
       count: countByCol.get(col.id as string) ?? 0,
       coverBg: coverRid ? bgById.get(coverRid) ?? null : null,
+      isPublic: (col.is_public as boolean) ?? false,
       ...(memberCols ? { hasRecipe: memberCols.has(col.id as string) } : {}),
     };
   });
@@ -447,18 +448,26 @@ me.post('/collections', async (c) => {
     .select('id, name, created_at')
     .single();
   if (error || !data) throw badRequest(error?.message ?? 'Failed to create collection');
-  return c.json<CollectionDTO>({ id: data.id as string, name: data.name as string, count: 0, coverBg: null, createdAt: data.created_at as string }, 201);
+  return c.json<CollectionDTO>({ id: data.id as string, name: data.name as string, count: 0, coverBg: null, createdAt: data.created_at as string, isPublic: false }, 201);
 });
 
-/** PATCH /me/collections/:id {name} — rename a collection. */
+/** PATCH /me/collections/:id {name?, isPublic?} — rename and/or flip the
+ *  public-board toggle (public boards are shareable at /b/:id). */
 me.patch('/collections/:id', async (c) => {
   const userId = c.get('userId')!;
   const id = c.req.param('id');
   await ownCollection(id, userId);
-  const parsed = collectionSchema.safeParse(await c.req.json().catch(() => null));
-  if (!parsed.success) throw badRequest('Invalid collection name');
-  const { error } = await supabaseAdmin.from('collections').update({ name: parsed.data.name }).eq('id', id).eq('user_id', userId);
-  if (error) throw badRequest(error.message ?? 'Failed to rename collection');
+  const body = (await c.req.json().catch(() => null)) as { name?: string; isPublic?: boolean } | null;
+  if (!body || (body.name === undefined && body.isPublic === undefined)) throw badRequest('Nothing to update');
+  const updates: Record<string, unknown> = {};
+  if (body.name !== undefined) {
+    const parsed = collectionSchema.safeParse({ name: body.name });
+    if (!parsed.success) throw badRequest('Invalid collection name');
+    updates.name = parsed.data.name;
+  }
+  if (body.isPublic !== undefined) updates.is_public = !!body.isPublic;
+  const { error } = await supabaseAdmin.from('collections').update(updates).eq('id', id).eq('user_id', userId);
+  if (error) throw badRequest(error.message ?? 'Failed to update collection');
   return c.json({ ok: true });
 });
 

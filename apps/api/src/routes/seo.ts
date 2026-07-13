@@ -238,3 +238,64 @@ seoProfile.get('/:handle', async (c) => {
   c.header('Cache-Control', 'public, max-age=600, s-maxage=3600');
   return c.html(html);
 });
+
+/**
+ * GET /b/:id — crawlable public-board page (Pinterest-style shareable list).
+ * Reuses the recipe-page OG pattern; private/unknown boards 404.
+ */
+export const seoBoard = new Hono<AppEnv>();
+
+seoBoard.get('/:id', async (c) => {
+  const id = (c.req.param('id') ?? '').trim();
+  if (!/^[0-9a-fA-F-]{36}$/.test(id)) return c.html(page404(), 404);
+
+  const { data: col } = await supabaseAdmin.from('collections').select('id, name, user_id, is_public').eq('id', id).maybeSingle();
+  if (!col || !col.is_public) return c.html(page404(), 404);
+  const { data: owner } = await supabaseAdmin.from('profiles').select('display_name, handle, banned').eq('id', col.user_id).maybeSingle();
+  if (!owner || owner.banned) return c.html(page404(), 404);
+
+  const { data: items } = await supabaseAdmin.from('collection_recipes').select('recipe_id').eq('collection_id', id).limit(24);
+  const rids = (items ?? []).map((r) => r.recipe_id as string);
+  const { data: recs } = rids.length
+    ? await supabaseAdmin.from('recipes').select('id, title, image_urls, video_asset_id, status').in('id', rids).eq('status', 'published')
+    : { data: [] as Record<string, unknown>[] };
+  const vidIds = (recs ?? []).map((r) => r.video_asset_id).filter(Boolean) as string[];
+  const posters = new Map<string, string>();
+  if (vidIds.length) {
+    const { data: vids } = await supabaseAdmin.from('video_assets').select('id, poster_url').in('id', vidIds);
+    for (const v of vids ?? []) if (v.poster_url) posters.set(v.id as string, v.poster_url as string);
+  }
+  const dishes = (recs ?? []).map((r) => ({
+    id: r.id as string,
+    title: (r.title as string) || 'A recipe',
+    img: (r.video_asset_id && posters.get(r.video_asset_id as string)) || ((r.image_urls as string[] | null)?.[0] ?? ''),
+  }));
+
+  const ownerName = (owner.display_name as string) || `@${owner.handle}`;
+  const url = `${env.APP_ORIGIN}/b/${col.id}`;
+  const appLink = `${env.APP_ORIGIN}/?b=${col.id}`;
+  const title = `${col.name} — a board by ${ownerName} · Sizzle`;
+  const desc = `${dishes.length} recipe${dishes.length === 1 ? '' : 's'} curated by ${ownerName} on Sizzle.`;
+  const hero = dishes.find((d) => d.img)?.img || `${env.APP_ORIGIN}/og-default.jpg`;
+
+  const html = `<!doctype html>
+<html lang="en"><head>
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>${esc(title)}</title>
+<meta name="description" content="${esc(desc)}">
+<meta property="og:type" content="website">
+<meta property="og:title" content="${esc(col.name as string)}">
+<meta property="og:description" content="${esc(desc)}">
+<meta property="og:image" content="${esc(hero)}">
+<meta property="og:url" content="${esc(url)}">
+<link rel="canonical" href="${esc(url)}">
+<style>body{margin:0;background:#0c0a09;color:#faf3ea;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding:28px 20px 60px;max-width:760px;margin-inline:auto}h1{font-size:30px;margin:0}a.cta{display:inline-block;background:linear-gradient(135deg,#ff5a36,#e23a18);color:#fff;text-decoration:none;font-weight:800;padding:13px 24px;border-radius:14px;margin:18px 0 26px}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px}.card{position:relative;border-radius:14px;overflow:hidden;aspect-ratio:3/4;background:#241c17}.card img{width:100%;height:100%;object-fit:cover}.card span{position:absolute;left:10px;right:10px;bottom:9px;font-size:14px;font-weight:700;text-shadow:0 1px 4px rgba(0,0,0,.8)}</style>
+</head><body>
+  <div style="color:#b8a99b;font-size:13px;font-weight:700;letter-spacing:.06em;text-transform:uppercase">A board by ${esc(ownerName)}</div>
+  <h1>${esc(col.name as string)}</h1>
+  <a class="cta" href="${esc(appLink)}">Open in Sizzle</a>
+  <div class="grid">${dishes.map((d) => `<a class="card" href="${esc(`${env.APP_ORIGIN}/r/${d.id}`)}">${d.img ? `<img src="${esc(d.img)}" alt="${esc(d.title)}" loading="lazy">` : ''}<span>${esc(d.title)}</span></a>`).join('')}</div>
+</body></html>`;
+  c.header('Cache-Control', 'public, max-age=300');
+  return c.html(html);
+});

@@ -37,6 +37,9 @@ export const RANK_WEIGHTS = {
   // quality signal on the platform — weighted above raw popularity, and
   // log-scaled so early recipes aren't buried by old hits.
   cooked: 2.5,
+  // Sends-per-reach: DM'ing a recipe to a friend is a personal endorsement —
+  // Instagram ranks it #1. Log-scaled like cooks.
+  sends: 2.0,
   // Admin boost: factor 1 ≈ the pull of a follow. Bounded to [0,3] in the DB.
   boost: 5.0,
   seenPenalty: 4.0,
@@ -58,6 +61,10 @@ function cookedScore(cookCount: number): number {
   return Math.min(1, Math.log10(cookCount + 1) / 3); // ~1.0 around 1K cooks
 }
 
+function sendsScore(sendCount: number): number {
+  return Math.min(1, Math.log10(sendCount + 1) / 3); // ~1.0 around 1K sends
+}
+
 export function scoreRecipe(r: RecipeRow, s: ViewerSignals, now: number): number {
   const W = RANK_WEIGHTS;
   let score = W.recency * recencyScore(r.created_at, now);
@@ -72,6 +79,7 @@ export function scoreRecipe(r: RecipeRow, s: ViewerSignals, now: number): number
   if (tagPull > 0) score += W.hashtag * Math.min(1, tagPull / 5);
   score += W.popular * popularityScore(r.like_count);
   score += W.cooked * cookedScore(r.cook_count ?? 0);
+  score += W.sends * sendsScore(r.send_count ?? 0);
   // Admin boost — one more positive signal, so a boosted creator still competes
   // with taste/follow/recency (and the diversity cap) instead of pinning to #1.
   const boost = s.boosts.get(r.cook_id) ?? 0;

@@ -25,6 +25,7 @@ export interface CommentRow {
   reply_count: number;
   created_at: string;
   hidden?: boolean;
+  pinned?: boolean;
 }
 
 export function commentDTO(row: CommentRow, author: ProfileRow | undefined, likedSet?: Set<string>): CommentDTO {
@@ -43,6 +44,7 @@ export function commentDTO(row: CommentRow, author: ProfileRow | undefined, like
     likedByMe: likedSet ? likedSet.has(row.id) : false,
     parentId: row.parent_id ?? null,
     replyCount: row.reply_count ?? 0,
+    pinned: row.pinned ?? false,
     // Per-viewer: the route coerces this to false for non-moderator viewers so a
     // shadow-hidden comment never reveals its state to its own author.
     hidden: row.hidden ?? false,
@@ -115,6 +117,8 @@ export interface RecipeRow {
   visibility: string | null;
   /** Qualified cooks — distinct users who finished this recipe in cook mode. */
   cook_count: number | null;
+  /** Send-to-friend count (DM shares) — the sends-per-reach ranking signal. */
+  send_count: number | null;
   /** Lineage: the recipe this post was cooked from ("Cook this"). */
   origin_recipe_id: string | null;
   created_at: string;
