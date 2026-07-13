@@ -44,17 +44,36 @@ export async function biometricAvailability(): Promise<{ available: boolean; lab
   }
 }
 
+// Showing the OS biometric prompt makes iOS/Android fire an app-state change
+// (the app goes inactive behind the system overlay, then active again when it
+// dismisses). The app-lock re-locks on "became active", so without this guard
+// passing Face ID would immediately re-lock and re-prompt forever. We flag the
+// window around a prompt so the appStateChange listener can ignore that one
+// spurious resume. A short cooldown after resolve covers the dismissal event.
+let promptInFlight = false;
+let promptBusyUntil = 0;
+
+/** True while a biometric prompt is showing, or briefly (1.5s) after it
+ *  resolves — used to ignore the resume the prompt itself triggers. */
+export function biometricPromptBusy(): boolean {
+  return promptInFlight || Date.now() < promptBusyUntil;
+}
+
 /**
  * Prompt the OS biometric check. Resolves true on success, false on
  * cancel/failure. On web it resolves true (nothing to gate).
  */
 export async function biometricVerify(reason = 'Unlock Sizzle'): Promise<boolean> {
   if (!isNative) return true;
+  promptInFlight = true;
   try {
     await NativeBiometric.verifyIdentity({ reason, title: 'Sizzle', subtitle: '', description: reason });
     return true;
   } catch {
     return false;
+  } finally {
+    promptInFlight = false;
+    promptBusyUntil = Date.now() + 1500; // swallow the resume the prompt dismissal fires
   }
 }
 
