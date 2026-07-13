@@ -190,7 +190,11 @@ function FeedList({ items, onRefresh, onEndReached }: { items: RecipeCard[]; onR
       </div>
       <div
         ref={scrollRef}
-        style={{ position: 'absolute', inset: 0, overflowY: 'scroll', scrollSnapType: 'y mandatory', transform: offset ? `translateY(${offset}px)` : undefined, transition: dragging ? 'none' : 'transform .34s cubic-bezier(.16,1,.3,1)' }}
+        // overscrollBehaviorY:contain stops iOS from rubber-band-locking at the
+        // last video (WebKit can get stuck at the scroll boundary with mandatory
+        // snap and refuse to scroll back up). WebkitOverflowScrolling keeps
+        // momentum. See scrollSnapStop on the cards below.
+        style={{ position: 'absolute', inset: 0, overflowY: 'scroll', scrollSnapType: 'y mandatory', overscrollBehaviorY: 'contain', WebkitOverflowScrolling: 'touch', transform: offset ? `translateY(${offset}px)` : undefined, transition: dragging ? 'none' : 'transform .34s cubic-bezier(.16,1,.3,1)' }}
       >
         {items.map((card) => (
           <ErrorBoundary key={card.id}>
@@ -390,7 +394,7 @@ export function FeedCard({ card, onClose }: { card: RecipeCard; onClose?: () => 
       onPointerCancel={clearPress}
       onPointerLeave={clearPress}
       onClickCapture={onClickCapture}
-      style={{ position: 'relative', height: 'var(--app-h)', scrollSnapAlign: 'start', overflow: 'hidden', background: card.bg }}
+      style={{ position: 'relative', height: 'var(--app-h)', scrollSnapAlign: 'start', scrollSnapStop: 'always', overflow: 'hidden', background: card.bg }}
     >
       {hasImages ? (
         <ImageCarousel images={card.images} />
