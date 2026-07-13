@@ -8,7 +8,7 @@ import { apiGet, apiSend } from '../../lib/api';
 import { queryClient, useBlockedList, useMe, useToggleBlock, useUpdateNotifPref, useUpdateProfile } from '../../data/queries';
 import { enablePush, disablePush } from '../../lib/push';
 import { biometricAvailability, biometricVerify, clearBiometricToken } from '../../lib/biometric';
-import { isNative } from '../../lib/native';
+import { isNative, showMonetization } from '../../lib/native';
 import { PlayIcon, SpeakerIcon } from '../icons';
 
 const APP_VERSION = '1.0.0';
@@ -213,9 +213,11 @@ export function AppSettingsSheet() {
   };
 
   // Deleting is irreversible, so require the user to type the exact phrase
-  // "Delete <their username>" — guards against an accidental double-tap.
-  const delPhrase = me.data?.handle ? `Delete ${me.data.handle}` : null;
-  const delReady = !!delPhrase && delConfirm.trim() === delPhrase && !delBusy;
+  // "Delete <their username>" — guards against an accidental double-tap. Falls
+  // back to a fixed phrase so a failed profile fetch can never make account
+  // deletion impossible (App Store 5.1.1(v) requires it to always work).
+  const delPhrase = me.data?.handle ? `Delete ${me.data.handle}` : 'Delete my account';
+  const delReady = delConfirm.trim() === delPhrase && !delBusy;
 
   const deleteAccount = async () => {
     if (!delReady) return;
@@ -316,7 +318,8 @@ export function AppSettingsSheet() {
             { key: 'follows', title: 'New followers', sub: 'When someone follows you', icon: '👤' },
             { key: 'reposts', title: 'Reposts', sub: 'When someone reposts your recipe', icon: '🔁' },
             { key: 'messages', title: 'Messages', sub: 'When you get a direct message', icon: '✉️' },
-            { key: 'tips', title: 'Tips', sub: 'When someone tips you', icon: '💝' },
+            // Money surfaces stay web-only on native (Guideline 3.1.x hardening).
+    ...(showMonetization ? [{ key: 'tips' as const, title: 'Tips', sub: 'When someone tips you', icon: '💝' }] : []),
           ] as const).map((row) => (
             <ToggleRow
               key={row.key}

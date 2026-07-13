@@ -29,6 +29,13 @@ export function moderateLocal(...parts: Array<string | string[]>): ModerationRes
 }
 
 /** True when a real moderation provider is wired up. */
+// Fail LOUDLY when the real moderation provider is missing in production —
+// a rotated/missing key silently downgrades 1.2 content filtering to a
+// 5-term blocklist otherwise. (boot warning, logged once per cold start)
+if (process.env.VERCEL_ENV === 'production' && !env.OPENAI_API_KEY) {
+  console.error('[moderation] OPENAI_API_KEY missing in production — content filtering is running on the local blocklist only');
+}
+
 export const moderationConfigured = !!env.OPENAI_API_KEY;
 
 /**
