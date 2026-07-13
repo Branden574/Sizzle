@@ -57,6 +57,11 @@
 	<string>Sizzle saves videos and photos you choose to your library.</string>
 	<key>NSFaceIDUsageDescription</key>
 	<string>Sizzle uses Face ID to unlock the app and keep your account secure.</string>
+	<!-- The native camera component (@capgo/camera-preview) references location APIs
+	     for optional geotagging. Sizzle doesn't collect location in the background;
+	     this string is required because the API is referenced. -->
+	<key>NSLocationWhenInUseUsageDescription</key>
+	<string>Sizzle only uses your location if you choose to tag a recipe with where it was made. It's never collected in the background.</string>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<!-- ATS stays ENABLED (App Store-safe): the production app talks to the
