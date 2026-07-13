@@ -1041,6 +1041,22 @@ export async function pollVideoReady(assetId: string, tries = 60, intervalMs = 2
   return false; // timed out; the post still carries the asset id and self-heals on load
 }
 
+/**
+ * After a Cloudflare post is created, drive its asset to `ready` in the BACKGROUND
+ * and refresh the feed/profile so the card upgrades from poster → playable. We skip
+ * Cloudflare webhooks, so this client poll is what pulls the transcoding result into
+ * our DB (and triggers the server-side thumbnail re-moderation on the ready hop).
+ * Detached from the composer so posting feels instant — the user has already
+ * navigated to their profile by the time this resolves.
+ */
+export function finalizeVideoAsset(assetId: string, qc: QueryClient): void {
+  void pollVideoReady(assetId).finally(() => {
+    for (const key of [['feed'], ['cook'], keys.me, ['me', 'drafts']] as const) {
+      void qc.invalidateQueries({ queryKey: key });
+    }
+  });
+}
+
 export function useUploadRecipe() {
   const qc = useQueryClient();
   return useMutation({
@@ -1057,11 +1073,15 @@ export function useUploadRecipe() {
       const ticket = await apiSend<DirectUploadTicket>('POST', '/uploads/video', video ?? undefined);
       return apiSend<RecipeDetail>('POST', '/recipes', { ...input, videoAssetId: ticket.videoAssetId });
     },
-    onSuccess: () => {
+    onSuccess: (_detail, variables) => {
       void qc.invalidateQueries({ queryKey: ['feed'] });
       void qc.invalidateQueries({ queryKey: ['cook'] });
       void qc.invalidateQueries({ queryKey: keys.me });
       void qc.invalidateQueries({ queryKey: ['me', 'drafts'] });
+      // Cloudflare posts are created before transcoding finishes — keep polling in
+      // the background so the card becomes playable (and its thumbnail is moderated)
+      // without the composer having to wait.
+      if (variables.videoAssetId) finalizeVideoAsset(variables.videoAssetId, qc);
     },
   });
 }

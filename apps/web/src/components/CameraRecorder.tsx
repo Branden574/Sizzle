@@ -75,7 +75,9 @@ export function CameraRecorder({ onCapture, onClose }: { onCapture: (file: File)
   const supported = typeof navigator !== 'undefined' && !!navigator.mediaDevices?.getUserMedia && typeof MediaRecorder !== 'undefined';
   const [status, setStatus] = useState<Status>(supported ? 'idle' : 'unsupported');
   const [errName, setErrName] = useState('');
-  const [facing, setFacing] = useState<'user' | 'environment'>('user');
+  // Default to the REAR camera — this is a food app; people shoot the dish, not a
+  // selfie. They can flip to the front camera before recording if they want to.
+  const [facing, setFacing] = useState<'user' | 'environment'>('environment');
   const [demo, setDemo] = useState(false);
   const [recording, setRecording] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
@@ -203,7 +205,11 @@ export function CameraRecorder({ onCapture, onClose }: { onCapture: (file: File)
     const stream = streamRef.current;
     if (!stream) return;
     chunksRef.current = [];
-    const rec = new MediaRecorder(stream, mimeRef.current ? { mimeType: mimeRef.current } : undefined);
+    // Cap the bitrate so a 60s clip is ~30–45 MB instead of 100 MB+ (MediaRecorder's
+    // default is very high) — crisp enough at 1080p, and roughly halves upload time.
+    const opts: MediaRecorderOptions = { videoBitsPerSecond: 6_000_000, audioBitsPerSecond: 128_000 };
+    if (mimeRef.current) opts.mimeType = mimeRef.current;
+    const rec = new MediaRecorder(stream, opts);
     rec.ondataavailable = (e) => { if (e.data && e.data.size) chunksRef.current.push(e.data); };
     recorderRef.current = rec;
   };

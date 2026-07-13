@@ -8,6 +8,7 @@ import { badRequest, dbFail, notFound } from '../lib/errors';
 import { assertUuid } from '../lib/validate';
 import { cloudflareConfigured, env } from '../env';
 import { getStreamProvider } from '../services/stream';
+import { moderateImages } from '../services/moderation';
 import { rateLimit } from '../middleware/rateLimit';
 import { generateCaptions } from '../services/transcribe';
 import type { AppEnv } from '../types';
@@ -152,6 +153,23 @@ uploads.get('/video/:id/status', requireAuth, async (c) => {
     status = a.status;
     hlsUrl = a.hlsUrl;
     posterUrl = a.posterUrl;
+    // Posting no longer blocks on transcoding, so THIS ready-hop is where the clip's
+    // thumbnail gets vision-moderated — and playability is gated on it. A flagged
+    // thumbnail marks the asset errored and pulls any recipe built on it. Nothing was
+    // viewable before now (hls_url was null while processing), so nothing bad played.
+    // moderateImages fails open (no key / provider error → ok), so a legit clip is
+    // never wedged by an outage.
+    if (a.status === 'ready' && a.posterUrl) {
+      const mod = await moderateImages([a.posterUrl]);
+      if (!mod.ok) {
+        await supabaseAdmin
+          .from('video_assets')
+          .update({ status: 'error', poster_url: a.posterUrl, duration_seconds: a.duration })
+          .eq('id', id);
+        await supabaseAdmin.from('recipes').update({ status: 'removed', auto_hidden: true }).eq('video_asset_id', id);
+        return c.json<VideoAssetStatus>({ status: 'error', hlsUrl: null, posterUrl: a.posterUrl, mp4Url: asset.mp4_url as string | null });
+      }
+    }
     await supabaseAdmin
       .from('video_assets')
       .update({ status: a.status, hls_url: a.hlsUrl, poster_url: a.posterUrl, duration_seconds: a.duration })

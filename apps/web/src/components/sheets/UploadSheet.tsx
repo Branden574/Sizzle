@@ -3,7 +3,7 @@ import { Button, GlassButton } from '../controls';
 import { MAX_DURATION_SECONDS, MAX_UPLOAD_BYTES, type DirectUploadTicket, type PostType } from '@sizzle/shared';
 import { useAuth } from '../../auth/useAuth';
 import { useRequireAuth } from '../../auth/useRequireAuth';
-import { pollVideoReady, useUploadRecipe, useVideoConfig, type UploadRecipeInput } from '../../data/queries';
+import { useUploadRecipe, useVideoConfig, type UploadRecipeInput } from '../../data/queries';
 import { apiSend } from '../../lib/api';
 import { useSizzle } from '../../store';
 import { theme } from '../../theme';
@@ -31,12 +31,10 @@ export function UploadSheet() {
   const setShowUpload = useSizzle((s) => s.setShowUpload);
   const setShareAfterPost = useSizzle((s) => s.setShareAfterPost);
   const setTab = useSizzle((s) => s.setTab);
-  const setFeed = useSizzle((s) => s.setFeed);
   const requireAuth = useRequireAuth();
   const upload = useUploadRecipe();
   const { data: videoConfig } = useVideoConfig();
   const user = useAuth((s) => s.user);
-  const [processing, setProcessing] = useState(false);
 
   // "Cook this" lineage: pre-fill the composer from the origin recipe.
   const uploadPrefill = useSizzle((s) => s.uploadPrefill);
@@ -137,14 +135,14 @@ export function UploadSheet() {
           return;
         }
         if (videoConfig?.provider === 'cloudflare') {
-          // Register first → upload the clip to Cloudflare → wait for transcoding.
-          // Cloudflare auto-generates the thumbnail, so no client poster upload.
+          // Register first → upload the clip to Cloudflare. We do NOT block on
+          // transcoding here — that used to freeze the composer at 100% for up to
+          // two minutes. The post is created right away and the asset finishes
+          // transcoding in the background (see useUploadRecipe → finalize), which
+          // upgrades the card from poster → playable and re-moderates the thumbnail.
           const ticket = await apiSend<DirectUploadTicket>('POST', '/uploads/video', {});
           await uploadToCloudflare(ticket.uploadUrl, videoFile, setProgress);
           setProgress(100);
-          setProcessing(true);
-          await pollVideoReady(ticket.videoAssetId); // best-effort; posts even if it times out
-          setProcessing(false);
           videoAssetId = ticket.videoAssetId;
         } else {
           const uploadedUrl = await uploadVideo(user.id, videoFile, setProgress);
@@ -154,7 +152,6 @@ export function UploadSheet() {
         }
       } catch {
         setPrepping(false);
-        setProcessing(false);
         setVideoErr("Couldn't upload the video — please try again.");
         return;
       }
@@ -204,10 +201,10 @@ export function UploadSheet() {
           photos.forEach((p) => URL.revokeObjectURL(p.url));
           setUploadPrefill(null);
           setShowUpload(false);
-          setFeed('foryou');
-          setTab('feed');
-          // Share Everywhere: published posts get the one-tap share moment
-          // (drafts/scheduled posts aren't public yet — nothing to share).
+          // Land on the creator's own profile — where the new post now lives — so
+          // they immediately see it uploaded (drafts/scheduled show under the
+          // profile's Drafts too). Published posts also get the share moment.
+          setTab('profile');
           if (mode === 'publish' && !scheduleAt && detail?.id) setShareAfterPost({ id: detail.id, title: detail.title });
         },
         onSettled: () => setSubmitMode(null),
@@ -432,7 +429,7 @@ export function UploadSheet() {
         {prepping && (
           <div style={{ marginBottom: 14 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 7 }}>
-              <span style={{ color: 'rgba(255,255,255,.85)', fontSize: 13.5, fontWeight: 700 }}>{processing ? 'Processing video…' : progress >= 100 ? 'Finishing up…' : 'Uploading your video…'}</span>
+              <span style={{ color: 'rgba(255,255,255,.85)', fontSize: 13.5, fontWeight: 700 }}>{progress >= 100 ? 'Finishing up…' : 'Uploading your video…'}</span>
               <span style={{ color: '#fff', fontSize: 14, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{progress}%</span>
             </div>
             <div style={{ height: 8, borderRadius: 5, background: 'rgba(255,255,255,.14)', overflow: 'hidden' }}>
