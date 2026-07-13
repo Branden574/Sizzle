@@ -124,17 +124,20 @@ function StepHero({ next, onLogin }: { next: () => void; onLogin: () => void }) 
           margin: '96px 22px 0',
           borderRadius: 32,
           overflow: 'hidden',
-          background: 'radial-gradient(130% 100% at 30% 10%, #ff8a4d 0%, #e23a18 45%, #7a1f0c 100%)',
+          background: '#1b1512',
         }}
       >
-        <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(60% 40% at 70% 80%, rgba(244,165,44,.55), transparent 70%)' }} />
-        <div style={{ position: 'absolute', inset: 0, opacity: 0.12, background: 'repeating-linear-gradient(115deg, #000 0 2px, transparent 2px 7px)' }} />
-        <div style={{ position: 'absolute', top: 24, left: 28, fontFamily: "'Instrument Serif',serif", fontSize: 30, color: '#fff', letterSpacing: '.5px' }}>
+        {/* An appetizing recipe still fills the hero — warm-toned so it stays on
+            brand — with an ember scrim top + bottom for wordmark/headline legibility. */}
+        <img src="/recipes/birria-tacos.jpg" alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+        <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(to bottom, rgba(10,6,4,.5) 0%, transparent 24%, transparent 40%, rgba(12,7,5,.55) 70%, rgba(9,5,4,.94) 100%)' }} />
+        <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(120% 75% at 50% 118%, rgba(255,120,60,.4), transparent 60%)', mixBlendMode: 'screen' }} />
+        <div style={{ position: 'absolute', top: 24, left: 28, fontFamily: "'Instrument Serif',serif", fontSize: 30, color: '#fff', letterSpacing: '.5px', textShadow: '0 2px 14px rgba(0,0,0,.55)' }}>
           Sizzle
         </div>
         <div style={{ position: 'absolute', left: 28, bottom: 30, right: 28, color: '#fff' }}>
-          <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', opacity: 0.85 }}>Recipes, in motion</div>
-          <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 60, lineHeight: 0.92, marginTop: 8 }}>
+          <div style={{ fontSize: 13, fontWeight: 700, letterSpacing: '2px', textTransform: 'uppercase', opacity: 0.9 }}>Recipes, in motion</div>
+          <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 60, lineHeight: 0.92, marginTop: 8, textShadow: '0 2px 22px rgba(0,0,0,.5)' }}>
             Watch it.
             <br />
             Then cook it.

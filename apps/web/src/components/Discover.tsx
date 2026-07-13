@@ -147,12 +147,12 @@ export function Discover() {
           <div style={{ fontSize: 13, fontWeight: 700, color: 'var(--text-faint)', textTransform: 'uppercase', letterSpacing: '.4px', marginBottom: 10 }}>People</div>
           <div style={{ display: 'flex', flexDirection: 'column', gap: 10 }}>
             {cooks.map((ck) => (
-              <Button key={ck.id} onClick={() => setOpenCook(ck.id)} style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 18, padding: 12, cursor: 'pointer', textAlign: 'left' }}>
+              <Button key={ck.id} onClick={() => setOpenCook(ck.id)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 12, width: '100%', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 18, padding: 12, cursor: 'pointer', textAlign: 'left' }}>
                 <div style={{ width: 46, height: 46, flex: 'none', borderRadius: 14, background: ck.avatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Instrument Serif',serif", fontSize: 18, color: '#fff', overflow: 'hidden' }}>
                   {ck.avatarUrl ? <img src={ck.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : ck.init}
                 </div>
-                <div>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{ck.name}</div>
+                <div style={{ minWidth: 0 }}>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ck.name}</div>
                   <div style={{ fontSize: 13, color: 'var(--text-faint)' }}>@{ck.handle}</div>
                 </div>
               </Button>
