@@ -12,6 +12,12 @@ import { CameraRecorder } from '../CameraRecorder';
 import { NativeCameraRecorder } from '../NativeCameraRecorder';
 import { VideoTrimmer } from '../VideoTrimmer';
 import { isNative } from '../../lib/native';
+import { Capacitor } from '@capacitor/core';
+
+// Use the native camera only when the plugin is actually compiled into this binary.
+// If a JS-only OTA ever reaches an older build without it, fall back to the web
+// recorder cleanly instead of erroring.
+const useNativeCamera = isNative && Capacitor.isPluginAvailable('CameraPreview');
 import { CameraIcon } from '../icons';
 
 const accent = theme.accent;
@@ -217,7 +223,7 @@ export function UploadSheet() {
   return (
     <div className="sz-upload-sheet" style={{ position: 'absolute', inset: 0, zIndex: 90, background: '#0c0a09', animation: 'sz-slideUp .4s cubic-bezier(.16,1,.3,1)', display: 'flex', flexDirection: 'column' }}>
       {recording && (
-        isNative ? (
+        useNativeCamera ? (
           <NativeCameraRecorder
             onClose={() => setRecording(false)}
             onCapture={(file) => { acceptFile(file); setRecording(false); }}
