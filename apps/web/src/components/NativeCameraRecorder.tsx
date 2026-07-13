@@ -94,20 +94,27 @@ export function NativeCameraRecorder({ onCapture, onClose }: { onCapture: (file:
     clearTick();
     recordingRef.current = false;
     if (activeRef.current) setRecording(false);
-    await teardown();
     try {
       if (!videoFilePath) throw new Error('no file path');
+      // Read the finalized on-disk clip into a File. Do NOT gate on res.ok — a
+      // local file://→capacitor:// fetch reports ok=false / status 0 even on a
+      // perfectly valid read (this is what broke recording). The blob size is the
+      // real signal; anything under ~1KB isn't a real clip.
       const res = await fetch(Capacitor.convertFileSrc(videoFilePath));
-      if (!res.ok) throw new Error(`read failed (${res.status})`);
       const blob = await res.blob();
-      if (!blob.size) throw new Error('empty recording');
+      if (!blob || blob.size < 1024) throw new Error('empty recording');
       const ext = (videoFilePath.split('.').pop() || 'mp4').toLowerCase().replace(/[^a-z0-9]/g, '') || 'mp4';
       const file = new File([blob], `sizzle-${Date.now()}.${ext}`, { type: blob.type || 'video/mp4' });
+      // Success → tear the camera down (the composer takes over) and hand off.
+      await teardown();
       onCapture(file);
     } catch {
-      // The take couldn't be read — camera is already off and the UI restored;
-      // show an honest error with a way out instead of silently dropping it.
-      if (activeRef.current) setStatus('error');
+      // Read failed → keep the camera LIVE so they can simply record again,
+      // instead of killing it and forcing a close/reopen. (Unmount still tears
+      // down as the backstop.)
+      capturedRef.current = false;
+      stoppingRef.current = false;
+      if (activeRef.current) { setElapsedMs(0); setRecording(false); }
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [teardown]);
@@ -124,14 +131,14 @@ export function NativeCameraRecorder({ onCapture, onClose }: { onCapture: (file:
         if (!activeRef.current) return;
         if (perm.camera !== 'granted') { setStatus('denied'); return; }
         document.documentElement.classList.add('sz-native-cam');
+        // Full-screen preview: let the plugin default to the whole screen, fill
+        // with 'cover', and DON'T inset for safe areas (edge-to-edge, no black
+        // band). Passing explicit innerWidth/innerHeight left a band at the top.
         await CameraPreview.start({
           position: 'rear',
           toBack: true,
-          x: 0,
-          y: 0,
-          width: Math.round(window.innerWidth),
-          height: Math.round(window.innerHeight),
           aspectMode: 'cover',
+          includeSafeAreaInsets: false,
           disableAudio: false,
         });
         if (!activeRef.current) { void teardown(); return; }
@@ -431,7 +438,7 @@ function ZoomDial({ zoom, range, lenses, onZoom }: { zoom: number; range: { min:
       onPointerMove={onMove}
       onPointerUp={onUp}
       onPointerCancel={onUp}
-      style={{ position: 'relative', height: 64, margin: '0 24px 10px', touchAction: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
+      style={{ position: 'relative', height: 60, margin: '0 24px 22px', touchAction: 'none', display: 'flex', alignItems: 'center', justifyContent: 'center' }}
     >
       {dial ? (
         <div style={{ position: 'relative', width: '100%', height: '100%', overflow: 'hidden' }}>
@@ -455,24 +462,28 @@ function ZoomDial({ zoom, range, lenses, onZoom }: { zoom: number; range: { min:
           <div style={{ position: 'absolute', bottom: 2, left: '50%', transform: 'translateX(-50%)', width: 2, height: 24, background: '#ffd60a', borderRadius: 1 }} />
         </div>
       ) : (
-        <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(0,0,0,.4)', borderRadius: 26, padding: 5, backdropFilter: 'blur(6px)' }}>
+        <div style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'rgba(0,0,0,.42)', borderRadius: 30, padding: '7px 12px', backdropFilter: 'blur(8px)' }}>
           {(lenses.length ? lenses : [1]).map((val) => {
             const on = Math.abs(Math.log2(zoom / val)) < 0.12;
+            const near = Math.abs(zoom - Math.round(zoom)) < 0.05;
+            const label = on
+              ? (near ? `${Math.round(zoom)}×` : `${zoom.toFixed(1)}×`)
+              : val < 1 ? val.toString().replace(/^0/, '') : String(Math.round(val));
             return (
               <Button
                 key={val}
                 onClick={() => onZoom(val)}
                 aria-label={`${val}× zoom`}
                 style={{
-                  minWidth: on ? 46 : 36,
-                  height: on ? 46 : 36,
+                  minWidth: on ? 40 : 30,
+                  height: on ? 40 : 30,
                   borderRadius: '50%',
                   border: 'none',
-                  padding: '0 6px',
-                  background: on ? 'rgba(28,24,20,.85)' : 'rgba(255,255,255,.12)',
+                  padding: on ? '0 8px' : 0,
+                  background: on ? 'rgba(0,0,0,.55)' : 'transparent',
                   color: on ? '#ffd60a' : '#fff',
-                  fontWeight: 800,
-                  fontSize: on ? 13.5 : 12,
+                  fontWeight: on ? 800 : 700,
+                  fontSize: on ? 14 : 13,
                   cursor: 'pointer',
                   display: 'flex',
                   alignItems: 'center',
@@ -481,7 +492,7 @@ function ZoomDial({ zoom, range, lenses, onZoom }: { zoom: number; range: { min:
                   fontVariantNumeric: 'tabular-nums',
                 }}
               >
-                {on ? `${zoom.toFixed(1)}×` : val < 1 ? `${val}` : `${Math.round(val)}`}
+                {label}
               </Button>
             );
           })}
