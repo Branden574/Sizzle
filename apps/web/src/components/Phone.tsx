@@ -16,6 +16,7 @@ export function Phone({ children, bare = false, desktop = false }: { children: R
       : '0 2px 0 2px #2c2521 inset, 0 40px 90px -20px rgba(0,0,0,.7), 0 0 0 12px #1c1714';
   return (
     <div
+      className="sz-phone"
       style={{
         position: 'relative',
         width: 'var(--app-w)',

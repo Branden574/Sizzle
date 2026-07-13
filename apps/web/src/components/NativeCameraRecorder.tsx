@@ -166,6 +166,7 @@ export function NativeCameraRecorder({ onCapture, onClose }: { onCapture: (file:
 
   return (
     <div
+      className="sz-cam-overlay"
       style={{ position: 'absolute', inset: 0, zIndex: 96, background: status === 'ready' ? 'transparent' : '#000', display: 'flex', flexDirection: 'column', touchAction: 'none' }}
       onTouchStart={onPinchStart}
       onTouchMove={onPinchMove}
