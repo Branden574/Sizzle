@@ -22,5 +22,11 @@ export const supabase = createClient(webEnv.supabaseUrl, webEnv.supabaseAnonKey,
     persistSession: true,
     autoRefreshToken: true,
     detectSessionInUrl: true,
+    // Native needs PKCE: the OAuth code returns via the app's custom URL scheme
+    // and is exchanged manually (nativeOAuth.ts). Web stays on the implicit
+    // default so email confirmation / password-reset links keep working
+    // cross-device (a PKCE code verifier is device-local — a reset link opened
+    // on a different device than it was requested from would fail to exchange).
+    flowType: isNative ? 'pkce' : 'implicit',
   },
 });

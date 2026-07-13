@@ -2,7 +2,6 @@ import { useEffect, useMemo, useState } from 'react';
 import { Button, FilterChip, FollowButton, IconButton } from './controls';
 import { GlowButton } from './glow';
 import { useAuth } from '../auth/useAuth';
-import { isNative } from '../lib/native';
 import { tasteDefs } from '../data';
 import { useSuggestedCooks } from '../data/queries';
 import { apiGet } from '../lib/api';
@@ -426,32 +425,25 @@ function StepAccount() {
         </p>
 
         <div style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
-          {/* App Store compliance: social sign-in is WEB-ONLY until the Apple +
-              Google providers are configured in Supabase. Guideline 4.8 requires
-              a working Sign in with Apple whenever Google login is offered on
-              iOS, and an unconfigured provider = a broken button (2.1). Native
-              ships email-only auth for v1 — remove the !isNative gate once both
-              providers are live (docs/app-store-deployment.md §2). */}
-          {!isNative && (
-            <>
-              <Button
-                onClick={() => void signInOAuth('apple')}
-                variant="secondary"
-                size="lg"
-                fullWidth
-              >
-                Continue with Apple
-              </Button>
-              <Button
-                onClick={() => void signInOAuth('google')}
-                variant="outline"
-                size="lg"
-                fullWidth
-              >
-                Continue with Google
-              </Button>
-            </>
-          )}
+          {/* Apple + Google sign-in — live on web (page redirect) and native
+              (system browser + custom-scheme return, see nativeOAuth.ts). Apple
+              is listed first for Guideline 4.8 prominence on iOS. */}
+          <Button
+            onClick={() => void signInOAuth('apple')}
+            variant="secondary"
+            size="lg"
+            fullWidth
+          >
+            Continue with Apple
+          </Button>
+          <Button
+            onClick={() => void signInOAuth('google')}
+            variant="outline"
+            size="lg"
+            fullWidth
+          >
+            Continue with Google
+          </Button>
 
           {/* Social sign-up consent: the email form has its own 13+ checkbox, but
               OAuth skips that form, so capture the same agreement here. */}
@@ -464,13 +456,11 @@ function StepAccount() {
             </p>
           )}
 
-          {!isNative && (
-            <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '4px 0' }}>
-              <div style={{ flex: 1, height: 1, background: 'var(--line-2)' }} />
-              <span style={{ color: 'var(--text-faint-2)', fontSize: 13 }}>or</span>
-              <div style={{ flex: 1, height: 1, background: 'var(--line-2)' }} />
-            </div>
-          )}
+          <div style={{ display: 'flex', alignItems: 'center', gap: 12, margin: '4px 0' }}>
+            <div style={{ flex: 1, height: 1, background: 'var(--line-2)' }} />
+            <span style={{ color: 'var(--text-faint-2)', fontSize: 13 }}>or</span>
+            <div style={{ flex: 1, height: 1, background: 'var(--line-2)' }} />
+          </div>
 
           <form onSubmit={submit} style={{ display: 'flex', flexDirection: 'column', gap: 11 }}>
             {!isLogin && (

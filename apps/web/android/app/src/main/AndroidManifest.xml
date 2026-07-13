@@ -29,6 +29,15 @@
                 <data android:scheme="https" android:host="getsizzle.app" android:pathPrefix="/u/" />
                 <data android:scheme="https" android:host="getsizzle.app" android:pathPrefix="/b/" />
             </intent-filter>
+
+            <!-- OAuth (Google/Apple) return via the system browser — custom scheme
+                 app.sizzle.mobile:// (see src/lib/nativeOAuth.ts). -->
+            <intent-filter>
+                <action android:name="android.intent.action.VIEW" />
+                <category android:name="android.intent.category.DEFAULT" />
+                <category android:name="android.intent.category.BROWSABLE" />
+                <data android:scheme="app.sizzle.mobile" />
+            </intent-filter>
         </activity>
 
         <provider

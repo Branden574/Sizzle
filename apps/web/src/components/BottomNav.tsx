@@ -13,6 +13,7 @@ export function BottomNav() {
   const tab = useSizzle((s) => s.tab);
   const setTab = useSizzle((s) => s.setTab);
   const setShowUpload = useSizzle((s) => s.setShowUpload);
+  const setShowCreate = useSizzle((s) => s.setShowCreate);
   const setMessagesOpen = useSizzle((s) => s.setMessagesOpen);
   const dmUnread = useUnreadMessages().data?.count ?? 0;
   const immersive = useSizzle((s) => s.immersive);
@@ -65,7 +66,7 @@ export function BottomNav() {
         <SearchIcon size={25} stroke={col(tab === 'discover')} strokeWidth={2} />
       </NavButton>
 
-      <IconButton label="Create post" variant="primary" shape="square" size="md" className="sz-nav-create" onClick={() => setShowUpload(true)}>
+      <IconButton label="Create" variant="primary" shape="square" size="md" className="sz-nav-create" onClick={() => (isNative ? setShowUpload(true) : setShowCreate(true))}>
         <NavPlusIcon size={24} stroke="#fff" strokeWidth={2.6} />
       </IconButton>
 

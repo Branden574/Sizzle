@@ -42,6 +42,7 @@ import { RepostSheet } from './components/sheets/RepostSheet';
 import { ShoppingListSheet } from './components/sheets/ShoppingListSheet';
 import { SettingsSheet } from './components/sheets/SettingsSheet';
 import { UploadSheet } from './components/sheets/UploadSheet';
+import { CreateSheet } from './components/sheets/CreateSheet';
 import { useAuth } from './auth/useAuth';
 import { queryClient } from './data/queries';
 import { apiSend } from './lib/api';
@@ -53,6 +54,7 @@ import { BiometricLock } from './components/BiometricLock';
 import { DesktopSidebar } from './components/DesktopSidebar';
 import { useMediaQuery } from './lib/useMediaQuery';
 import { parseBoardDeepLink, parseCookDeepLink, parseRecipeDeepLink } from './lib/share';
+import { handleOAuthCallback } from './lib/nativeOAuth';
 import { App as CapApp } from '@capacitor/app';
 import { useSizzle } from './store';
 
@@ -103,6 +105,7 @@ function closeTopmostOverlay(): boolean {
     [s.showAdmin, () => s.setShowAdmin(false)],
     [s.showEditProfile, () => s.setShowEditProfile(false)],
     [s.showAppSettings, () => s.setShowAppSettings(false)],
+    [s.showCreate, () => s.setShowCreate(false)],
     [s.showUpload, () => s.setShowUpload(false)],
     [s.viewer, () => s.setViewer(null)],
     [s.openCook, () => s.setOpenCook(null)],
@@ -237,7 +240,9 @@ export default function App() {
   // Native: links that launch/foreground the app (universal link / custom scheme).
   useEffect(() => {
     if (!isNative) return;
-    const handle = CapApp.addListener('appUrlOpen', ({ url }) => {
+    const handle = CapApp.addListener('appUrlOpen', async ({ url }) => {
+      // OAuth PKCE return (Google/Apple) — exchange the code, then stop.
+      if (await handleOAuthCallback(url)) return;
       const id = parseRecipeDeepLink(url);
       if (id) { openSharedRecipe(id); return; }
       const cook = parseCookDeepLink(url);
@@ -426,6 +431,7 @@ export default function App() {
           {showSettings && <SettingsSheet />}
           {showCook && <CookSheet />}
           {showUpload && <UploadSheet />}
+          <CreateSheet />
           {showNotifications && <NotificationsSheet />}
           {messagesOpen && <MessagesSheet />}
           {sendRecipeFor && <SendToFriendSheet />}

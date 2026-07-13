@@ -1,5 +1,5 @@
 import { useState, useEffect, type ReactNode } from 'react';
-import { Button, DismissBackdrop } from '../controls';
+import { Button, DismissBackdrop, SegmentedControl } from '../controls';
 import { useSwipeDismiss } from '../../lib/useSwipeDismiss';
 import { useAuth } from '../../auth/useAuth';
 import { useSizzle, type FeedKindPref, type ThemePref, type UnitPref } from '../../store';
@@ -10,72 +10,93 @@ import { enablePush, disablePush } from '../../lib/push';
 import { biometricAvailability, biometricVerify, clearBiometricToken } from '../../lib/biometric';
 import { isNative, showMonetization } from '../../lib/native';
 import { PlayIcon, SpeakerIcon } from '../icons';
+import type { MeProfile } from '@sizzle/shared';
 
 const APP_VERSION = '1.0.0';
 const SUPPORT_EMAIL = 'support@getsizzle.app';
 
+/** Uppercase group header. */
 function SectionLabel({ children }: { children: ReactNode }) {
-  return <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.4px', textTransform: 'uppercase', color: 'var(--text-faint-2)', margin: '16px 2px 10px' }}>{children}</div>;
+  return <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.5px', textTransform: 'uppercase', color: 'var(--text-faint-2)', margin: '22px 4px 8px' }}>{children}</div>;
 }
 
-function ToggleRow({ title, sub, icon, on, onToggle }: { title: string; sub: string; icon: ReactNode; on: boolean; onToggle: () => void }) {
+/** 38px rounded icon tile that leads every row. */
+function IconChip({ children, dim }: { children: ReactNode; dim?: boolean }) {
+  return <div style={{ width: 38, height: 38, flex: 'none', borderRadius: 11, background: 'var(--surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: dim ? 0.5 : 1 }}>{children}</div>;
+}
+
+/** A rounded card that groups related rows with hairline dividers between them
+ *  — replaces the old "every row is its own bordered card" layout that made the
+ *  sheet feel like an endless scroll. */
+function Group({ children }: { children: ReactNode }) {
+  const items = (Array.isArray(children) ? children : [children]).flat().filter(Boolean);
+  return (
+    <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 18, overflow: 'hidden' }}>
+      {items.map((child, i) => (
+        <div key={i}>
+          {i > 0 && <div style={{ height: 1, background: 'var(--line)', marginLeft: 67 }} />}
+          {child}
+        </div>
+      ))}
+    </div>
+  );
+}
+
+function Chevron() {
+  return (
+    <svg width="8" height="14" viewBox="0 0 8 14" fill="none" style={{ flex: 'none' }}>
+      <path d="M1 1l6 6-6 6" stroke="var(--text-faint-2)" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round" />
+    </svg>
+  );
+}
+
+/** A flush toggle row inside a Group. */
+function ToggleRow({ title, sub, icon, on, onToggle, dim }: { title: string; sub: string; icon: ReactNode; on: boolean; onToggle: () => void; dim?: boolean }) {
   return (
     <Button
+      role="switch"
+      aria-checked={on}
       onClick={onToggle}
-      style={{ display: 'flex', alignItems: 'center', gap: 14, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 18, padding: 16, cursor: 'pointer', textAlign: 'left', marginBottom: 10, width: '100%' }}
+      style={{ display: 'flex', alignItems: 'center', gap: 13, background: 'transparent', border: 'none', borderRadius: 0, padding: '12px 16px', textAlign: 'left', width: '100%' }}
     >
-      <div style={{ width: 42, height: 42, flex: 'none', borderRadius: 13, background: 'var(--surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>{icon}</div>
-      <div style={{ flex: 1 }}>
-        <div style={{ fontSize: 15.5, fontWeight: 700, color: 'var(--text)' }}>{title}</div>
-        <div style={{ fontSize: 13, color: 'var(--text-faint)', marginTop: 2 }}>{sub}</div>
+      <IconChip dim={dim}>{icon}</IconChip>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</div>
+        <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sub}</div>
       </div>
-      <div style={{ width: 50, height: 30, flex: 'none', borderRadius: 16, background: on ? 'var(--accent)' : 'var(--track)', position: 'relative', transition: 'background .25s' }}>
-        <div style={{ position: 'absolute', top: 3, width: 24, height: 24, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.25)', transition: 'left .25s cubic-bezier(.34,1.56,.64,1)', left: on ? 23 : 3 }} />
+      <div style={{ width: 48, height: 29, flex: 'none', borderRadius: 15, background: on ? 'var(--accent)' : 'var(--track)', position: 'relative', transition: 'background .25s' }}>
+        <div style={{ position: 'absolute', top: 3, width: 23, height: 23, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.25)', transition: 'left .25s cubic-bezier(.34,1.56,.64,1)', left: on ? 22 : 3 }} />
       </div>
     </Button>
   );
 }
 
-function RowButton({ label, hint, danger, onClick }: { label: string; hint?: string; danger?: boolean; onClick: () => void }) {
+/** A flush tappable row inside a Group (icon · label · optional hint · chevron). */
+function LinkRow({ icon, label, hint, danger, onClick }: { icon: ReactNode; label: string; hint?: string; danger?: boolean; onClick: () => void }) {
   return (
     <Button
       onClick={onClick}
-      style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: 16, border: '1px solid var(--line)', borderRadius: 18, background: 'var(--surface)', cursor: 'pointer', marginBottom: 10 }}
+      style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '12px 16px', width: '100%', background: 'transparent', border: 'none', borderRadius: 0, textAlign: 'left' }}
     >
-      <span style={{ fontSize: 15.5, fontWeight: 700, color: danger ? '#d8521e' : 'var(--text)' }}>{label}</span>
-      {hint && <span style={{ fontSize: 13, color: 'var(--text-faint)' }}>{hint}</span>}
+      <IconChip>{icon}</IconChip>
+      <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 700, color: danger ? 'var(--button-danger-fg)' : 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+      {hint && <span style={{ fontSize: 12.5, color: 'var(--text-faint)', flex: 'none', maxWidth: '42%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{hint}</span>}
+      <Chevron />
     </Button>
   );
 }
 
-function Segmented<T extends string>({ value, options, onChange }: { value: T; options: { value: T; label: string }[]; onChange: (v: T) => void }) {
+/** Compact identity header at the top of the sheet. */
+function AccountHeader({ me }: { me: MeProfile }) {
   return (
-    <div style={{ display: 'flex', gap: 5, padding: 5, borderRadius: 16, background: 'var(--surface-2)', border: '1px solid var(--line)', marginBottom: 10 }}>
-      {options.map((o) => {
-        const on = value === o.value;
-        return (
-          <Button
-            key={o.value}
-            onClick={() => onChange(o.value)}
-            style={{
-              flex: 1,
-              padding: '10px 0',
-              borderRadius: 12,
-              border: 'none',
-              cursor: 'pointer',
-              fontFamily: "'Hanken Grotesk'",
-              fontSize: 14,
-              fontWeight: 700,
-              transition: 'all .2s ease',
-              background: on ? 'var(--surface)' : 'transparent',
-              color: on ? 'var(--text)' : 'var(--text-faint)',
-              boxShadow: on ? '0 2px 8px -4px rgba(0,0,0,.3)' : 'none',
-            }}
-          >
-            {o.label}
-          </Button>
-        );
-      })}
+    <div style={{ display: 'flex', alignItems: 'center', gap: 13, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 18, padding: 14, marginBottom: 4 }}>
+      <div style={{ width: 52, height: 52, flex: 'none', borderRadius: '50%', background: me.avatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Instrument Serif',serif", fontSize: 22, color: '#fff', overflow: 'hidden' }}>
+        {me.avatarUrl ? <img src={me.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : me.init}
+      </div>
+      <div style={{ flex: 1, minWidth: 0 }}>
+        <div style={{ fontSize: 17, fontWeight: 800, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{me.name}</div>
+        <div style={{ fontSize: 13.5, color: 'var(--text-faint)' }}>@{me.handle}</div>
+      </div>
     </div>
   );
 }
@@ -231,6 +252,16 @@ export function AppSettingsSheet() {
     }
   };
 
+  const notifRows = [
+    { key: 'likes', title: 'Likes', sub: 'When someone likes your recipe', icon: '❤️' },
+    { key: 'comments', title: 'Comments', sub: 'When someone comments on your recipe', icon: '💬' },
+    { key: 'follows', title: 'New followers', sub: 'When someone follows you', icon: '👤' },
+    { key: 'reposts', title: 'Reposts', sub: 'When someone reposts your recipe', icon: '🔁' },
+    { key: 'messages', title: 'Messages', sub: 'When you get a direct message', icon: '✉️' },
+    // Money surfaces stay web-only on native (Guideline 3.1.x hardening).
+    ...(showMonetization ? [{ key: 'tips' as const, title: 'Tips', sub: 'When someone tips you', icon: '💝' }] : []),
+  ] as const;
+
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 93 }}>
       <DismissBackdrop onDismiss={close} />
@@ -238,7 +269,7 @@ export function AppSettingsSheet() {
         <div {...swipe.handlers} style={{ textAlign: 'center', padding: '16px 0 6px', position: 'relative', flex: 'none' , ...swipe.handlers.style}}>
           <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', width: 42, height: 5, borderRadius: 3, background: 'var(--track)' }} />
           <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginTop: 6 }}>{legal ? LEGAL_COPY[legal].title : showBlocked ? 'Blocked accounts' : 'Settings'}</div>
-          <div style={{ fontSize: 13, color: 'var(--text-faint)', marginTop: 2 }}>{legal ? 'Sizzle' : showBlocked ? "People you've blocked" : 'Appearance, recipes, playback & account'}</div>
+          <div style={{ fontSize: 13, color: 'var(--text-faint)', marginTop: 2 }}>{legal ? 'Sizzle' : showBlocked ? "People you've blocked" : 'Preferences, privacy & account'}</div>
         </div>
 
         {legal ? (
@@ -249,10 +280,12 @@ export function AppSettingsSheet() {
         ) : showBlocked ? (
           <BlockedAccounts onBack={() => setShowBlocked(false)} />
         ) : (
-        <div style={{ flex: 1, overflowY: 'auto', padding: '4px 22px 30px' }}>
+        <div style={{ flex: 1, overflowY: 'auto', padding: '4px 20px 30px' }}>
+          {me.data && <AccountHeader me={me.data} />}
+
           <SectionLabel>Appearance</SectionLabel>
-          <div style={{ fontSize: 13, color: 'var(--text-faint)', margin: '0 2px 8px' }}>Theme · System follows your device</div>
-          <Segmented<ThemePref>
+          <SegmentedControl<ThemePref>
+            label="Theme"
             value={themePref}
             onChange={setTheme}
             options={[
@@ -261,17 +294,46 @@ export function AppSettingsSheet() {
               { value: 'dark', label: 'Dark' },
             ]}
           />
-          <ToggleRow
-            title="Reduce motion"
-            sub="Minimize animations and transitions"
-            icon={<span style={{ fontSize: 20 }}>🌀</span>}
-            on={reduceMotion}
-            onToggle={() => setReduceMotion(!reduceMotion)}
-          />
+          <div style={{ height: 10 }} />
+          <Group>
+            <ToggleRow
+              title="Reduce motion"
+              sub="Minimize animations and transitions"
+              icon={<span style={{ fontSize: 19 }}>🌀</span>}
+              on={reduceMotion}
+              onToggle={() => setReduceMotion(!reduceMotion)}
+            />
+          </Group>
 
-          <SectionLabel>Recipes</SectionLabel>
-          <div style={{ fontSize: 13, color: 'var(--text-faint)', margin: '0 2px 8px' }}>Measurement units · converts ingredient amounts</div>
-          <Segmented<UnitPref>
+          <SectionLabel>Playback</SectionLabel>
+          <Group>
+            <ToggleRow
+              title="Autoplay videos"
+              sub="Play recipes automatically as you scroll"
+              icon={<PlayIcon size={19} fill="var(--text-soft)" />}
+              on={autoplay}
+              onToggle={toggleAutoplay}
+            />
+            <ToggleRow
+              title="Start with sound"
+              sub="Unmute videos by default"
+              icon={<SpeakerIcon size={19} stroke="var(--text-soft)" />}
+              on={!muted}
+              onToggle={toggleMuted}
+            />
+            <ToggleRow
+              title="Data saver"
+              sub="Don't autoplay — tap a video to play"
+              icon={<span style={{ fontSize: 18 }}>📶</span>}
+              on={dataSaver}
+              onToggle={() => setDataSaver(!dataSaver)}
+            />
+          </Group>
+
+          <SectionLabel>Recipes &amp; feed</SectionLabel>
+          <div style={{ fontSize: 12.5, color: 'var(--text-faint)', margin: '0 4px 6px' }}>Measurement units</div>
+          <SegmentedControl<UnitPref>
+            label="Measurement units"
             value={units}
             onChange={setUnits}
             options={[
@@ -280,69 +342,9 @@ export function AppSettingsSheet() {
               { value: 'imperial', label: 'Imperial' },
             ]}
           />
-
-          <SectionLabel>Playback</SectionLabel>
-          <ToggleRow
-            title="Autoplay videos"
-            sub="Play recipes automatically as you scroll"
-            icon={<PlayIcon size={20} fill="var(--text-soft)" />}
-            on={autoplay}
-            onToggle={toggleAutoplay}
-          />
-          <ToggleRow
-            title="Start with sound"
-            sub="Unmute videos by default"
-            icon={<SpeakerIcon size={20} stroke="var(--text-soft)" />}
-            on={!muted}
-            onToggle={toggleMuted}
-          />
-          <ToggleRow
-            title="Data saver"
-            sub="Don't autoplay — tap a video to play and save data"
-            icon={<span style={{ fontSize: 19 }}>📶</span>}
-            on={dataSaver}
-            onToggle={() => setDataSaver(!dataSaver)}
-          />
-
-          <SectionLabel>Notifications</SectionLabel>
-          <ToggleRow
-            title="Push notifications"
-            sub="The master switch for all push alerts"
-            icon={<span style={{ fontSize: 20 }}>🔔</span>}
-            on={pushOn}
-            onToggle={() => void togglePush()}
-          />
-          {pushOn && ([
-            { key: 'likes', title: 'Likes', sub: 'When someone likes your recipe', icon: '❤️' },
-            { key: 'comments', title: 'Comments', sub: 'When someone comments on your recipe', icon: '💬' },
-            { key: 'follows', title: 'New followers', sub: 'When someone follows you', icon: '👤' },
-            { key: 'reposts', title: 'Reposts', sub: 'When someone reposts your recipe', icon: '🔁' },
-            { key: 'messages', title: 'Messages', sub: 'When you get a direct message', icon: '✉️' },
-            // Money surfaces stay web-only on native (Guideline 3.1.x hardening).
-    ...(showMonetization ? [{ key: 'tips' as const, title: 'Tips', sub: 'When someone tips you', icon: '💝' }] : []),
-          ] as const).map((row) => (
-            <ToggleRow
-              key={row.key}
-              title={row.title}
-              sub={row.sub}
-              icon={<span style={{ fontSize: 20 }}>{row.icon}</span>}
-              on={me.data?.notifPrefs?.[row.key] !== false}
-              onToggle={() => updatePref.mutate({ key: row.key, enabled: me.data?.notifPrefs?.[row.key] === false })}
-            />
-          ))}
-
-          <SectionLabel>Security</SectionLabel>
-          <ToggleRow
-            title={`Unlock with ${bio.available ? bio.label : 'Face ID / Touch ID'}`}
-            sub={bio.available ? 'Require it each time you open Sizzle' : isNative ? 'Not set up on this device' : 'Available in the Sizzle app'}
-            icon={<span style={{ fontSize: 20, opacity: bio.available ? 1 : 0.5 }}>🔒</span>}
-            on={biometricLock}
-            onToggle={() => void toggleBiometric()}
-          />
-
-          <SectionLabel>Feed</SectionLabel>
-          <div style={{ fontSize: 13, color: 'var(--text-faint)', margin: '0 2px 8px' }}>Which feed opens first</div>
-          <Segmented<FeedKindPref>
+          <div style={{ fontSize: 12.5, color: 'var(--text-faint)', margin: '12px 4px 6px' }}>Feed that opens first</div>
+          <SegmentedControl<FeedKindPref>
+            label="Default feed"
             value={defaultFeed}
             onChange={setDefaultFeed}
             options={[
@@ -351,23 +353,60 @@ export function AppSettingsSheet() {
             ]}
           />
 
-          <SectionLabel>Storage</SectionLabel>
-          <RowButton label="Clear downloaded recipes" hint="Free up space" onClick={() => clearOffline()} />
-          <RowButton label="Clear cache" hint={cacheCleared ? '✓ Cleared' : 'Reload fresh data'} onClick={() => { queryClient.clear(); setCacheCleared(true); window.setTimeout(() => setCacheCleared(false), 1800); }} />
+          <SectionLabel>Notifications</SectionLabel>
+          <Group>
+            <ToggleRow
+              title="Push notifications"
+              sub="The master switch for all push alerts"
+              icon={<span style={{ fontSize: 19 }}>🔔</span>}
+              on={pushOn}
+              onToggle={() => void togglePush()}
+            />
+            {pushOn && notifRows.map((row) => (
+              <ToggleRow
+                key={row.key}
+                title={row.title}
+                sub={row.sub}
+                icon={<span style={{ fontSize: 19 }}>{row.icon}</span>}
+                on={me.data?.notifPrefs?.[row.key] !== false}
+                onToggle={() => updatePref.mutate({ key: row.key, enabled: me.data?.notifPrefs?.[row.key] === false })}
+              />
+            ))}
+          </Group>
 
           <SectionLabel>Privacy &amp; safety</SectionLabel>
-          <ToggleRow
-            title="Private account"
-            sub={me.data?.private ? 'Only approved followers see your recipes' : 'Anyone can see your recipes and follow you'}
-            icon={<span style={{ fontSize: 20 }}>🔐</span>}
-            on={me.data?.private ?? false}
-            onToggle={() => updateProfile.mutate({ private: !(me.data?.private ?? false) })}
-          />
-          <RowButton label="Blocked accounts" hint="Manage who you've blocked" onClick={() => setShowBlocked(true)} />
+          <Group>
+            <ToggleRow
+              title="Private account"
+              sub={me.data?.private ? 'Only approved followers see your recipes' : 'Anyone can see your recipes and follow you'}
+              icon={<span style={{ fontSize: 19 }}>🔐</span>}
+              on={me.data?.private ?? false}
+              onToggle={() => updateProfile.mutate({ private: !(me.data?.private ?? false) })}
+            />
+            <ToggleRow
+              title={`Unlock with ${bio.available ? bio.label : 'Face ID / Touch ID'}`}
+              sub={bio.available ? 'Require it each time you open Sizzle' : isNative ? 'Not set up on this device' : 'Available in the Sizzle app'}
+              icon={<span style={{ fontSize: 19 }}>🔒</span>}
+              on={biometricLock}
+              onToggle={() => void toggleBiometric()}
+              dim={!bio.available}
+            />
+            <LinkRow icon={<span style={{ fontSize: 18 }}>🚫</span>} label="Blocked accounts" hint="Manage list" onClick={() => setShowBlocked(true)} />
+          </Group>
+
+          <SectionLabel>Storage</SectionLabel>
+          <Group>
+            <LinkRow icon={<span style={{ fontSize: 18 }}>💾</span>} label="Clear downloaded recipes" hint="Free up space" onClick={() => clearOffline()} />
+            <LinkRow icon={<span style={{ fontSize: 18 }}>♻️</span>} label="Clear cache" hint={cacheCleared ? '✓ Cleared' : 'Reload fresh'} onClick={() => { queryClient.clear(); setCacheCleared(true); window.setTimeout(() => setCacheCleared(false), 1800); }} />
+          </Group>
 
           <SectionLabel>Account</SectionLabel>
-          {pwOpen ? (
-            <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 18, padding: 14, marginBottom: 10 }}>
+          <Group>
+            {!pwOpen && <LinkRow icon={<span style={{ fontSize: 18 }}>🔑</span>} label="Change password" onClick={() => { setPwMsg(null); setPwOpen(true); }} />}
+            <LinkRow icon={<span style={{ fontSize: 18 }}>📦</span>} label={exportBusy ? 'Preparing…' : 'Download my data'} hint="JSON (GDPR)" onClick={() => void exportData()} />
+          </Group>
+          {pwOpen && (
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 18, padding: 14, marginTop: 10 }}>
               <input
                 type="password"
                 value={pw}
@@ -380,31 +419,28 @@ export function AppSettingsSheet() {
                 <Button variant="primary" onClick={() => void changePassword()} disabled={pw.length < 10} loading={pwBusy} loadingLabel="Saving…" style={{ flex: 1 }}>Update</Button>
               </div>
             </div>
-          ) : (
-            <RowButton label="Change password" hint="" onClick={() => { setPwMsg(null); setPwOpen(true); }} />
           )}
-          {pwMsg && <div style={{ fontSize: 13, color: pwMsg.includes('updated') ? '#2c8a4a' : '#d8521e', fontWeight: 600, margin: '-4px 2px 10px' }}>{pwMsg}</div>}
+          {pwMsg && <div style={{ fontSize: 13, color: pwMsg.includes('updated') ? 'var(--button-success-fg)' : 'var(--button-danger-fg)', fontWeight: 600, margin: '8px 4px 0' }}>{pwMsg}</div>}
 
-          <RowButton label={exportBusy ? 'Preparing…' : 'Download my data'} hint="A JSON copy of your account (GDPR)" onClick={() => void exportData()} />
-
+          <div style={{ height: 12 }} />
           <Button
             onClick={() => { void signOut(); close(); }}
-            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', height: 52, border: '1px solid var(--line-2)', borderRadius: 16, background: 'var(--surface)', color: 'var(--accent)', fontFamily: "'Hanken Grotesk'", fontSize: 15.5, fontWeight: 700, cursor: 'pointer', marginBottom: 10 }}
+            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', height: 52, border: '1px solid var(--line-2)', borderRadius: 16, background: 'var(--surface)', color: 'var(--accent)', fontFamily: "'Hanken Grotesk'", fontSize: 15.5, fontWeight: 700, cursor: 'pointer' }}
           >
             Log out
           </Button>
 
           {delStep ? (
-            <div style={{ background: 'var(--surface)', border: '1px solid #f2c8bb', borderRadius: 18, padding: 16, marginBottom: 12 }}>
-              <div style={{ fontSize: 14.5, fontWeight: 800, color: '#d8521e' }}>Delete your account?</div>
+            <div style={{ background: 'var(--surface)', border: '1px solid var(--button-danger-fg)', borderRadius: 18, padding: 16, marginTop: 12 }}>
+              <div style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--button-danger-fg)' }}>Delete your account?</div>
               <div style={{ fontSize: 13, color: 'var(--text-faint)', margin: '4px 0 10px' }}>This permanently removes your profile, recipes, and all your data. This can't be undone.</div>
               <div style={{ fontSize: 13, color: 'var(--text-faint)', margin: '0 0 6px' }}>
-                To confirm, type <b style={{ color: 'var(--text)' }}>{delPhrase ?? 'Delete …'}</b>
+                To confirm, type <b style={{ color: 'var(--text)' }}>{delPhrase}</b>
               </div>
               <input
                 value={delConfirm}
                 onChange={(e) => setDelConfirm(e.target.value)}
-                placeholder={delPhrase ?? 'Delete username'}
+                placeholder={delPhrase}
                 autoCapitalize="off"
                 autoCorrect="off"
                 spellCheck={false}
@@ -416,16 +452,22 @@ export function AppSettingsSheet() {
               </div>
             </div>
           ) : (
-            <RowButton label="Delete account" danger hint="Permanent" onClick={() => { setDelConfirm(''); setDelStep(true); }} />
+            <div style={{ marginTop: 12 }}>
+              <Group>
+                <LinkRow icon={<span style={{ fontSize: 18 }}>🗑️</span>} label="Delete account" danger hint="Permanent" onClick={() => { setDelConfirm(''); setDelStep(true); }} />
+              </Group>
+            </div>
           )}
 
-          <SectionLabel>About &amp; Legal</SectionLabel>
-          <RowButton label="🚀 Roadmap" hint="What's next →" onClick={() => { setShowRoadmap(true); close(); }} />
-          <RowButton label="Terms of Service" onClick={() => setLegal('terms')} />
-          <RowButton label="Privacy Policy" onClick={() => setLegal('privacy')} />
-          <RowButton label="Contact support" hint={SUPPORT_EMAIL} onClick={() => { window.location.href = `mailto:${SUPPORT_EMAIL}`; }} />
+          <SectionLabel>About</SectionLabel>
+          <Group>
+            <LinkRow icon={<span style={{ fontSize: 18 }}>🚀</span>} label="Roadmap" hint="What's next" onClick={() => { setShowRoadmap(true); close(); }} />
+            <LinkRow icon={<span style={{ fontSize: 18 }}>📄</span>} label="Terms of Service" onClick={() => setLegal('terms')} />
+            <LinkRow icon={<span style={{ fontSize: 18 }}>🛡️</span>} label="Privacy Policy" onClick={() => setLegal('privacy')} />
+            <LinkRow icon={<span style={{ fontSize: 18 }}>✉️</span>} label="Contact support" hint="Email us" onClick={() => { window.location.href = `mailto:${SUPPORT_EMAIL}`; }} />
+          </Group>
 
-          <div style={{ textAlign: 'center', color: 'var(--text-faint-2)', fontSize: 12.5, margin: '6px 0 14px' }}>Sizzle v{APP_VERSION}</div>
+          <div style={{ textAlign: 'center', color: 'var(--text-faint-2)', fontSize: 12.5, margin: '16px 0 14px' }}>Sizzle v{APP_VERSION}</div>
 
           <Button variant="primary" size="lg" fullWidth onClick={close}>Done</Button>
         </div>

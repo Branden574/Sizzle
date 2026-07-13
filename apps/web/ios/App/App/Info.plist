@@ -71,5 +71,18 @@
 	     "Missing Compliance" gate so TestFlight builds reach testers immediately. -->
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<!-- Custom URL scheme for OAuth (Google/Apple) return via the system
+	     browser — see src/lib/nativeOAuth.ts (redirect app.sizzle.mobile://). -->
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key>
+			<string>app.sizzle.mobile</string>
+			<key>CFBundleURLSchemes</key>
+			<array>
+				<string>app.sizzle.mobile</string>
+			</array>
+		</dict>
+	</array>
 </dict>
 </plist>

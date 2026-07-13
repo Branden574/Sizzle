@@ -3,6 +3,8 @@ import { create } from 'zustand';
 import type { MeProfile } from '@sizzle/shared';
 import { apiGet } from '../lib/api';
 import { supabase } from '../lib/supabase';
+import { isNative } from '../lib/native';
+import { nativeSignInOAuth } from '../lib/nativeOAuth';
 import { disablePush } from '../lib/push';
 import { biometricVerify, getBiometricToken, storeBiometricToken, clearBiometricToken } from '../lib/biometric';
 
@@ -143,14 +145,19 @@ export const useAuth = create<AuthState>((set, get) => ({
 
   signInOAuth: async (provider) => {
     set({ error: null });
+    const label = provider === 'apple' ? 'Apple' : 'Google';
+    // Native opens the system browser + returns via the app's custom URL scheme
+    // (see nativeOAuth.ts); web redirects the page as usual.
+    if (isNative) {
+      const { error } = await nativeSignInOAuth(provider);
+      if (error) set({ error: `${label} sign-in isn't available right now — use email below.` });
+      return;
+    }
     const { error } = await supabase.auth.signInWithOAuth({
       provider,
       options: { redirectTo: window.location.origin },
     });
-    if (error) {
-      const label = provider === 'apple' ? 'Apple' : 'Google';
-      set({ error: `${label} sign-in isn't configured yet — use email below.` });
-    }
+    if (error) set({ error: `${label} sign-in isn't configured yet — use email below.` });
   },
 
   signOut: async () => {

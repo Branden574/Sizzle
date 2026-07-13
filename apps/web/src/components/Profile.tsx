@@ -3,11 +3,10 @@ import { Button, IconButton } from './controls';
 import type { RecipeCard } from '@sizzle/shared';
 import { useAuth } from '../auth/useAuth';
 import { useRequireAuth } from '../auth/useRequireAuth';
-import { useCook, useCookLive, useDeleteCookLog, useDeleteRecipe, useDrafts, useEndLive, useLikedFeed, useMe, useMyJournal, useNotifications, usePublishDraft, useRequestVerification, useSavedFeed, useStartLive } from '../data/queries';
+import { useCook, useDeleteCookLog, useDeleteRecipe, useDrafts, useLikedFeed, useMe, useMyJournal, useNotifications, usePublishDraft, useRequestVerification, useSavedFeed } from '../data/queries';
 import { useSizzle } from '../store';
 import { formatCount } from '../lib/format';
 import { cookShareUrl } from '../lib/share';
-import { isNative } from '../lib/native';
 import { VerifiedBadge } from './VerifiedBadge';
 import { SocialLinks } from './SocialLinks';
 import { BellIcon, BookmarkIcon, GearIcon, HeartIcon, ShareIcon } from './icons';
@@ -130,7 +129,6 @@ export function Profile() {
         >
           📊 View insights
         </Button>
-        {me && <GoLiveButton meId={me.id} />}
         {!me?.verifiedTier && <VerifyButton />}
         <DraftsStrip />
         {me?.role === 'admin' && (
@@ -305,29 +303,3 @@ function VerifyButton() {
   );
 }
 
-/** Go live / end a live cooking session. App Store compliance: hidden on
- *  native while the live provider is the MOCK (a visibly fake stream is a
- *  2.1 completeness rejection) — remove the gate when Cloudflare Stream is
- *  configured (docs/app-store-deployment.md §3). */
-function GoLiveButton({ meId }: { meId: string }) {
-  if (isNative) return null;
-  const { data: live } = useCookLive(meId);
-  const start = useStartLive();
-  const end = useEndLive();
-  if (live) {
-    return (
-      <Button variant="danger" fullWidth onClick={() => end.mutate()} loading={end.isPending} style={{ marginTop: 10 }}>
-        ⏹ End live · {formatCount(live.viewers)} watching
-      </Button>
-    );
-  }
-  const go = () => {
-    const title = window.prompt('What are you cooking live?');
-    if (title && title.trim()) start.mutate(title.trim());
-  };
-  return (
-    <Button variant="outline" fullWidth onClick={go} loading={start.isPending} loadingLabel="Starting…" style={{ marginTop: 10 }}>
-      🔴 Go live
-    </Button>
-  );
-}

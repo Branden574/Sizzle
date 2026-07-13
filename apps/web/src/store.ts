@@ -86,6 +86,7 @@ export interface SizzleState {
   viewer: { items: RecipeCard[]; index: number } | null;
   openCook: string | null;
   showUpload: boolean;
+  showCreate: boolean;
   showNotifications: boolean;
   showEditProfile: boolean;
   showAppSettings: boolean;
@@ -190,6 +191,7 @@ export interface SizzleState {
   setOpenTag: (tag: string | null) => void;
   setFollowList: (v: { id: string; mode: 'followers' | 'following'; name: string } | null) => void;
   setShowUpload: (v: boolean) => void;
+  setShowCreate: (v: boolean) => void;
   setShowNotifications: (v: boolean) => void;
   setShowEditProfile: (v: boolean) => void;
   setShowAppSettings: (v: boolean) => void;
@@ -237,6 +239,7 @@ export const useSizzle = create<SizzleState>((set) => ({
   viewer: null,
   openCook: null,
   showUpload: false,
+  showCreate: false,
   showNotifications: false,
   showEditProfile: false,
   showAppSettings: false,
@@ -362,6 +365,7 @@ export const useSizzle = create<SizzleState>((set) => ({
   setOpenTag: (tag) => set({ openTag: tag }),
   setFollowList: (v) => set({ followList: v }),
   setShowUpload: (v) => set({ showUpload: v }),
+  setShowCreate: (v) => set({ showCreate: v }),
   setShowNotifications: (v) => set({ showNotifications: v }),
   setShowEditProfile: (v) => set({ showEditProfile: v }),
   setShowAppSettings: (v) => set({ showAppSettings: v }),
