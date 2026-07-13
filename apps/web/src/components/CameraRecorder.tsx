@@ -82,6 +82,43 @@ export function CameraRecorder({ onCapture, onClose }: { onCapture: (file: File)
   const [recording, setRecording] = useState(false);
   const [elapsedMs, setElapsedMs] = useState(0);
   const [segments, setSegments] = useState<number[]>([]);
+  // Zoom: driven by the live video track's hardware/digital zoom (so it affects the
+  // RECORDED clip, not just the preview). Null range = the camera exposes no zoom.
+  const [zoom, setZoom] = useState(1);
+  const [zoomRange, setZoomRange] = useState<{ min: number; max: number; step: number } | null>(null);
+  const pinch = useRef<{ dist: number; zoom: number } | null>(null);
+
+  // Read the current camera's zoom capability + apply a zoom level.
+  const readZoomCaps = useCallback((stream: MediaStream) => {
+    try {
+      const track = stream.getVideoTracks()[0];
+      const caps = (track?.getCapabilities?.() ?? {}) as MediaTrackCapabilities & { zoom?: { min: number; max: number; step?: number } };
+      const z = caps.zoom;
+      if (z && typeof z.min === 'number' && typeof z.max === 'number' && z.max > z.min) {
+        setZoomRange({ min: z.min, max: z.max, step: z.step || (z.max - z.min) / 100 });
+        const cur = (track.getSettings() as MediaTrackSettings & { zoom?: number }).zoom;
+        setZoom(typeof cur === 'number' ? cur : z.min);
+      } else {
+        setZoomRange(null);
+        setZoom(1);
+      }
+    } catch {
+      setZoomRange(null);
+      setZoom(1);
+    }
+  }, []);
+
+  const applyZoom = useCallback((value: number) => {
+    const track = streamRef.current?.getVideoTracks()[0];
+    if (!track || !zoomRange) return;
+    const v = Math.max(zoomRange.min, Math.min(zoomRange.max, Math.round(value * 100) / 100));
+    setZoom(v);
+    try {
+      void track.applyConstraints({ advanced: [{ zoom: v } as MediaTrackConstraintSet & { zoom: number }] });
+    } catch {
+      /* device rejected the zoom constraint — leave the preview as-is */
+    }
+  }, [zoomRange]);
 
   const stopStream = useCallback(() => {
     streamRef.current?.getTracks().forEach((t) => t.stop());
@@ -146,6 +183,8 @@ export function CameraRecorder({ onCapture, onClose }: { onCapture: (file: File)
         void videoRef.current.play().catch(() => {});
       }
       mimeRef.current = pickMime();
+      setZoomRange(null);
+      setZoom(1);
       setErrName('');
       setStatus('granted');
     } catch {
@@ -173,13 +212,43 @@ export function CameraRecorder({ onCapture, onClose }: { onCapture: (file: File)
         void videoRef.current.play().catch(() => {});
       }
       mimeRef.current = pickMime();
+      readZoomCaps(stream);
       setErrName('');
       setStatus('granted');
     } catch (e) {
       setErrName((e as DOMException)?.name || 'Error');
       setStatus('denied');
     }
-  }, [stopStream]);
+  }, [stopStream, readZoomCaps]);
+
+  // Flip front↔back WITHOUT tearing down to the permission UI. iOS grants camera +
+  // mic ONCE; the old flip re-ran startStream (status→'requesting' flashed the
+  // "request access" card, and audio:true re-asked for the mic). Here we grab only
+  // the other camera's video (audio:false), keep the existing audio track, and stay
+  // 'granted' the whole time — so no permission screen ever reappears on a flip.
+  const flipCamera = useCallback(async () => {
+    if (status !== 'granted' || demo) return;
+    const next = facing === 'user' ? 'environment' : 'user';
+    try {
+      const fresh = await navigator.mediaDevices.getUserMedia({
+        video: { facingMode: next, width: { ideal: 1080 }, height: { ideal: 1920 } },
+        audio: false,
+      });
+      const old = streamRef.current;
+      old?.getVideoTracks().forEach((t) => t.stop()); // release only the old camera
+      const audio = old?.getAudioTracks() ?? [];
+      const combined = new MediaStream([fresh.getVideoTracks()[0]!, ...audio]);
+      streamRef.current = combined;
+      if (videoRef.current) {
+        videoRef.current.srcObject = combined;
+        void videoRef.current.play().catch(() => {});
+      }
+      setFacing(next);
+      readZoomCaps(combined); // zoom range differs per camera → reset
+    } catch {
+      /* only one camera, or the flip was refused — stay put, no permission card */
+    }
+  }, [status, demo, facing, readZoomCaps]);
 
   // Release the camera + timers on unmount (do NOT auto-request on mount).
   useEffect(() => {
@@ -285,12 +354,42 @@ export function CameraRecorder({ onCapture, onClose }: { onCapture: (file: File)
     // a quick tap → leave recording (hands-free); the next tap stops it
   };
 
+  // Pinch-to-zoom on the preview (two fingers). Maps the finger spread onto the
+  // camera's zoom range and applies it to the live track (so the recording zooms too).
+  const pinchDist = (t: React.TouchList) => {
+    const a = t[0], b = t[1];
+    return a && b ? Math.hypot(a.clientX - b.clientX, a.clientY - b.clientY) : 0;
+  };
+  const onPinchStart = (e: React.TouchEvent) => {
+    if (e.touches.length === 2 && zoomRange) pinch.current = { dist: pinchDist(e.touches), zoom };
+  };
+  const onPinchMove = (e: React.TouchEvent) => {
+    if (e.touches.length === 2 && pinch.current && zoomRange) {
+      e.preventDefault();
+      const ratio = pinchDist(e.touches) / (pinch.current.dist || 1);
+      applyZoom(pinch.current.zoom * ratio);
+    }
+  };
+  const onPinchEnd = () => { pinch.current = null; };
+
   const hasFootage = elapsedMs > 600;
   const canFlip = !recording && segments.length === 0;
+  // Zoom label reads relative to the camera's base zoom, so the minimum shows 1.0×.
+  const zoomLabel = zoomRange && zoomRange.min > 0 ? zoom / zoomRange.min : zoom;
 
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 96, background: '#000', display: 'flex', flexDirection: 'column' }}>
-      <video ref={videoRef} muted playsInline autoPlay style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', transform: facing === 'user' && !demo ? 'scaleX(-1)' : 'none' }} />
+      <video
+        ref={videoRef}
+        muted
+        playsInline
+        autoPlay
+        onTouchStart={onPinchStart}
+        onTouchMove={onPinchMove}
+        onTouchEnd={onPinchEnd}
+        onTouchCancel={onPinchEnd}
+        style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover', touchAction: 'none', transform: facing === 'user' && !demo ? 'scaleX(-1)' : 'none' }}
+      />
       <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, rgba(0,0,0,.4), transparent 18%, transparent 72%, rgba(0,0,0,.5))', pointerEvents: 'none' }} />
 
       {/* top bar */}
@@ -304,7 +403,7 @@ export function CameraRecorder({ onCapture, onClose }: { onCapture: (file: File)
           </div>
         )}
         <Button
-          onClick={() => { const next = facing === 'user' ? 'environment' : 'user'; setFacing(next); void startStream(next); }}
+          onClick={() => { void flipCamera(); }}
           disabled={!canFlip}
           aria-label="Flip camera"
           style={{ width: 40, height: 40, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.4)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: canFlip ? 'pointer' : 'default', opacity: canFlip ? 1 : 0.35 }}
@@ -365,6 +464,26 @@ export function CameraRecorder({ onCapture, onClose }: { onCapture: (file: File)
             </div>
             <div style={{ color: 'rgba(255,255,255,.4)', fontSize: 12, marginTop: 2 }}>“Demo camera” records a synthetic clip so you can test recording without granting the camera.</div>
           </div>
+        </div>
+      )}
+
+      {/* zoom — pinch the preview or drag the slider; applies to the live track so
+          the recording zooms too. Only shown when the camera exposes a zoom range. */}
+      {status === 'granted' && zoomRange && (
+        <div style={{ position: 'relative', display: 'flex', alignItems: 'center', gap: 12, padding: '0 32px 16px' }}>
+          <span style={{ color: '#fff', fontSize: 12.5, fontWeight: 800, minWidth: 40, textAlign: 'center', background: 'rgba(0,0,0,.4)', borderRadius: 12, padding: '4px 0', fontVariantNumeric: 'tabular-nums' }}>
+            {zoomLabel.toFixed(1)}×
+          </span>
+          <input
+            type="range"
+            min={zoomRange.min}
+            max={zoomRange.max}
+            step={zoomRange.step}
+            value={zoom}
+            onChange={(e) => applyZoom(parseFloat(e.target.value))}
+            aria-label="Zoom"
+            style={{ flex: 1, accentColor: 'var(--accent)', height: 28 }}
+          />
         </div>
       )}
 
