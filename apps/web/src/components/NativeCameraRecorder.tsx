@@ -131,12 +131,17 @@ export function NativeCameraRecorder({ onCapture, onClose }: { onCapture: (file:
         if (!activeRef.current) return;
         if (perm.camera !== 'granted') { setStatus('denied'); return; }
         document.documentElement.classList.add('sz-native-cam');
-        // Full-screen preview: let the plugin default to the whole screen, fill
-        // with 'cover', and DON'T inset for safe areas (edge-to-edge, no black
-        // band). Passing explicit innerWidth/innerHeight left a band at the top.
+        // Full-screen preview edge-to-edge: pass the PHYSICAL screen size
+        // (window.screen.* == UIScreen.main.bounds), pin to 0,0, safe-area insets
+        // OFF, and 'cover' to fill+crop. (Plugin defaults SHOULD be full-screen but
+        // weren't; innerWidth/innerHeight under-reported the height → black band.)
         await CameraPreview.start({
           position: 'rear',
           toBack: true,
+          x: 0,
+          y: 0,
+          width: Math.round(window.screen.width),
+          height: Math.round(window.screen.height),
           aspectMode: 'cover',
           includeSafeAreaInsets: false,
           disableAudio: false,
@@ -297,8 +302,9 @@ export function NativeCameraRecorder({ onCapture, onClose }: { onCapture: (file:
       onTouchEnd={onPinchEnd}
       onTouchCancel={onPinchEnd}
     >
-      {/* darkening only at the edges so controls read against the live preview */}
-      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: 'linear-gradient(180deg, rgba(0,0,0,.4), transparent 18%, transparent 72%, rgba(0,0,0,.5))' }} />
+      {/* darkening at top + bottom so the controls read against the live preview
+          (the preview now fills the whole screen, TikTok/IG-style) */}
+      <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: 'linear-gradient(180deg, rgba(0,0,0,.5) 0%, transparent 15%, transparent 58%, rgba(0,0,0,.72) 100%)' }} />
 
       {/* top bar: close · timer · flip (flip works mid-recording) */}
       <div style={{ position: 'relative', display: 'flex', alignItems: 'center', justifyContent: 'space-between', padding: '54px 18px 0' }}>
