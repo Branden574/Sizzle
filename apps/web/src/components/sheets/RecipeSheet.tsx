@@ -65,7 +65,8 @@ export function RecipeSheet() {
   const close = () => setOpenRecipe(null);
   const isOwner = !!r && !!me && r.cook.id === me.id;
   const isReview = r?.postType === 'review';
-  const headerVideo = r?.video?.mp4Url || r?.video?.hlsUrl || null;
+  // Prefer HLS (Cloudflare adaptive stream) over raw MP4 — same order as the feed.
+  const headerVideo = r?.video?.hlsUrl || r?.video?.mp4Url || null;
   const headerImages = r?.images ?? [];
   const hasMedia = !!headerVideo || headerImages.length > 0;
   // Serving scaler: the recipe's own serving count is the baseline; the user can

@@ -383,7 +383,9 @@ export function FeedCard({ card, onClose }: { card: RecipeCard; onClose?: () => 
 
   const { cook, viewer, counts, controls } = card;
   const hasImages = card.images.length > 0;
-  const videoSrc = !hasImages ? card.video?.mp4Url || card.video?.hlsUrl || null : null;
+  // Prefer the HLS stream (Cloudflare: adaptive bitrate, CDN egress) over the
+  // raw MP4; mp4Url stays as the fallback for the bundled seed videos.
+  const videoSrc = !hasImages ? card.video?.hlsUrl || card.video?.mp4Url || null : null;
   // Controls are now persisted server-side + enforced for every viewer.
   const showLikes = controls.likesEnabled;
   const showComments = controls.commentsEnabled;
