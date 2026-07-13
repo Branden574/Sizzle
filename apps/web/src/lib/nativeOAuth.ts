@@ -28,11 +28,7 @@ export const NATIVE_OAUTH_REDIRECT = 'app.sizzle.mobile://login-callback';
  *  PKCE code-verifier key and break the in-flight exchange. */
 let oauthInFlight = false;
 
-async function setAuthError(message: string) {
-  // Dynamic import avoids a static import cycle (useAuth imports this module).
-  const { useAuth } = await import('../auth/useAuth');
-  useAuth.setState({ error: message });
-}
+const SIGNIN_FAILED = 'Sign-in didn’t complete — try again or use email.';
 
 /** Open the provider's consent screen in the system browser. The result returns
  *  asynchronously via the appUrlOpen deep link → handleOAuthCallback. */
@@ -65,18 +61,28 @@ export async function handleOAuthCallback(url: string): Promise<boolean> {
   const params = new URLSearchParams(url.split('?')[1] ?? '');
   const code = params.get('code');
   const providerError = params.get('error_description') ?? params.get('error');
+  oauthInFlight = false;
+  // Dismiss the system browser FIRST. SFSafariViewController does NOT auto-close
+  // on a custom-scheme redirect (only ASWebAuthenticationSession does), so if we
+  // waited for the token exchange to finish before closing, the user would stare
+  // at a lingering "cannot open page" browser for a second or two — that was the
+  // "took forever" delay. Return them to the app instantly, then exchange.
+  await Browser.close().catch(() => {});
+  if (!code && !providerError) return true;
+  // Dynamic import avoids a static import cycle (useAuth imports this module).
+  const { useAuth } = await import('../auth/useAuth');
+  if (code) useAuth.setState({ busy: true, error: null });
   try {
     if (code) {
       await supabase.auth.exchangeCodeForSession(code);
-    } else if (providerError) {
+    } else if (params.get('error') !== 'access_denied') {
       // access_denied = the user cancelled the sheet; stay quiet on that.
-      if (params.get('error') !== 'access_denied') await setAuthError('Sign-in didn’t complete — try again or use email.');
+      useAuth.setState({ error: SIGNIN_FAILED });
     }
   } catch {
-    await setAuthError('Sign-in didn’t complete — try again or use email.');
+    useAuth.setState({ error: SIGNIN_FAILED });
   } finally {
-    oauthInFlight = false;
-    await Browser.close().catch(() => {});
+    useAuth.setState({ busy: false });
   }
   return true;
 }

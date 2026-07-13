@@ -433,6 +433,7 @@ function StepAccount() {
             variant="secondary"
             size="lg"
             fullWidth
+            disabled={busy}
           >
             Continue with Apple
           </Button>
@@ -441,6 +442,7 @@ function StepAccount() {
             variant="outline"
             size="lg"
             fullWidth
+            disabled={busy}
           >
             Continue with Google
           </Button>
