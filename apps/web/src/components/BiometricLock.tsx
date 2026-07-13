@@ -4,15 +4,19 @@ import { biometricVerify } from '../lib/biometric';
 import { useAuth } from '../auth/useAuth';
 
 // Belt-and-suspenders against any remount loop ever trapping the user in
-// endless Face ID prompts: if the lock auto-prompts more than 3 times within
-// 5 seconds, stop auto-prompting and require a manual tap instead. Module
-// scope so the count survives the remounts a loop would cause.
-let autoPromptTimes: number[] = [];
+// endless Face ID prompts: allow at most 3 AUTO-prompts between successful
+// unlocks — after that, require a manual tap. Deliberately NO time window
+// (time-based breakers failed twice on-device: a slow prompt cycle simply
+// outran the window). A normal user resets the count on every successful
+// unlock, so only cancel/failure/loop sequences accumulate. Module scope so
+// the count survives the remounts a loop would cause.
+let autoPromptCount = 0;
+export function resetBiometricAutoPrompts(): void {
+  autoPromptCount = 0;
+}
 function autoPromptAllowed(): boolean {
-  const now = Date.now();
-  autoPromptTimes = autoPromptTimes.filter((t) => now - t < 5000);
-  autoPromptTimes.push(now);
-  return autoPromptTimes.length <= 3;
+  autoPromptCount += 1;
+  return autoPromptCount <= 3;
 }
 
 /**
@@ -34,8 +38,12 @@ export function BiometricLock({ label, onUnlock }: { label: string; onUnlock: ()
     setAutoPaused(false);
     const ok = await biometricVerify('Unlock Sizzle');
     setBusy(false);
-    if (ok) onUnlock();
-    else setFailed(true);
+    if (ok) {
+      resetBiometricAutoPrompts(); // a real unlock re-arms the auto-prompt budget
+      onUnlock();
+    } else {
+      setFailed(true);
+    }
   }, [busy, onUnlock]);
 
   // Prompt once automatically when the lock appears — unless we've auto-prompted

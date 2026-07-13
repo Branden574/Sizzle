@@ -49,7 +49,7 @@ import { apiSend } from './lib/api';
 import { useOnlineStatus } from './lib/useOnlineStatus';
 import { isNative } from './lib/native';
 import { syncPushRegistration, disablePush } from './lib/push';
-import { biometricAvailability, biometricPromptBusy } from './lib/biometric';
+import { biometricAvailability, consumeBiometricPromptResume } from './lib/biometric';
 import { BiometricLock } from './components/BiometricLock';
 import { DesktopSidebar } from './components/DesktopSidebar';
 import { useMediaQuery } from './lib/useMediaQuery';
@@ -201,9 +201,12 @@ export default function App() {
   useEffect(() => {
     if (!isNative) return;
     const handle = CapApp.addListener('appStateChange', ({ isActive }) => {
-      // Ignore the resume the biometric prompt itself fires — otherwise passing
-      // Face ID re-locks the app immediately and prompts again in a loop.
-      if (isActive && useSizzle.getState().biometricLock && !biometricPromptBusy()) setAppUnlocked(false);
+      if (!isActive) return;
+      // Consume the resume the biometric prompt itself fires (one-shot, no
+      // wall clock — a timed cooldown looped on devices with slow event
+      // delivery). Only a resume NOT caused by a prompt re-locks.
+      const promptResume = consumeBiometricPromptResume();
+      if (useSizzle.getState().biometricLock && !promptResume) setAppUnlocked(false);
     });
     return () => { void handle.then((l) => l.remove()); };
   }, [setAppUnlocked]);

@@ -47,16 +47,23 @@ export async function biometricAvailability(): Promise<{ available: boolean; lab
 // Showing the OS biometric prompt makes iOS/Android fire an app-state change
 // (the app goes inactive behind the system overlay, then active again when it
 // dismisses). The app-lock re-locks on "became active", so without this guard
-// passing Face ID would immediately re-lock and re-prompt forever. We flag the
-// window around a prompt so the appStateChange listener can ignore that one
-// spurious resume. A short cooldown after resolve covers the dismissal event.
-let promptInFlight = false;
-let promptBusyUntil = 0;
+// passing Face ID would immediately re-lock and re-prompt forever.
+//
+// DETERMINISTIC one-shot guard — no wall clocks. (A previous version used a
+// 1.5s cooldown; on devices where the OS delivers the resume later than that,
+// the loop came back.) Every prompt arms the flag; the NEXT isActive:true is
+// consumed instead of re-locking, whenever it arrives. Each lock/unlock cycle
+// arms and consumes its own flag, so genuine background→foreground re-locks
+// still work. If a device never fires the resume, the stale flag costs at most
+// one skipped re-lock (the circuit breaker in BiometricLock backstops worse).
+let pendingPromptResume = false;
 
-/** True while a biometric prompt is showing, or briefly (1.5s) after it
- *  resolves — used to ignore the resume the prompt itself triggers. */
-export function biometricPromptBusy(): boolean {
-  return promptInFlight || Date.now() < promptBusyUntil;
+/** Consume the one-shot "the biometric prompt caused this resume" flag.
+ *  Returns true (and disarms) if a prompt was shown since the last resume. */
+export function consumeBiometricPromptResume(): boolean {
+  if (!pendingPromptResume) return false;
+  pendingPromptResume = false;
+  return true;
 }
 
 /**
@@ -65,15 +72,12 @@ export function biometricPromptBusy(): boolean {
  */
 export async function biometricVerify(reason = 'Unlock Sizzle'): Promise<boolean> {
   if (!isNative) return true;
-  promptInFlight = true;
+  pendingPromptResume = true; // the overlay will fire exactly one resume
   try {
     await NativeBiometric.verifyIdentity({ reason, title: 'Sizzle', subtitle: '', description: reason });
     return true;
   } catch {
     return false;
-  } finally {
-    promptInFlight = false;
-    promptBusyUntil = Date.now() + 1500; // swallow the resume the prompt dismissal fires
   }
 }
 
