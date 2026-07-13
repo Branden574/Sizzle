@@ -149,10 +149,17 @@ export function cookSummary(p: ProfileRow): CookSummary {
 
 export function videoDTO(v: VideoRow | null | undefined): VideoAssetDTO | null {
   if (!v) return null;
+  // Only hand playback URLs to the client once the asset is READY. Cloudflare
+  // populates hls_url early (while still transcoding), but its manifest returns
+  // 500 until the stream is actually ready — so exposing the URL made the player
+  // load a dead stream ("won't play, tapped 5 times"). Null until ready → the
+  // client shows a "processing" state instead of a broken player, and the card
+  // upgrades to playable once status flips to 'ready'.
+  const ready = v.status === 'ready';
   return {
     status: v.status as VideoAssetDTO['status'],
-    hlsUrl: v.hls_url,
-    mp4Url: v.mp4_url,
+    hlsUrl: ready ? v.hls_url : null,
+    mp4Url: ready ? v.mp4_url : null,
     posterUrl: v.poster_url,
     duration: v.duration_seconds,
   };

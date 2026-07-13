@@ -432,11 +432,33 @@ export function FeedCard({ card, onClose }: { card: RecipeCard; onClose?: () => 
       )}
       <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: 'linear-gradient(180deg, rgba(0,0,0,.35) 0%, transparent 22%, transparent 50%, rgba(0,0,0,.85) 100%)', opacity: immersive ? 0 : 1, transition: 'opacity .28s ease' }} />
 
-      {!videoSrc && !hasImages && (
-        <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 64, height: 64, borderRadius: '50%', background: 'rgba(255,255,255,.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.5 }}>
-          <PlayIcon size={26} />
-        </div>
-      )}
+      {!videoSrc && !hasImages && (() => {
+        const st = card.video?.status;
+        // A clip whose asset isn't ready yet (Cloudflare still transcoding) has no
+        // playable URL — show an honest "Processing…" state instead of a dead play
+        // button (which read as "tap me" and did nothing). 'error' = it failed.
+        if (st === 'pending' || st === 'uploading' || st === 'processing') {
+          return (
+            <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12 }}>
+              <div style={{ width: 34, height: 34, borderRadius: '50%', border: '3px solid rgba(255,255,255,.25)', borderTopColor: '#fff', animation: 'sz-spin .8s linear infinite' }} />
+              <div style={{ color: 'rgba(255,255,255,.92)', fontSize: 14, fontWeight: 700 }}>Processing your video…</div>
+              <div style={{ color: 'rgba(255,255,255,.6)', fontSize: 12.5 }}>It'll start playing in a moment.</div>
+            </div>
+          );
+        }
+        if (st === 'error') {
+          return (
+            <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', textAlign: 'center', color: 'rgba(255,255,255,.85)', fontSize: 14, fontWeight: 700, padding: '0 32px' }}>
+              This video couldn't be processed.
+            </div>
+          );
+        }
+        return (
+          <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', width: 64, height: 64, borderRadius: '50%', background: 'rgba(255,255,255,.14)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: 0.5 }}>
+            <PlayIcon size={26} />
+          </div>
+        );
+      })()}
 
       {card.repost && (
         <div style={{ position: 'absolute', top: 140, left: 16, right: 64, zIndex: 18, display: 'flex', alignItems: 'flex-start', gap: 8, background: 'rgba(0,0,0,.32)', backdropFilter: 'blur(6px)', borderRadius: 12, padding: '8px 11px', ...overlayFade }}>

@@ -38,7 +38,7 @@ export function VideoViewer() {
 
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 80, background: '#0c0a09', animation: 'sz-fadeIn .2s' }}>
-      <div ref={scrollRef} style={{ position: 'absolute', inset: 0, overflowY: 'scroll', scrollSnapType: 'y mandatory' }}>
+      <div ref={scrollRef} style={{ position: 'absolute', inset: 0, overflowY: 'scroll', scrollSnapType: 'y mandatory', overscrollBehaviorY: 'contain' }}>
         {viewer.items.map((card) => (
           <ErrorBoundary key={card.id}>
             <FeedCard card={card} onClose={close} />

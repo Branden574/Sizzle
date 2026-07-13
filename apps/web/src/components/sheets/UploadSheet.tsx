@@ -10,6 +10,7 @@ import { theme } from '../../theme';
 import { probeVideo, uploadPoster, uploadRecipeImage, uploadToCloudflare, uploadVideo } from '../../lib/storage';
 import { CameraRecorder } from '../CameraRecorder';
 import { VideoTrimmer } from '../VideoTrimmer';
+import { isNative } from '../../lib/native';
 import { CameraIcon } from '../icons';
 
 const accent = theme.accent;
@@ -322,12 +323,17 @@ export function UploadSheet() {
               style={{ width: '100%', height: '100%', objectFit: previewAspect > 1.05 ? 'contain' : 'cover' }}
             />
             <div style={{ position: 'absolute', bottom: 12, right: 12, display: 'flex', gap: 8 }}>
-              <GlassButton
-                onClick={() => setTrimming(true)}
-                size="sm"
-              >
-                ✂️ Trim
-              </GlassButton>
+              {/* Trim relies on HTMLVideoElement.captureStream, which iOS WKWebView
+                  doesn't support — so it's a silent no-op on the native app. Hide it
+                  there rather than show a button that does nothing. */}
+              {!isNative && (
+                <GlassButton
+                  onClick={() => setTrimming(true)}
+                  size="sm"
+                >
+                  ✂️ Trim
+                </GlassButton>
+              )}
               <GlassButton
                 onClick={() => setRecording(true)}
                 size="sm"

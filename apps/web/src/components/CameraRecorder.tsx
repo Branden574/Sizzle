@@ -277,11 +277,11 @@ export function CameraRecorder({ onCapture, onClose }: { onCapture: (file: File)
     const stream = streamRef.current;
     if (!stream) return;
     chunksRef.current = [];
-    // Cap the bitrate so a 60s clip is ~30–45 MB instead of 100 MB+ (MediaRecorder's
-    // default is very high) — crisp enough at 1080p, and roughly halves upload time.
-    const opts: MediaRecorderOptions = { videoBitsPerSecond: 6_000_000, audioBitsPerSecond: 128_000 };
-    if (mimeRef.current) opts.mimeType = mimeRef.current;
-    const rec = new MediaRecorder(stream, opts);
+    // Record at the browser's full-quality default bitrate — do NOT cap it. (An
+    // earlier 6 Mbps cap traded quality for upload speed, which is the wrong trade:
+    // size should come from a better codec, not a lower bitrate. Upload speed is
+    // handled elsewhere; here we keep the clip as crisp as the web layer allows.)
+    const rec = new MediaRecorder(stream, mimeRef.current ? { mimeType: mimeRef.current } : undefined);
     rec.ondataavailable = (e) => { if (e.data && e.data.size) chunksRef.current.push(e.data); };
     recorderRef.current = rec;
   };

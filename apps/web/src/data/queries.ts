@@ -626,6 +626,15 @@ export function useDeleteRecipe() {
     onSuccess: (_d, recipeId) => {
       qc.removeQueries({ queryKey: keys.recipe(recipeId) });
       removeOffline(recipeId);
+      // Prune the deleted card from the full-screen viewer's snapshot (it renders
+      // from zustand, not the query cache) — otherwise the just-deleted video stays
+      // on screen. Advance to the next clip, or close the viewer if it was the last.
+      const sz = useSizzle.getState();
+      const v = sz.viewer;
+      if (v) {
+        const items = v.items.filter((c) => c.id !== recipeId);
+        sz.setViewer(items.length ? { items, index: Math.min(v.index, items.length - 1) } : null);
+      }
       void qc.invalidateQueries({ queryKey: ['feed'] });
       void qc.invalidateQueries({ queryKey: ['cook'] });
       void qc.invalidateQueries({ queryKey: keys.saved });
@@ -652,7 +661,10 @@ export function useEditRecipe() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ recipeId, ...input }: EditRecipeInput) => apiSend<RecipeDetail>('PATCH', `/recipes/${recipeId}`, input),
-    onSuccess: (_d, { recipeId }) => {
+    onSuccess: (_d, { recipeId, title, cuisine, caption }) => {
+      // Patch the edited fields everywhere the card is rendered from a snapshot
+      // (feeds, cook grids, AND the open full-screen viewer) so it isn't stale.
+      patchRecipeEverywhere(qc, recipeId, (c) => ({ ...c, title, cuisine, caption: caption ?? null }));
       void qc.invalidateQueries({ queryKey: keys.recipe(recipeId) });
       void qc.invalidateQueries({ queryKey: ['feed'] });
       void qc.invalidateQueries({ queryKey: ['cook'] });
@@ -1050,14 +1062,28 @@ export async function pollVideoReady(assetId: string, tries = 60, intervalMs = 2
  * navigated to their profile by the time this resolves.
  */
 export function finalizeVideoAsset(assetId: string, qc: QueryClient, recipeId?: string): void {
-  void pollVideoReady(assetId).finally(() => {
+  void (async () => {
+    const ready = await pollVideoReady(assetId);
+    // Patch the OPEN full-screen viewer (renders from a zustand snapshot, not the
+    // query cache) so a clip that finished transcoding while being watched upgrades
+    // from "Processing…" to playable in place — not stuck on the spinner.
+    if (ready && recipeId) {
+      try {
+        const s = await apiGet<VideoAssetStatus>(`/uploads/video/${assetId}/status`);
+        patchRecipeEverywhere(qc, recipeId, (c) =>
+          c.video ? { ...c, video: { ...c.video, status: s.status, hlsUrl: s.hlsUrl, mp4Url: s.mp4Url, posterUrl: s.posterUrl ?? c.video.posterUrl } } : c,
+        );
+      } catch {
+        /* the invalidations below still refresh it on the next fetch */
+      }
+    }
     for (const key of [['feed'], ['cook'], keys.me, ['me', 'drafts']] as const) {
       void qc.invalidateQueries({ queryKey: key });
     }
     // Also refresh the recipe-detail sheet — a creator who opens their just-posted
     // clip should see it flip from poster → playable without leaving the page.
     if (recipeId) void qc.invalidateQueries({ queryKey: keys.recipe(recipeId) });
-  });
+  })();
 }
 
 export function useUploadRecipe() {

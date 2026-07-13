@@ -55,6 +55,15 @@ export function VideoPlayer({ src, poster, active, immersive = false }: { src: s
             maxMaxBufferLength: 20,
             backBufferLength: 10,
           });
+          // Recover from transient errors instead of leaving a permanently black,
+          // dead player: reload on network errors, recover media errors, and fall
+          // back to the browser's native player as a last resort.
+          h.on(Hls.Events.ERROR, (_evt, data) => {
+            if (!data.fatal) return;
+            if (data.type === Hls.ErrorTypes.NETWORK_ERROR) h.startLoad();
+            else if (data.type === Hls.ErrorTypes.MEDIA_ERROR) h.recoverMediaError();
+            else { h.destroy(); hls = null; v.src = src; }
+          });
           h.loadSource(src);
           h.attachMedia(v);
           hls = h;
