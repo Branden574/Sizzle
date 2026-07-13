@@ -5,7 +5,7 @@ import { useAuth } from '../../auth/useAuth';
 import { useSizzle, type FeedKindPref, type ThemePref, type UnitPref } from '../../store';
 import { clearOffline } from '../../lib/offline';
 import { apiGet, apiSend } from '../../lib/api';
-import { queryClient, useBlockedList, useMe, useToggleBlock, useUpdateNotifPref, useUpdateProfile } from '../../data/queries';
+import { queryClient, useBlockedList, useMe, useSubmitSupportTicket, useToggleBlock, useUpdateNotifPref, useUpdateProfile } from '../../data/queries';
 import { enablePush, disablePush } from '../../lib/push';
 import { clearPasscode } from '../../lib/applock';
 import { PasscodeSetup } from '../PasscodeLock';
@@ -174,6 +174,12 @@ export function AppSettingsSheet() {
   const [legal, setLegal] = useState<'terms' | 'privacy' | null>(null);
   const [showBlocked, setShowBlocked] = useState(false);
   const [section, setSection] = useState<SectionKey | null>(null);
+  // Help & feedback (in-app support ticket): report a problem or request a feature.
+  const [fbOpen, setFbOpen] = useState(false);
+  const [fbType, setFbType] = useState<'problem' | 'feature'>('problem');
+  const [fbMsg, setFbMsg] = useState('');
+  const [fbDone, setFbDone] = useState(false);
+  const submitTicket = useSubmitSupportTicket();
 
   const me = useMe();
   const [pushLocal, setPushLocal] = useState<boolean | null>(null);
@@ -307,6 +313,7 @@ export function AppSettingsSheet() {
     // section never shows a stale password form or an armed delete confirm.
     setPwOpen(false); setPw(''); setPwMsg(null);
     setDelStep(false); setDelConfirm('');
+    setFbOpen(false); setFbMsg(''); setFbDone(false);
     setSection(null);
   };
 
@@ -546,12 +553,66 @@ export function AppSettingsSheet() {
             )}
 
             {section === 'about' && (
-              <Group>
-                <LinkRow icon={<span style={{ fontSize: 18 }}>🚀</span>} label="Roadmap" hint="What's next" onClick={() => { setShowRoadmap(true); close(); }} />
-                <LinkRow icon={<span style={{ fontSize: 18 }}>📄</span>} label="Terms of Service" onClick={() => setLegal('terms')} />
-                <LinkRow icon={<span style={{ fontSize: 18 }}>🛡️</span>} label="Privacy Policy" onClick={() => setLegal('privacy')} />
-                <LinkRow icon={<span style={{ fontSize: 18 }}>✉️</span>} label="Contact support" hint="Email us" onClick={() => { window.location.href = `mailto:${SUPPORT_EMAIL}`; }} />
-              </Group>
+              <>
+                <Group>
+                  {!fbOpen && <LinkRow icon={<span style={{ fontSize: 18 }}>💬</span>} label="Help & feedback" hint="Report or request" onClick={() => { setFbDone(false); setFbMsg(''); setFbOpen(true); }} />}
+                  <LinkRow icon={<span style={{ fontSize: 18 }}>🚀</span>} label="Roadmap" hint="What's next" onClick={() => { setShowRoadmap(true); close(); }} />
+                  <LinkRow icon={<span style={{ fontSize: 18 }}>📄</span>} label="Terms of Service" onClick={() => setLegal('terms')} />
+                  <LinkRow icon={<span style={{ fontSize: 18 }}>🛡️</span>} label="Privacy Policy" onClick={() => setLegal('privacy')} />
+                  <LinkRow icon={<span style={{ fontSize: 18 }}>✉️</span>} label="Email support" hint="support@getsizzle.app" onClick={() => { window.location.href = `mailto:${SUPPORT_EMAIL}`; }} />
+                </Group>
+                {fbOpen && (
+                  <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 18, padding: 14, marginTop: 10 }}>
+                    {fbDone ? (
+                      <>
+                        <div style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--button-success-fg)' }}>Thanks — we got it.</div>
+                        <div style={{ fontSize: 13, color: 'var(--text-faint)', margin: '4px 0 12px' }}>We read every note and will follow up by email if we need more.</div>
+                        <Button variant="outline" fullWidth onClick={() => { setFbOpen(false); setFbMsg(''); setFbDone(false); }}>Done</Button>
+                      </>
+                    ) : (
+                      <>
+                        <SegmentedControl<'problem' | 'feature'>
+                          label="Feedback type"
+                          value={fbType}
+                          onChange={setFbType}
+                          options={[
+                            { value: 'problem', label: 'Report a problem' },
+                            { value: 'feature', label: 'Request a feature' },
+                          ]}
+                        />
+                        <textarea
+                          value={fbMsg}
+                          onChange={(e) => setFbMsg(e.target.value.slice(0, 5000))}
+                          placeholder={fbType === 'problem' ? 'What went wrong? Steps to reproduce help a lot.' : "What would you love Sizzle to do?"}
+                          rows={4}
+                          style={{ width: '100%', marginTop: 10, border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--surface-2)', padding: '11px 14px', fontFamily: "'Hanken Grotesk'", fontSize: 15, color: 'var(--text)', outline: 'none', resize: 'none', boxSizing: 'border-box' }}
+                        />
+                        <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                          <Button variant="outline" onClick={() => { setFbOpen(false); setFbMsg(''); }} style={{ flex: 1 }}>Cancel</Button>
+                          <Button
+                            variant="primary"
+                            disabled={fbMsg.trim().length === 0}
+                            loading={submitTicket.isPending}
+                            loadingLabel="Sending…"
+                            onClick={() => submitTicket.mutate(
+                              { type: fbType, message: fbMsg.trim() },
+                              { onSuccess: () => setFbDone(true) },
+                            )}
+                            style={{ flex: 1 }}
+                          >
+                            Send
+                          </Button>
+                        </div>
+                        {submitTicket.isError && (
+                          <div style={{ fontSize: 12.5, color: 'var(--button-danger-fg)', marginTop: 8 }}>
+                            Couldn't send — please email support@getsizzle.app.
+                          </div>
+                        )}
+                      </>
+                    )}
+                  </div>
+                )}
+              </>
             )}
 
             <div style={{ height: 20 }} />

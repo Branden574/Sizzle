@@ -186,7 +186,8 @@ feed.get('/for-you', optionalAuth, async (c) => {
     if (ranked.length) {
       await supabaseAdmin.from('recipe_impressions').insert(ranked.map((r) => ({ user_id: userId, recipe_id: r.id })));
     }
-    const items = await buildCards(supabaseAdmin, userId, ranked);
+    // Reuse the block set already loaded above so buildCards doesn't re-fetch it.
+    const items = await buildCards(supabaseAdmin, userId, ranked, false, blocked);
     // Continue by recency from just before the candidate window so the feed keeps
     // loading past the ranked top-10 (page 2+ falls through to the recency branch).
     const raw = (data ?? []) as RecipeRow[];

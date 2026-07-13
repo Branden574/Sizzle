@@ -436,12 +436,20 @@ admin.get('/support-requests', async (c) => {
   // within each, and a wider window so spam can't bury a genuine request.
   const { data, error } = await supabaseAdmin
     .from('support_requests')
-    .select('id, name, email, kind, message, status, created_at')
+    .select('id, name, email, kind, message, status, created_at, user_id')
     .order('status', { ascending: true })
     .order('created_at', { ascending: false })
     .limit(500);
   if (error) throw dbFail(error.message);
-  const rows: SupportRequestDTO[] = (data ?? []).map((r) => ({
+  const list = data ?? [];
+  // In-app tickets carry a user_id (public contact-form rows don't). Batch-fetch
+  // the reporters' handles so the admin view can link back to their profile.
+  const userIds = [...new Set(list.map((r) => r.user_id).filter(Boolean) as string[])];
+  const { data: reporters } = userIds.length
+    ? await supabaseAdmin.from('profiles').select('id, handle').in('id', userIds)
+    : { data: [] };
+  const handleMap = new Map((reporters ?? []).map((p) => [p.id as string, p.handle as string]));
+  const rows: SupportRequestDTO[] = list.map((r) => ({
     id: r.id as string,
     name: r.name as string,
     email: r.email as string,
@@ -449,6 +457,8 @@ admin.get('/support-requests', async (c) => {
     message: r.message as string,
     status: r.status as string,
     createdAt: relativeTime(new Date(r.created_at as string)),
+    userId: (r.user_id as string) ?? null,
+    userHandle: r.user_id ? handleMap.get(r.user_id as string) ?? null : null,
   }));
   return c.json(rows);
 });

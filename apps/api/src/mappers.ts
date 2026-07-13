@@ -185,24 +185,26 @@ async function loadViewerCtx(
   const ctx = emptyViewer();
   if (!viewerId) return ctx;
 
-  if (recipeIds.length) {
-    const { data: reactions } = await db.from('reactions').select('recipe_id, kind').eq('user_id', viewerId).in('recipe_id', recipeIds);
-    for (const r of reactions ?? []) (r.kind === 'like' ? ctx.likes : ctx.dislikes).add(r.recipe_id as string);
-    const { data: saves } = await db.from('saves').select('recipe_id').eq('user_id', viewerId).in('recipe_id', recipeIds);
-    for (const s of saves ?? []) ctx.saves.add(s.recipe_id as string);
-    const { data: downloads } = await db.from('downloads').select('recipe_id').eq('user_id', viewerId).in('recipe_id', recipeIds);
-    for (const d of downloads ?? []) ctx.downloads.add(d.recipe_id as string);
-    const { data: reposts } = await db.from('reposts').select('recipe_id').eq('user_id', viewerId).in('recipe_id', recipeIds);
-    for (const rp of reposts ?? []) ctx.reposts.add(rp.recipe_id as string);
-    const { data: unlocks } = await db.from('recipe_unlocks').select('recipe_id').eq('user_id', viewerId).in('recipe_id', recipeIds);
-    for (const u of unlocks ?? []) ctx.unlocked.add(u.recipe_id as string);
-  }
-  if (cookIds.length) {
-    const { data: follows } = await db.from('follows').select('cook_id').eq('follower_id', viewerId).in('cook_id', cookIds);
-    for (const f of follows ?? []) ctx.follows.add(f.cook_id as string);
-    const { data: subs } = await db.from('subscriptions').select('creator_id').eq('subscriber_id', viewerId).eq('status', 'active').in('creator_id', cookIds);
-    for (const s of subs ?? []) ctx.subscribedTo.add(s.creator_id as string);
-  }
+  // All seven lookups are independent — fetch them in parallel (same data, one
+  // round-trip instead of seven). Empty id lists short-circuit to a null result
+  // so we skip the query entirely, preserving the old per-block guards.
+  const [reactions, saves, downloads, reposts, unlocks, follows, subs] = await Promise.all([
+    recipeIds.length ? db.from('reactions').select('recipe_id, kind').eq('user_id', viewerId).in('recipe_id', recipeIds) : Promise.resolve({ data: null }),
+    recipeIds.length ? db.from('saves').select('recipe_id').eq('user_id', viewerId).in('recipe_id', recipeIds) : Promise.resolve({ data: null }),
+    recipeIds.length ? db.from('downloads').select('recipe_id').eq('user_id', viewerId).in('recipe_id', recipeIds) : Promise.resolve({ data: null }),
+    recipeIds.length ? db.from('reposts').select('recipe_id').eq('user_id', viewerId).in('recipe_id', recipeIds) : Promise.resolve({ data: null }),
+    recipeIds.length ? db.from('recipe_unlocks').select('recipe_id').eq('user_id', viewerId).in('recipe_id', recipeIds) : Promise.resolve({ data: null }),
+    cookIds.length ? db.from('follows').select('cook_id').eq('follower_id', viewerId).in('cook_id', cookIds) : Promise.resolve({ data: null }),
+    cookIds.length ? db.from('subscriptions').select('creator_id').eq('subscriber_id', viewerId).eq('status', 'active').in('creator_id', cookIds) : Promise.resolve({ data: null }),
+  ]);
+
+  for (const r of reactions.data ?? []) (r.kind === 'like' ? ctx.likes : ctx.dislikes).add(r.recipe_id as string);
+  for (const s of saves.data ?? []) ctx.saves.add(s.recipe_id as string);
+  for (const d of downloads.data ?? []) ctx.downloads.add(d.recipe_id as string);
+  for (const rp of reposts.data ?? []) ctx.reposts.add(rp.recipe_id as string);
+  for (const u of unlocks.data ?? []) ctx.unlocked.add(u.recipe_id as string);
+  for (const f of follows.data ?? []) ctx.follows.add(f.cook_id as string);
+  for (const s of subs.data ?? []) ctx.subscribedTo.add(s.creator_id as string);
   return ctx;
 }
 
@@ -317,15 +319,17 @@ export async function canViewCookContent(
   return !!f;
 }
 
-export async function buildCards(db: SupabaseClient, viewerId: string | undefined, rows: RecipeRow[], viewerIsAdmin = false): Promise<RecipeCard[]> {
+export async function buildCards(db: SupabaseClient, viewerId: string | undefined, rows: RecipeRow[], viewerIsAdmin = false, preBlocked?: Set<string>): Promise<RecipeCard[]> {
   if (rows.length === 0) return [];
 
   const cookIds = [...new Set(rows.map((r) => r.cook_id))];
   const videoIds = rows.map((r) => r.video_asset_id).filter((x): x is string => !!x);
 
+  // Callers that already loaded the viewer's block set (e.g. the for-you feed) can
+  // thread it in via preBlocked to avoid re-fetching it; otherwise load it here.
   const [{ data: cooks }, blocked] = await Promise.all([
     db.from('profiles').select('*').in('id', cookIds),
-    loadBlockedIds(db, viewerId),
+    preBlocked ? Promise.resolve(preBlocked) : loadBlockedIds(db, viewerId),
   ]);
   const cookMap = new Map<string, ProfileRow>((cooks ?? []).map((c) => [c.id as string, c as ProfileRow]));
 

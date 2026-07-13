@@ -235,7 +235,10 @@ body {
   --sab: env(safe-area-inset-bottom, 0px);
   min-height: 100dvh;
   padding: 0;
-  background: var(--feed-bg);
+  /* Theme bg (not --feed-bg) so overscroll/rubber-band, keyboard gaps and the
+     app edges follow light/dark. Full-screen media surfaces (feed, viewer,
+     camera) paint their own opaque dark layer, so they're unaffected. */
+  background: var(--bg);
   align-items: stretch;
   justify-content: stretch;
 }

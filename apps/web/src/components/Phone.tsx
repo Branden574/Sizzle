@@ -21,7 +21,7 @@ export function Phone({ children, bare = false, desktop = false }: { children: R
         width: 'var(--app-w)',
         height: 'var(--app-h)',
         borderRadius: radius,
-        background: '#0c0a09',
+        background: 'var(--bg)',
         boxShadow,
         overflow: 'hidden',
         flex: 'none',

@@ -23,11 +23,27 @@ cooks.get('/suggested', optionalAuth, async (c) => {
   const tastes = (c.req.query('tastes') ?? '').split(',').map((s) => s.trim()).filter(Boolean);
   const limit = Math.min(Number(c.req.query('limit')) || 5, 20);
 
-  const [{ data: profiles, error }, { data: recipeRows }] = await Promise.all([
-    supabaseAdmin.from('profiles').select('*').eq('is_cook', true),
-    supabaseAdmin.from('recipes').select('cook_id, cuisine, title').eq('status', 'published'),
-  ]);
+  // Only the platform's top cooks are ever suggested, so fetch just those top-50
+  // (ordered in the DB via profiles_cook_followers_idx) instead of scanning every
+  // cook AND the entire published catalog. Private cooks opt out of discovery, so
+  // they're excluded in the query (matches the old !p.private filter below).
+  const { data: profiles, error } = await supabaseAdmin
+    .from('profiles')
+    .select('*')
+    .eq('is_cook', true)
+    .eq('private', false)
+    .order('follower_count', { ascending: false })
+    .limit(50);
   if (error) throw dbFail(error.message);
+
+  const topCooks = (profiles ?? []) as ProfileRow[];
+  const topIds = topCooks.map((p) => p.id);
+
+  // Taste-match chips derive from each suggested cook's own recipe cuisines/titles
+  // — fetch recipes for just these cooks, never the whole catalog.
+  const { data: recipeRows } = topIds.length
+    ? await supabaseAdmin.from('recipes').select('cook_id, cuisine, title').eq('status', 'published').in('cook_id', topIds)
+    : { data: [] as { cook_id: string; cuisine: string; title: string }[] };
 
   // Build a searchable text blob per cook from bio + their recipe cuisines/titles.
   const blobs = new Map<string, string>();
@@ -43,9 +59,9 @@ cooks.get('/suggested', optionalAuth, async (c) => {
     blocked = await loadBlockedIds(supabaseAdmin, viewerId);
   }
 
-  const ranked = (profiles as ProfileRow[])
-    // Private cooks opt out of discovery — never suggest them, and their recipe
-    // titles/cuisines must not feed the taste-match chips.
+  const ranked = topCooks
+    // Private cooks are already excluded by the query; still drop the viewer and
+    // cooks they follow or have blocked (and keep the !p.private guard as-is).
     .filter((p) => p.id !== viewerId && !following.has(p.id) && !blocked.has(p.id) && !p.private)
     .map((p) => {
       const matched = matchTastes(`${p.bio ?? ''} ${blobs.get(p.id) ?? ''}`, tastes);

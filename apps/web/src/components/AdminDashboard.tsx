@@ -111,26 +111,55 @@ function LogTab() {
 }
 
 const KIND_LABEL: Record<string, string> = {
+  problem: 'Problem report', feature: 'Feature request',
   access: 'Access my data', delete: 'Delete my data', correct: 'Correct my data', optout: 'Opt out of sale/share', general: 'General',
 };
+// Tone the kind chip so problems (red) and feature requests (amber) stand out
+// from privacy/general (neutral) at a glance.
+function kindChip(kind: string): React.CSSProperties {
+  if (kind === 'problem') return chip('var(--danger-bg)', 'var(--button-danger-fg)');
+  if (kind === 'feature') return chip('var(--warn-bg)', 'var(--warn-fg)');
+  return chip('var(--surface-3)', 'var(--text-soft)');
+}
+type ReqFilter = 'all' | 'problem' | 'feature' | 'privacy' | 'general';
+const REQ_FILTERS: { key: ReqFilter; label: string }[] = [
+  { key: 'all', label: 'All' }, { key: 'problem', label: 'Problems' }, { key: 'feature', label: 'Features' },
+  { key: 'privacy', label: 'Privacy' }, { key: 'general', label: 'General' },
+];
+const PRIVACY_KINDS = new Set(['access', 'delete', 'correct', 'optout']);
 
 function RequestsTab() {
   const reqs = useAdminSupportRequests(true);
   const resolve = useResolveSupportRequest();
-  const list = reqs.data ?? [];
+  const [filter, setFilter] = useState<ReqFilter>('all');
+  const all = reqs.data ?? [];
+  const list = all.filter((r) =>
+    filter === 'all' ? true : filter === 'privacy' ? PRIVACY_KINDS.has(r.kind) : r.kind === filter,
+  );
   if (reqs.isLoading) return <Muted>Loading requests…</Muted>;
-  if (list.length === 0) return <Muted>No privacy or support requests yet.</Muted>;
+  if (all.length === 0) return <Muted>No privacy or support requests yet.</Muted>;
   return (
     <>
-      <div style={{ fontSize: 12, color: 'var(--text-faint-2)', margin: '0 2px 10px' }}>Submitted via getsizzle.app/contact.</div>
-      {list.map((r: SupportRequestDTO) => (
+      <div style={{ fontSize: 12, color: 'var(--text-faint-2)', margin: '0 2px 10px' }}>Submitted in-app (Help &amp; feedback) or via getsizzle.app/contact.</div>
+      <div style={{ display: 'flex', gap: 7, flexWrap: 'wrap', marginBottom: 12 }}>
+        {REQ_FILTERS.map((f) => {
+          const on = filter === f.key;
+          return (
+            <Button key={f.key} onClick={() => setFilter(f.key)} style={{ padding: '6px 13px', borderRadius: 20, border: `1.5px solid ${on ? 'var(--accent)' : 'var(--line-2)'}`, background: on ? 'var(--accent)' : 'transparent', color: on ? '#fff' : 'var(--text-soft)', fontFamily: "'Hanken Grotesk'", fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>{f.label}</Button>
+          );
+        })}
+      </div>
+      {list.length === 0 ? <Muted>Nothing in this filter.</Muted> : list.map((r: SupportRequestDTO) => (
         <div key={r.id} style={{ ...card, opacity: r.status === 'resolved' ? 0.55 : 1 }}>
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 6, flexWrap: 'wrap' }}>
-            <span style={chip('var(--surface-3)', 'var(--text-soft)')}>{KIND_LABEL[r.kind] ?? r.kind}</span>
+            <span style={kindChip(r.kind)}>{KIND_LABEL[r.kind] ?? r.kind}</span>
+            {r.userId && <span style={chip('var(--surface-3)', 'var(--text-soft)')}>in-app</span>}
             {r.status === 'resolved' && <span style={chip('var(--invert-bg)', 'var(--invert-fg)')}>resolved</span>}
             <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-faint-2)' }}>{r.createdAt}</span>
           </div>
-          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>{r.name}</div>
+          <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)' }}>
+            {r.name}{r.userHandle && <span style={{ color: 'var(--text-faint)', fontWeight: 600 }}> · @{r.userHandle}</span>}
+          </div>
           <a href={`mailto:${r.email}`} style={{ fontSize: 13, color: '#1d9bf0', textDecoration: 'none' }}>{r.email}</a>
           <div style={{ fontSize: 13.5, color: 'var(--text-soft)', marginTop: 8, whiteSpace: 'pre-wrap', lineHeight: 1.5 }}>{r.message}</div>
           {r.status !== 'resolved' && (

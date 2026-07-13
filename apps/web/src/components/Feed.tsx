@@ -421,7 +421,7 @@ export function FeedCard({ card, onClose }: { card: RecipeCard; onClose?: () => 
         <VideoPlayer src={videoSrc} poster={card.video?.posterUrl} active={active} immersive={immersive} />
       ) : (
         card.video?.posterUrl && (
-          <img src={card.video.posterUrl} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+          <img src={card.video.posterUrl} alt="" decoding="async" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
         )
       )}
       {!videoSrc && !hasImages && (
@@ -477,7 +477,7 @@ export function FeedCard({ card, onClose }: { card: RecipeCard; onClose?: () => 
             aria-label={`View ${cook.name}'s profile`}
             style={{ width: 50, height: 50, borderRadius: '50%', border: '2px solid #fff', background: cook.avatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Instrument Serif',serif", fontSize: 20, color: '#fff', cursor: 'pointer', padding: 0, overflow: 'hidden' }}
           >
-            {cook.avatarUrl ? <img src={cook.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : cook.init}
+            {cook.avatarUrl ? <img src={cook.avatarUrl} alt="" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : cook.init}
           </Button>
           <IconButton
             onClick={gated(() => follow.mutate({ cookId: cook.id, following: viewer.following }))}

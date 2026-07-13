@@ -3,6 +3,7 @@ import { z } from 'zod';
 import { supabaseAdmin } from '../lib/supabase';
 import { badRequest, dbFail } from '../lib/errors';
 import { rateLimit } from '../middleware/rateLimit';
+import { requireAuth, requireNotBanned } from '../middleware/auth';
 import type { AppEnv } from '../types';
 
 export const support = new Hono<AppEnv>();
@@ -35,3 +36,48 @@ support.post('/requests', rateLimit({ windowMs: 60_000, max: 4, name: 'support' 
   if (error) throw dbFail(error.message);
   return c.json({ ok: true });
 });
+
+/** In-app ticket types (report a problem / request a feature). */
+const ticketSchema = z.object({
+  type: z.enum(['problem', 'feature']),
+  message: z.string().trim().min(1).max(5000),
+});
+
+/**
+ * Authenticated in-app support ticket. Reuses the same support_requests pipeline
+ * (and admin view) as the public form, but the reporter's identity is derived
+ * server-side from the session — unspoofable, so a signed-in user can't file a
+ * ticket as someone else. Stored on user_id (added in
+ * 20260713130000_support_requests_user.sql) so admins can link back to the profile.
+ */
+support.post(
+  '/tickets',
+  requireAuth,
+  requireNotBanned,
+  rateLimit({ windowMs: 60_000, max: 4, name: 'support' }),
+  async (c) => {
+    const parsed = ticketSchema.safeParse(await c.req.json().catch(() => ({})));
+    if (!parsed.success) throw badRequest('Please describe the problem or feature you have in mind.');
+    const { type, message } = parsed.data;
+    const userId = c.get('userId')!;
+
+    // Identity comes from the session, never the request body.
+    const { data: profile } = await supabaseAdmin
+      .from('profiles')
+      .select('display_name, handle')
+      .eq('id', userId)
+      .maybeSingle();
+    const name = profile?.display_name || profile?.handle || 'Sizzle user';
+
+    // Real address for the reply — the userEmail() helper returns null without a
+    // Resend key, so read it straight from the auth admin API instead.
+    const { data: authUser } = await supabaseAdmin.auth.admin.getUserById(userId);
+    const email = authUser?.user?.email ?? 'unknown';
+
+    const { error } = await supabaseAdmin
+      .from('support_requests')
+      .insert({ name, email, kind: type, message, user_id: userId });
+    if (error) throw dbFail(error.message);
+    return c.json({ ok: true });
+  },
+);

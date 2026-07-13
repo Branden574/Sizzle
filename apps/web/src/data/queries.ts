@@ -710,6 +710,10 @@ export function useAdminSupportRequests(enabled: boolean) {
   return useQuery({ queryKey: ['admin', 'support'], queryFn: () => apiGet<SupportRequestDTO[]>('/admin/support-requests'), enabled });
 }
 export const useResolveSupportRequest = adminMutation<{ id: string }>(({ id }) => apiSend('POST', `/admin/support-requests/${id}/resolve`));
+/** In-app Help & feedback: signed-in users submit a problem report or feature request. */
+export function useSubmitSupportTicket() {
+  return useMutation({ mutationFn: (v: { type: 'problem' | 'feature'; message: string }) => apiSend('POST', '/support/tickets', v) });
+}
 function adminMutation<V>(fn: (v: V) => Promise<unknown>) {
   return function useAdminMutation() {
     const qc = useQueryClient();

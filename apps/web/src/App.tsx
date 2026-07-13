@@ -56,6 +56,7 @@ import { useMediaQuery } from './lib/useMediaQuery';
 import { parseBoardDeepLink, parseCookDeepLink, parseRecipeDeepLink } from './lib/share';
 import { handleOAuthCallback } from './lib/nativeOAuth';
 import { App as CapApp } from '@capacitor/app';
+import { StatusBar, Style } from '@capacitor/status-bar';
 import { useSizzle } from './store';
 
 /** Resolve the System/Light/Dark preference to a concrete scheme, tracking the
@@ -357,6 +358,15 @@ export default function App() {
   const darkGlyphs = lightStatus && !isDark;
   const homeIndicator = darkGlyphs ? 'rgba(27,21,18,.22)' : 'rgba(255,255,255,.5)';
 
+  // Native: tint the real iOS/Android status-bar glyphs to match the frontmost
+  // surface. Style.Light = dark ink (for light surfaces); Style.Dark = light
+  // glyphs (for the always-dark feed, or anywhere in dark mode). Without this
+  // the OS status bar ignored the in-app theme entirely.
+  useEffect(() => {
+    if (!isNative) return;
+    void StatusBar.setStyle({ style: darkGlyphs ? Style.Light : Style.Dark }).catch(() => {});
+  }, [darkGlyphs]);
+
   // Wide-screen web: present the app as a desktop shell (left sidebar + the
   // phone-width app column) instead of a lone floating phone. Never on native.
   const isDesktop = useMediaQuery('(min-width: 1024px)') && !isNative;
@@ -373,7 +383,7 @@ export default function App() {
   if (showMarketing) {
     return (
       <div className="sz-stage marketing" data-theme={scheme}>
-        <Suspense fallback={<div style={{ position: 'absolute', inset: 0, background: '#0f0b08' }} />}>
+        <Suspense fallback={<div style={{ position: 'absolute', inset: 0, background: 'var(--bg)' }} />}>
           <Marketing onGetStarted={() => enterApp('signup')} onLogin={() => enterApp('login')} />
         </Suspense>
       </div>
@@ -388,7 +398,7 @@ export default function App() {
             real app (web + native) doesn't show a fake clock/battery. */}
         <div style={{ position: 'absolute', inset: 0, overflow: 'hidden' }}>
           {!online && (
-            <div style={{ position: 'absolute', top: 54, left: '50%', transform: 'translateX(-50%)', zIndex: 55, background: 'rgba(27,21,18,.92)', color: '#fff', fontSize: 12.5, fontWeight: 600, padding: '7px 14px', borderRadius: 20, backdropFilter: 'blur(8px)', pointerEvents: 'none', whiteSpace: 'nowrap' }}>
+            <div style={{ position: 'absolute', top: 54, left: '50%', transform: 'translateX(-50%)', zIndex: 55, background: 'var(--invert-bg)', color: 'var(--invert-fg)', fontSize: 12.5, fontWeight: 600, padding: '7px 14px', borderRadius: 20, backdropFilter: 'blur(8px)', pointerEvents: 'none', whiteSpace: 'nowrap' }}>
               You're offline · showing downloads
             </div>
           )}
@@ -452,10 +462,10 @@ export default function App() {
 
 function CrashFallback() {
   return (
-    <div style={{ position: 'absolute', inset: 0, background: '#faf3ea', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 30, textAlign: 'center' }}>
-      <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 30, color: '#1b1512' }}>Something went wrong</div>
-      <p style={{ color: '#8a7c70', fontSize: 15, margin: '10px 0 22px' }}>Give it a refresh and you'll be right back.</p>
-      <Button onClick={() => location.reload()} style={{ height: 50, padding: '0 26px', border: 'none', borderRadius: 16, background: '#1b1512', color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>Reload</Button>
+    <div style={{ position: 'absolute', inset: 0, background: 'var(--bg)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 30, textAlign: 'center' }}>
+      <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 30, color: 'var(--text)' }}>Something went wrong</div>
+      <p style={{ color: 'var(--text-faint)', fontSize: 15, margin: '10px 0 22px' }}>Give it a refresh and you'll be right back.</p>
+      <Button onClick={() => location.reload()} style={{ height: 50, padding: '0 26px', border: 'none', borderRadius: 16, background: 'var(--invert-bg)', color: 'var(--invert-fg)', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 700, cursor: 'pointer' }}>Reload</Button>
     </div>
   );
 }

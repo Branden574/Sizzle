@@ -682,7 +682,7 @@ export interface ApiErrorBody {
   };
 }
 
-/** A privacy / support request submitted via the public contact form. */
+/** A privacy / support request submitted via the public contact form or an in-app ticket. */
 export interface SupportRequestDTO {
   id: string;
   name: string;
@@ -691,4 +691,7 @@ export interface SupportRequestDTO {
   message: string;
   status: string;
   createdAt: string;
+  /** Set for authenticated in-app tickets; null for public contact-form rows. */
+  userId: string | null;
+  userHandle: string | null;
 }
