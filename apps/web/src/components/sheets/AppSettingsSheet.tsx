@@ -15,19 +15,12 @@ import type { MeProfile } from '@sizzle/shared';
 const APP_VERSION = '1.0.0';
 const SUPPORT_EMAIL = 'support@getsizzle.app';
 
-/** Uppercase group header. */
-function SectionLabel({ children }: { children: ReactNode }) {
-  return <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.5px', textTransform: 'uppercase', color: 'var(--text-faint-2)', margin: '22px 4px 8px' }}>{children}</div>;
-}
-
 /** 38px rounded icon tile that leads every row. */
 function IconChip({ children, dim }: { children: ReactNode; dim?: boolean }) {
   return <div style={{ width: 38, height: 38, flex: 'none', borderRadius: 11, background: 'var(--surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', opacity: dim ? 0.5 : 1 }}>{children}</div>;
 }
 
-/** A rounded card that groups related rows with hairline dividers between them
- *  — replaces the old "every row is its own bordered card" layout that made the
- *  sheet feel like an endless scroll. */
+/** A rounded card that groups related rows with hairline dividers between them. */
 function Group({ children }: { children: ReactNode }) {
   const items = (Array.isArray(children) ? children : [children]).flat().filter(Boolean);
   return (
@@ -112,6 +105,25 @@ const LEGAL_COPY: Record<'terms' | 'privacy', { title: string; body: string }> =
   },
 };
 
+/** The tap-in categories on the settings home. */
+type SectionKey = 'appearance' | 'playback' | 'feed' | 'notifications' | 'privacy' | 'storage' | 'account' | 'about';
+const SECTION_ORDER: SectionKey[] = ['appearance', 'playback', 'feed', 'notifications', 'privacy', 'storage', 'account', 'about'];
+const SECTION_META: Record<SectionKey, { title: string; sub: string; icon: string }> = {
+  appearance: { title: 'Appearance', sub: 'Theme & motion', icon: '🎨' },
+  playback: { title: 'Playback', sub: 'Autoplay, sound, data', icon: '▶️' },
+  feed: { title: 'Recipes & feed', sub: 'Units & default feed', icon: '🍳' },
+  notifications: { title: 'Notifications', sub: 'Push alerts', icon: '🔔' },
+  privacy: { title: 'Privacy & safety', sub: 'Privacy, app lock, blocks', icon: '🔐' },
+  storage: { title: 'Storage', sub: 'Downloads & cache', icon: '💾' },
+  account: { title: 'Account', sub: 'Password, data, deletion', icon: '👤' },
+  about: { title: 'About', sub: 'Roadmap, legal & support', icon: 'ℹ️' },
+};
+
+/** Small label above a control inside a section. */
+function FieldLabel({ children, top }: { children: ReactNode; top?: number }) {
+  return <div style={{ fontSize: 12.5, color: 'var(--text-faint)', margin: `${top ?? 0}px 4px 6px` }}>{children}</div>;
+}
+
 export function AppSettingsSheet() {
   const open = useSizzle((s) => s.showAppSettings);
   const setOpen = useSizzle((s) => s.setShowAppSettings);
@@ -143,6 +155,7 @@ export function AppSettingsSheet() {
   const [cacheCleared, setCacheCleared] = useState(false);
   const [legal, setLegal] = useState<'terms' | 'privacy' | null>(null);
   const [showBlocked, setShowBlocked] = useState(false);
+  const [section, setSection] = useState<SectionKey | null>(null);
 
   const me = useMe();
   const [pushLocal, setPushLocal] = useState<boolean | null>(null);
@@ -262,215 +275,259 @@ export function AppSettingsSheet() {
     ...(showMonetization ? [{ key: 'tips' as const, title: 'Tips', sub: 'When someone tips you', icon: '💝' }] : []),
   ] as const;
 
+  // Header + back-navigation: legal / blocked are opened from within a section,
+  // so backing out of them returns to that section, and backing out of a section
+  // returns to the top-level menu.
+  const atSub = !!legal || showBlocked || section !== null;
+  const headerTitle = legal ? LEGAL_COPY[legal].title : showBlocked ? 'Blocked accounts' : section ? SECTION_META[section].title : 'Settings';
+  const headerSub = legal ? 'Sizzle' : showBlocked ? "People you've blocked" : section ? SECTION_META[section].sub : 'Preferences, privacy & account';
+  const goBack = () => { if (legal) setLegal(null); else if (showBlocked) setShowBlocked(false); else setSection(null); };
+
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 93 }}>
       <DismissBackdrop onDismiss={close} />
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, top: 70, background: 'var(--bg)', borderRadius: '26px 26px 0 0', overflow: 'hidden', animation: 'sz-slideUp .4s cubic-bezier(.16,1,.3,1)', display: 'flex', flexDirection: 'column', ...swipe.sheetStyle }}>
-        <div {...swipe.handlers} style={{ textAlign: 'center', padding: '16px 0 6px', position: 'relative', flex: 'none' , ...swipe.handlers.style}}>
+        <div {...swipe.handlers} style={{ textAlign: 'center', padding: '16px 0 6px', position: 'relative', flex: 'none', ...swipe.handlers.style }}>
           <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', width: 42, height: 5, borderRadius: 3, background: 'var(--track)' }} />
-          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginTop: 6 }}>{legal ? LEGAL_COPY[legal].title : showBlocked ? 'Blocked accounts' : 'Settings'}</div>
-          <div style={{ fontSize: 13, color: 'var(--text-faint)', marginTop: 2 }}>{legal ? 'Sizzle' : showBlocked ? "People you've blocked" : 'Preferences, privacy & account'}</div>
+          {atSub && (
+            <Button onClick={goBack} aria-label="Back" style={{ position: 'absolute', left: 6, top: 12, width: 42, height: 42, display: 'flex', alignItems: 'center', justifyContent: 'center', background: 'transparent', border: 'none', borderRadius: 12, cursor: 'pointer', padding: 0, zIndex: 2 }}>
+              <svg width="11" height="18" viewBox="0 0 11 18" fill="none"><path d="M9 1 2 9l7 8" stroke="var(--text)" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" /></svg>
+            </Button>
+          )}
+          <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginTop: 6 }}>{headerTitle}</div>
+          <div style={{ fontSize: 13, color: 'var(--text-faint)', marginTop: 2 }}>{headerSub}</div>
         </div>
 
         {legal ? (
           <div style={{ flex: 1, overflowY: 'auto', padding: '8px 22px 30px' }}>
             <p style={{ fontSize: 15, lineHeight: 1.6, color: 'var(--text-2)' }}>{LEGAL_COPY[legal].body}</p>
-            <Button onClick={() => setLegal(null)} style={{ width: '100%', height: 50, marginTop: 18, border: '1px solid var(--line-2)', borderRadius: 16, background: 'var(--surface)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>Back to settings</Button>
+            <Button onClick={() => setLegal(null)} style={{ width: '100%', height: 50, marginTop: 18, border: '1px solid var(--line-2)', borderRadius: 16, background: 'var(--surface)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>Back</Button>
           </div>
         ) : showBlocked ? (
           <BlockedAccounts onBack={() => setShowBlocked(false)} />
+        ) : section === null ? (
+          /* ── Top-level category menu ─────────────────────────────────────── */
+          <div style={{ flex: 1, overflowY: 'auto', padding: '4px 20px 30px' }}>
+            {me.data && <AccountHeader me={me.data} />}
+            <div style={{ height: 8 }} />
+            <Group>
+              {SECTION_ORDER.map((k) => (
+                <LinkRow
+                  key={k}
+                  icon={<span style={{ fontSize: 18 }}>{SECTION_META[k].icon}</span>}
+                  label={SECTION_META[k].title}
+                  hint={SECTION_META[k].sub}
+                  onClick={() => setSection(k)}
+                />
+              ))}
+            </Group>
+
+            <div style={{ height: 14 }} />
+            <Button
+              onClick={() => { void signOut(); close(); }}
+              style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', height: 52, border: '1px solid var(--line-2)', borderRadius: 16, background: 'var(--surface)', color: 'var(--accent)', fontFamily: "'Hanken Grotesk'", fontSize: 15.5, fontWeight: 700, cursor: 'pointer' }}
+            >
+              Log out
+            </Button>
+            <div style={{ textAlign: 'center', color: 'var(--text-faint-2)', fontSize: 12.5, margin: '16px 0 14px' }}>Sizzle v{APP_VERSION}</div>
+            <Button variant="primary" size="lg" fullWidth onClick={close}>Done</Button>
+          </div>
         ) : (
-        <div style={{ flex: 1, overflowY: 'auto', padding: '4px 20px 30px' }}>
-          {me.data && <AccountHeader me={me.data} />}
+          /* ── Section detail ──────────────────────────────────────────────── */
+          <div style={{ flex: 1, overflowY: 'auto', padding: '8px 20px 30px' }}>
+            {section === 'appearance' && (
+              <>
+                <FieldLabel>Theme</FieldLabel>
+                <SegmentedControl<ThemePref>
+                  label="Theme"
+                  value={themePref}
+                  onChange={setTheme}
+                  options={[
+                    { value: 'system', label: 'System' },
+                    { value: 'light', label: 'Light' },
+                    { value: 'dark', label: 'Dark' },
+                  ]}
+                />
+                <div style={{ height: 14 }} />
+                <Group>
+                  <ToggleRow
+                    title="Reduce motion"
+                    sub="Minimize animations and transitions"
+                    icon={<span style={{ fontSize: 19 }}>🌀</span>}
+                    on={reduceMotion}
+                    onToggle={() => setReduceMotion(!reduceMotion)}
+                  />
+                </Group>
+              </>
+            )}
 
-          <SectionLabel>Appearance</SectionLabel>
-          <SegmentedControl<ThemePref>
-            label="Theme"
-            value={themePref}
-            onChange={setTheme}
-            options={[
-              { value: 'system', label: 'System' },
-              { value: 'light', label: 'Light' },
-              { value: 'dark', label: 'Dark' },
-            ]}
-          />
-          <div style={{ height: 10 }} />
-          <Group>
-            <ToggleRow
-              title="Reduce motion"
-              sub="Minimize animations and transitions"
-              icon={<span style={{ fontSize: 19 }}>🌀</span>}
-              on={reduceMotion}
-              onToggle={() => setReduceMotion(!reduceMotion)}
-            />
-          </Group>
-
-          <SectionLabel>Playback</SectionLabel>
-          <Group>
-            <ToggleRow
-              title="Autoplay videos"
-              sub="Play recipes automatically as you scroll"
-              icon={<PlayIcon size={19} fill="var(--text-soft)" />}
-              on={autoplay}
-              onToggle={toggleAutoplay}
-            />
-            <ToggleRow
-              title="Start with sound"
-              sub="Unmute videos by default"
-              icon={<SpeakerIcon size={19} stroke="var(--text-soft)" />}
-              on={!muted}
-              onToggle={toggleMuted}
-            />
-            <ToggleRow
-              title="Data saver"
-              sub="Don't autoplay — tap a video to play"
-              icon={<span style={{ fontSize: 18 }}>📶</span>}
-              on={dataSaver}
-              onToggle={() => setDataSaver(!dataSaver)}
-            />
-          </Group>
-
-          <SectionLabel>Recipes &amp; feed</SectionLabel>
-          <div style={{ fontSize: 12.5, color: 'var(--text-faint)', margin: '0 4px 6px' }}>Measurement units</div>
-          <SegmentedControl<UnitPref>
-            label="Measurement units"
-            value={units}
-            onChange={setUnits}
-            options={[
-              { value: 'original', label: 'Original' },
-              { value: 'metric', label: 'Metric' },
-              { value: 'imperial', label: 'Imperial' },
-            ]}
-          />
-          <div style={{ fontSize: 12.5, color: 'var(--text-faint)', margin: '12px 4px 6px' }}>Feed that opens first</div>
-          <SegmentedControl<FeedKindPref>
-            label="Default feed"
-            value={defaultFeed}
-            onChange={setDefaultFeed}
-            options={[
-              { value: 'foryou', label: 'For You' },
-              { value: 'following', label: 'Following' },
-            ]}
-          />
-
-          <SectionLabel>Notifications</SectionLabel>
-          <Group>
-            <ToggleRow
-              title="Push notifications"
-              sub="The master switch for all push alerts"
-              icon={<span style={{ fontSize: 19 }}>🔔</span>}
-              on={pushOn}
-              onToggle={() => void togglePush()}
-            />
-            {pushOn && notifRows.map((row) => (
-              <ToggleRow
-                key={row.key}
-                title={row.title}
-                sub={row.sub}
-                icon={<span style={{ fontSize: 19 }}>{row.icon}</span>}
-                on={me.data?.notifPrefs?.[row.key] !== false}
-                onToggle={() => updatePref.mutate({ key: row.key, enabled: me.data?.notifPrefs?.[row.key] === false })}
-              />
-            ))}
-          </Group>
-
-          <SectionLabel>Privacy &amp; safety</SectionLabel>
-          <Group>
-            <ToggleRow
-              title="Private account"
-              sub={me.data?.private ? 'Only approved followers see your recipes' : 'Anyone can see your recipes and follow you'}
-              icon={<span style={{ fontSize: 19 }}>🔐</span>}
-              on={me.data?.private ?? false}
-              onToggle={() => updateProfile.mutate({ private: !(me.data?.private ?? false) })}
-            />
-            <ToggleRow
-              title={`Unlock with ${bio.available ? bio.label : 'Face ID / Touch ID'}`}
-              sub={bio.available ? 'Require it each time you open Sizzle' : isNative ? 'Not set up on this device' : 'Available in the Sizzle app'}
-              icon={<span style={{ fontSize: 19 }}>🔒</span>}
-              on={biometricLock}
-              onToggle={() => void toggleBiometric()}
-              dim={!bio.available}
-            />
-            <LinkRow icon={<span style={{ fontSize: 18 }}>🚫</span>} label="Blocked accounts" hint="Manage list" onClick={() => setShowBlocked(true)} />
-          </Group>
-
-          <SectionLabel>Storage</SectionLabel>
-          <Group>
-            <LinkRow icon={<span style={{ fontSize: 18 }}>💾</span>} label="Clear downloaded recipes" hint="Free up space" onClick={() => clearOffline()} />
-            <LinkRow icon={<span style={{ fontSize: 18 }}>♻️</span>} label="Clear cache" hint={cacheCleared ? '✓ Cleared' : 'Reload fresh'} onClick={() => { queryClient.clear(); setCacheCleared(true); window.setTimeout(() => setCacheCleared(false), 1800); }} />
-          </Group>
-
-          <SectionLabel>Account</SectionLabel>
-          <Group>
-            {!pwOpen && <LinkRow icon={<span style={{ fontSize: 18 }}>🔑</span>} label="Change password" onClick={() => { setPwMsg(null); setPwOpen(true); }} />}
-            <LinkRow icon={<span style={{ fontSize: 18 }}>📦</span>} label={exportBusy ? 'Preparing…' : 'Download my data'} hint="JSON (GDPR)" onClick={() => void exportData()} />
-          </Group>
-          {pwOpen && (
-            <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 18, padding: 14, marginTop: 10 }}>
-              <input
-                type="password"
-                value={pw}
-                onChange={(e) => setPw(e.target.value)}
-                placeholder="New password (10+ characters)"
-                style={{ width: '100%', height: 46, border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--surface-2)', padding: '0 14px', fontFamily: "'Hanken Grotesk'", fontSize: 15, color: 'var(--text)', outline: 'none' }}
-              />
-              <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
-                <Button variant="outline" onClick={() => { setPwOpen(false); setPw(''); setPwMsg(null); }} style={{ flex: 1 }}>Cancel</Button>
-                <Button variant="primary" onClick={() => void changePassword()} disabled={pw.length < 10} loading={pwBusy} loadingLabel="Saving…" style={{ flex: 1 }}>Update</Button>
-              </div>
-            </div>
-          )}
-          {pwMsg && <div style={{ fontSize: 13, color: pwMsg.includes('updated') ? 'var(--button-success-fg)' : 'var(--button-danger-fg)', fontWeight: 600, margin: '8px 4px 0' }}>{pwMsg}</div>}
-
-          <div style={{ height: 12 }} />
-          <Button
-            onClick={() => { void signOut(); close(); }}
-            style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', height: 52, border: '1px solid var(--line-2)', borderRadius: 16, background: 'var(--surface)', color: 'var(--accent)', fontFamily: "'Hanken Grotesk'", fontSize: 15.5, fontWeight: 700, cursor: 'pointer' }}
-          >
-            Log out
-          </Button>
-
-          {delStep ? (
-            <div style={{ background: 'var(--surface)', border: '1px solid var(--button-danger-fg)', borderRadius: 18, padding: 16, marginTop: 12 }}>
-              <div style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--button-danger-fg)' }}>Delete your account?</div>
-              <div style={{ fontSize: 13, color: 'var(--text-faint)', margin: '4px 0 10px' }}>This permanently removes your profile, recipes, and all your data. This can't be undone.</div>
-              <div style={{ fontSize: 13, color: 'var(--text-faint)', margin: '0 0 6px' }}>
-                To confirm, type <b style={{ color: 'var(--text)' }}>{delPhrase}</b>
-              </div>
-              <input
-                value={delConfirm}
-                onChange={(e) => setDelConfirm(e.target.value)}
-                placeholder={delPhrase}
-                autoCapitalize="off"
-                autoCorrect="off"
-                spellCheck={false}
-                style={{ width: '100%', height: 46, border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--surface-2)', padding: '0 14px', fontFamily: "'Hanken Grotesk'", fontSize: 15, color: 'var(--text)', outline: 'none', marginBottom: 10 }}
-              />
-              <div style={{ display: 'flex', gap: 8 }}>
-                <Button variant="outline" onClick={() => { setDelStep(false); setDelConfirm(''); }} style={{ flex: 1 }}>Cancel</Button>
-                <Button variant="danger" onClick={() => void deleteAccount()} disabled={!delReady} loading={delBusy} loadingLabel="Deleting…" style={{ flex: 1 }}>Delete everything</Button>
-              </div>
-            </div>
-          ) : (
-            <div style={{ marginTop: 12 }}>
+            {section === 'playback' && (
               <Group>
-                <LinkRow icon={<span style={{ fontSize: 18 }}>🗑️</span>} label="Delete account" danger hint="Permanent" onClick={() => { setDelConfirm(''); setDelStep(true); }} />
+                <ToggleRow
+                  title="Autoplay videos"
+                  sub="Play recipes automatically as you scroll"
+                  icon={<PlayIcon size={19} fill="var(--text-soft)" />}
+                  on={autoplay}
+                  onToggle={toggleAutoplay}
+                />
+                <ToggleRow
+                  title="Start with sound"
+                  sub="Unmute videos by default"
+                  icon={<SpeakerIcon size={19} stroke="var(--text-soft)" />}
+                  on={!muted}
+                  onToggle={toggleMuted}
+                />
+                <ToggleRow
+                  title="Data saver"
+                  sub="Don't autoplay — tap a video to play"
+                  icon={<span style={{ fontSize: 18 }}>📶</span>}
+                  on={dataSaver}
+                  onToggle={() => setDataSaver(!dataSaver)}
+                />
               </Group>
-            </div>
-          )}
+            )}
 
-          <SectionLabel>About</SectionLabel>
-          <Group>
-            <LinkRow icon={<span style={{ fontSize: 18 }}>🚀</span>} label="Roadmap" hint="What's next" onClick={() => { setShowRoadmap(true); close(); }} />
-            <LinkRow icon={<span style={{ fontSize: 18 }}>📄</span>} label="Terms of Service" onClick={() => setLegal('terms')} />
-            <LinkRow icon={<span style={{ fontSize: 18 }}>🛡️</span>} label="Privacy Policy" onClick={() => setLegal('privacy')} />
-            <LinkRow icon={<span style={{ fontSize: 18 }}>✉️</span>} label="Contact support" hint="Email us" onClick={() => { window.location.href = `mailto:${SUPPORT_EMAIL}`; }} />
-          </Group>
+            {section === 'feed' && (
+              <>
+                <FieldLabel>Measurement units</FieldLabel>
+                <SegmentedControl<UnitPref>
+                  label="Measurement units"
+                  value={units}
+                  onChange={setUnits}
+                  options={[
+                    { value: 'original', label: 'Original' },
+                    { value: 'metric', label: 'Metric' },
+                    { value: 'imperial', label: 'Imperial' },
+                  ]}
+                />
+                <FieldLabel top={14}>Feed that opens first</FieldLabel>
+                <SegmentedControl<FeedKindPref>
+                  label="Default feed"
+                  value={defaultFeed}
+                  onChange={setDefaultFeed}
+                  options={[
+                    { value: 'foryou', label: 'For You' },
+                    { value: 'following', label: 'Following' },
+                  ]}
+                />
+              </>
+            )}
 
-          <div style={{ textAlign: 'center', color: 'var(--text-faint-2)', fontSize: 12.5, margin: '16px 0 14px' }}>Sizzle v{APP_VERSION}</div>
+            {section === 'notifications' && (
+              <Group>
+                <ToggleRow
+                  title="Push notifications"
+                  sub="The master switch for all push alerts"
+                  icon={<span style={{ fontSize: 19 }}>🔔</span>}
+                  on={pushOn}
+                  onToggle={() => void togglePush()}
+                />
+                {pushOn && notifRows.map((row) => (
+                  <ToggleRow
+                    key={row.key}
+                    title={row.title}
+                    sub={row.sub}
+                    icon={<span style={{ fontSize: 19 }}>{row.icon}</span>}
+                    on={me.data?.notifPrefs?.[row.key] !== false}
+                    onToggle={() => updatePref.mutate({ key: row.key, enabled: me.data?.notifPrefs?.[row.key] === false })}
+                  />
+                ))}
+              </Group>
+            )}
 
-          <Button variant="primary" size="lg" fullWidth onClick={close}>Done</Button>
-        </div>
+            {section === 'privacy' && (
+              <Group>
+                <ToggleRow
+                  title="Private account"
+                  sub={me.data?.private ? 'Only approved followers see your recipes' : 'Anyone can see your recipes and follow you'}
+                  icon={<span style={{ fontSize: 19 }}>🔐</span>}
+                  on={me.data?.private ?? false}
+                  onToggle={() => updateProfile.mutate({ private: !(me.data?.private ?? false) })}
+                />
+                <ToggleRow
+                  title={`Unlock with ${bio.available ? bio.label : 'Face ID / Touch ID'}`}
+                  sub={bio.available ? 'Require it each time you open Sizzle' : isNative ? 'Not set up on this device' : 'Available in the Sizzle app'}
+                  icon={<span style={{ fontSize: 19 }}>🔒</span>}
+                  on={biometricLock}
+                  onToggle={() => void toggleBiometric()}
+                  dim={!bio.available}
+                />
+                <LinkRow icon={<span style={{ fontSize: 18 }}>🚫</span>} label="Blocked accounts" hint="Manage list" onClick={() => setShowBlocked(true)} />
+              </Group>
+            )}
+
+            {section === 'storage' && (
+              <Group>
+                <LinkRow icon={<span style={{ fontSize: 18 }}>💾</span>} label="Clear downloaded recipes" hint="Free up space" onClick={() => clearOffline()} />
+                <LinkRow icon={<span style={{ fontSize: 18 }}>♻️</span>} label="Clear cache" hint={cacheCleared ? '✓ Cleared' : 'Reload fresh'} onClick={() => { queryClient.clear(); setCacheCleared(true); window.setTimeout(() => setCacheCleared(false), 1800); }} />
+              </Group>
+            )}
+
+            {section === 'account' && (
+              <>
+                <Group>
+                  {!pwOpen && <LinkRow icon={<span style={{ fontSize: 18 }}>🔑</span>} label="Change password" onClick={() => { setPwMsg(null); setPwOpen(true); }} />}
+                  <LinkRow icon={<span style={{ fontSize: 18 }}>📦</span>} label={exportBusy ? 'Preparing…' : 'Download my data'} hint="JSON (GDPR)" onClick={() => void exportData()} />
+                </Group>
+                {pwOpen && (
+                  <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 18, padding: 14, marginTop: 10 }}>
+                    <input
+                      type="password"
+                      value={pw}
+                      onChange={(e) => setPw(e.target.value)}
+                      placeholder="New password (10+ characters)"
+                      style={{ width: '100%', height: 46, border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--surface-2)', padding: '0 14px', fontFamily: "'Hanken Grotesk'", fontSize: 15, color: 'var(--text)', outline: 'none' }}
+                    />
+                    <div style={{ display: 'flex', gap: 8, marginTop: 10 }}>
+                      <Button variant="outline" onClick={() => { setPwOpen(false); setPw(''); setPwMsg(null); }} style={{ flex: 1 }}>Cancel</Button>
+                      <Button variant="primary" onClick={() => void changePassword()} disabled={pw.length < 10} loading={pwBusy} loadingLabel="Saving…" style={{ flex: 1 }}>Update</Button>
+                    </div>
+                  </div>
+                )}
+                {pwMsg && <div style={{ fontSize: 13, color: pwMsg.includes('updated') ? 'var(--button-success-fg)' : 'var(--button-danger-fg)', fontWeight: 600, margin: '8px 4px 0' }}>{pwMsg}</div>}
+
+                <div style={{ height: 12 }} />
+                {delStep ? (
+                  <div style={{ background: 'var(--surface)', border: '1px solid var(--button-danger-fg)', borderRadius: 18, padding: 16 }}>
+                    <div style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--button-danger-fg)' }}>Delete your account?</div>
+                    <div style={{ fontSize: 13, color: 'var(--text-faint)', margin: '4px 0 10px' }}>This permanently removes your profile, recipes, and all your data. This can't be undone.</div>
+                    <div style={{ fontSize: 13, color: 'var(--text-faint)', margin: '0 0 6px' }}>
+                      To confirm, type <b style={{ color: 'var(--text)' }}>{delPhrase}</b>
+                    </div>
+                    <input
+                      value={delConfirm}
+                      onChange={(e) => setDelConfirm(e.target.value)}
+                      placeholder={delPhrase}
+                      autoCapitalize="off"
+                      autoCorrect="off"
+                      spellCheck={false}
+                      style={{ width: '100%', height: 46, border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--surface-2)', padding: '0 14px', fontFamily: "'Hanken Grotesk'", fontSize: 15, color: 'var(--text)', outline: 'none', marginBottom: 10 }}
+                    />
+                    <div style={{ display: 'flex', gap: 8 }}>
+                      <Button variant="outline" onClick={() => { setDelStep(false); setDelConfirm(''); }} style={{ flex: 1 }}>Cancel</Button>
+                      <Button variant="danger" onClick={() => void deleteAccount()} disabled={!delReady} loading={delBusy} loadingLabel="Deleting…" style={{ flex: 1 }}>Delete everything</Button>
+                    </div>
+                  </div>
+                ) : (
+                  <Group>
+                    <LinkRow icon={<span style={{ fontSize: 18 }}>🗑️</span>} label="Delete account" danger hint="Permanent" onClick={() => { setDelConfirm(''); setDelStep(true); }} />
+                  </Group>
+                )}
+              </>
+            )}
+
+            {section === 'about' && (
+              <Group>
+                <LinkRow icon={<span style={{ fontSize: 18 }}>🚀</span>} label="Roadmap" hint="What's next" onClick={() => { setShowRoadmap(true); close(); }} />
+                <LinkRow icon={<span style={{ fontSize: 18 }}>📄</span>} label="Terms of Service" onClick={() => setLegal('terms')} />
+                <LinkRow icon={<span style={{ fontSize: 18 }}>🛡️</span>} label="Privacy Policy" onClick={() => setLegal('privacy')} />
+                <LinkRow icon={<span style={{ fontSize: 18 }}>✉️</span>} label="Contact support" hint="Email us" onClick={() => { window.location.href = `mailto:${SUPPORT_EMAIL}`; }} />
+              </Group>
+            )}
+
+            <div style={{ height: 20 }} />
+            <Button variant="primary" size="lg" fullWidth onClick={close}>Done</Button>
+          </div>
         )}
       </div>
     </div>
@@ -511,7 +568,7 @@ function BlockedAccounts({ onBack }: { onBack: () => void }) {
           </div>
         ))
       )}
-      <Button onClick={onBack} style={{ width: '100%', height: 50, marginTop: 8, border: '1px solid var(--line-2)', borderRadius: 16, background: 'var(--surface)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>Back to settings</Button>
+      <Button onClick={onBack} style={{ width: '100%', height: 50, marginTop: 8, border: '1px solid var(--line-2)', borderRadius: 16, background: 'var(--surface)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 700, cursor: 'pointer' }}>Back</Button>
     </div>
   );
 }
