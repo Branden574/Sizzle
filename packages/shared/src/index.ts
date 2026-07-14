@@ -393,6 +393,23 @@ export interface CreatorAnalytics {
 export type NotifPrefKey = 'likes' | 'comments' | 'follows' | 'reposts' | 'messages' | 'tips';
 export type NotifPrefs = Partial<Record<NotifPrefKey, boolean>>;
 
+/** The Regular↔Creator account tier. `regular` = default; `eligible` = met the
+ *  thresholds but hasn't activated; `pending` = activating (payout setup in
+ *  progress); `active` = full Creator (payouts wired); `suspended` = under review. */
+export type CreatorStatus = 'regular' | 'eligible' | 'pending' | 'active' | 'suspended';
+/** Creator-eligibility thresholds (both required). */
+export const CREATOR_FOLLOWER_REQ = 1000;
+export const CREATOR_VIEW_REQ = 100_000;
+
+export interface CreatorEligibility {
+  followers: number;
+  views: number;
+  followersReq: number;
+  viewsReq: number;
+  /** True once BOTH thresholds are met. */
+  met: boolean;
+}
+
 export interface MeProfile {
   id: string;
   name: string;
@@ -412,10 +429,16 @@ export interface MeProfile {
   /** When a banned account is permanently wiped (ISO); drives the appeal window. */
   deleteAt: string | null;
   banAppealStatus: AppealStatus;
+  /** Regular↔Creator account tier (see CreatorStatus). */
+  creatorStatus: CreatorStatus;
+  /** Live progress toward Creator eligibility (drives the "Become a Creator" screen). */
+  creatorEligibility: CreatorEligibility;
   counts: {
     following: number;
     followers: number;
     saved: number;
+    /** Lifetime video views across all the user's videos (public metric + eligibility). */
+    views: number;
   };
   tastes: string[];
   /** Master switch for device push notifications (mirrors the Settings toggle). */
@@ -448,7 +471,15 @@ export interface JournalEntryDTO extends CookLogDTO {
   recipe: { id: string; title: string; poster: string | null; bg: string };
 }
 
-export type NotificationKind = 'follow' | 'like' | 'comment' | 'comment_like' | 'verified' | 'repost' | 'removed' | 'restored' | 'banned' | 'message' | 'tip' | 'follow_request';
+export type NotificationKind =
+  | 'follow' | 'like' | 'comment' | 'comment_like' | 'verified' | 'repost' | 'removed' | 'restored' | 'banned' | 'message' | 'tip' | 'follow_request'
+  // Creator-account lifecycle (system notifications; actor is the recipient).
+  | 'creator_progress' | 'creator_eligible' | 'creator_activated' | 'creator_payout_incomplete' | 'payout_first' | 'payout_paid' | 'creator_monthly_summary';
+
+/** Creator/payout system-notification kinds — self-directed, no other-user actor. */
+export const SYSTEM_NOTIFICATION_KINDS: readonly NotificationKind[] = [
+  'creator_progress', 'creator_eligible', 'creator_activated', 'creator_payout_incomplete', 'payout_first', 'payout_paid', 'creator_monthly_summary', 'verified', 'removed', 'restored', 'banned',
+];
 
 export interface NotificationDTO {
   id: string;

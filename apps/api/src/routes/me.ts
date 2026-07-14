@@ -8,6 +8,8 @@ import { assertUuid } from '../lib/validate';
 import { initialsOf, relativeTime } from '../lib/format';
 import { buildCards, cookSummary, loadBlockedIds, profileLinks, type ProfileRow, type RecipeRow } from '../mappers';
 import { normalizeLink, PROFILE_LINK_KEYS } from '../services/links';
+import { CREATOR_FOLLOWER_REQ, CREATOR_VIEW_REQ, type CreatorStatus } from '@sizzle/shared';
+import { systemNotify } from '../services/notify';
 import { moderateImages } from '../services/moderation';
 import { env } from '../env';
 import type { AppEnv } from '../types';
@@ -32,6 +34,26 @@ me.get('/', async (c) => {
   // adjust_follow_counters) so the profile matches the cook profile + the badge.
   const { count: savedCount } = await db.from('saves').select('*', { count: 'exact', head: true }).eq('user_id', userId);
 
+  // Creator tier + eligibility. Auto-promote regular→eligible the moment both
+  // thresholds are met (activation to `active` is a separate, explicit step).
+  const followers = profile.follower_count ?? 0;
+  const views = Number(profile.total_video_views ?? 0);
+  const met = followers >= CREATOR_FOLLOWER_REQ && views >= CREATOR_VIEW_REQ;
+  let creatorStatus = (profile.creator_status ?? 'regular') as CreatorStatus;
+  if (creatorStatus === 'regular' && met) {
+    creatorStatus = 'eligible';
+    // Conditional update (still 'regular') so concurrent /me calls can't double-fire
+    // the notification — only the writer that actually flips the row notifies.
+    const { data: flipped } = await supabaseAdmin
+      .from('profiles')
+      .update({ creator_status: 'eligible' })
+      .eq('id', userId)
+      .eq('creator_status', 'regular')
+      .select('id')
+      .maybeSingle();
+    if (flipped) await systemNotify({ userId, type: 'creator_eligible' }).catch(() => {});
+  }
+
   const dto: MeProfile = {
     id: profile.id,
     name: profile.display_name,
@@ -50,7 +72,15 @@ me.get('/', async (c) => {
     bannedReason: profile.banned_reason ?? null,
     deleteAt: profile.delete_at ?? null,
     banAppealStatus: profile.ban_appeal_status ?? 'none',
-    counts: { following: profile.following_count ?? 0, followers: profile.follower_count ?? 0, saved: savedCount ?? 0 },
+    creatorStatus,
+    creatorEligibility: {
+      followers,
+      views,
+      followersReq: CREATOR_FOLLOWER_REQ,
+      viewsReq: CREATOR_VIEW_REQ,
+      met,
+    },
+    counts: { following: profile.following_count ?? 0, followers, saved: savedCount ?? 0, views },
     tastes: profile.tastes ?? [],
     pushEnabled: profile.push_enabled ?? true,
     notifPrefs: (profile.notif_prefs ?? {}) as MeProfile['notifPrefs'],

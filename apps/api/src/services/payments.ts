@@ -32,9 +32,13 @@ export async function cancelSubscriptionAtPeriodEnd(subId: string): Promise<void
   await stripe(`/subscriptions/${subId}`, { cancel_at_period_end: 'true' });
 }
 
-async function stripeGet<T>(path: string): Promise<T> {
+async function stripeGet<T>(path: string, account?: string): Promise<T> {
   const res = await fetch(`${STRIPE_API}${path}`, {
-    headers: { authorization: `Bearer ${env.STRIPE_SECRET_KEY}` },
+    headers: {
+      authorization: `Bearer ${env.STRIPE_SECRET_KEY}`,
+      // Act on behalf of a connected account (Connect) when given one.
+      ...(account ? { 'stripe-account': account } : {}),
+    },
   });
   const data = (await res.json()) as T & { error?: { message?: string } };
   if (!res.ok) throw new Error(`stripe ${path}: ${data.error?.message ?? res.status}`);
@@ -68,6 +72,23 @@ export async function createOnboardingLink(accountId: string): Promise<string> {
 export async function accountActive(accountId: string): Promise<boolean> {
   const acct = await stripeGet<{ charges_enabled?: boolean; payouts_enabled?: boolean; details_submitted?: boolean }>(`/accounts/${accountId}`);
   return !!acct.details_submitted && (!!acct.charges_enabled || !!acct.payouts_enabled);
+}
+
+/** The connected account's live balance (USD cents), summed across the currency
+ *  buckets Stripe returns. `available` can be paid out now; `pending` is still
+ *  clearing. Queried on the connected account so it reflects the creator's own
+ *  Stripe balance, not the platform's. */
+export async function stripeBalance(accountId: string): Promise<{ availableCents: number; pendingCents: number }> {
+  const bal = await stripeGet<{ available?: Array<{ amount: number }>; pending?: Array<{ amount: number }> }>('/balance', accountId);
+  const sum = (arr?: Array<{ amount: number }>) => (arr ?? []).reduce((n, b) => n + (b.amount || 0), 0);
+  return { availableCents: sum(bal.available), pendingCents: sum(bal.pending) };
+}
+
+/** A single-use login link to the creator's Stripe Express dashboard (where they
+ *  manage bank details, see payouts, and download tax forms). */
+export async function createDashboardLink(accountId: string): Promise<string> {
+  const link = await stripe<{ url: string }>(`/accounts/${accountId}/login_links`, {});
+  return link.url;
 }
 
 /**

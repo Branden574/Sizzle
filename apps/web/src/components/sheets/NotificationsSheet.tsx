@@ -18,6 +18,14 @@ function text(n: NotificationDTO): string {
   if (n.type === 'restored') return n.recipeTitle ? `Your post “${n.recipeTitle}” was restored` : 'Your account was restored';
   if (n.type === 'banned') return 'Your account was suspended — open settings to appeal';
   if (n.type === 'tip') return n.recipeTitle ? `${who} sent you a tip on “${n.recipeTitle}” 🎉` : `${who} sent you a tip 🎉`;
+  // Creator-account / payout system notifications (self-directed — ignore actor).
+  if (n.type === 'creator_progress') return "You're getting close to Creator eligibility — keep it up! 📈";
+  if (n.type === 'creator_eligible') return "🎉 You're eligible to become a Sizzle Creator — set up payouts to start earning";
+  if (n.type === 'creator_activated') return "✨ You're a Sizzle Creator! Your account is active and payouts are set up";
+  if (n.type === 'creator_payout_incomplete') return 'Finish your payout setup to activate your Creator account';
+  if (n.type === 'payout_first') return 'Your first payout is on the way to your bank 💸';
+  if (n.type === 'payout_paid') return 'Your creator earnings were paid out 💸';
+  if (n.type === 'creator_monthly_summary') return 'Your monthly creator earnings summary is ready';
   return n.recipeTitle ? `${who} commented on “${n.recipeTitle}”` : `${who} commented on your recipe`;
 }
 

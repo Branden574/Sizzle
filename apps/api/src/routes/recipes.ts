@@ -572,7 +572,7 @@ recipes.post('/:id/view', requireAuth, requireNotBanned, rateLimit({ windowMs: 6
   const userId = c.get('userId')!;
   const body = viewSchema.safeParse(await c.req.json().catch(() => null));
   if (!body.success) throw badRequest('Invalid view payload', body.error.flatten());
-  await recipeCookIdUnblocked(id, userId);
+  const cookId = await recipeCookIdUnblocked(id, userId);
   await supabaseAdmin.from('recipe_views').insert({
     user_id: userId,
     recipe_id: id,
@@ -580,6 +580,10 @@ recipes.post('/:id/view', requireAuth, requireNotBanned, rateLimit({ windowMs: 6
     completed: body.data.completed,
     skipped: body.data.skipped,
   });
+  // Bump the public/eligibility view counter (→ profiles.total_video_views via
+  // trigger), excluding the creator's own views. (Per-user/day dedup + bot
+  // filtering land in the fraud phase; self-view exclusion is the baseline.)
+  if (userId !== cookId) await supabaseAdmin.rpc('bump_view_count', { rid: id });
   return c.json({ ok: true });
 });
 

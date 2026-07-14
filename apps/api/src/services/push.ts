@@ -102,6 +102,20 @@ function copyFor(type: NotificationKind, who: string): { title: string; body: st
       return { title: 'You got a tip! 🎉', body: `${who} sent you a tip` };
     case 'follow_request':
       return { title: 'Follow request', body: `${who} requested to follow you` };
+    case 'creator_progress':
+      return { title: "You're growing! 📈", body: "You're getting close to Creator eligibility" };
+    case 'creator_eligible':
+      return { title: "You're Creator-eligible! 🎉", body: 'You can now become a Sizzle Creator and start earning' };
+    case 'creator_activated':
+      return { title: "You're a Sizzle Creator! ✨", body: 'Your Creator account is active — payouts are set up' };
+    case 'creator_payout_incomplete':
+      return { title: 'Finish your payout setup', body: 'Complete payout setup to activate your Creator account' };
+    case 'payout_first':
+      return { title: 'Your first payout is on the way 💸', body: 'Your earnings are heading to your bank' };
+    case 'payout_paid':
+      return { title: 'Payout sent 💸', body: 'Your creator earnings were paid out' };
+    case 'creator_monthly_summary':
+      return { title: 'Your month on Sizzle', body: 'Your creator earnings summary is ready' };
     default:
       return { title: 'Sizzle', body: 'You have a new notification' };
   }

@@ -9,9 +9,9 @@ import { supabaseAdmin } from '../lib/supabase';
 import { badRequest, dbFail, notFound } from '../lib/errors';
 import { relativeTime } from '../lib/format';
 import { canViewCookContent, cookSummary, loadBlockedIds, type ProfileRow } from '../mappers';
-import { notify } from '../services/notify';
+import { notify, systemNotify } from '../services/notify';
 import { moderate } from '../services/moderation';
-import { accountActive, cancelSubscriptionAtPeriodEnd, createConnectAccount, createOnboardingLink, createOneOffCheckout, createSubscriptionCheckout, paymentsProvider } from '../services/payments';
+import { accountActive, cancelSubscriptionAtPeriodEnd, createConnectAccount, createDashboardLink, createOnboardingLink, createOneOffCheckout, createSubscriptionCheckout, paymentsProvider, stripeBalance } from '../services/payments';
 import type { AppEnv } from '../types';
 
 export const monetize = new Hono<AppEnv>();
@@ -44,6 +44,24 @@ function mapSubStatus(s?: string): 'active' | 'canceled' | 'past_due' {
 }
 /** Guard webhook-supplied ids before they reach FK columns (poison-event defence). */
 const isUuid = (s?: string): s is string => !!s && /^[0-9a-f-]{36}$/i.test(s);
+
+/**
+ * Advance a creator to the `active` Creator tier once payout setup is complete.
+ * Idempotent + safe: only transitions from `eligible`/`pending` (an already-active
+ * or grandfathered creator, or a suspended one, is left untouched). Stamps
+ * creator_since and fires the one-time "you're a Creator" system notification.
+ * This is the single choke point that ties Creator activation to finished payouts.
+ */
+async function activateCreator(userId: string): Promise<void> {
+  const { data } = await supabaseAdmin
+    .from('profiles')
+    .update({ creator_status: 'active', creator_since: new Date().toISOString() })
+    .eq('id', userId)
+    .in('creator_status', ['eligible', 'pending'])
+    .select('id')
+    .maybeSingle();
+  if (data) await systemNotify({ userId, type: 'creator_activated' }).catch(() => {});
+}
 
 /** Add net earnings toward the creator's funding goal (no-op if they have no goal). */
 async function bumpGoal(creatorId: string, netCents: number): Promise<void> {
@@ -263,12 +281,41 @@ monetize.post('/sub-price', requireAuth, async (c) => {
  *  API + Express dashboard link wire up when STRIPE_SECRET_KEY is set. */
 monetize.get('/payout', requireAuth, async (c) => {
   const userId = c.get('userId')!;
-  const { data: agg } = await supabaseAdmin.rpc('creator_earnings', { uid: userId });
-  const totals = (Array.isArray(agg) ? agg[0] : agg) as { net_cents: number } | null;
   // Next automatic payout: the upcoming Friday (Stripe's default weekly schedule).
   const now = new Date();
   const next = new Date(now);
   next.setDate(now.getDate() + ((5 - now.getDay() + 7) % 7 || 7));
+
+  // Live: read the creator's actual Stripe balance + mint a dashboard login link.
+  // Falls back to the lifetime-net estimate if the balance/link call fails so the
+  // payouts screen never hard-errors.
+  if (stripeConfigured) {
+    const { data: me } = await supabaseAdmin.from('profiles').select('stripe_account_id').eq('id', userId).maybeSingle();
+    const accountId = me?.stripe_account_id as string | null;
+    if (accountId) {
+      try {
+        const [{ availableCents, pendingCents }, dashboardUrl] = await Promise.all([
+          stripeBalance(accountId),
+          createDashboardLink(accountId).catch(() => null),
+        ]);
+        return c.json({
+          provider: paymentsProvider,
+          availableCents,
+          pendingCents,
+          nextPayoutDate: next.toISOString(),
+          dashboardUrl,
+          taxNote: 'You are responsible for taxes on your creator earnings. A 1099-K is issued by our payment processor when thresholds are met.',
+        });
+      } catch (err) {
+        console.error('[monetize] balance fetch failed:', (err as Error).message);
+        /* fall through to the estimate below */
+      }
+    }
+  }
+
+  // Mock / fallback: derive the available balance from lifetime net earnings.
+  const { data: agg } = await supabaseAdmin.rpc('creator_earnings', { uid: userId });
+  const totals = (Array.isArray(agg) ? agg[0] : agg) as { net_cents: number } | null;
   return c.json({
     provider: paymentsProvider,
     availableCents: totals?.net_cents ?? 0,
@@ -700,15 +747,33 @@ monetize.post('/webhook/stripe', async (c) => {
  */
 monetize.post('/onboard', requireAuth, requireNotBanned, rateLimit({ windowMs: 60_000, max: 6, name: 'onboard' }), async (c) => {
   const userId = c.get('userId')!;
+  const body = z.object({ acceptTerms: z.boolean().optional() }).safeParse(await c.req.json().catch(() => ({})));
   const { data: me } = await supabaseAdmin
     .from('profiles')
-    .select('monetization_status, stripe_account_id')
+    .select('monetization_status, stripe_account_id, creator_status, creator_terms_accepted_at')
     .eq('id', userId)
     .maybeSingle();
   if (!me) throw notFound('Profile not found');
 
+  // Monetization is Creator-gated: only an eligible (or already-in-flight/active)
+  // account can set up payouts. A `regular` user hasn't crossed the eligibility
+  // bar yet; a `suspended` one is under review.
+  const cs = (me.creator_status as string) ?? 'regular';
+  if (cs === 'regular') throw badRequest("You're not eligible to become a Creator yet — keep growing your followers and views.");
+  if (cs === 'suspended') throw badRequest('Your Creator account is under review.');
+
+  // Record Creator-terms acceptance on the way in (first time only).
+  if (body.success && body.data.acceptTerms && !me.creator_terms_accepted_at) {
+    await supabaseAdmin.from('profiles').update({ creator_terms_accepted_at: new Date().toISOString(), creator_terms_version: '1.0' }).eq('id', userId);
+  }
+  // Reflect that activation is in progress (eligible → pending) so the UI can
+  // show a "finishing setup" state; leaves active/pending as-is.
+  if (cs === 'eligible') await supabaseAdmin.from('profiles').update({ creator_status: 'pending' }).eq('id', userId);
+
   if (!stripeConfigured) {
+    // Mock: payouts "complete" instantly → activate monetization AND the Creator tier.
     await supabaseAdmin.from('profiles').update({ monetization_status: 'active' }).eq('id', userId);
+    await activateCreator(userId);
     return c.json({ url: null, status: 'active' as const });
   }
 
@@ -741,6 +806,8 @@ monetize.get('/status', requireAuth, async (c) => {
       if (await accountActive(me.stripe_account_id as string)) {
         status = 'active';
         await supabaseAdmin.from('profiles').update({ monetization_status: 'active' }).eq('id', userId);
+        // Payouts are live → activate the Creator tier (idempotent) + notify.
+        await activateCreator(userId);
       }
     } catch {
       /* keep pending on provider errors */
