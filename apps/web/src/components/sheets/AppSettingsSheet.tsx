@@ -1,4 +1,5 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
+import { App as CapApp } from '@capacitor/app';
 import { Button, DismissBackdrop, SegmentedControl } from '../controls';
 import { useSwipeDismiss } from '../../lib/useSwipeDismiss';
 import { useAuth } from '../../auth/useAuth';
@@ -190,6 +191,13 @@ export function AppSettingsSheet() {
   // Device push-registration status (diagnostic — shown under the toggle on native).
   const [pushStatus, setPushStatus] = useState(() => getPushDebug());
   const [reRegistering, setReRegistering] = useState(false);
+  // Native binary version/build (from the compiled app, NOT the OTA JS bundle) —
+  // proves which iOS build is actually installed when diagnosing native fixes.
+  const [buildInfo, setBuildInfo] = useState('');
+  useEffect(() => {
+    if (!isNative) return;
+    void CapApp.getInfo().then((i) => setBuildInfo(`v${i.version} · build ${i.build}`)).catch(() => {});
+  }, []);
 
   const togglePush = async () => {
     if (pushBusy) return;
@@ -488,6 +496,11 @@ export function AppSettingsSheet() {
                     <div style={{ fontSize: 12, color: 'var(--text-faint)', lineHeight: 1.4 }}>
                       Device delivery status: <span style={{ color: 'var(--text-2)' }}>{pushStatus}</span>
                     </div>
+                    {buildInfo && (
+                      <div style={{ fontSize: 12, color: 'var(--text-faint)' }}>
+                        App: <span style={{ color: 'var(--text-2)' }}>{buildInfo}</span>
+                      </div>
+                    )}
                     <Button variant="secondary" size="sm" onClick={() => void reRegisterPush()} loading={reRegistering} loadingLabel="Registering…" style={{ alignSelf: 'flex-start' }}>
                       Re-register this device
                     </Button>
