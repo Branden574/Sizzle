@@ -122,6 +122,8 @@ export interface SizzleState {
   cookFor: { id: string; scale: number } | null;
   /** Shopping-list overlay. */
   showShopping: boolean;
+  /** Creator hub overlay (eligibility → become-a-creator → dashboard). */
+  showCreator: boolean;
   /** "Save to collection" picker for a recipe id. */
   collectionPickerFor: string | null;
   /** Viewing a collection's recipes. */
@@ -186,6 +188,7 @@ export interface SizzleState {
   setEditPostFor: (id: string | null) => void;
   setCookFor: (v: { id: string; scale: number } | null) => void;
   setShowShopping: (v: boolean) => void;
+  setShowCreator: (v: boolean) => void;
   setCollectionPickerFor: (id: string | null) => void;
   setOpenCollection: (v: { id: string; name: string } | null) => void;
   setOpenTag: (tag: string | null) => void;
@@ -262,6 +265,7 @@ export const useSizzle = create<SizzleState>((set) => ({
   editPostFor: null,
   cookFor: null,
   showShopping: false,
+  showCreator: false,
   collectionPickerFor: null,
   openCollection: null,
   openTag: null,
@@ -323,6 +327,7 @@ export const useSizzle = create<SizzleState>((set) => ({
     cookFor: null,
     followList: null,
     showShopping: false,
+    showCreator: false,
     settingsFor: null,
     openCollection: null,
     openTag: null,
@@ -360,6 +365,7 @@ export const useSizzle = create<SizzleState>((set) => ({
   setEditPostFor: (id) => set({ editPostFor: id }),
   setCookFor: (v) => set({ cookFor: v }),
   setShowShopping: (v) => set({ showShopping: v }),
+  setShowCreator: (v) => set({ showCreator: v }),
   setCollectionPickerFor: (id) => set({ collectionPickerFor: id }),
   setOpenCollection: (v) => set({ openCollection: v }),
   setOpenTag: (tag) => set({ openTag: tag }),

@@ -145,6 +145,7 @@ function FieldLabel({ children, top }: { children: ReactNode; top?: number }) {
 export function AppSettingsSheet() {
   const open = useSizzle((s) => s.showAppSettings);
   const setOpen = useSizzle((s) => s.setShowAppSettings);
+  const setShowCreator = useSizzle((s) => s.setShowCreator);
   const autoplay = useSizzle((s) => s.autoplay);
   const toggleAutoplay = useSizzle((s) => s.toggleAutoplay);
   const muted = useSizzle((s) => s.muted);
@@ -344,6 +345,15 @@ export function AppSettingsSheet() {
           <div style={{ flex: 1, overflowY: 'auto', padding: '4px 20px 30px' }}>
             {me.data && <AccountHeader me={me.data} />}
             <div style={{ height: 8 }} />
+            <Group>
+              <MenuRow
+                icon={<span style={{ fontSize: 18 }}>⭐</span>}
+                title="Creator Tools"
+                sub={me.data?.creatorStatus === 'active' ? 'Your Creator dashboard & earnings' : me.data?.creatorStatus === 'eligible' ? "You're eligible — become a Creator" : 'Analytics, earning & eligibility'}
+                onClick={() => { setShowCreator(true); close(); }}
+              />
+            </Group>
+            <div style={{ height: 12 }} />
             <Group>
               {SECTION_ORDER.map((k) => (
                 <MenuRow

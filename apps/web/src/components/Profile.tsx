@@ -35,6 +35,7 @@ export function Profile() {
   const setShowAdmin = useSizzle((s) => s.setShowAdmin);
   const setShowAnalytics = useSizzle((s) => s.setShowAnalytics);
   const setShowShopping = useSizzle((s) => s.setShowShopping);
+  const setShowCreator = useSizzle((s) => s.setShowCreator);
   const setFollowList = useSizzle((s) => s.setFollowList);
   const shoppingCount = useShopping((s) => s.items.length);
 
@@ -88,6 +89,7 @@ export function Profile() {
         <div style={{ display: 'flex', gap: 22, marginTop: 18 }}>
           <Stat value={formatCount(me?.counts.following ?? 0)} label="Following" onClick={me ? () => setFollowList({ id: me.id, mode: 'following', name: me.name }) : undefined} />
           <Stat value={formatCount(me?.counts.followers ?? 0)} label="Followers" onClick={me ? () => setFollowList({ id: me.id, mode: 'followers', name: me.name }) : undefined} />
+          <Stat value={formatCount(me?.counts.views ?? 0)} label="Views" />
           <Stat value={formatCount(me?.counts.saved ?? 0)} label="Saved" />
         </div>
         <div style={{ display: 'flex', gap: 10, marginTop: 18 }}>
@@ -139,6 +141,14 @@ export function Profile() {
           style={{ marginTop: 10 }}
         >
           🛒 Shopping list{shoppingCount > 0 ? ` · ${shoppingCount}` : ''}
+        </Button>
+        <Button
+          onClick={() => setShowCreator(true)}
+          variant="outline"
+          fullWidth
+          style={{ marginTop: 10 }}
+        >
+          {me?.creatorStatus === 'active' ? '⭐ Creator dashboard' : me?.creatorStatus === 'eligible' ? '🎉 Become a Creator' : '⭐ Creator'}
         </Button>
         {!me?.verifiedTier && <VerifyButton />}
         <DraftsStrip />

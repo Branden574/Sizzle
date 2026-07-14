@@ -2,7 +2,7 @@ import { QueryClient, useInfiniteQuery, useMutation, useQuery, useQueryClient, t
 import type { AdminAppealDTO, AdminContentReportDTO, AdminLogDTO, AdminReportGroupDTO, AdminStats, AdminUserDTO, CollectionDTO, CommentDTO, ConversationDTO, CookProfile, CookSummary, CreateRecipeInput, CreatorAnalytics, DirectUploadTicket, DraftCard, EarningsSummary, FeedResponse, MeProfile, MessageDTO, MonetizationStatus, NotificationDTO, NotifPrefKey, PostControls, ProductDTO, RecipeCard, RecipeDetail, ReportInput, SearchResults, SuggestedCook, SupportRequestDTO, ThreadDTO, TierDTO, TipConfig, TrendingTag, VerificationTier, VideoAssetStatus, VideoUploadConfig, CookLogDTO, JournalEntryDTO, BoardDTO } from '@sizzle/shared';
 import { useAuth } from '../auth/useAuth';
 import { useSizzle } from '../store';
-import { apiGet, apiSend } from '../lib/api';
+import { apiGet, apiSend, setAdminUnlockToken } from '../lib/api';
 import { removeOffline, saveOffline } from '../lib/offline';
 
 export const queryClient = new QueryClient({
@@ -76,11 +76,13 @@ export function useMonetizationStatus(enabled: boolean) {
   });
 }
 
-/** Start payout onboarding (Stripe link, or instant in test mode). */
+/** Start payout onboarding (Stripe link, or instant in test mode). Pass
+ *  { acceptTerms:true } from the Creator-activation flow to record Creator-terms
+ *  acceptance server-side as the account advances toward active. */
 export function useStartOnboarding() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: () => apiSend<{ url: string | null; status: MonetizationStatus }>('POST', '/monetize/onboard'),
+    mutationFn: (v?: { acceptTerms?: boolean }) => apiSend<{ url: string | null; status: MonetizationStatus }>('POST', '/monetize/onboard', v ?? {}),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: ['monetize'] });
       void qc.invalidateQueries({ queryKey: keys.me });
@@ -771,6 +773,39 @@ export function useBanUser() {
 }
 /** Admin: set a creator's For You ranking boost (0 = none, 0.5 = light, 1 = strong). */
 export const useBoostUser = adminMutation<{ id: string; boost: number }>(({ id, boost }) => apiSend('POST', `/admin/users/${id}/boost`, { boost }));
+
+/** Admin: manually set a user's Creator tier (grant/revoke/suspend). */
+export const useSetCreator = adminMutation<{ id: string; status: 'regular' | 'eligible' | 'active' | 'suspended' }>(({ id, status }) => apiSend('POST', `/admin/users/${id}/creator`, { status }));
+
+/* Admin second factor (passphrase). security-status + unlock + set are EXEMPT
+ * from the server unlock gate, so they work before/without a token. */
+export function useAdminSecurityStatus(enabled: boolean) {
+  return useQuery({ queryKey: ['admin', 'security-status'], queryFn: () => apiGet<{ passphraseSet: boolean }>('/admin/security-status'), enabled });
+}
+/** Verify the passphrase and capture the returned unlock token for this tab. */
+export function useAdminUnlock() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (passphrase: string) => apiSend<{ token: string; expiresAt: string }>('POST', '/admin/unlock', { passphrase }),
+    onSuccess: (res) => {
+      setAdminUnlockToken(res.token);
+      // Now that we're unlocked, refetch the (previously gated) admin data.
+      void qc.invalidateQueries({ queryKey: ['admin'] });
+    },
+  });
+}
+/** Set (bootstrap) or change the admin passphrase. */
+export function useSetAdminPassphrase() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: (v: { current?: string; next: string }) => apiSend('POST', '/admin/passphrase', v),
+    onSuccess: () => {
+      // Rotating revokes the server session; drop the local token so we re-unlock.
+      setAdminUnlockToken(null);
+      void qc.invalidateQueries({ queryKey: ['admin', 'security-status'] });
+    },
+  });
+}
 
 export function useSearch(q: string) {
   return useQuery({

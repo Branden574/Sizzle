@@ -189,6 +189,7 @@ export function CookSheet() {
             <CookStat value={formatCount(ck.counts.followers)} label="Followers" border onClick={privateLocked ? undefined : () => setFollowList({ id: ck.id, mode: 'followers', name: ck.name })} />
             <CookStat value={formatCount(ck.counts.following)} label="Following" border onClick={privateLocked ? undefined : () => setFollowList({ id: ck.id, mode: 'following', name: ck.name })} />
             <CookStat value={formatCount(ck.counts.likes)} label="Likes" border />
+            <CookStat value={formatCount(ck.counts.views)} label="Views" border />
             <CookStat value={String(ck.counts.recipes)} label="Recipes" />
           </div>
 

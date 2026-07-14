@@ -2,11 +2,14 @@ import { Hono } from 'hono';
 import { z } from 'zod';
 import type { AdminAppealDTO, AdminContentReportDTO, AdminLogDTO, AdminReportGroupDTO, AdminStats, AdminUserDTO, ReportCategory, SupportRequestDTO } from '@sizzle/shared';
 import { requireAdmin, requireAuth, requireNotBanned } from '../middleware/auth';
+import { requireAdminUnlock } from '../middleware/adminUnlock';
+import { rateLimit } from '../middleware/rateLimit';
 import { supabaseAdmin } from '../lib/supabase';
-import { badRequest, dbFail, notFound } from '../lib/errors';
+import { badRequest, dbFail, notFound, unauthorized } from '../lib/errors';
 import { assertUuid } from '../lib/validate';
 import { initialsOf, relativeTime } from '../lib/format';
-import { notify } from '../services/notify';
+import { notify, systemNotify } from '../services/notify';
+import { hashPassphrase, verifyPassphrase, newUnlockToken, MIN_PASSPHRASE_LEN } from '../services/adminAuth';
 import { logModeration } from '../services/audit';
 import { emails, sendEmail, userEmail } from '../services/email';
 import type { ProfileRow } from '../mappers';
@@ -22,6 +25,20 @@ const BAN_DELETE_DAYS = 45;
 export const admin = new Hono<AppEnv>();
 // A banned admin must lose admin powers too (ban enforcement + role check).
 admin.use('*', requireAuth, requireNotBanned, requireAdmin);
+// Second factor: every admin route past this requires an unlock token, EXCEPT
+// the bootstrap/unlock/status endpoints (exempted inside the middleware). Fails
+// closed until a passphrase is set. See middleware/adminUnlock.ts.
+admin.use('*', requireAdminUnlock);
+
+/** Exponential lockout after repeated failed passphrase attempts (checked before
+ *  scrypt so a wrong guess can't be used as a CPU-exhaustion oracle). First 4
+ *  attempts are free (rate-limited only); then 30s, 60s, 120s… capped at 1h. */
+function lockUntil(failCount: number): string | null {
+  if (failCount < 5) return null;
+  const secs = Math.min(3600, 2 ** (failCount - 5) * 30);
+  return new Date(Date.now() + secs * 1000).toISOString();
+}
+const now = () => new Date().toISOString();
 
 /** open report rows → { recipeId → {count, categories, last} }. */
 async function openReportsByRecipe() {
@@ -319,6 +336,7 @@ admin.get('/users', async (c) => {
     banAppealStatus: p.ban_appeal_status ?? 'none',
     banAppealText: p.ban_appeal_text ?? null,
     boost: p.boost ?? 0,
+    creatorStatus: ((p as { creator_status?: string }).creator_status as AdminUserDTO['creatorStatus']) ?? 'regular',
   }));
   if (filter === 'flagged') dto = dto.filter((u) => u.flagged || u.repeatOffender).sort((a, b) => (b.reportCount + b.removedCount * 50) - (a.reportCount + a.removedCount * 50));
   return c.json(dto);
@@ -380,6 +398,33 @@ admin.post('/users/:id/boost', async (c) => {
   const { error } = await supabaseAdmin.from('profiles').update({ boost: body.data.boost }).eq('id', id);
   if (error) throw dbFail(error.message);
   await logModeration({ adminId: c.get('userId'), action: 'boost', targetUserId: id, detail: String(body.data.boost) });
+  return c.json({ ok: true });
+});
+
+const creatorGrantSchema = z.object({ status: z.enum(['regular', 'eligible', 'active', 'suspended']) });
+
+/** POST /admin/users/:id/creator — manually set a user's Creator tier (admin
+ *  override: bypasses the follower/view + payout requirements). Granting `active`
+ *  unlocks the Creator badge/tools + notifies; the user still needs their OWN
+ *  payout setup before money can move. */
+admin.post('/users/:id/creator', async (c) => {
+  const id = assertUuid(c.req.param('id'), 'user');
+  const body = creatorGrantSchema.safeParse(await c.req.json().catch(() => null));
+  if (!body.success) throw badRequest('Invalid creator status');
+  const { data: prev } = await supabaseAdmin.from('profiles').select('creator_status, creator_since').eq('id', id).maybeSingle();
+  if (!prev) throw notFound('User not found');
+  const patch: Record<string, unknown> = { creator_status: body.data.status };
+  if (body.data.status === 'active' && !prev.creator_since) patch.creator_since = now();
+  const { error } = await supabaseAdmin.from('profiles').update(patch).eq('id', id);
+  if (error) throw dbFail(error.message);
+  // Fire the "you're a Creator" ping only on a real transition into active.
+  if (body.data.status === 'active' && prev.creator_status !== 'active') await systemNotify({ userId: id, type: 'creator_activated' }).catch(() => {});
+  await logModeration({
+    adminId: c.get('userId'),
+    action: body.data.status === 'active' ? 'grant_creator' : body.data.status === 'suspended' ? 'suspend_creator' : 'set_creator',
+    targetUserId: id,
+    detail: body.data.status,
+  });
   return c.json({ ok: true });
 });
 
@@ -470,4 +515,76 @@ admin.post('/support-requests/:id/resolve', async (c) => {
   const { error } = await supabaseAdmin.from('support_requests').update({ status: 'resolved' }).eq('id', id);
   if (error) throw dbFail(error.message);
   return c.json({ ok: true });
+});
+
+/* ─────────────────────── admin passphrase (second factor) ───────────────────────
+ * These three routes are EXEMPT from requireAdminUnlock (they're how you set/verify
+ * the passphrase) but still sit behind requireAuth + requireNotBanned + requireAdmin.
+ */
+
+/** GET /admin/security-status — whether this admin has set a passphrase yet
+ *  (drives the client's "set one" vs "unlock" screen). Leaks no secret. */
+admin.get('/security-status', async (c) => {
+  const userId = c.get('userId')!;
+  const { data } = await supabaseAdmin.from('admin_credentials').select('user_id').eq('user_id', userId).maybeSingle();
+  return c.json({ passphraseSet: !!data });
+});
+
+const passphraseSchema = z.object({
+  current: z.string().max(200).optional(),
+  next: z.string().min(MIN_PASSPHRASE_LEN, `Passphrase must be at least ${MIN_PASSPHRASE_LEN} characters`).max(200),
+});
+
+/** POST /admin/passphrase — set (bootstrap) or change the admin passphrase.
+ *  Changing requires the current one (rate-limited, lockout-aware). Rotating
+ *  revokes every outstanding unlock session (forces re-unlock everywhere). */
+admin.post('/passphrase', rateLimit({ windowMs: 60_000, max: 10, name: 'admin-passphrase' }), async (c) => {
+  const userId = c.get('userId')!;
+  const body = passphraseSchema.safeParse(await c.req.json().catch(() => null));
+  if (!body.success) throw badRequest(body.error.issues[0]?.message ?? 'Invalid passphrase');
+  const { data: existing } = await supabaseAdmin.from('admin_credentials').select('pass_hash, fail_count, locked_until').eq('user_id', userId).maybeSingle();
+  if (existing) {
+    // Changing: verify the current passphrase (respect the lockout; generic errors).
+    if (existing.locked_until && new Date(existing.locked_until as string).getTime() > Date.now()) throw unauthorized('Too many attempts — try again later');
+    const ok = body.data.current ? await verifyPassphrase(body.data.current, existing.pass_hash as string) : false;
+    if (!ok) {
+      const n = ((existing.fail_count as number) ?? 0) + 1;
+      await supabaseAdmin.from('admin_credentials').update({ fail_count: n, locked_until: lockUntil(n) }).eq('user_id', userId);
+      throw unauthorized('Incorrect current passphrase');
+    }
+  }
+  const pass_hash = await hashPassphrase(body.data.next);
+  await supabaseAdmin.from('admin_credentials').upsert({ user_id: userId, pass_hash, fail_count: 0, locked_until: null, updated_at: now() }, { onConflict: 'user_id' });
+  // Rotating the factor revokes all live unlock sessions.
+  await supabaseAdmin.from('admin_sessions').delete().eq('user_id', userId);
+  await logModeration({ adminId: userId, action: existing ? 'admin_passphrase_change' : 'admin_passphrase_set' });
+  return c.json({ ok: true });
+});
+
+const unlockSchema = z.object({ passphrase: z.string().min(1).max(200) });
+
+/** POST /admin/unlock — the ONLY place scrypt runs. Verifies the passphrase and,
+ *  on success, mints a 20-min unlock token (only its SHA-256 is stored). Lockout
+ *  is checked before scrypt so failures can't be used as a CPU oracle. */
+admin.post('/unlock', rateLimit({ windowMs: 60_000, max: 10, name: 'admin-unlock' }), async (c) => {
+  const userId = c.get('userId')!;
+  const body = unlockSchema.safeParse(await c.req.json().catch(() => null));
+  if (!body.success) throw badRequest('Passphrase required');
+  const { data: cred } = await supabaseAdmin.from('admin_credentials').select('pass_hash, fail_count, locked_until').eq('user_id', userId).maybeSingle();
+  if (!cred) throw badRequest('No admin passphrase set yet — create one first');
+  // Generic 401 for locked/wrong so lock state isn't an oracle.
+  if (cred.locked_until && new Date(cred.locked_until as string).getTime() > Date.now()) throw unauthorized('Incorrect passphrase');
+  const ok = await verifyPassphrase(body.data.passphrase, cred.pass_hash as string);
+  if (!ok) {
+    const n = ((cred.fail_count as number) ?? 0) + 1;
+    await supabaseAdmin.from('admin_credentials').update({ fail_count: n, locked_until: lockUntil(n) }).eq('user_id', userId);
+    throw unauthorized('Incorrect passphrase');
+  }
+  const { token, tokenSha256 } = newUnlockToken();
+  const expiresAt = new Date(Date.now() + 20 * 60_000).toISOString();
+  await supabaseAdmin.from('admin_credentials').update({ fail_count: 0, locked_until: null }).eq('user_id', userId);
+  await supabaseAdmin.from('admin_sessions').delete().lt('expires_at', now()); // opportunistic GC
+  const { error } = await supabaseAdmin.from('admin_sessions').insert({ user_id: userId, token_sha256: tokenSha256, expires_at: expiresAt });
+  if (error) throw dbFail(error.message);
+  return c.json({ token, expiresAt });
 });

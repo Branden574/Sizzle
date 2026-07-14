@@ -40,6 +40,7 @@ import { RecipeSheet } from './components/sheets/RecipeSheet';
 import { ReportSheet } from './components/sheets/ReportSheet';
 import { RepostSheet } from './components/sheets/RepostSheet';
 import { ShoppingListSheet } from './components/sheets/ShoppingListSheet';
+import { CreatorSheet } from './components/sheets/CreatorSheet';
 import { SettingsSheet } from './components/sheets/SettingsSheet';
 import { UploadSheet } from './components/sheets/UploadSheet';
 import { CreateSheet } from './components/sheets/CreateSheet';
@@ -91,6 +92,7 @@ function closeTopmostOverlay(): boolean {
     [s.followList, () => s.setFollowList(null)],
     [s.editPostFor, () => s.setEditPostFor(null)],
     [s.showShopping, () => s.setShowShopping(false)],
+    [s.showCreator, () => s.setShowCreator(false)],
     [s.commentsFor, () => s.setCommentsFor(null)],
     [s.settingsFor, () => s.setSettingsFor(null)],
     [s.openCollection, () => s.setOpenCollection(null)],
@@ -374,6 +376,7 @@ export default function App() {
   const editPostFor = useSizzle((s) => s.editPostFor);
   const cookFor = useSizzle((s) => s.cookFor);
   const showShopping = useSizzle((s) => s.showShopping);
+  const showCreator = useSizzle((s) => s.showCreator);
   const collectionPickerFor = useSizzle((s) => s.collectionPickerFor);
   const openCollection = useSizzle((s) => s.openCollection);
   const openTag = useSizzle((s) => s.openTag);
@@ -402,7 +405,7 @@ export default function App() {
   const overlay = showRecipe || showCook;
   let lightStatus: boolean;
   if (showUpload || cookFor) lightStatus = false;
-  else if (recovery || overlay || showComments || showSettings || showNotifications || showEditProfile || showAppSettings || showRoadmap || showAdmin || showShopping || !!collectionPickerFor || !!openCollection || !!moreFor || !!reportFor || !!repostFor || !!openTag || !!followList) lightStatus = true;
+  else if (recovery || overlay || showComments || showSettings || showNotifications || showEditProfile || showAppSettings || showRoadmap || showAdmin || showShopping || showCreator || !!collectionPickerFor || !!openCollection || !!moreFor || !!reportFor || !!repostFor || !!openTag || !!followList) lightStatus = true;
   else if (isOnboarding) lightStatus = true;
   else lightStatus = tab !== 'feed';
 
@@ -493,6 +496,7 @@ export default function App() {
           {openTag && <HashtagSheet />}
           {cookFor && <CookModeSheet />}
           {showShopping && <ShoppingListSheet />}
+          {showCreator && <CreatorSheet />}
           {openCollection && <CollectionSheet />}
           {collectionPickerFor && <CollectionPickerSheet />}
           {showAdmin && <Suspense fallback={null}><AdminDashboard /></Suspense>}

@@ -253,8 +253,12 @@ export interface CookProfile {
     following: number;
     likes: number;
     recipes: number;
+    /** Lifetime video views across all their videos (public Creator metric). */
+    views: number;
   };
   viewer: { following: boolean; blocked: boolean; muted: boolean; subscribed: boolean; requested: boolean };
+  /** True when this account is an active Sizzle Creator (shows the Creator badge). */
+  isCreator: boolean;
   /** Private account: content is visible to accepted followers only. */
   isPrivate: boolean;
   /** True when this creator has payouts set up and can receive support/tips. */
@@ -631,6 +635,8 @@ export interface AdminUserDTO {
   banAppealText: string | null;
   /** Admin For You ranking lift for this creator (0 = none, 0.5 = light, 1 = strong). */
   boost: number;
+  /** Creator-account tier (drives the admin Grant/Revoke Creator control). */
+  creatorStatus: CreatorStatus;
 }
 
 /** An entry in the admin moderation audit log. */

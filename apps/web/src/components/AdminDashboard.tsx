@@ -1,10 +1,11 @@
-import { useState, type CSSProperties } from 'react';
+import { useEffect, useState, type CSSProperties } from 'react';
 import { Button } from './controls';
 import type { AdminAppealDTO, AdminContentReportDTO, AdminReportGroupDTO, AdminUserDTO, ReportCategory, SupportRequestDTO, VerificationTier } from '@sizzle/shared';
 import {
-  useAdminAppeals, useAdminContentReports, useAdminLog, useAdminReports, useAdminStats, useAdminSupportRequests, useAdminUsers, useBanUser, useBoostUser, useDenyAppeal,
-  useMarkFalseReport, usePurgeAccounts, useRemoveRecipe, useResolveContentReport, useResolveSupportRequest, useRestoreRecipe, useVerifyUser,
+  useAdminAppeals, useAdminContentReports, useAdminLog, useAdminReports, useAdminStats, useAdminSecurityStatus, useAdminSupportRequests, useAdminUnlock, useAdminUsers, useBanUser, useBoostUser, useDenyAppeal,
+  useMarkFalseReport, usePurgeAccounts, useRemoveRecipe, useResolveContentReport, useResolveSupportRequest, useRestoreRecipe, useSetAdminPassphrase, useSetCreator, useVerifyUser,
 } from '../data/queries';
+import { ApiError, hasAdminUnlockToken, setAdminUnlockToken } from '../lib/api';
 import { useSizzle } from '../store';
 import { formatCount } from '../lib/format';
 import { ChevronLeftIcon } from './icons';
@@ -25,9 +26,24 @@ const chip = (bg: string, color: string): CSSProperties => ({ fontSize: 11.5, fo
 
 export function AdminDashboard() {
   const setShowAdmin = useSizzle((s) => s.setShowAdmin);
-  const [tab, setTab] = useState<'reports' | 'appeals' | 'users' | 'log' | 'requests'>('reports');
-  const stats = useAdminStats(true).data;
+  const [tab, setTab] = useState<'reports' | 'appeals' | 'users' | 'log' | 'requests' | 'security'>('reports');
+  const [unlocked, setUnlocked] = useState(hasAdminUnlockToken());
+  const security = useAdminSecurityStatus(true);
+  // Only hit the (unlock-gated) admin data once we hold a token.
+  const statsQ = useAdminStats(unlocked);
+  const stats = statsQ.data;
   const purge = usePurgeAccounts();
+
+  // If the unlock token expired server-side, any gated call 401s — drop it and
+  // fall back to the unlock screen.
+  useEffect(() => {
+    if (statsQ.error instanceof ApiError && statsQ.error.status === 401) {
+      setAdminUnlockToken(null);
+      setUnlocked(false);
+    }
+  }, [statsQ.error]);
+
+  const lock = () => { setAdminUnlockToken(null); setUnlocked(false); };
 
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 96, background: 'var(--bg)', display: 'flex', flexDirection: 'column', animation: 'sz-fadeIn .3s' }}>
@@ -36,32 +52,169 @@ export function AdminDashboard() {
           <ChevronLeftIcon size={22} stroke="var(--text)" />
         </Button>
         <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 26, color: 'var(--text)', flex: 1 }}>Admin dashboard</div>
-        <Button onClick={() => purge.mutate()} title="Run the expired-ban wipe now (also daily)" style={{ height: 34, padding: '0 12px', border: '1px solid var(--line)', borderRadius: 11, background: 'var(--surface)', color: 'var(--text-faint)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
-          {purge.isPending ? 'Purging…' : 'Run purge'}
-        </Button>
+        {unlocked && (
+          <>
+            <Button onClick={lock} title="Lock the dashboard (require the passphrase again)" style={{ height: 34, padding: '0 12px', border: '1px solid var(--line)', borderRadius: 11, background: 'var(--surface)', color: 'var(--text-faint)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>🔒 Lock</Button>
+            <Button onClick={() => purge.mutate()} title="Run the expired-ban wipe now (also daily)" style={{ height: 34, padding: '0 12px', border: '1px solid var(--line)', borderRadius: 11, background: 'var(--surface)', color: 'var(--text-faint)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>
+              {purge.isPending ? 'Purging…' : 'Run purge'}
+            </Button>
+          </>
+        )}
       </div>
 
-      <div style={{ flex: 1, overflowY: 'auto', padding: '16px 16px 40px' }}>
-        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 9, marginBottom: 16 }}>
-          <Stat label="Flagged posts" value={stats?.flaggedPosts ?? 0} tone="#d8521e" />
-          <Stat label="Appeals" value={stats?.pendingAppeals ?? 0} tone="#c98a1e" />
-          <Stat label="Banned" value={stats?.bannedUsers ?? 0} tone="var(--text)" />
-          <Stat label="Flagged users" value={stats?.flaggedUsers ?? 0} tone="#d8521e" />
-          <Stat label="Verified" value={stats?.verifiedUsers ?? 0} tone="#1d9bf0" />
-          <Stat label="Users" value={stats?.totalUsers ?? 0} tone="#1f9d55" />
-        </div>
+      {security.isLoading ? (
+        <Muted>Checking admin security…</Muted>
+      ) : !security.data?.passphraseSet ? (
+        <SetupGate onDone={() => setUnlocked(true)} />
+      ) : !unlocked ? (
+        <UnlockGate onUnlocked={() => setUnlocked(true)} />
+      ) : (
+        <div style={{ flex: 1, overflowY: 'auto', padding: '16px 16px 40px' }}>
+          <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 9, marginBottom: 16 }}>
+            <Stat label="Flagged posts" value={stats?.flaggedPosts ?? 0} tone="#d8521e" />
+            <Stat label="Appeals" value={stats?.pendingAppeals ?? 0} tone="#c98a1e" />
+            <Stat label="Banned" value={stats?.bannedUsers ?? 0} tone="var(--text)" />
+            <Stat label="Flagged users" value={stats?.flaggedUsers ?? 0} tone="#d8521e" />
+            <Stat label="Verified" value={stats?.verifiedUsers ?? 0} tone="#1d9bf0" />
+            <Stat label="Users" value={stats?.totalUsers ?? 0} tone="#1f9d55" />
+          </div>
 
-        <div style={{ display: 'flex', gap: 6, marginBottom: 14 }}>
-          <Tab on={tab === 'reports'} onClick={() => setTab('reports')}>Reports</Tab>
-          <Tab on={tab === 'appeals'} onClick={() => setTab('appeals')}>Appeals{stats?.pendingAppeals ? ` (${stats.pendingAppeals})` : ''}</Tab>
-          <Tab on={tab === 'users'} onClick={() => setTab('users')}>Users</Tab>
-          <Tab on={tab === 'requests'} onClick={() => setTab('requests')}>Requests</Tab>
-          <Tab on={tab === 'log'} onClick={() => setTab('log')}>Log</Tab>
-        </div>
+          <div style={{ display: 'flex', gap: 6, marginBottom: 14, flexWrap: 'wrap' }}>
+            <Tab on={tab === 'reports'} onClick={() => setTab('reports')}>Reports</Tab>
+            <Tab on={tab === 'appeals'} onClick={() => setTab('appeals')}>Appeals{stats?.pendingAppeals ? ` (${stats.pendingAppeals})` : ''}</Tab>
+            <Tab on={tab === 'users'} onClick={() => setTab('users')}>Users</Tab>
+            <Tab on={tab === 'requests'} onClick={() => setTab('requests')}>Requests</Tab>
+            <Tab on={tab === 'log'} onClick={() => setTab('log')}>Log</Tab>
+            <Tab on={tab === 'security'} onClick={() => setTab('security')}>Security</Tab>
+          </div>
 
-        {tab === 'reports' ? <ReportsTab /> : tab === 'appeals' ? <AppealsTab /> : tab === 'users' ? <UsersTab /> : tab === 'requests' ? <RequestsTab /> : <LogTab />}
-      </div>
+          {tab === 'reports' ? <ReportsTab /> : tab === 'appeals' ? <AppealsTab /> : tab === 'users' ? <UsersTab /> : tab === 'requests' ? <RequestsTab /> : tab === 'security' ? <SecurityTab /> : <LogTab />}
+        </div>
+      )}
     </div>
+  );
+}
+
+/** Full-screen bootstrap: no admin passphrase exists yet — create one, then auto-unlock. */
+function SetupGate({ onDone }: { onDone: () => void }) {
+  const [pass, setPass] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [err, setErr] = useState<string | null>(null);
+  const setPassphrase = useSetAdminPassphrase();
+  const unlock = useAdminUnlock();
+  const busy = setPassphrase.isPending || unlock.isPending;
+
+  const submit = async () => {
+    setErr(null);
+    if (pass.length < 12) return setErr('Use at least 12 characters.');
+    if (pass !== confirm) return setErr('Passphrases don’t match.');
+    try {
+      await setPassphrase.mutateAsync({ next: pass });
+      await unlock.mutateAsync(pass); // capture a token immediately
+      onDone();
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : 'Could not set the passphrase.');
+    }
+  };
+
+  return (
+    <GateShell icon="🛡️" title="Secure your admin dashboard" sub="Set an admin passphrase. You’ll enter it to unlock the dashboard, and it’s required for every admin action.">
+      <PassInput value={pass} onChange={setPass} placeholder="New passphrase (min 12 chars)" onEnter={submit} />
+      <PassInput value={confirm} onChange={setConfirm} placeholder="Confirm passphrase" onEnter={submit} />
+      {err && <div style={gateErr}>{err}</div>}
+      <Button onClick={submit} disabled={busy} style={gateBtn}>{busy ? 'Saving…' : 'Set passphrase & unlock'}</Button>
+      <div style={{ fontSize: 11.5, color: 'var(--text-faint-2)', marginTop: 10, lineHeight: 1.5 }}>Choose something long and unique — this is the key to every admin action. Store it in your password manager.</div>
+    </GateShell>
+  );
+}
+
+/** Full-screen unlock: a passphrase exists — verify it to mint a session token. */
+function UnlockGate({ onUnlocked }: { onUnlocked: () => void }) {
+  const [pass, setPass] = useState('');
+  const [err, setErr] = useState<string | null>(null);
+  const unlock = useAdminUnlock();
+
+  const submit = async () => {
+    setErr(null);
+    try {
+      await unlock.mutateAsync(pass);
+      onUnlocked();
+    } catch (e) {
+      setErr(e instanceof ApiError ? e.message : 'Could not unlock.');
+      setPass('');
+    }
+  };
+
+  return (
+    <GateShell icon="🔒" title="Enter your admin passphrase" sub="Unlock the dashboard to continue.">
+      <PassInput value={pass} onChange={setPass} placeholder="Admin passphrase" onEnter={submit} autoFocus />
+      {err && <div style={gateErr}>{err}</div>}
+      <Button onClick={submit} disabled={unlock.isPending || !pass} style={gateBtn}>{unlock.isPending ? 'Unlocking…' : 'Unlock'}</Button>
+    </GateShell>
+  );
+}
+
+/** Security tab: rotate the admin passphrase (revokes all live sessions). */
+function SecurityTab() {
+  const [current, setCurrent] = useState('');
+  const [next, setNext] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
+  const change = useSetAdminPassphrase();
+
+  const submit = async () => {
+    setMsg(null);
+    if (next.length < 12) return setMsg({ ok: false, text: 'New passphrase must be at least 12 characters.' });
+    if (next !== confirm) return setMsg({ ok: false, text: 'New passphrases don’t match.' });
+    try {
+      await change.mutateAsync({ current, next });
+      setMsg({ ok: true, text: 'Passphrase changed. All sessions were signed out — unlock again with the new one.' });
+      setCurrent(''); setNext(''); setConfirm('');
+    } catch (e) {
+      setMsg({ ok: false, text: e instanceof ApiError ? e.message : 'Could not change the passphrase.' });
+    }
+  };
+
+  return (
+    <div style={card}>
+      <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)', marginBottom: 4 }}>Change admin passphrase</div>
+      <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginBottom: 12, lineHeight: 1.5 }}>Every admin action requires this passphrase. Changing it immediately signs out all unlocked sessions.</div>
+      <PassInput value={current} onChange={setCurrent} placeholder="Current passphrase" />
+      <PassInput value={next} onChange={setNext} placeholder="New passphrase (min 12 chars)" />
+      <PassInput value={confirm} onChange={setConfirm} placeholder="Confirm new passphrase" onEnter={submit} />
+      {msg && <div style={{ ...gateErr, color: msg.ok ? '#1f9d55' : '#d8521e', background: msg.ok ? 'rgba(31,157,85,.1)' : 'rgba(216,82,30,.1)' }}>{msg.text}</div>}
+      <Button onClick={submit} disabled={change.isPending || !current || !next} style={gateBtn}>{change.isPending ? 'Changing…' : 'Change passphrase'}</Button>
+    </div>
+  );
+}
+
+const gateBtn: CSSProperties = { width: '100%', height: 46, marginTop: 6, border: 'none', borderRadius: 13, background: 'var(--invert-bg)', color: 'var(--invert-fg)', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 800, cursor: 'pointer' };
+const gateErr: CSSProperties = { fontSize: 12.5, fontWeight: 600, color: '#d8521e', background: 'rgba(216,82,30,.1)', borderRadius: 10, padding: '9px 12px', margin: '4px 0' };
+
+function GateShell({ icon, title, sub, children }: { icon: string; title: string; sub: string; children: React.ReactNode }) {
+  return (
+    <div style={{ flex: 1, overflowY: 'auto', padding: '30px 22px 40px', display: 'flex', flexDirection: 'column', alignItems: 'stretch', maxWidth: 460, margin: '0 auto', width: '100%' }}>
+      <div style={{ fontSize: 42, textAlign: 'center' }}>{icon}</div>
+      <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 26, color: 'var(--text)', textAlign: 'center', marginTop: 8 }}>{title}</div>
+      <div style={{ fontSize: 14, color: 'var(--text-faint)', textAlign: 'center', margin: '6px 0 22px', lineHeight: 1.5 }}>{sub}</div>
+      {children}
+    </div>
+  );
+}
+
+function PassInput({ value, onChange, placeholder, onEnter, autoFocus }: { value: string; onChange: (v: string) => void; placeholder: string; onEnter?: () => void; autoFocus?: boolean }) {
+  return (
+    <input
+      type="password"
+      value={value}
+      // eslint-disable-next-line jsx-a11y/no-autofocus
+      autoFocus={autoFocus}
+      autoComplete="off"
+      onChange={(e) => onChange(e.target.value)}
+      onKeyDown={(e) => { if (e.key === 'Enter' && onEnter) onEnter(); }}
+      placeholder={placeholder}
+      style={{ width: '100%', height: 46, borderRadius: 13, border: '1px solid var(--line)', background: 'var(--surface)', color: 'var(--text)', fontSize: 15, padding: '0 14px', marginBottom: 10, fontFamily: "'Hanken Grotesk'" }}
+    />
   );
 }
 
@@ -273,11 +426,20 @@ function UsersTab() {
   const verify = useVerifyUser();
   const ban = useBanUser();
   const boost = useBoostUser();
+  const creator = useSetCreator();
   const list = users.data ?? [];
 
   const tierBtn = (u: AdminUserDTO, tier: VerificationTier | null, label: string) => {
     const active = u.verifiedTier === tier || (tier === null && !u.verifiedTier);
     return <Button key={label} onClick={() => verify.mutate({ id: u.id, tier })} style={{ flex: 1, height: 32, border: '1px solid var(--line)', borderRadius: 9, background: active ? 'var(--invert-bg)' : 'var(--surface)', color: active ? 'var(--invert-fg)' : 'var(--text-soft)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>{label}</Button>;
+  };
+
+  // Manually set a user's Creator tier (admin override). Grant = active,
+  // Suspend = under review, Off = back to regular.
+  const creatorBtn = (u: AdminUserDTO, status: 'regular' | 'active' | 'suspended', label: string) => {
+    const active = (u.creatorStatus ?? 'regular') === status || (status === 'regular' && (u.creatorStatus === 'regular' || u.creatorStatus === 'eligible'));
+    const onColor = status === 'active' ? '#1f9d55' : status === 'suspended' ? '#d8521e' : 'var(--invert-bg)';
+    return <Button key={label} onClick={() => creator.mutate({ id: u.id, status })} style={{ flex: 1, height: 30, border: '1px solid var(--line)', borderRadius: 9, background: active ? onColor : 'var(--surface)', color: active ? '#fff' : 'var(--text-soft)', fontSize: 12, fontWeight: 700, cursor: 'pointer' }}>{label}</Button>;
   };
 
   // Per-creator For You ranking lift. Off=0, Light=0.5, Strong=1 (folded into the
@@ -309,6 +471,9 @@ function UsersTab() {
                   {u.role === 'admin' && <span style={chip('var(--surface-3)', '#1d9bf0')}>ADMIN</span>}
                   {u.flagged && <span style={chip('var(--danger-bg)', '#d8521e')}>⚑ flagged</span>}
                   {u.repeatOffender && <span style={chip('var(--invert-bg)', 'var(--invert-fg)')}>repeat offender</span>}
+                  {u.creatorStatus === 'active' && <span style={chip('rgba(31,157,85,.14)', '#1f9d55')}>★ creator</span>}
+                  {u.creatorStatus === 'eligible' && <span style={chip('var(--surface-3)', '#c98a1e')}>eligible</span>}
+                  {u.creatorStatus === 'suspended' && <span style={chip('var(--danger-bg)', '#d8521e')}>creator suspended</span>}
                 </div>
                 <div style={{ fontSize: 12.5, color: 'var(--text-faint)' }}>@{u.handle} · {formatCount(u.followerCount)} followers · {u.reportCount} reports{u.removedCount ? ` · ${u.removedCount} removed` : ''}</div>
               </div>
@@ -324,6 +489,10 @@ function UsersTab() {
             <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }}>
               <span style={{ width: 42, flex: 'none', fontSize: 11, fontWeight: 800, letterSpacing: '.04em', textTransform: 'uppercase', color: u.boost > 0 ? '#c98a1e' : 'var(--text-faint)' }}>Boost</span>
               {boostBtn(u, 0, 'Off')}{boostBtn(u, 0.5, 'Light')}{boostBtn(u, 1, 'Strong')}
+            </div>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6, marginTop: 8 }} title="Manually grant/revoke the Creator tier (overrides the follower/view + payout requirements)">
+              <span style={{ width: 42, flex: 'none', fontSize: 11, fontWeight: 800, letterSpacing: '.04em', textTransform: 'uppercase', color: u.creatorStatus === 'active' ? '#1f9d55' : 'var(--text-faint)' }}>Creator</span>
+              {creatorBtn(u, 'regular', 'Off')}{creatorBtn(u, 'active', 'Grant')}{creatorBtn(u, 'suspended', 'Suspend')}
             </div>
             <Button
               disabled={u.role === 'admin' || ban.isPending}

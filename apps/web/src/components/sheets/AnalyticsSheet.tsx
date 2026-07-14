@@ -3,7 +3,7 @@ import { Button, DismissBackdrop } from '../controls';
 import { useSwipeDismiss } from '../../lib/useSwipeDismiss';
 import { showMonetization } from '../../lib/native';
 import { PLATFORM_FEE_PCT, PLATFORM_FEE_RATIONALE, type CreatorAnalytics, type EarningKind, type EarningsSummary } from '@sizzle/shared';
-import { useAnalytics, useBroadcast, useCreateProduct, useCreateTier, useDeleteProduct, useDeleteTier, useEarnings, useMonetizationStatus, useMyProducts, useMyTiers, usePayout, useSetGoal, useSetSubPrice, useSetWelcomeDm, useStartOnboarding } from '../../data/queries';
+import { useAnalytics, useBroadcast, useCreateProduct, useCreateTier, useDeleteProduct, useDeleteTier, useEarnings, useMe, useMonetizationStatus, useMyProducts, useMyTiers, usePayout, useSetGoal, useSetSubPrice, useSetWelcomeDm, useStartOnboarding } from '../../data/queries';
 import { useSizzle } from '../../store';
 import { formatCount } from '../../lib/format';
 import { theme } from '../../theme';
@@ -114,11 +114,16 @@ function Earnings() {
   const status = useMonetizationStatus(true);
   const { data } = useEarnings(status.data?.status === 'active');
   const onboard = useStartOnboarding();
+  const me = useMe().data;
+  const setShowCreator = useSizzle((s) => s.setShowCreator);
   const st = status.data?.status ?? 'none';
+  // Monetization is Creator-gated: a not-yet-eligible account can't set up payouts.
+  const creatorStatus = me?.creatorStatus ?? 'regular';
+  const canOnboard = creatorStatus !== 'regular';
 
   const startPayouts = () => {
     if (onboard.isPending) return;
-    onboard.mutate(undefined, {
+    onboard.mutate({ acceptTerms: true }, {
       onSuccess: (res) => { if (res.url) window.open(res.url, '_blank', 'noopener'); },
     });
   };
@@ -127,7 +132,20 @@ function Earnings() {
     <div style={{ marginBottom: 22 }}>
       <div style={{ fontSize: 12, color: 'var(--text-faint-2)', margin: '0 2px 8px', textTransform: 'uppercase', letterSpacing: '.06em' }}>Earnings</div>
 
-      {st !== 'active' ? (
+      {st !== 'active' && !canOnboard ? (
+        <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 16, padding: 16 }}>
+          <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)' }}>Become a Creator to start earning</div>
+          <div style={{ fontSize: 13, color: 'var(--text-faint)', margin: '4px 0 12px', lineHeight: 1.5 }}>
+            Earning is a Creator feature. Grow your audience to unlock payouts, subscriptions, and premium recipes.
+          </div>
+          <Button
+            onClick={() => setShowCreator(true)}
+            style={{ width: '100%', height: 48, border: 'none', borderRadius: 14, background: `linear-gradient(135deg,${theme.accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 800, cursor: 'pointer' }}
+          >
+            View Creator progress
+          </Button>
+        </div>
+      ) : st !== 'active' ? (
         <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 16, padding: 16 }}>
           <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)' }}>Get paid for your cooking</div>
           <div style={{ fontSize: 13, color: 'var(--text-faint)', margin: '4px 0 10px', lineHeight: 1.5 }}>
