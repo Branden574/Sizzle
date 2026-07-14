@@ -448,7 +448,7 @@ export interface JournalEntryDTO extends CookLogDTO {
   recipe: { id: string; title: string; poster: string | null; bg: string };
 }
 
-export type NotificationKind = 'follow' | 'like' | 'comment' | 'verified' | 'repost' | 'removed' | 'restored' | 'banned' | 'message' | 'tip' | 'follow_request';
+export type NotificationKind = 'follow' | 'like' | 'comment' | 'comment_like' | 'verified' | 'repost' | 'removed' | 'restored' | 'banned' | 'message' | 'tip' | 'follow_request';
 
 export interface NotificationDTO {
   id: string;

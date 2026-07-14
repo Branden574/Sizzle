@@ -48,7 +48,7 @@ import { queryClient } from './data/queries';
 import { apiSend } from './lib/api';
 import { useOnlineStatus } from './lib/useOnlineStatus';
 import { isNative } from './lib/native';
-import { syncPushRegistration, disablePush } from './lib/push';
+import { enablePush, syncPushRegistration, disablePush } from './lib/push';
 import { PasscodeLock } from './components/PasscodeLock';
 import { DemoContentNotice, useDemoNotice } from './components/DemoContentNotice';
 import { DesktopSidebar } from './components/DesktopSidebar';
@@ -170,12 +170,23 @@ export default function App() {
     })();
   }, [authStatus]);
 
-  // Native push: when signed in, silently refresh this device's FCM token if the
-  // user already granted permission (the opt-in prompt lives in Settings). On
-  // sign-out, drop the token so a logged-out device stops receiving pushes.
+  // Native push. On the FIRST authed session on this device we proactively ask
+  // for notification permission (enablePush shows the iOS dialog once, then
+  // registers the FCM token); afterwards we just silently refresh the token.
+  // Without this, a new user was never prompted — Settings defaults the toggle to
+  // "on", so they believed push was enabled while iOS was never actually asked
+  // and no token existed, and they received nothing. On sign-out, drop the token.
   useEffect(() => {
-    if (authStatus === 'authed') void syncPushRegistration();
-    else if (authStatus === 'anon' || authStatus === 'guest') void disablePush();
+    if (authStatus === 'authed') {
+      if (localStorage.getItem('sz.pushPrompted')) {
+        void syncPushRegistration();
+      } else {
+        localStorage.setItem('sz.pushPrompted', '1');
+        void enablePush();
+      }
+    } else if (authStatus === 'anon' || authStatus === 'guest') {
+      void disablePush();
+    }
   }, [authStatus]);
 
   // ── Passcode app-lock (opt-in) ─────────────────────────────────────────────

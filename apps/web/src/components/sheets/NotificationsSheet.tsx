@@ -11,6 +11,7 @@ function text(n: NotificationDTO): string {
   if (n.type === 'follow') return `${who} started following you`;
   if (n.type === 'follow_request') return `${who} requested to follow you`;
   if (n.type === 'like') return n.recipeTitle ? `${who} liked “${n.recipeTitle}”` : `${who} liked your recipe`;
+  if (n.type === 'comment_like') return `${who} liked your comment`;
   if (n.type === 'verified') return `${who} reached a verification milestone`;
   if (n.type === 'repost') return n.recipeTitle ? `${who} reposted “${n.recipeTitle}”` : `${who} reposted your recipe`;
   if (n.type === 'removed') return n.recipeTitle ? `Your post “${n.recipeTitle}” was removed — you can appeal it` : 'One of your posts was removed';

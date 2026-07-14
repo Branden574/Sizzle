@@ -84,6 +84,8 @@ function copyFor(type: NotificationKind, who: string): { title: string; body: st
       return { title: 'New like', body: `${who} liked your recipe` };
     case 'comment':
       return { title: 'New comment', body: `${who} commented on your recipe` };
+    case 'comment_like':
+      return { title: 'New like', body: `${who} liked your comment` };
     case 'repost':
       return { title: 'New repost', body: `${who} reposted your recipe` };
     case 'verified':
@@ -132,7 +134,7 @@ export async function sendPushForNotification(opts: {
       .eq('id', opts.userId)
       .single();
     if (profile && profile.push_enabled === false) return;
-    const prefKey = ({ like: 'likes', comment: 'comments', follow: 'follows', follow_request: 'follows', repost: 'reposts', message: 'messages', tip: 'tips' } as const)[opts.type as 'like' | 'comment' | 'follow' | 'follow_request' | 'repost' | 'message' | 'tip'];
+    const prefKey = ({ like: 'likes', comment_like: 'likes', comment: 'comments', follow: 'follows', follow_request: 'follows', repost: 'reposts', message: 'messages', tip: 'tips' } as const)[opts.type as 'like' | 'comment_like' | 'comment' | 'follow' | 'follow_request' | 'repost' | 'message' | 'tip'];
     if (prefKey && (profile?.notif_prefs as Record<string, boolean> | undefined)?.[prefKey] === false) return;
 
     const { data: tokens } = await supabaseAdmin.from('push_tokens').select('token').eq('user_id', opts.userId);

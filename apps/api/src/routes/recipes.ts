@@ -766,7 +766,11 @@ recipes.post('/:id/comments/:commentId/like', requireAuth, requireNotBanned, rat
 
   const { data: liked, error } = await supabaseAdmin.rpc('toggle_comment_like', { p_user: userId, p_comment: commentId });
   if (error) throw dbFail(error.message);
-  const { data: row } = await supabaseAdmin.from('comments').select('like_count').eq('id', commentId).maybeSingle();
+  const { data: row } = await supabaseAdmin.from('comments').select('like_count, author_id, recipe_id').eq('id', commentId).maybeSingle();
+  // Notify the comment's author on a fresh like (notify() skips self-likes).
+  if (liked && row?.author_id) {
+    await notify({ userId: row.author_id as string, type: 'comment_like', actorId: userId, recipeId: (row.recipe_id as string) ?? null });
+  }
   return c.json({ liked: !!liked, likes: row?.like_count ?? 0 });
 });
 
