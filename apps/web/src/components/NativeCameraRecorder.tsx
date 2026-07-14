@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Capacitor } from '@capacitor/core';
+import { App as CapApp } from '@capacitor/app';
 import { CameraPreview } from '@capgo/camera-preview';
 import { Button } from './controls';
 import { CameraIcon, CloseIcon } from './icons';
@@ -46,6 +47,10 @@ export function NativeCameraRecorder({ onCapture, onClose, onLibrary }: { onCapt
   const [zoom, setZoom] = useState(1);
   const [lensValues, setLensValues] = useState<number[]>([]);
   const [zoomRange, setZoomRange] = useState<{ min: number; max: number }>({ min: 1, max: 8 });
+  // Mic access is requested up-front with the camera; if it's denied we still let
+  // them record (some people want silent clips) but say so, so nobody posts a
+  // silent cooking video by surprise.
+  const [micOff, setMicOff] = useState(false);
 
   const codecRef = useRef<'hvc1' | 'avc1'>('avc1');
   const activeRef = useRef(true);
@@ -58,6 +63,7 @@ export function NativeCameraRecorder({ onCapture, onClose, onLibrary }: { onCapt
   const pressHold = useRef(false);
   const ignoreUp = useRef(false);
   const pinch = useRef<{ dist: number; zoom: number } | null>(null);
+  const zoomTrailing = useRef<number | null>(null);
   const statusRef = useRef<Status>('starting');
   statusRef.current = status;
 
@@ -77,6 +83,7 @@ export function NativeCameraRecorder({ onCapture, onClose, onLibrary }: { onCapt
     if (tornRef.current) return;
     tornRef.current = true;
     clearTick();
+    if (zoomTrailing.current) { window.clearTimeout(zoomTrailing.current); zoomTrailing.current = null; }
     document.documentElement.classList.remove('sz-native-cam');
     try { await CameraPreview.removeAllListeners(); } catch { /* none */ }
     try { await CameraPreview.stopRecordVideo(); } catch { /* not recording */ }
@@ -125,11 +132,28 @@ export function NativeCameraRecorder({ onCapture, onClose, onLibrary }: { onCapt
   // await is unmount-guarded; any failure funnels through teardown().
   useEffect(() => {
     activeRef.current = true;
+    // Tear the camera down the moment the app backgrounds. iOS suspends the
+    // AVCaptureSession anyway, and — critically — while sz-native-cam is on, the
+    // whole app is transparent; if we returned to a re-locked app-lock passcode
+    // (or any overlay) it would render invisibly behind the see-through WebView.
+    // Stopping here also removes the class, so we always come back to a normal,
+    // opaque app. (removeAllListeners runs before stopRecordVideo in teardown, so
+    // no partial clip is captured.)
+    let appStateSub: { remove: () => void } | null = null;
+    if (Capacitor.isNativePlatform()) {
+      void CapApp.addListener('appStateChange', ({ isActive }) => {
+        if (!isActive && !tornRef.current) { void teardown(); onClose(); }
+      }).then((h) => { appStateSub = h; if (tornRef.current) h.remove(); });
+    }
     void (async () => {
       try {
-        const perm = await CameraPreview.requestPermissions({});
+        // Ask for camera AND microphone together (disableAudio:false), so the mic
+        // prompt appears alongside the camera one — not deferred over the live
+        // preview — and we can tell the user if audio will be missing.
+        const perm = await CameraPreview.requestPermissions({ disableAudio: false });
         if (!activeRef.current) return;
         if (perm.camera !== 'granted') { setStatus('denied'); return; }
+        if (perm.microphone !== undefined && perm.microphone !== 'granted') setMicOff(true);
         document.documentElement.classList.add('sz-native-cam');
         // Full-screen preview edge-to-edge: pass the PHYSICAL screen size
         // (window.screen.* == UIScreen.main.bounds), pin to 0,0, safe-area insets
@@ -163,6 +187,7 @@ export function NativeCameraRecorder({ onCapture, onClose, onLibrary }: { onCapt
     })();
     return () => {
       activeRef.current = false;
+      appStateSub?.remove();
       void teardown();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
@@ -203,7 +228,19 @@ export function NativeCameraRecorder({ onCapture, onClose, onLibrary }: { onCapt
     setZoom(v);
     // Throttle the native calls a touch — drags emit faster than the session needs.
     const now = performance.now();
-    if (now - zoomCallAt.current < 30) return;
+    if (zoomTrailing.current) { window.clearTimeout(zoomTrailing.current); zoomTrailing.current = null; }
+    if (now - zoomCallAt.current < 30) {
+      // Leading-edge throttle drops the final frame of a fast flick, leaving the
+      // hardware (and the recorded footage) a step behind the pill. Schedule a
+      // trailing call so the LAST value the user landed on always reaches the lens.
+      zoomTrailing.current = window.setTimeout(() => {
+        zoomTrailing.current = null;
+        if (statusRef.current !== 'ready') return;
+        zoomCallAt.current = performance.now();
+        CameraPreview.setZoom({ level: v, ramp: false }).catch(() => {});
+      }, 40);
+      return;
+    }
     zoomCallAt.current = now;
     CameraPreview.setZoom({ level: v, ramp: false }).catch(() => {});
   }, [zoomRange]);
@@ -329,6 +366,16 @@ export function NativeCameraRecorder({ onCapture, onClose, onLibrary }: { onCapt
         </Button>
       </div>
 
+      {/* mic denied → tell them clips will be silent (still recordable) */}
+      {status === 'ready' && micOff && (
+        <div style={{ position: 'relative', display: 'flex', justifyContent: 'center', marginTop: 10, pointerEvents: 'none' }}>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 6, background: 'rgba(0,0,0,.55)', borderRadius: 20, padding: '6px 12px', color: '#fff', fontSize: 12.5, fontWeight: 600, backdropFilter: 'blur(6px)' }}>
+            <svg width={15} height={15} viewBox="0 0 24 24" fill="none" stroke="#fff" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round"><path d="M1 1l22 22M9 9v3a3 3 0 0 0 5.12 2.12M15 9.34V5a3 3 0 0 0-5.94-.6M17 16.95A7 7 0 0 1 5 12v-2m14 0v2a7 7 0 0 1-.11 1.23M12 19v4" /></svg>
+            No mic — video will be silent
+          </div>
+        </div>
+      )}
+
       {/* live preview fills the gap; tap/pinch pass through to the camera */}
       <div style={{ flex: 1 }} />
 
@@ -348,7 +395,7 @@ export function NativeCameraRecorder({ onCapture, onClose, onLibrary }: { onCapt
                 ? "Something went wrong with the camera. Upload a clip from your library instead."
                 : 'Getting the camera ready…'}
           </p>
-          <Button onClick={onClose} style={{ width: '100%', height: 50, border: 'none', borderRadius: 15, background: 'var(--accent)', color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15.5, fontWeight: 700, cursor: 'pointer' }}>
+          <Button onClick={() => (onLibrary ? onLibrary() : onClose())} style={{ width: '100%', height: 50, border: 'none', borderRadius: 15, background: 'var(--accent)', color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15.5, fontWeight: 700, cursor: 'pointer' }}>
             Use library instead
           </Button>
         </div>

@@ -36,12 +36,17 @@
            on render, so this is replaced automatically. CSS vars aren't loaded
            yet, so the inline script below picks the light/dark bg from the saved
            theme so the very first frame matches the user's choice. -->
-      <div id="sz-boot" style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;background:#0e0c0b">
-        <div style="font-family:'Instrument Serif',Georgia,'Times New Roman',serif;font-size:48px;line-height:1;background-image:linear-gradient(135deg,#ff5a1f,#f4a52c);-webkit-background-clip:text;background-clip:text;color:transparent">Sizzle</div>
-        <div style="width:26px;height:26px;border-radius:50%;border:2.5px solid rgba(150,140,130,.2);border-top-color:#ff5a1f;animation:sz-boot-spin .8s linear infinite"></div>
+      <div id="sz-boot" style="position:fixed;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:24px;background:#0e0c0b">
+        <div style="display:flex;flex-direction:column;align-items:center;gap:6px">
+          <div style="font-family:'Instrument Serif',Georgia,'Times New Roman',serif;font-size:52px;line-height:1;letter-spacing:.5px;background-image:linear-gradient(135deg,#ff5a1f,#f4a52c);-webkit-background-clip:text;background-clip:text;color:transparent">Sizzle</div>
+          <div style="font-size:11px;letter-spacing:3px;text-transform:uppercase;color:rgba(150,140,130,.7)">Watch it · Cook it</div>
+        </div>
+        <div style="width:176px;height:4px;border-radius:3px;background:rgba(150,140,130,.2);overflow:hidden">
+          <div style="height:100%;border-radius:3px;background:linear-gradient(90deg,#ff5a1f,#f4a52c);animation:sz-boot-fill 2.4s ease-out forwards"></div>
+        </div>
       </div>
     </div>
-    <style>@keyframes sz-boot-spin{to{transform:rotate(360deg)}}</style>
+    <style>@keyframes sz-boot-fill{from{width:8%}to{width:82%}}</style>
     <script>
       (function () {
         try {

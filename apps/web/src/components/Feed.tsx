@@ -15,6 +15,8 @@ import { VerifiedBadge } from './VerifiedBadge';
 import { Hashtags } from './Hashtags';
 import { StarRow } from './Stars';
 import { ErrorBoundary } from './ErrorBoundary';
+import { LoadingScreen } from './Splash';
+import { markBootReady } from '../lib/bootProgress';
 import {
   CheckIcon,
   ChevronUpIcon,
@@ -42,6 +44,12 @@ export function Feed() {
   const flActive = feedKind === 'following';
   const items = active.data?.pages.flatMap((p) => p.items) ?? [];
   const followingEmpty = feedKind === 'following' && !active.isLoading && items.length === 0;
+
+  // The feed settling (loaded or errored) is the app's "we're interactive now"
+  // signal — complete the launch progress bar to 100%.
+  useEffect(() => {
+    if (!active.isLoading) markBootReady();
+  }, [active.isLoading]);
   const loadMore = () => {
     if (active.hasNextPage && !active.isFetchingNextPage) void active.fetchNextPage();
   };
@@ -208,28 +216,7 @@ function FeedList({ items, onRefresh, onEndReached }: { items: RecipeCard[]; onR
 }
 
 function FeedLoading() {
-  return (
-    <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 20, background: 'var(--bg)' }}>
-      <div style={{ display: 'flex', flexDirection: 'column', alignItems: 'center', animation: 'sz-breathe 1.9s ease-in-out infinite' }}>
-        <div
-          style={{
-            fontFamily: "'Instrument Serif',serif",
-            fontSize: 48,
-            lineHeight: 1,
-            letterSpacing: '.5px',
-            backgroundImage: 'linear-gradient(135deg, var(--accent), var(--saffron, #f4a52c))',
-            WebkitBackgroundClip: 'text',
-            backgroundClip: 'text',
-            color: 'transparent',
-          }}
-        >
-          Sizzle
-        </div>
-        <div style={{ fontSize: 11, letterSpacing: '3px', textTransform: 'uppercase', color: 'var(--text-faint-2)', marginTop: 6 }}>Watch it · Cook it</div>
-      </div>
-      <div style={{ width: 26, height: 26, borderRadius: '50%', border: '2.5px solid var(--track)', borderTopColor: 'var(--accent)', animation: 'sz-spin .8s linear infinite' }} />
-    </div>
-  );
+  return <LoadingScreen />;
 }
 
 function FeedError({ onRetry, retrying }: { onRetry: () => void; retrying: boolean }) {

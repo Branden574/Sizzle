@@ -68,7 +68,16 @@ export function RecipeSheet() {
   // Prefer HLS (Cloudflare adaptive stream) over raw MP4 — same order as the feed.
   const headerVideo = r?.video?.hlsUrl || r?.video?.mp4Url || null;
   const headerImages = r?.images ?? [];
-  const hasMedia = !!headerVideo || headerImages.length > 0;
+  // A freshly-posted clip has no playable URL until Cloudflare finishes — surface
+  // an honest "Processing…" state instead of a bare gradient that reads as broken.
+  const vstatus = r?.video?.status;
+  const videoProcessing = vstatus === 'pending' || vstatus === 'uploading' || vstatus === 'processing';
+  const videoFailed = vstatus === 'error';
+  // Reserve the full-height media slot whenever a video exists in ANY state, so
+  // the header doesn't shrink (and the controls don't jump up toward the status
+  // bar) when the video transitions from processing → ready.
+  const hasVideoSlot = !!headerVideo || videoProcessing || videoFailed;
+  const hasMedia = hasVideoSlot || headerImages.length > 0;
   // Serving scaler: the recipe's own serving count is the baseline; the user can
   // type or step a target number of servings and every ingredient scales to it.
   const baseServes = r?.servings ?? 1;
@@ -79,30 +88,40 @@ export function RecipeSheet() {
     <div style={{ position: 'absolute', inset: 0, zIndex: 97 }}>
       <DismissBackdrop onDismiss={close} />
       <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, top: 44, background: 'var(--bg)', borderRadius: '30px 30px 0 0', overflow: 'hidden', animation: 'sz-slideUp .42s cubic-bezier(.16,1,.3,1)', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ position: 'relative', height: hasMedia ? 300 : 230, flex: 'none', background: r?.bg ?? 'linear-gradient(165deg,#2a160e,#b5471f)' }}>
+        <div style={{ position: 'relative', height: hasMedia ? 300 : 230, flex: 'none', background: hasVideoSlot && !headerVideo ? '#0d0b0a' : (r?.bg ?? 'linear-gradient(165deg,#2a160e,#b5471f)') }}>
           {headerVideo ? (
             <RecipeHeaderVideo src={headerVideo} poster={r?.video?.posterUrl} onExpand={() => { if (r) { setViewer({ items: [r], index: 0 }); setOpenRecipe(null); } }} />
           ) : headerImages.length > 0 ? (
             <ImageCarousel images={headerImages} />
+          ) : videoProcessing ? (
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 12 }}>
+              <div style={{ width: 34, height: 34, borderRadius: '50%', border: '3px solid rgba(255,255,255,.25)', borderTopColor: '#fff', animation: 'sz-spin .8s linear infinite' }} />
+              <div style={{ color: 'rgba(255,255,255,.92)', fontSize: 14, fontWeight: 700 }}>Processing your video…</div>
+              <div style={{ color: 'rgba(255,255,255,.6)', fontSize: 12.5 }}>It’ll start playing in a moment.</div>
+            </div>
+          ) : videoFailed ? (
+            <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', textAlign: 'center', padding: '0 32px', color: 'rgba(255,255,255,.85)', fontSize: 14, fontWeight: 700 }}>
+              This video couldn’t be processed.
+            </div>
           ) : (
             <div style={{ position: 'absolute', inset: 0, background: 'radial-gradient(70% 60% at 70% 20%, rgba(244,165,44,.5), transparent 70%)' }} />
           )}
           {/* fade the bottom into the sheet bg so the recipe title reads over it */}
           <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: hasMedia ? 'linear-gradient(180deg, rgba(0,0,0,.3) 0%, transparent 24%, transparent 64%, var(--bg))' : 'linear-gradient(180deg, transparent 50%, var(--bg))' }} />
-          <Button onClick={close} style={{ position: 'absolute', top: 16, right: 16, zIndex: 6, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.35)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+          <Button onClick={close} style={{ position: 'absolute', top: 'calc(var(--sat, 0px) + 16px)', right: 16, zIndex: 6, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.35)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
             <CloseIcon size={20} stroke="#fff" strokeWidth={2.2} />
           </Button>
           {isOwner && (
-            <Button onClick={() => setConfirmDel(true)} title="Delete post" aria-label="Delete post" style={{ position: 'absolute', top: 16, left: 16, zIndex: 6, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.4)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+            <Button onClick={() => setConfirmDel(true)} title="Delete post" aria-label="Delete post" style={{ position: 'absolute', top: 'calc(var(--sat, 0px) + 16px)', left: 16, zIndex: 6, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.4)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
               <TrashIcon size={19} stroke="#fff" strokeWidth={2} />
             </Button>
           )}
           {isOwner && (
-            <Button onClick={() => { if (r) setEditPostFor(r.id); }} title="Edit post" aria-label="Edit post" style={{ position: 'absolute', top: 16, left: 62, zIndex: 6, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.4)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+            <Button onClick={() => { if (r) setEditPostFor(r.id); }} title="Edit post" aria-label="Edit post" style={{ position: 'absolute', top: 'calc(var(--sat, 0px) + 16px)', left: 62, zIndex: 6, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.4)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
               <PencilIcon size={18} stroke="#fff" strokeWidth={2} />
             </Button>
           )}
-          <div style={{ position: 'absolute', top: 14, left: '50%', transform: 'translateX(-50%)', zIndex: 6, width: 42, height: 5, borderRadius: 3, background: 'rgba(255,255,255,.6)' }} />
+          <div style={{ position: 'absolute', top: 'calc(var(--sat, 0px) + 14px)', left: '50%', transform: 'translateX(-50%)', zIndex: 6, width: 42, height: 5, borderRadius: 3, background: 'rgba(255,255,255,.6)' }} />
         </div>
 
         {!r ? (
@@ -111,7 +130,7 @@ export function RecipeSheet() {
           </div>
         ) : (
           <>
-            <div style={{ flex: 1, overflowY: 'auto', padding: '0 24px 130px', marginTop: -46, position: 'relative', zIndex: 2 }}>
+            <div key={openRecipe} style={{ flex: 1, overflowY: 'auto', padding: '0 24px 130px', marginTop: -46, position: 'relative', zIndex: 2 }}>
               {r.removed && (
                 <div style={{ background: 'var(--danger-bg)', border: '1px solid var(--line-2)', borderRadius: 16, padding: 14, marginBottom: 16 }}>
                   <div style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--danger-fg)' }}>This video was removed</div>
