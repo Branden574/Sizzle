@@ -46,6 +46,12 @@ const schema = z.object({
   // Where Stripe Checkout returns the tipper after paying/cancelling.
   APP_ORIGIN: z.string().default('https://getsizzle.app'),
   CRON_SECRET: z.string().optional(),
+  // Optional hardening for the admin passphrase: when set, the FIRST-time
+  // passphrase bootstrap (POST /admin/passphrase with no existing credential)
+  // must present a matching `x-admin-bootstrap` header. This closes the
+  // trust-on-first-use window where a stolen admin JWT could self-provision the
+  // second factor. Leave unset for TOFU bootstrap (fine for a single trusted admin).
+  ADMIN_BOOTSTRAP_SECRET: z.string().optional(),
 });
 
 const parsed = schema.safeParse(process.env);

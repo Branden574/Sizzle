@@ -794,11 +794,12 @@ export function useAdminUnlock() {
     },
   });
 }
-/** Set (bootstrap) or change the admin passphrase. */
+/** Set (bootstrap) or change the admin passphrase. `bootstrap` is the one-time
+ *  setup code, only needed when ADMIN_BOOTSTRAP_SECRET is configured server-side. */
 export function useSetAdminPassphrase() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (v: { current?: string; next: string }) => apiSend('POST', '/admin/passphrase', v),
+    mutationFn: (v: { current?: string; next: string; bootstrap?: string }) => apiSend('POST', '/admin/passphrase', v),
     onSuccess: () => {
       // Rotating revokes the server session; drop the local token so we re-unlock.
       setAdminUnlockToken(null);

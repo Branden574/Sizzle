@@ -99,6 +99,7 @@ export function AdminDashboard() {
 function SetupGate({ onDone }: { onDone: () => void }) {
   const [pass, setPass] = useState('');
   const [confirm, setConfirm] = useState('');
+  const [boot, setBoot] = useState('');
   const [err, setErr] = useState<string | null>(null);
   const setPassphrase = useSetAdminPassphrase();
   const unlock = useAdminUnlock();
@@ -109,7 +110,7 @@ function SetupGate({ onDone }: { onDone: () => void }) {
     if (pass.length < 12) return setErr('Use at least 12 characters.');
     if (pass !== confirm) return setErr('Passphrases don’t match.');
     try {
-      await setPassphrase.mutateAsync({ next: pass });
+      await setPassphrase.mutateAsync({ next: pass, bootstrap: boot || undefined });
       await unlock.mutateAsync(pass); // capture a token immediately
       onDone();
     } catch (e) {
@@ -121,6 +122,7 @@ function SetupGate({ onDone }: { onDone: () => void }) {
     <GateShell icon="🛡️" title="Secure your admin dashboard" sub="Set an admin passphrase. You’ll enter it to unlock the dashboard, and it’s required for every admin action.">
       <PassInput value={pass} onChange={setPass} placeholder="New passphrase (min 12 chars)" onEnter={submit} />
       <PassInput value={confirm} onChange={setConfirm} placeholder="Confirm passphrase" onEnter={submit} />
+      <PassInput value={boot} onChange={setBoot} placeholder="One-time setup code (if configured)" onEnter={submit} />
       {err && <div style={gateErr}>{err}</div>}
       <Button onClick={submit} disabled={busy} style={gateBtn}>{busy ? 'Saving…' : 'Set passphrase & unlock'}</Button>
       <div style={{ fontSize: 11.5, color: 'var(--text-faint-2)', marginTop: 10, lineHeight: 1.5 }}>Choose something long and unique — this is the key to every admin action. Store it in your password manager.</div>

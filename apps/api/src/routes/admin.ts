@@ -1,5 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
+import { timingSafeEqual } from 'node:crypto';
+import { env } from '../env';
 import type { AdminAppealDTO, AdminContentReportDTO, AdminLogDTO, AdminReportGroupDTO, AdminStats, AdminUserDTO, ReportCategory, SupportRequestDTO } from '@sizzle/shared';
 import { requireAdmin, requireAuth, requireNotBanned } from '../middleware/auth';
 import { requireAdminUnlock } from '../middleware/adminUnlock';
@@ -30,14 +32,6 @@ admin.use('*', requireAuth, requireNotBanned, requireAdmin);
 // closed until a passphrase is set. See middleware/adminUnlock.ts.
 admin.use('*', requireAdminUnlock);
 
-/** Exponential lockout after repeated failed passphrase attempts (checked before
- *  scrypt so a wrong guess can't be used as a CPU-exhaustion oracle). First 4
- *  attempts are free (rate-limited only); then 30s, 60s, 120s… capped at 1h. */
-function lockUntil(failCount: number): string | null {
-  if (failCount < 5) return null;
-  const secs = Math.min(3600, 2 ** (failCount - 5) * 30);
-  return new Date(Date.now() + secs * 1000).toISOString();
-}
 const now = () => new Date().toISOString();
 
 /** open report rows → { recipeId → {count, categories, last} }. */
@@ -533,6 +527,8 @@ admin.get('/security-status', async (c) => {
 const passphraseSchema = z.object({
   current: z.string().max(200).optional(),
   next: z.string().min(MIN_PASSPHRASE_LEN, `Passphrase must be at least ${MIN_PASSPHRASE_LEN} characters`).max(200),
+  // One-time bootstrap secret (only enforced when ADMIN_BOOTSTRAP_SECRET is set).
+  bootstrap: z.string().max(200).optional(),
 });
 
 /** POST /admin/passphrase — set (bootstrap) or change the admin passphrase.
@@ -542,16 +538,23 @@ admin.post('/passphrase', rateLimit({ windowMs: 60_000, max: 10, name: 'admin-pa
   const userId = c.get('userId')!;
   const body = passphraseSchema.safeParse(await c.req.json().catch(() => null));
   if (!body.success) throw badRequest(body.error.issues[0]?.message ?? 'Invalid passphrase');
-  const { data: existing } = await supabaseAdmin.from('admin_credentials').select('pass_hash, fail_count, locked_until').eq('user_id', userId).maybeSingle();
+  const { data: existing } = await supabaseAdmin.from('admin_credentials').select('pass_hash, locked_until').eq('user_id', userId).maybeSingle();
   if (existing) {
     // Changing: verify the current passphrase (respect the lockout; generic errors).
     if (existing.locked_until && new Date(existing.locked_until as string).getTime() > Date.now()) throw unauthorized('Too many attempts — try again later');
     const ok = body.data.current ? await verifyPassphrase(body.data.current, existing.pass_hash as string) : false;
     if (!ok) {
-      const n = ((existing.fail_count as number) ?? 0) + 1;
-      await supabaseAdmin.from('admin_credentials').update({ fail_count: n, locked_until: lockUntil(n) }).eq('user_id', userId);
+      await supabaseAdmin.rpc('admin_register_fail', { uid: userId }); // atomic lockout bump
       throw unauthorized('Incorrect current passphrase');
     }
+  } else if (env.ADMIN_BOOTSTRAP_SECRET) {
+    // First-time provisioning is the one moment a stolen admin session could seize
+    // the second factor. When a bootstrap secret is configured, require it here so
+    // possessing the JWT alone isn't enough to set the initial passphrase.
+    const provided = body.data.bootstrap ?? '';
+    const expected = env.ADMIN_BOOTSTRAP_SECRET;
+    const okBoot = provided.length === expected.length && timingSafeEqual(Buffer.from(provided), Buffer.from(expected));
+    if (!okBoot) throw unauthorized('Admin bootstrap code required to set the first passphrase');
   }
   const pass_hash = await hashPassphrase(body.data.next);
   await supabaseAdmin.from('admin_credentials').upsert({ user_id: userId, pass_hash, fail_count: 0, locked_until: null, updated_at: now() }, { onConflict: 'user_id' });
@@ -570,14 +573,14 @@ admin.post('/unlock', rateLimit({ windowMs: 60_000, max: 10, name: 'admin-unlock
   const userId = c.get('userId')!;
   const body = unlockSchema.safeParse(await c.req.json().catch(() => null));
   if (!body.success) throw badRequest('Passphrase required');
-  const { data: cred } = await supabaseAdmin.from('admin_credentials').select('pass_hash, fail_count, locked_until').eq('user_id', userId).maybeSingle();
+  const { data: cred } = await supabaseAdmin.from('admin_credentials').select('pass_hash, locked_until').eq('user_id', userId).maybeSingle();
   if (!cred) throw badRequest('No admin passphrase set yet — create one first');
-  // Generic 401 for locked/wrong so lock state isn't an oracle.
+  // Generic 401 for locked/wrong so lock state isn't an oracle. Checked BEFORE
+  // scrypt so a locked account can't be used as a CPU-exhaustion oracle.
   if (cred.locked_until && new Date(cred.locked_until as string).getTime() > Date.now()) throw unauthorized('Incorrect passphrase');
   const ok = await verifyPassphrase(body.data.passphrase, cred.pass_hash as string);
   if (!ok) {
-    const n = ((cred.fail_count as number) ?? 0) + 1;
-    await supabaseAdmin.from('admin_credentials').update({ fail_count: n, locked_until: lockUntil(n) }).eq('user_id', userId);
+    await supabaseAdmin.rpc('admin_register_fail', { uid: userId }); // atomic lockout bump (race-safe)
     throw unauthorized('Incorrect passphrase');
   }
   const { token, tokenSha256 } = newUnlockToken();

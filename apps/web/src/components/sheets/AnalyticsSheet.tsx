@@ -117,14 +117,18 @@ function Earnings() {
   const me = useMe().data;
   const setShowCreator = useSizzle((s) => s.setShowCreator);
   const st = status.data?.status ?? 'none';
-  // Monetization is Creator-gated: a not-yet-eligible account can't set up payouts.
+  const [onboardErr, setOnboardErr] = useState<string | null>(null);
+  // Monetization is Creator-gated: only eligible/pending/active accounts can set
+  // up payouts. `regular` (not yet eligible) and `suspended` (under review) can't.
   const creatorStatus = me?.creatorStatus ?? 'regular';
-  const canOnboard = creatorStatus !== 'regular';
+  const canOnboard = creatorStatus === 'eligible' || creatorStatus === 'pending' || creatorStatus === 'active';
 
   const startPayouts = () => {
     if (onboard.isPending) return;
+    setOnboardErr(null);
     onboard.mutate({ acceptTerms: true }, {
       onSuccess: (res) => { if (res.url) window.open(res.url, '_blank', 'noopener'); },
+      onError: (e) => setOnboardErr(e instanceof Error ? e.message : 'Could not start payout setup.'),
     });
   };
 
@@ -152,6 +156,7 @@ function Earnings() {
             Turn on payouts to earn from monthly subscriptions, premium recipes, and one-off support. You keep {100 - PLATFORM_FEE_PCT}% of everything.
           </div>
           <div style={{ fontSize: 12.5, color: 'var(--text-faint-2)', lineHeight: 1.55, marginBottom: 12 }}>{PLATFORM_FEE_RATIONALE}</div>
+          {onboardErr && <div style={{ fontSize: 12.5, fontWeight: 600, color: '#d8521e', background: 'rgba(216,82,30,.1)', borderRadius: 10, padding: '9px 12px', marginBottom: 10 }}>{onboardErr}</div>}
           <Button
             onClick={startPayouts}
             disabled={onboard.isPending || st === 'pending'}

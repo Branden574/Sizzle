@@ -131,10 +131,12 @@ monetize.post('/tip', requireAuth, requireNotBanned, rateLimit({ windowMs: 60_00
   if (!(await canViewCookContent(supabaseAdmin, creatorId, userId))) throw notFound('User not found');
   const { data: creator } = await supabaseAdmin
     .from('profiles')
-    .select('id, display_name, banned, monetization_status, stripe_account_id')
+    .select('id, display_name, banned, monetization_status, stripe_account_id, creator_status')
     .eq('id', creatorId)
     .maybeSingle();
   if (!creator || creator.banned) throw notFound('User not found');
+  // A suspended Creator can't receive money while under review.
+  if (creator.creator_status === 'suspended') throw badRequest('This creator isn’t accepting payments right now');
   if (creator.monetization_status !== 'active') throw badRequest("This creator hasn't set up payouts yet");
 
   // The settle path is keyed STRICTLY on the running mode, never on the creator's
@@ -229,8 +231,8 @@ monetize.post('/unlock', requireAuth, requireNotBanned, rateLimit({ windowMs: 60
     .maybeSingle();
   if (pendingUnlock) throw badRequest('You already have an unlock in progress for this recipe — finish that checkout, or try again in a few minutes.');
 
-  const { data: creator } = await supabaseAdmin.from('profiles').select('display_name, banned, monetization_status, stripe_account_id').eq('id', rec.cook_id).maybeSingle();
-  if (!creator || creator.banned || creator.monetization_status !== 'active') throw badRequest('This recipe is not available');
+  const { data: creator } = await supabaseAdmin.from('profiles').select('display_name, banned, monetization_status, stripe_account_id, creator_status').eq('id', rec.cook_id).maybeSingle();
+  if (!creator || creator.banned || creator.creator_status === 'suspended' || creator.monetization_status !== 'active') throw badRequest('This recipe is not available');
   const liveMode = stripeConfigured;
   if (liveMode && !creator.stripe_account_id) throw badRequest('This creator has not finished payout setup');
 
@@ -391,6 +393,9 @@ monetize.post('/products/:id/buy', requireAuth, requireNotBanned, rateLimit({ wi
   if (prod.creator_id === userId) throw badRequest("You can't buy your own product");
   // Private creator's products are follower-only.
   if (!(await canViewCookContent(supabaseAdmin, prod.creator_id as string, userId))) throw notFound('Product not found');
+  // A suspended Creator can't sell while under review.
+  const { data: seller } = await supabaseAdmin.from('profiles').select('banned, creator_status').eq('id', prod.creator_id).maybeSingle();
+  if (!seller || seller.banned || seller.creator_status === 'suspended') throw badRequest('This product isn’t available right now');
   const { data: already } = await supabaseAdmin.from('product_purchases').select('product_id').eq('user_id', userId).eq('product_id', id).maybeSingle();
   if (already) return c.json({ url: null, status: 'succeeded' as const });
 
@@ -511,9 +516,10 @@ monetize.post('/subscribe', requireAuth, requireNotBanned, rateLimit({ windowMs:
   if (!(await canViewCookContent(supabaseAdmin, creatorId, userId))) throw notFound('User not found');
   const { data: creator } = await supabaseAdmin
     .from('profiles')
-    .select('display_name, banned, monetization_status, stripe_account_id, sub_price_cents')
+    .select('display_name, banned, monetization_status, stripe_account_id, sub_price_cents, creator_status')
     .eq('id', creatorId)
     .maybeSingle();
+  if (creator?.creator_status === 'suspended') throw badRequest('This creator isn’t accepting subscriptions right now');
   // A tier sets its own price; otherwise fall back to the creator's base sub price.
   let priceCents = (creator?.sub_price_cents as number | null) ?? null;
   let tierId: string | null = null;
@@ -762,8 +768,11 @@ monetize.post('/onboard', requireAuth, requireNotBanned, rateLimit({ windowMs: 6
   if (cs === 'regular') throw badRequest("You're not eligible to become a Creator yet — keep growing your followers and views.");
   if (cs === 'suspended') throw badRequest('Your Creator account is under review.');
 
-  // Record Creator-terms acceptance on the way in (first time only).
-  if (body.success && body.data.acceptTerms && !me.creator_terms_accepted_at) {
+  // Creator terms must be accepted before activating (either previously, or in
+  // this request). Reject rather than silently activating without a terms record.
+  const termsOk = !!me.creator_terms_accepted_at || (body.success && body.data.acceptTerms === true);
+  if (!termsOk) throw badRequest('Please accept the Creator Terms to continue.');
+  if (!me.creator_terms_accepted_at) {
     await supabaseAdmin.from('profiles').update({ creator_terms_accepted_at: new Date().toISOString(), creator_terms_version: '1.0' }).eq('id', userId);
   }
   // Reflect that activation is in progress (eligible → pending) so the UI can
