@@ -208,6 +208,11 @@ export default function App() {
       if (kb > 80) {
         stage.style.setProperty('--app-h', `${Math.round(vv.height)}px`);
         stage.style.setProperty('--kb-pad', '10px');
+        // We already shrank the app to the visible area, so WKWebView's own
+        // "scroll the focused input into view" is redundant and instead pushes the
+        // fixed header (chat title, back button) off the top. Undo that document
+        // scroll so the header stays pinned.
+        if (window.scrollY || vv.offsetTop) window.scrollTo(0, 0);
       } else {
         stage.style.removeProperty('--app-h');
         stage.style.removeProperty('--kb-pad');
