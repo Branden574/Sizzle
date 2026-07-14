@@ -222,7 +222,7 @@ export function EditProfileSheet() {
                         inputMode="url"
                         autoCapitalize="none"
                         autoCorrect="off"
-                        style={{ flex: 1, minWidth: 0, height: '100%', border: 'none', background: 'transparent', fontFamily: "'Hanken Grotesk'", fontSize: 15, color: 'var(--text)', outline: 'none' }}
+                        style={{ flex: 1, minWidth: 0, height: '100%', border: 'none', background: 'transparent', fontFamily: "'Hanken Grotesk'", fontSize: 16, color: 'var(--text)', outline: 'none' }}
                       />
                     </div>
                   );
