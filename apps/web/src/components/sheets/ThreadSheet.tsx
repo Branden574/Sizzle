@@ -121,11 +121,12 @@ export function ThreadSheet() {
         ))}
       </div>
 
-      <div style={{ flex: 'none', borderTop: '1px solid var(--line)', background: 'var(--surface)', padding: '12px 16px 28px', display: 'flex', alignItems: 'center', gap: 10 }}>
+      <div style={{ flex: 'none', borderTop: '1px solid var(--line)', background: 'var(--surface)', padding: '12px 16px', paddingBottom: 'var(--kb-pad, 28px)', display: 'flex', alignItems: 'center', gap: 10 }}>
         <input
           value={draft}
           onChange={(e) => setDraft(e.target.value)}
           onKeyDown={(e) => { if (e.key === 'Enter' && !e.nativeEvent.isComposing) submit(); }}
+          onFocus={() => { window.setTimeout(() => { const el = scrollRef.current; if (el) el.scrollTop = el.scrollHeight; }, 250); }}
           placeholder="Message…"
           maxLength={2000}
           style={{ flex: 1, height: 44, border: '1.5px solid var(--line)', borderRadius: 22, padding: '0 16px', fontFamily: "'Hanken Grotesk'", fontSize: 15, color: 'var(--text)', outline: 'none', background: 'var(--bg-soft)' }}

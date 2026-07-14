@@ -189,6 +189,43 @@ export default function App() {
     }
   }, [authStatus]);
 
+  // ── Keyboard-aware height (native) ─────────────────────────────────────────
+  // iOS overlays the keyboard ON TOP of the WebView without resizing it, so a
+  // bottom-anchored composer (DM thread, comments, login) lands behind the
+  // keyboard and WKWebView auto-scrolls to a black gap you have to scroll back
+  // up from. Track the visual viewport and, while the keyboard is up, shrink
+  // --app-h to the visible height so the composer sits flush above it
+  // (iMessage/TikTok-style), and drop the home-indicator padding (--kb-pad) that
+  // would otherwise leave a gap. Native only — mobile-web browsers resize
+  // themselves. Re-query .sz-stage each tick so it follows the marketing↔app swap.
+  useEffect(() => {
+    const vv = window.visualViewport;
+    if (!isNative || !vv) return;
+    const apply = () => {
+      const stage = document.querySelector('.sz-stage') as HTMLElement | null;
+      if (!stage) return;
+      const kb = Math.max(0, window.innerHeight - vv.height - vv.offsetTop);
+      if (kb > 80) {
+        stage.style.setProperty('--app-h', `${Math.round(vv.height)}px`);
+        stage.style.setProperty('--kb-pad', '10px');
+      } else {
+        stage.style.removeProperty('--app-h');
+        stage.style.removeProperty('--kb-pad');
+      }
+    };
+    apply();
+    vv.addEventListener('resize', apply);
+    vv.addEventListener('scroll', apply);
+    return () => {
+      vv.removeEventListener('resize', apply);
+      vv.removeEventListener('scroll', apply);
+      document.querySelectorAll('.sz-stage').forEach((s) => {
+        (s as HTMLElement).style.removeProperty('--app-h');
+        (s as HTMLElement).style.removeProperty('--kb-pad');
+      });
+    };
+  }, []);
+
   // ── Passcode app-lock (opt-in) ─────────────────────────────────────────────
   // Replaced the biometric lock: the OS biometric overlay's app-state events
   // caused re-lock loops on some devices. A passcode screen is pure in-app UI,
