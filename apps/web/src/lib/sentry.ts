@@ -31,7 +31,10 @@ export function captureException(err: unknown, extra?: Record<string, unknown>):
       platform: 'javascript',
       level: 'error',
       exception: { values: [{ type: e.name, value: e.message }] },
-      extra: { ...extra, stack: e.stack, url: location.href },
+      // origin+pathname only — never the hash/query, which on the web OAuth
+      // implicit flow briefly carries #access_token=…&refresh_token=… (would ship a
+      // live session token to Sentry if an error fired before it's stripped).
+      extra: { ...extra, stack: e.stack, url: location.origin + location.pathname },
     };
     const body = `${JSON.stringify({ event_id: eventId, sent_at: ts })}\n${JSON.stringify({ type: 'event' })}\n${JSON.stringify(event)}`;
     void fetch(endpoint.url, {

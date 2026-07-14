@@ -7,6 +7,19 @@ import type { AppEnv } from '../types';
 
 export const internal = new Hono<AppEnv>();
 
+// Fail CLOSED: every /internal/* route (Vercel Cron targets) requires the
+// CRON_SECRET bearer. Previously each route only checked `if (env.CRON_SECRET)`,
+// so a missing/unconfigured secret left these world-reachable — an anon GET could
+// force-publish scheduled posts or fan out push nudges. Now an absent secret
+// rejects everything. (Vercel Cron sends `Authorization: Bearer <CRON_SECRET>`.)
+internal.use('*', async (c, next) => {
+  const expected = env.CRON_SECRET;
+  if (!expected || c.req.header('authorization') !== `Bearer ${expected}`) {
+    return c.json({ error: 'unauthorized' }, 401);
+  }
+  await next();
+});
+
 /**
  * GET /internal/finalize-videos — Vercel Cron target (every minute). SERVER-SIDE
  * backstop that drives Cloudflare assets to ready + moderates their thumbnail,

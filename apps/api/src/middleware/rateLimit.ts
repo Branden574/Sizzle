@@ -5,7 +5,16 @@ import { supabaseAdmin } from '../lib/supabase';
 import type { AppEnv } from '../types';
 
 function identity(c: Context): string {
-  return c.get('userId') ?? c.req.header('x-forwarded-for')?.split(',')[0]?.trim() ?? 'anon';
+  const userId = c.get('userId');
+  if (userId) return userId;
+  // For anon requests, key on a TRUSTED client IP. The left-most x-forwarded-for
+  // entry is client-supplied (spoof a fresh value per request → bypass the limit),
+  // so prefer Vercel's own x-vercel-forwarded-for, else the RIGHT-most XFF hop
+  // (the IP Vercel appends), never the left-most.
+  const vercelIp = c.req.header('x-vercel-forwarded-for')?.trim();
+  if (vercelIp) return vercelIp;
+  const parts = c.req.header('x-forwarded-for')?.split(',').map((s) => s.trim()).filter(Boolean);
+  return parts && parts.length ? parts[parts.length - 1] : 'anon';
 }
 
 /**

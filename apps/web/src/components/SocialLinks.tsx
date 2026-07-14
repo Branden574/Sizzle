@@ -80,7 +80,7 @@ export function SocialLinks({ links, size = 36 }: { links: ProfileLinks; size?: 
         return (
           <a
             key={k}
-            href={links[k]!}
+            href={/^https?:\/\//i.test(links[k]!) ? links[k]! : `https://${links[k]!.replace(/^\/+/, '')}`}
             target="_blank"
             rel="noopener noreferrer"
             aria-label={label}
