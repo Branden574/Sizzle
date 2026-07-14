@@ -1,5 +1,4 @@
-import { useEffect, useState, type ReactNode } from 'react';
-import { App as CapApp } from '@capacitor/app';
+import { useState, type ReactNode } from 'react';
 import { Button, DismissBackdrop, SegmentedControl } from '../controls';
 import { useSwipeDismiss } from '../../lib/useSwipeDismiss';
 import { useAuth } from '../../auth/useAuth';
@@ -7,10 +6,10 @@ import { useSizzle, type FeedKindPref, type ThemePref, type UnitPref } from '../
 import { clearOffline } from '../../lib/offline';
 import { apiGet, apiSend } from '../../lib/api';
 import { queryClient, useBlockedList, useMe, useSubmitSupportTicket, useToggleBlock, useUpdateNotifPref, useUpdateProfile } from '../../data/queries';
-import { enablePush, disablePush, getPushDebug } from '../../lib/push';
+import { enablePush, disablePush } from '../../lib/push';
 import { clearPasscode } from '../../lib/applock';
 import { PasscodeSetup } from '../PasscodeLock';
-import { showMonetization, isNative } from '../../lib/native';
+import { showMonetization } from '../../lib/native';
 import { PlayIcon, SpeakerIcon } from '../icons';
 import type { MeProfile } from '@sizzle/shared';
 
@@ -188,16 +187,6 @@ export function AppSettingsSheet() {
   const pushOn = pushLocal ?? me.data?.pushEnabled ?? true;
   const updatePref = useUpdateNotifPref();
   const updateProfile = useUpdateProfile();
-  // Device push-registration status (diagnostic — shown under the toggle on native).
-  const [pushStatus, setPushStatus] = useState(() => getPushDebug());
-  const [reRegistering, setReRegistering] = useState(false);
-  // Native binary version/build (from the compiled app, NOT the OTA JS bundle) —
-  // proves which iOS build is actually installed when diagnosing native fixes.
-  const [buildInfo, setBuildInfo] = useState('');
-  useEffect(() => {
-    if (!isNative) return;
-    void CapApp.getInfo().then((i) => setBuildInfo(`v${i.version} · build ${i.build}`)).catch(() => {});
-  }, []);
 
   const togglePush = async () => {
     if (pushBusy) return;
@@ -210,25 +199,11 @@ export function AppSettingsSheet() {
       // for OS permission the first time; on the web build both are no-ops.
       if (next) await enablePush();
       else await disablePush();
-      setPushStatus(getPushDebug());
       void queryClient.invalidateQueries({ queryKey: ['me'] });
     } catch {
       setPushLocal(!next); // revert on failure
     } finally {
       setPushBusy(false);
-    }
-  };
-
-  // Force a fresh permission-check + token registration and surface the result.
-  const reRegisterPush = async () => {
-    if (reRegistering) return;
-    setReRegistering(true);
-    setPushStatus('registering…');
-    try {
-      await enablePush();
-    } finally {
-      setPushStatus(getPushDebug());
-      setReRegistering(false);
     }
   };
 
@@ -491,21 +466,6 @@ export function AppSettingsSheet() {
                     onToggle={() => updatePref.mutate({ key: row.key, enabled: me.data?.notifPrefs?.[row.key] === false })}
                   />
                 ))}
-                {isNative && (
-                  <div style={{ padding: '12px 16px', borderTop: '1px solid var(--line)', display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    <div style={{ fontSize: 12, color: 'var(--text-faint)', lineHeight: 1.4 }}>
-                      Device delivery status: <span style={{ color: 'var(--text-2)' }}>{pushStatus}</span>
-                    </div>
-                    {buildInfo && (
-                      <div style={{ fontSize: 12, color: 'var(--text-faint)' }}>
-                        App: <span style={{ color: 'var(--text-2)' }}>{buildInfo}</span>
-                      </div>
-                    )}
-                    <Button variant="secondary" size="sm" onClick={() => void reRegisterPush()} loading={reRegistering} loadingLabel="Registering…" style={{ alignSelf: 'flex-start' }}>
-                      Re-register this device
-                    </Button>
-                  </div>
-                )}
               </Group>
             )}
 
