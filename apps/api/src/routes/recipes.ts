@@ -269,8 +269,9 @@ recipes.post('/:id/cook-events', requireAuth, requireNotBanned, rateLimit({ wind
   const parsed = cookEventSchema.safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) throw badRequest('Invalid cook event');
 
-  const { data: recipe } = await supabaseAdmin.from('recipes').select('id, status').eq('id', recipeId).maybeSingle();
-  if (!recipe || recipe.status !== 'published') throw notFound('Recipe not found');
+  // Same trust boundary as like/save/view: published + private-follower + block
+  // gating (was only checking status, letting you inflate a private/blocked cook).
+  await recipeCookIdUnblocked(recipeId, userId);
 
   const { error } = await supabaseAdmin.from('cook_events').insert({ user_id: userId, recipe_id: recipeId, kind: parsed.data.kind });
   if (error) throw dbFail(error.message);
@@ -348,8 +349,8 @@ recipes.post('/:id/cook-log', requireAuth, requireNotBanned, rateLimit({ windowM
   if (!parsed.success) throw badRequest('Invalid cook log', parsed.error.flatten());
   const input = parsed.data;
 
-  const { data: recipe } = await supabaseAdmin.from('recipes').select('id, status').eq('id', recipeId).maybeSingle();
-  if (!recipe || recipe.status !== 'published') throw notFound('Recipe not found');
+  // Same trust boundary as like/save/view: published + private-follower + block gating.
+  await recipeCookIdUnblocked(recipeId, userId);
 
   // Same trust boundary as photo posts: the photo must live in OUR storage
   // under the author's own folder, and it goes through image moderation.

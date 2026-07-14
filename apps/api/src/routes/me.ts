@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import type { CollectionDTO, CreatorAnalytics, FeedResponse, JournalEntryDTO, MeProfile, NotificationDTO } from '@sizzle/shared';
-import { requireAuth } from '../middleware/auth';
+import { requireAuth, requireNotBanned } from '../middleware/auth';
 import { supabaseAdmin, userClient } from '../lib/supabase';
 import { badRequest, notFound } from '../lib/errors';
 import { assertUuid } from '../lib/validate';
@@ -82,7 +82,7 @@ me.post('/ban-appeal', async (c) => {
 const tastesSchema = z.object({ tastes: z.array(z.string().max(50)).max(64) });
 
 /** POST /me/tastes — save onboarding taste preferences. */
-me.post('/tastes', async (c) => {
+me.post('/tastes', requireNotBanned, async (c) => {
   const userId = c.get('userId')!;
   const body = tastesSchema.safeParse(await c.req.json().catch(() => null));
   if (!body.success) throw badRequest('Expected { tastes: string[] }', body.error.flatten());
@@ -313,7 +313,7 @@ me.get('/export', async (c) => {
 
 /** POST /me/verify — self-serve verification. Auto-grants the badge at follower
  *  thresholds (blue at 100k, gold at 1M), so creators don't wait on an admin. */
-me.post('/verify', async (c) => {
+me.post('/verify', requireNotBanned, async (c) => {
   const userId = c.get('userId')!;
   const { data: prof } = await supabaseAdmin.from('profiles').select('follower_count, verified_tier').eq('id', userId).maybeSingle();
   const followers = (prof?.follower_count as number) ?? 0;
@@ -594,7 +594,7 @@ const patchSchema = z.object({
 });
 
 /** PATCH /me — edit display name / handle / bio / phone / avatar / banner. */
-me.patch('/', async (c) => {
+me.patch('/', requireNotBanned, async (c) => {
   const userId = c.get('userId')!;
   const body = patchSchema.safeParse(await c.req.json().catch(() => null));
   if (!body.success) throw badRequest('Invalid profile update', body.error.flatten());

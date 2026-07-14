@@ -357,6 +357,15 @@ monetize.post('/products/:id/buy', requireAuth, requireNotBanned, rateLimit({ wi
     await notify({ userId: prod.creator_id as string, type: 'tip', actorId: userId }).catch(() => {});
     return c.json({ url: null, status: 'succeeded' as const });
   }
+  // One in-flight checkout per (buyer, product) — mirrors the unlock guard so a
+  // double-opened checkout can't charge twice (the grant is idempotent, the charge
+  // isn't). A partial unique index backstops the race.
+  const { data: pendingProduct } = await supabaseAdmin
+    .from('tips').select('id')
+    .eq('tipper_id', userId).eq('product_id', id).eq('kind', 'product').eq('status', 'pending')
+    .maybeSingle();
+  if (pendingProduct) throw badRequest('You already have a purchase in progress for this product — finish that checkout, or try again in a few minutes.');
+
   // Live: pending ledger row + checkout (settled by webhook).
   const { data: creator } = await supabaseAdmin.from('profiles').select('stripe_account_id').eq('id', prod.creator_id).maybeSingle();
   if (!creator?.stripe_account_id) throw badRequest('This creator can’t accept payments yet');

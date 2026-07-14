@@ -121,10 +121,32 @@ export function probeVideo(file: File): Promise<{ durationSeconds: number | null
  * return its public URL. The `${userId}/` prefix is what the API checks to
  * confirm you own the image.
  */
+/** Re-encode an image through a canvas to strip EXIF/GPS metadata — phone photos
+ *  embed the shooting location, which on a public post would leak the creator's
+ *  coordinates. Keeps original dimensions; exports JPEG. Falls back to the raw
+ *  file if decoding is unavailable. (Avatars/banners already go through the
+ *  cropper canvas, so only these raw recipe photos needed this.) */
+async function stripImageMetadata(file: File): Promise<Blob> {
+  try {
+    const bitmap = await createImageBitmap(file);
+    const canvas = document.createElement('canvas');
+    canvas.width = bitmap.width;
+    canvas.height = bitmap.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx || !canvas.width) { bitmap.close?.(); return file; }
+    ctx.drawImage(bitmap, 0, 0);
+    bitmap.close?.();
+    const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, 'image/jpeg', 0.9));
+    return blob ?? file;
+  } catch {
+    return file;
+  }
+}
+
 export async function uploadRecipeImage(userId: string, file: File): Promise<string> {
-  const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '');
-  const path = `${userId}/photo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.${ext}`;
-  const { error } = await supabase.storage.from('videos').upload(path, file, { upsert: true, contentType: file.type || 'image/jpeg' });
+  const clean = await stripImageMetadata(file);
+  const path = `${userId}/photo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
+  const { error } = await supabase.storage.from('videos').upload(path, clean, { upsert: true, contentType: 'image/jpeg' });
   if (error) throw error;
   return supabase.storage.from('videos').getPublicUrl(path).data.publicUrl;
 }
