@@ -48,7 +48,10 @@ export function createApp() {
         if (origin === env.WEB_ORIGIN || nativeOrigins.has(origin) || lanOrigin.test(origin) || vercelOrigin.test(origin) || siteOrigin.test(origin)) return origin;
         return env.WEB_ORIGIN;
       },
-      allowHeaders: ['Authorization', 'Content-Type'],
+      // x-admin-unlock carries the admin second-factor token on /admin/* requests;
+      // it must be allowlisted or the browser's CORS preflight blocks every gated
+      // admin call (dashboard would silently show empty/zero data).
+      allowHeaders: ['Authorization', 'Content-Type', 'x-admin-unlock'],
       allowMethods: ['GET', 'POST', 'PATCH', 'DELETE', 'OPTIONS'],
       credentials: true,
     }),
