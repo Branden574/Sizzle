@@ -7,6 +7,7 @@ import { useCook, useDeleteCookLog, useDeleteRecipe, useDrafts, useLikedFeed, us
 import { useSizzle } from '../store';
 import { formatCount } from '../lib/format';
 import { cookShareUrl } from '../lib/share';
+import { useShopping } from '../lib/shopping';
 import { VerifiedBadge } from './VerifiedBadge';
 import { SocialLinks } from './SocialLinks';
 import { BellIcon, BookmarkIcon, GearIcon, HeartIcon, ShareIcon } from './icons';
@@ -33,7 +34,9 @@ export function Profile() {
   const setShowAppSettings = useSizzle((s) => s.setShowAppSettings);
   const setShowAdmin = useSizzle((s) => s.setShowAdmin);
   const setShowAnalytics = useSizzle((s) => s.setShowAnalytics);
+  const setShowShopping = useSizzle((s) => s.setShowShopping);
   const setFollowList = useSizzle((s) => s.setFollowList);
+  const shoppingCount = useShopping((s) => s.items.length);
 
   const { data: me } = useMe();
   const { data: saved } = useSavedFeed();
@@ -128,6 +131,14 @@ export function Profile() {
           style={{ marginTop: 10 }}
         >
           📊 View insights
+        </Button>
+        <Button
+          onClick={() => setShowShopping(true)}
+          variant="outline"
+          fullWidth
+          style={{ marginTop: 10 }}
+        >
+          🛒 Shopping list{shoppingCount > 0 ? ` · ${shoppingCount}` : ''}
         </Button>
         {!me?.verifiedTier && <VerifyButton />}
         <DraftsStrip />
