@@ -35,8 +35,24 @@ interface StripeObj {
   period_end?: number;
   metadata?: StripeMeta;
   subscription_details?: { metadata?: StripeMeta };
-  items?: { data?: Array<{ price?: { unit_amount?: number } }> };
+  /** Newer API versions nest an invoice's subscription metadata + id under
+   *  `parent`; the old top-level `subscription_details`/`subscription` are now
+   *  null. Read both — see subMetaOf()/subIdOf(). */
+  parent?: { subscription_details?: { metadata?: StripeMeta; subscription?: string } };
+  /** current_period_end moved from the subscription onto its ITEMS. */
+  items?: { data?: Array<{ price?: { unit_amount?: number }; current_period_end?: number }> };
 }
+
+/* Field-location shims. Stripe RELOCATED these without breaking the schema, so
+ * the old reads just returned undefined and our guards silently skipped — an
+ * active subscription recorded ZERO earnings, with no error to notice. Read the
+ * new location first, fall back to the old so replayed/older events still work. */
+const subMetaOf = (o: StripeObj): StripeMeta | undefined =>
+  o.parent?.subscription_details?.metadata ?? o.subscription_details?.metadata;
+const subIdOf = (o: StripeObj): string | undefined =>
+  o.parent?.subscription_details?.subscription ?? o.subscription;
+const periodEndOf = (o: StripeObj): number | undefined =>
+  o.items?.data?.[0]?.current_period_end ?? o.current_period_end;
 function mapSubStatus(s?: string): 'active' | 'canceled' | 'past_due' {
   if (s === 'active' || s === 'trialing') return 'active';
   if (s === 'past_due' || s === 'unpaid' || s === 'incomplete') return 'past_due';
@@ -687,7 +703,8 @@ monetize.post('/webhook/stripe', async (c) => {
               stripe_subscription_id: subId,
               price_cents: price,
               status,
-              current_period_end: obj.current_period_end ? new Date(obj.current_period_end * 1000).toISOString() : null,
+              // Lives on the ITEM now, not the subscription (see periodEndOf).
+              current_period_end: (() => { const pe = periodEndOf(obj); return pe ? new Date(pe * 1000).toISOString() : null; })(),
             },
             { onConflict: 'subscriber_id,creator_id' },
           );
@@ -704,7 +721,9 @@ monetize.post('/webhook/stripe', async (c) => {
         // row even if it arrives before customer.subscription.created.
         const invoiceId = obj.id;
         const amount = obj.amount_paid ?? 0;
-        const meta = obj.subscription_details?.metadata;
+        // Nested under `parent` on current API versions — reading the old
+        // top-level path returned undefined and skipped the earning entirely.
+        const meta = subMetaOf(obj);
         // Key the earning by the invoice's payment_intent so a later refund or
         // dispute (which reference the payment_intent, not the invoice id) can
         // reverse it. Fall back to the invoice id when there's no PI (e.g. a
@@ -731,8 +750,10 @@ monetize.post('/webhook/stripe', async (c) => {
             await bumpGoal(meta!.creator_id, amount - feeCents);
             await notify({ userId: meta!.creator_id, type: 'tip', actorId: meta!.subscriber_id, amountCents: amount }).catch(() => {});
           }
-          if (obj.subscription) {
-            await supabaseAdmin.from('subscriptions').update({ status: 'active', ...(obj.period_end ? { current_period_end: new Date(obj.period_end * 1000).toISOString() } : {}) }).eq('stripe_subscription_id', obj.subscription);
+          // Same relocation: the invoice's subscription id is under `parent` now.
+          const subId = subIdOf(obj);
+          if (subId) {
+            await supabaseAdmin.from('subscriptions').update({ status: 'active', ...(obj.period_end ? { current_period_end: new Date(obj.period_end * 1000).toISOString() } : {}) }).eq('stripe_subscription_id', subId);
           }
         }
         break;
