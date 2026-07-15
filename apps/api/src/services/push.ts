@@ -35,6 +35,18 @@ function account(): ServiceAccount | null {
   return cachedAccount;
 }
 
+/**
+ * Why push may not be delivering. Surfaced in /health because this failure is
+ * SILENT by design: a malformed FCM_SERVICE_ACCOUNT makes every send a no-op
+ * while notification rows keep appearing in-app, so the app looks healthy and
+ * nobody notices until someone checks the logs. That happened — a stray
+ * character past the end of the JSON disabled push entirely.
+ */
+export function pushStatus(): 'ok' | 'invalid_service_account' | 'not_configured' {
+  if (!env.FCM_SERVICE_ACCOUNT) return 'not_configured';
+  return account() ? 'ok' : 'invalid_service_account';
+}
+
 function b64url(input: Buffer | string): string {
   return Buffer.from(input).toString('base64').replace(/\+/g, '-').replace(/\//g, '_').replace(/=+$/, '');
 }
