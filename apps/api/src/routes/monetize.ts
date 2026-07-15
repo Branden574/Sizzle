@@ -753,7 +753,13 @@ monetize.post('/webhook/stripe', async (c) => {
           // Same relocation: the invoice's subscription id is under `parent` now.
           const subId = subIdOf(obj);
           if (subId) {
-            await supabaseAdmin.from('subscriptions').update({ status: 'active', ...(obj.period_end ? { current_period_end: new Date(obj.period_end * 1000).toISOString() } : {}) }).eq('stripe_subscription_id', subId);
+            // ONLY status here. We used to also write current_period_end from the
+            // invoice's period_end — but that's the INVOICE's window, not the
+            // subscription's, and on a first invoice it's a zero-length window at
+            // signup (period_start === period_end === now). It overwrote the real
+            // renewal date (a month out) with today, which would expire a fan's
+            // access the moment they paid. customer.subscription.* owns that field.
+            await supabaseAdmin.from('subscriptions').update({ status: 'active' }).eq('stripe_subscription_id', subId);
           }
         }
         break;
