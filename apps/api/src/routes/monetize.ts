@@ -786,14 +786,23 @@ monetize.post('/onboard', requireAuth, requireNotBanned, rateLimit({ windowMs: 6
     return c.json({ url: null, status: 'active' as const });
   }
 
-  let accountId = me.stripe_account_id as string | null;
-  if (!accountId) {
-    const { data: auth } = await supabaseAdmin.auth.admin.getUserById(userId);
-    accountId = await createConnectAccount(auth?.user?.email ?? null);
-    await supabaseAdmin.from('profiles').update({ stripe_account_id: accountId, monetization_status: 'pending' }).eq('id', userId);
+  // Stripe failures here used to bubble up as a bare 500 "Something went wrong",
+  // which told the creator nothing and hid the real cause (a Stripe 400) behind
+  // the generic handler. Surface an actionable message; log the detail server-side.
+  try {
+    let accountId = me.stripe_account_id as string | null;
+    if (!accountId) {
+      const { data: auth } = await supabaseAdmin.auth.admin.getUserById(userId);
+      accountId = await createConnectAccount(auth?.user?.email ?? null);
+      await supabaseAdmin.from('profiles').update({ stripe_account_id: accountId, monetization_status: 'pending' }).eq('id', userId);
+    }
+    const url = await createOnboardingLink(accountId);
+    return c.json({ url, status: 'pending' as const });
+  } catch (err) {
+    const detail = (err as Error).message;
+    console.error('[monetize] payout onboarding failed:', detail);
+    throw badRequest(`Could not start payout setup — ${detail}`);
   }
-  const url = await createOnboardingLink(accountId);
-  return c.json({ url, status: 'pending' as const });
 });
 
 /** GET /monetize/status — payout state (refreshes pending Stripe accounts). */

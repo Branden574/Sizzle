@@ -101,8 +101,13 @@ export const paymentsProvider: 'stripe' | 'mock' = stripeConfigured ? 'stripe' :
  * (`merchant` would only be needed if we passed on_behalf_of.)
  */
 export async function createConnectAccount(email: string | null): Promise<string> {
+  // contact_email is MANDATORY whenever configuration.recipient is supplied —
+  // verified against the live API, which rejects with "If configuration.recipient
+  // is supplied, the Account must have a contact email". Fail with something the
+  // creator can act on rather than letting Stripe return an opaque 400.
+  if (!email) throw new Error('We need an email address on your account before you can set up payouts.');
   const acct = await stripeV2<{ id: string }>('/core/accounts', {
-    ...(email ? { contact_email: email } : {}),
+    contact_email: email,
     // Replaces v1 `type: 'express'` — gives creators the Express hosted dashboard
     // and is what makes /v1/accounts/{id}/login_links eligible below.
     dashboard: 'express',
