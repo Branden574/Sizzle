@@ -301,7 +301,10 @@ function SubscribeTiers({ cookId, basePriceCents }: { cookId: string; basePriceC
           <Button key={t.id} onClick={() => go(t.id)} disabled={subscribe.isPending} className="sz-press" style={{ ...pressVars(0.98), textAlign: 'left', border: '1px solid var(--line)', borderRadius: 16, background: 'var(--surface)', padding: '13px 16px', cursor: 'pointer', display: 'flex', alignItems: 'center', gap: 12 }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)' }}>{t.name}</div>
-              {t.perks && <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 2 }}>{t.perks}</div>}
+              {/* Perks are creator-authored and arbitrarily long. `.sz-button` sets
+                  white-space:nowrap and it inherits here, so without the override a
+                  wordy tier blows the card out sideways. */}
+              {t.perks && <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 2, lineHeight: 1.35, whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{t.perks}</div>}
             </div>
             <div style={{ flex: 'none', padding: '7px 14px', borderRadius: 12, background: `linear-gradient(135deg,${accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 14, fontWeight: 800 }}>${(t.priceCents / 100).toFixed(2)}/mo</div>
           </Button>

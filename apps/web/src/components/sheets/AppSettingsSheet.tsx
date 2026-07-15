@@ -130,7 +130,9 @@ function MenuRow({ icon, title, sub, onClick }: { icon: ReactNode; title: string
       <IconChip>{icon}</IconChip>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</div>
-        <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 2, lineHeight: 1.35 }}>{sub}</div>
+        {/* whiteSpace:'normal' undoes `.sz-button`'s nowrap, which inherits down here
+            and otherwise stops this two-line sub from ever wrapping. */}
+        <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 2, lineHeight: 1.35, whiteSpace: 'normal' }}>{sub}</div>
       </div>
       <Chevron />
     </Button>

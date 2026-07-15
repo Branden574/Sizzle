@@ -78,7 +78,9 @@ export function NotificationsSheet() {
           </Button>
         </div>
 
-        <div style={{ flex: 1, overflowY: 'auto', padding: '8px 16px 24px' }}>
+        {/* overflowX hidden is a backstop: nothing in this list should ever be able
+            to scroll it sideways, whatever a user names themselves or their recipe. */}
+        <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '8px 16px 24px' }}>
           {isLoading && <div style={{ color: 'var(--text-faint-2)', fontSize: 14, padding: 16 }}>Loading…</div>}
           {!isLoading && list.length === 0 && (
             <div style={{ textAlign: 'center', color: 'var(--text-faint-2)', fontSize: 15, padding: '50px 30px' }}>No activity yet. Likes, comments and new followers show up here.</div>
@@ -87,8 +89,13 @@ export function NotificationsSheet() {
             <div key={n.id} style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 8, background: n.read ? 'none' : 'rgba(255,90,54,.06)', borderRadius: 14, padding: '4px 6px' }}>
               <Button onClick={() => open(n)} style={{ flex: 1, minWidth: 0, display: 'flex', alignItems: 'center', gap: 12, background: 'none', border: 'none', padding: '8px 4px', cursor: 'pointer', textAlign: 'left' }}>
                 <div style={{ width: 44, height: 44, flex: 'none', borderRadius: '50%', background: n.actor.avatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Instrument Serif',serif", fontSize: 17, color: '#fff' }}>{n.actor.init}</div>
-                <div style={{ flex: 1 }}>
-                  <div style={{ fontSize: 14.5, color: 'var(--text)', lineHeight: 1.4 }}>{text(n)}</div>
+                {/* whiteSpace:'normal' is load-bearing: `.sz-button` sets white-space:nowrap
+                    (right for a one-line label, wrong here) and it INHERITS down into this
+                    copy. Without the override, long text (a display name + a quoted recipe
+                    title) can't wrap, so it runs out to its full single-line width and
+                    shoves the avatar off-frame. overflowWrap covers unbroken tokens. */}
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div style={{ fontSize: 14.5, color: 'var(--text)', lineHeight: 1.4, overflowWrap: 'anywhere', whiteSpace: 'normal' }}>{text(n)}</div>
                   <div style={{ fontSize: 12.5, color: 'var(--text-faint-2)', marginTop: 2 }}>{n.time}</div>
                 </div>
                 {!n.read && <div style={{ width: 8, height: 8, borderRadius: '50%', background: 'var(--accent,#ff5a36)', flex: 'none' }} />}
