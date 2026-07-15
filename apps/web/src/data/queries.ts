@@ -3,6 +3,7 @@ import type { AdminAppealDTO, AdminContentReportDTO, AdminLogDTO, AdminReportGro
 import { useAuth } from '../auth/useAuth';
 import { useSizzle } from '../store';
 import { apiGet, apiSend, setAdminUnlockToken } from '../lib/api';
+import { syncBadge } from '../lib/badge';
 import { onExternalBrowserClosed } from '../lib/native';
 import { removeOffline, saveOffline } from '../lib/offline';
 
@@ -859,7 +860,12 @@ export function useMarkNotificationsRead() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: () => apiSend('POST', '/me/notifications/read'),
-    onSuccess: () => void qc.invalidateQueries({ queryKey: ['notifications'] }),
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: ['notifications'] });
+      // Re-sync rather than zero it: unread DMs also feed the badge, so the
+      // right number after reading notifications is often not 0.
+      void syncBadge();
+    },
   });
 }
 

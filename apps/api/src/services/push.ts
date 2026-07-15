@@ -1,6 +1,7 @@
 import { createSign } from 'node:crypto';
 import { supabaseAdmin } from '../lib/supabase';
 import { env } from '../env';
+import { unreadBadgeCount } from './unread';
 import type { NotificationKind } from '@sizzle/shared';
 
 /**
@@ -139,6 +140,27 @@ async function deleteToken(token: string): Promise<void> {
 }
 
 /**
+ * The badge to stamp on an outgoing push: everything currently awaiting the user.
+ *
+ * `aps.badge` SETS an absolute value — APNs has no increment — so this must be
+ * the true total, not a flag. It used to be a hardcoded `1`, which pinned the
+ * badge at "1" for the life of the install because nothing ever sent a lower
+ * number.
+ *
+ * Fails open to 1, NEVER 0: if the count query breaks we degrade to the old
+ * "something is waiting" lamp. Returning 0 on an error would silently erase a
+ * badge the user genuinely needed to see.
+ */
+async function badgeFor(userId: string): Promise<number> {
+  try {
+    return await unreadBadgeCount(userId);
+  } catch (err) {
+    console.error('[push] badge count failed, falling back to 1:', (err as Error).message);
+    return 1;
+  }
+}
+
+/**
  * Deliver a push for a freshly-recorded notification. Safe no-op when FCM isn't
  * configured, when the recipient turned push off, or when they have no devices.
  * Never throws — push is best-effort and must not break the request that
@@ -168,16 +190,18 @@ export async function sendPushForNotification(opts: {
     const { data: tokens } = await supabaseAdmin.from('push_tokens').select('token').eq('user_id', opts.userId);
     if (!tokens || tokens.length === 0) return;
 
-    // Actor's display name for the copy.
-    let who = 'Someone';
-    if (opts.actorId) {
-      const { data: actor } = await supabaseAdmin
-        .from('profiles')
-        .select('display_name, handle')
-        .eq('id', opts.actorId)
-        .single();
-      who = actor?.display_name || (actor?.handle ? `@${actor.handle}` : 'Someone');
-    }
+    // Actor's display name for the copy, and the badge total. Run together —
+    // the badge count is two reads, and serialising them would show up as
+    // latency on every push. notify.ts writes the notifications row BEFORE
+    // calling us, so the count already includes the event being announced.
+    const [actorRes, badge] = await Promise.all([
+      opts.actorId
+        ? supabaseAdmin.from('profiles').select('display_name, handle').eq('id', opts.actorId).single()
+        : Promise.resolve({ data: null }),
+      badgeFor(opts.userId),
+    ]);
+    const actor = actorRes.data as { display_name?: string; handle?: string } | null;
+    const who = actor?.display_name || (actor?.handle ? `@${actor.handle}` : 'Someone');
     // Pre-formatted here so copyFor stays presentation-only.
     const amount = typeof opts.amountCents === 'number' ? `$${(opts.amountCents / 100).toFixed(2)}` : null;
     const { title, body } = copyFor(opts.type, who, amount);
@@ -196,8 +220,12 @@ export async function sendPushForNotification(opts: {
             recipeId: opts.recipeId ?? '',
             actorId: opts.actorId ?? '',
           },
-          apns: { payload: { aps: { sound: 'default', badge: 1 } } },
-          android: { notification: { sound: 'default' }, priority: 'high' as const },
+          apns: { payload: { aps: { sound: 'default', badge } } },
+          // `notificationCount` is the FCM v1 schema's spelling (proto3 JSON would
+          // likely also take notification_count, but a rejected payload comes back
+          // as INVALID_ARGUMENT — see the prune path below for why that must not
+          // be left to chance). Drives the launcher badge on Android.
+          android: { notification: { sound: 'default', notificationCount: badge }, priority: 'high' as const },
         };
         const res = await fetch(url, {
           method: 'POST',
@@ -206,10 +234,19 @@ export async function sendPushForNotification(opts: {
         });
         if (!res.ok) {
           const text = await res.text().catch(() => '');
-          // 404 / UNREGISTERED / invalid-argument → the token is dead; prune it
-          // so we stop trying. Anything else we just log.
-          if (res.status === 404 || /UNREGISTERED|INVALID_ARGUMENT/i.test(text)) {
+          // Prune ONLY on proof the token is dead (404 / UNREGISTERED).
+          //
+          // INVALID_ARGUMENT used to prune here too, and that was dangerous: FCM
+          // returns it for a MALFORMED PAYLOAD, not a dead token. One bad field
+          // in the message we build would have silently deleted the token of
+          // every user the push touched — unrecoverable without them
+          // reinstalling — and the symptom (push goes quiet) looks nothing like
+          // the cause. A payload bug is our bug; it must never cost a user their
+          // registration. Loud log instead.
+          if (res.status === 404 || /UNREGISTERED/i.test(text)) {
             await deleteToken(token);
+          } else if (/INVALID_ARGUMENT/i.test(text)) {
+            console.error('[push] FCM rejected the payload (token kept — fix the message shape):', res.status, text);
           } else {
             console.error('[push] send failed:', res.status, text);
           }
@@ -264,7 +301,10 @@ export async function sendDirectPush(opts: {
         });
         if (!res.ok) {
           const text = await res.text().catch(() => '');
-          if (res.status === 404 || /UNREGISTERED|INVALID_ARGUMENT/i.test(text)) await deleteToken(token);
+          // Same reasoning as sendPushForNotification: only a dead token gets
+          // pruned. INVALID_ARGUMENT means WE sent a bad payload.
+          if (res.status === 404 || /UNREGISTERED/i.test(text)) await deleteToken(token);
+          else console.error('[push] direct send failed:', res.status, text);
         }
       }),
     );

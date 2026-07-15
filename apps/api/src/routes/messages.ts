@@ -10,6 +10,7 @@ import { relativeTime } from '../lib/format';
 import { cookSummary, loadBlockedIds, type ProfileRow } from '../mappers';
 import { moderate } from '../services/moderation';
 import { sendPushForNotification } from '../services/push';
+import { clearedHidden, isUnread, unreadConversationCount, type ConvRow } from '../services/unread';
 import type { AppEnv } from '../types';
 
 export const messages = new Hono<AppEnv>();
@@ -17,31 +18,10 @@ export const messages = new Hono<AppEnv>();
 /** A 1:1 conversation is stored once, keyed on the ordered pair (user_a < user_b). */
 const canonical = (x: string, y: string): [string, string] => (x < y ? [x, y] : [y, x]);
 
-interface ConvRow {
-  id: string;
-  user_a: string;
-  user_b: string;
-  a_last_read_at: string;
-  b_last_read_at: string;
-  a_cleared_at: string | null;
-  b_cleared_at: string | null;
-  last_message_at: string | null;
-  last_message_text: string | null;
-  last_message_sender_id: string | null;
-}
-
-const isUnread = (r: ConvRow, viewer: string): boolean => {
-  const myLastRead = r.user_a === viewer ? r.a_last_read_at : r.b_last_read_at;
-  return !!r.last_message_at && r.last_message_at > myLastRead && r.last_message_sender_id !== viewer;
-};
-
-// A conversation the viewer "deleted": hidden from their inbox until the other
-// person sends something newer than the moment they cleared it. (last_message_at
-// and *_cleared_at are both JS-ISO strings, so a lexical compare is exact.)
-const clearedHidden = (r: ConvRow, viewer: string): boolean => {
-  const cleared = r.user_a === viewer ? r.a_cleared_at : r.b_cleared_at;
-  return !!cleared && (!r.last_message_at || r.last_message_at <= cleared);
-};
+// ConvRow / isUnread / clearedHidden now live in services/unread.ts so the inbox,
+// GET /messages/unread-count and the app-icon badge share ONE definition of
+// "unread" — two implementations would drift, and a badge that disagrees with the
+// inbox is exactly the bug that sends users hunting for a message that isn't there.
 
 /** GET /messages — the viewer's conversation inbox (newest activity first). */
 messages.get('/', requireAuth, async (c) => {
@@ -84,23 +64,7 @@ messages.get('/', requireAuth, async (c) => {
  *  (excluding blocked + banned counterparties, exactly like the inbox, so the
  *  badge can never outlive a hidden conversation). */
 messages.get('/unread-count', requireAuth, async (c) => {
-  const userId = c.get('userId')!;
-  const { data: rows } = await supabaseAdmin
-    .from('conversations')
-    .select('id, user_a, user_b, a_last_read_at, b_last_read_at, a_cleared_at, b_cleared_at, last_message_at, last_message_text, last_message_sender_id')
-    .or(`user_a.eq.${userId},user_b.eq.${userId}`)
-    .not('last_message_at', 'is', null);
-  const unread = ((rows ?? []) as ConvRow[]).filter((r) => isUnread(r, userId) && !clearedHidden(r, userId));
-  if (unread.length === 0) return c.json({ count: 0 });
-
-  const blocked = await loadBlockedIds(supabaseAdmin, userId);
-  const otherIds = [...new Set(unread.map((r) => (r.user_a === userId ? r.user_b : r.user_a)))];
-  const { data: profiles } = await supabaseAdmin.from('profiles').select('id, banned').in('id', otherIds);
-  const banned = new Set((profiles ?? []).filter((p) => p.banned).map((p) => p.id as string));
-  const count = unread.filter((r) => {
-    const other = r.user_a === userId ? r.user_b : r.user_a;
-    return !blocked.has(other) && !banned.has(other);
-  }).length;
+  const count = await unreadConversationCount(c.get('userId')!);
   return c.json({ count });
 });
 

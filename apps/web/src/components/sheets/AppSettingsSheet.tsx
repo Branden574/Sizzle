@@ -7,6 +7,7 @@ import { clearOffline } from '../../lib/offline';
 import { apiGet, apiSend } from '../../lib/api';
 import { queryClient, useBlockedList, useMe, useSubmitSupportTicket, useToggleBlock, useUpdateNotifPref, useUpdateProfile } from '../../data/queries';
 import { enablePush, disablePush } from '../../lib/push';
+import { clearBadge, syncBadge } from '../../lib/badge';
 import { clearPasscode } from '../../lib/applock';
 import { PasscodeSetup } from '../PasscodeLock';
 import { showCreatorMoney } from '../../lib/native';
@@ -202,6 +203,12 @@ export function AppSettingsSheet() {
       // for OS permission the first time; on the web build both are no-ops.
       if (next) await enablePush();
       else await disablePush();
+      // Keep the app-icon badge honest with the switch: turning push off must
+      // take the badge down with it (the OS badge permission survives, so a
+      // stale count would otherwise sit on the icon), and turning it back on
+      // restores the real count.
+      if (next) void syncBadge();
+      else await clearBadge();
       void queryClient.invalidateQueries({ queryKey: ['me'] });
     } catch {
       setPushLocal(!next); // revert on failure

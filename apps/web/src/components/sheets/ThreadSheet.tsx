@@ -3,6 +3,7 @@ import { Button } from '../controls';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRequireAuth } from '../../auth/useRequireAuth';
 import { useDeleteConversation, useSendMessage, useThread } from '../../data/queries';
+import { syncBadge } from '../../lib/badge';
 import { useSizzle } from '../../store';
 import { theme } from '../../theme';
 import { ChevronLeftIcon, ShareIcon, TrashIcon } from '../icons';
@@ -17,7 +18,7 @@ export function ThreadSheet() {
   const setOpenCook = useSizzle((s) => s.setOpenCook);
   const requireAuth = useRequireAuth();
 
-  const { data: thread, isLoading } = useThread(threadWith);
+  const { data: thread, isLoading, isFetchedAfterMount } = useThread(threadWith);
   const send = useSendMessage(threadWith ?? '');
   const deleteConv = useDeleteConversation();
   const [draft, setDraft] = useState('');
@@ -43,6 +44,21 @@ export function ThreadSheet() {
     void qc.invalidateQueries({ queryKey: ['messages-unread'] });
     void qc.invalidateQueries({ queryKey: ['conversations'] });
   }, [thread?.conversationId, qc]);
+
+  // DMs feed the app-icon badge, and they're push-only (no notifications row), so
+  // without this a DM you just read leaves the badge lit.
+  //
+  // Deliberately NOT keyed on conversationId: that's constant for as long as the
+  // thread is open, so it would miss the two cases that matter. `isFetchedAfterMount`
+  // waits for the SERVER round-trip that actually marks the thread read — keying off
+  // cached data would sync the badge before the read landed and never re-fire.
+  // `lastIncomingId` catches a message arriving while you're already reading, which
+  // the 4s poll marks read without conversationId ever changing.
+  const lastIncomingId = [...msgs].reverse().find((m) => !m.fromMe)?.id ?? null;
+  useEffect(() => {
+    if (!isFetchedAfterMount) return;
+    void syncBadge();
+  }, [isFetchedAfterMount, lastIncomingId]);
 
   if (!threadWith) return null;
   const other = thread?.otherUser;

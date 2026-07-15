@@ -1,6 +1,7 @@
 import { FirebaseMessaging } from '@capacitor-firebase/messaging';
 import { apiSend } from './api';
 import { isNative, platform } from './native';
+import { syncBadge } from './badge';
 import { useSizzle } from '../store';
 
 /**
@@ -66,6 +67,9 @@ function bindListeners(): void {
   // User tapped a notification — deep-link to the relevant surface.
   void FirebaseMessaging.addListener('notificationActionPerformed', (event) => {
     const data = (event?.notification?.data ?? {}) as { type?: string; recipeId?: string; actorId?: string };
+    // Tapping in from the background doesn't always cross an appStateChange we
+    // see, so re-sync here rather than rely on it.
+    void syncBadge();
     const store = useSizzle.getState();
     if (data.type === 'message' && data.actorId) store.setThreadWith(data.actorId);
     else if (data.recipeId) store.setOpenRecipe(data.recipeId);

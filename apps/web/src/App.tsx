@@ -50,6 +50,7 @@ import { apiSend } from './lib/api';
 import { useOnlineStatus } from './lib/useOnlineStatus';
 import { isNative } from './lib/native';
 import { enablePush, syncPushRegistration, disablePush } from './lib/push';
+import { syncBadge } from './lib/badge';
 import { PasscodeLock } from './components/PasscodeLock';
 import { DemoContentNotice, useDemoNotice } from './components/DemoContentNotice';
 import { DesktopSidebar } from './components/DesktopSidebar';
@@ -186,6 +187,11 @@ export default function App() {
         localStorage.setItem('sz.pushPrompted', '1');
         void enablePush();
       }
+      // Badge on COLD LAUNCH. appStateChange (below) only fires on transitions,
+      // and on a cold start iOS has already made the app active before this
+      // bundle even runs — so without this, launching straight from a push
+      // leaves the badge stuck at whatever the push set it to.
+      void syncBadge();
     } else if (authStatus === 'anon' || authStatus === 'guest') {
       void disablePush();
     }
@@ -246,6 +252,10 @@ export default function App() {
     if (!isNative) return;
     const handle = CapApp.addListener('appStateChange', ({ isActive }) => {
       if (isActive && useSizzle.getState().appLockEnabled) setAppUnlocked(false);
+      // Reconcile the badge on every foreground. This is the catch-all: it covers
+      // reads that happened on another device, pushes that arrived while
+      // backgrounded, and anything a per-action sync missed.
+      if (isActive) void syncBadge();
     });
     return () => { void handle.then((l) => l.remove()); };
   }, [setAppUnlocked]);

@@ -11,6 +11,7 @@ import { normalizeLink, PROFILE_LINK_KEYS } from '../services/links';
 import { CREATOR_FOLLOWER_REQ, CREATOR_VIEW_REQ, type CreatorStatus } from '@sizzle/shared';
 import { systemNotify } from '../services/notify';
 import { moderateImages } from '../services/moderation';
+import { unreadBadgeCount } from '../services/unread';
 import { env } from '../env';
 import type { AppEnv } from '../types';
 
@@ -604,6 +605,19 @@ me.post('/notifications/read', async (c) => {
   const userId = c.get('userId')!;
   await supabaseAdmin.from('notifications').update({ read: true }).eq('user_id', userId).eq('read', false);
   return c.json({ ok: true });
+});
+
+/** GET /me/badge-count — what the app-icon badge should read right now.
+ *  The native app syncs the badge to this on foreground, on launch, and after
+ *  anything that marks something read. Server-owned on purpose: the client
+ *  can't see DM unread and notification unread as one number. */
+me.get('/badge-count', async (c) => {
+  // Deliberately unguarded: if the count fails, this must 5xx rather than answer
+  // 0. syncBadge() swallows the error and leaves the badge alone, which is the
+  // right degradation — returning 0 would confidently erase a badge the user
+  // still needs.
+  const count = await unreadBadgeCount(c.get('userId')!);
+  return c.json({ count });
 });
 
 const linkOrNull = z.string().trim().max(300).nullable().optional();

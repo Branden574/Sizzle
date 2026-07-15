@@ -6,6 +6,7 @@ import { supabase } from '../lib/supabase';
 import { isNative } from '../lib/native';
 import { nativeSignInOAuth } from '../lib/nativeOAuth';
 import { disablePush } from '../lib/push';
+import { clearBadge } from '../lib/badge';
 import { clearPasscode } from '../lib/applock';
 import { useSizzle } from '../store';
 
@@ -162,6 +163,9 @@ export const useAuth = create<AuthState>((set, get) => ({
     // valid. If we signed out first, the DELETE /me/push-token would 401 and the
     // token row would leak — a logged-out device would keep receiving pushes.
     await disablePush().catch(() => {});
+    // Wipe the icon badge too — it's native state that outlives the session, so
+    // without this the next account inherits the previous user's count.
+    await clearBadge();
     await supabase.auth.signOut();
     // Drop the app-lock passcode so it can't carry over to the next account.
     await clearPasscode();
