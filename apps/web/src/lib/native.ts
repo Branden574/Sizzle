@@ -38,3 +38,18 @@ export async function openExternal(url: string): Promise<void> {
   if (isNative) await Browser.open({ url, presentationStyle: 'fullscreen' });
   else window.open(url, '_blank', 'noopener');
 }
+
+/**
+ * Fires when the in-app browser sheet is dismissed. Returns an unsubscribe fn.
+ *
+ * Needed because the sheet is presented OVER the WKWebView rather than
+ * backgrounding it, so the page underneath may never see visibilitychange or
+ * focus when the user comes back — leaving the app showing stale state until it's
+ * force-quit. `browserFinished` is the dependable signal on native. No-op on web,
+ * where visibilitychange/focus already work.
+ */
+export function onExternalBrowserClosed(fn: () => void): () => void {
+  if (!isNative) return () => {};
+  const handle = Browser.addListener('browserFinished', fn);
+  return () => { void handle.then((h) => h.remove()).catch(() => {}); };
+}

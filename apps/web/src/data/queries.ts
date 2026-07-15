@@ -3,6 +3,7 @@ import type { AdminAppealDTO, AdminContentReportDTO, AdminLogDTO, AdminReportGro
 import { useAuth } from '../auth/useAuth';
 import { useSizzle } from '../store';
 import { apiGet, apiSend, setAdminUnlockToken } from '../lib/api';
+import { onExternalBrowserClosed } from '../lib/native';
 import { removeOffline, saveOffline } from '../lib/offline';
 
 export const queryClient = new QueryClient({
@@ -39,18 +40,30 @@ export function useTipConfig(enabled: boolean) {
   return useQuery({ queryKey: ['monetize', 'config'], queryFn: () => apiGet<TipConfig>('/monetize/config'), enabled, staleTime: 3_600_000 });
 }
 
-/** After sending the user to an external checkout (Stripe) in a new tab, refresh
- *  the affected queries once they return to the app — so a freshly unlocked recipe
- *  or new subscription stops showing as locked without a manual reload. One-shot. */
+/** After sending the user to an external checkout / onboarding (Stripe), refresh
+ *  the affected queries once they return — so a freshly unlocked recipe, a new
+ *  subscription, or finished payout setup stops showing stale state without a
+ *  manual reload. One-shot.
+ *
+ *  Listens on BOTH paths deliberately: web gets visibilitychange/focus, but on
+ *  native the browser sheet is presented over the WKWebView and may never fire
+ *  either on dismiss — so we also listen for the Capacitor `browserFinished`
+ *  event. Without that, a native user finishing Stripe has to force-quit the app
+ *  to see the result. */
 function invalidateOnReturn(qc: QueryClient, queryKeys: readonly (readonly unknown[])[]) {
-  const handler = () => {
-    if (document.visibilityState !== 'visible') return;
+  let done = false;
+  const run = () => {
+    if (done) return;
+    done = true;
     for (const key of queryKeys) void qc.invalidateQueries({ queryKey: key });
-    document.removeEventListener('visibilitychange', handler);
-    window.removeEventListener('focus', handler);
+    document.removeEventListener('visibilitychange', onVisible);
+    window.removeEventListener('focus', run);
+    unsubscribeNative();
   };
-  document.addEventListener('visibilitychange', handler);
-  window.addEventListener('focus', handler);
+  const onVisible = () => { if (document.visibilityState === 'visible') run(); };
+  document.addEventListener('visibilitychange', onVisible);
+  window.addEventListener('focus', run);
+  const unsubscribeNative = onExternalBrowserClosed(run);
 }
 
 /** Send a tip. Stripe → returns a checkout URL to open; mock → settles instantly. */
@@ -83,9 +96,13 @@ export function useStartOnboarding() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: (v?: { acceptTerms?: boolean }) => apiSend<{ url: string | null; status: MonetizationStatus }>('POST', '/monetize/onboard', v ?? {}),
-    onSuccess: () => {
+    onSuccess: (res) => {
       void qc.invalidateQueries({ queryKey: ['monetize'] });
       void qc.invalidateQueries({ queryKey: keys.me });
+      // Stripe's hosted onboarding leaves the app; its return_url lands on the web
+      // app inside the browser sheet, so nothing here notices the user came back.
+      // Refresh when they do, or payouts read as unfinished until a force-quit.
+      if (res.url) invalidateOnReturn(qc, [['monetize'], keys.me]);
     },
   });
 }
