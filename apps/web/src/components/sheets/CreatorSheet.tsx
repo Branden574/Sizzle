@@ -71,9 +71,22 @@ export function CreatorSheet() {
                 <Metric value={formatCount(me?.counts.followers ?? 0)} label="Followers" />
               </div>
               <Button variant="primary" fullWidth onClick={openDashboard} style={{ marginTop: 4 }}>Open Creator dashboard</Button>
-              <div style={{ fontSize: 12, color: 'var(--text-faint-2)', textAlign: 'center', marginTop: 12, lineHeight: 1.5 }}>
-                {payout?.status === 'active' ? 'Payouts are set up.' : 'Finish payout setup in the dashboard to receive earnings.'}
-              </div>
+              {/* An active Creator without finished payouts is a real state (admin
+                  grant, or an abandoned Stripe form — its links expire in ~5 min).
+                  Give them a working way back, not a dead pointer to the dashboard. */}
+              {payout?.status !== 'active' ? (
+                <>
+                  {err && <div style={{ marginTop: 12 }}><ErrText text={err} /></div>}
+                  <Button fullWidth onClick={becomeCreator} disabled={onboard.isPending} variant="outline" style={{ marginTop: 10 }}>
+                    {onboard.isPending ? 'Opening…' : payout?.status === 'pending' ? 'Continue payout setup' : 'Set up payouts'}
+                  </Button>
+                  <div style={{ fontSize: 12, color: 'var(--text-faint-2)', textAlign: 'center', marginTop: 10, lineHeight: 1.5 }}>
+                    You won't receive earnings until payouts are set up.
+                  </div>
+                </>
+              ) : (
+                <div style={{ fontSize: 12, color: 'var(--text-faint-2)', textAlign: 'center', marginTop: 12, lineHeight: 1.5 }}>Payouts are set up.</div>
+              )}
             </>
           ) : status === 'suspended' ? (
             <Hero icon="⏸️" title="Creator account under review" sub="Your Creator status is paused while we review your account. You'll be notified when it's restored." />

@@ -151,18 +151,24 @@ function Earnings() {
         </div>
       ) : st !== 'active' ? (
         <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 16, padding: 16 }}>
-          <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)' }}>Get paid for your cooking</div>
+          <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)' }}>{st === 'pending' ? 'Finish setting up payouts' : 'Get paid for your cooking'}</div>
           <div style={{ fontSize: 13, color: 'var(--text-faint)', margin: '4px 0 10px', lineHeight: 1.5 }}>
-            Turn on payouts to earn from monthly subscriptions, premium recipes, and one-off support. You keep {100 - PLATFORM_FEE_PCT}% of everything.
+            {st === 'pending'
+              ? "You started payout setup but didn't finish. Stripe's setup links expire after a few minutes — tap below and we'll open a fresh one right where you left off."
+              : <>Turn on payouts to earn from monthly subscriptions, premium recipes, and one-off support. You keep {100 - PLATFORM_FEE_PCT}% of everything.</>}
           </div>
-          <div style={{ fontSize: 12.5, color: 'var(--text-faint-2)', lineHeight: 1.55, marginBottom: 12 }}>{PLATFORM_FEE_RATIONALE}</div>
+          {st !== 'pending' && <div style={{ fontSize: 12.5, color: 'var(--text-faint-2)', lineHeight: 1.55, marginBottom: 12 }}>{PLATFORM_FEE_RATIONALE}</div>}
           {onboardErr && <div style={{ fontSize: 12.5, fontWeight: 600, color: '#d8521e', background: 'rgba(216,82,30,.1)', borderRadius: 10, padding: '9px 12px', marginBottom: 10 }}>{onboardErr}</div>}
+          {/* Must stay ENABLED while `pending`: Stripe's onboarding links expire in
+              ~5 min, so anyone who closes the sheet early lands here — and this is
+              the only way back. POST /monetize/onboard reuses the existing
+              stripe_account_id and mints a fresh link, so tapping it resumes. */}
           <Button
             onClick={startPayouts}
-            disabled={onboard.isPending || st === 'pending'}
+            disabled={onboard.isPending}
             style={{ width: '100%', height: 48, border: 'none', borderRadius: 14, background: `linear-gradient(135deg,${theme.accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 800, cursor: 'pointer', opacity: onboard.isPending ? 0.7 : 1 }}
           >
-            {st === 'pending' ? 'Finishing setup… (complete the Stripe form)' : onboard.isPending ? 'Starting…' : 'Set up payouts'}
+            {onboard.isPending ? 'Opening…' : st === 'pending' ? 'Continue payout setup' : 'Set up payouts'}
           </Button>
         </div>
       ) : (
