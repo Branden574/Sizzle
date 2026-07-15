@@ -196,7 +196,7 @@ monetize.post('/tip', requireAuth, requireNotBanned, rateLimit({ windowMs: 60_00
     .from('tips')
     .update({ status: 'succeeded', succeeded_at: new Date().toISOString(), provider_ref: `mock_${tip.id}` })
     .eq('id', tip.id);
-  await notify({ userId: creatorId, type: 'tip', actorId: userId, recipeId: tipRecipeId }).catch(() => {});
+  await notify({ userId: creatorId, type: 'tip', actorId: userId, recipeId: tipRecipeId, amountCents }).catch(() => {});
   return c.json({ url: null, status: 'succeeded' as const });
 });
 
@@ -259,7 +259,7 @@ monetize.post('/unlock', requireAuth, requireNotBanned, rateLimit({ windowMs: 60
   // Mock: settle + grant access instantly.
   await supabaseAdmin.from('tips').update({ status: 'succeeded', succeeded_at: new Date().toISOString(), provider_ref: `mock_${ledger.id}` }).eq('id', ledger.id);
   await supabaseAdmin.from('recipe_unlocks').upsert({ user_id: userId, recipe_id: recipeId }, { onConflict: 'user_id,recipe_id', ignoreDuplicates: true });
-  await notify({ userId: rec.cook_id as string, type: 'tip', actorId: userId, recipeId }).catch(() => {});
+  await notify({ userId: rec.cook_id as string, type: 'tip', actorId: userId, recipeId, amountCents }).catch(() => {});
   return c.json({ url: null, status: 'succeeded' as const });
 });
 
@@ -406,7 +406,7 @@ monetize.post('/products/:id/buy', requireAuth, requireNotBanned, rateLimit({ wi
     await supabaseAdmin.from('product_purchases').upsert({ user_id: userId, product_id: id }, { onConflict: 'user_id,product_id' });
     await supabaseAdmin.from('tips').insert({ tipper_id: userId, creator_id: prod.creator_id, product_id: id, amount_cents: priceCents, fee_cents: feeCents, net_cents: priceCents - feeCents, provider: 'mock', status: 'succeeded', succeeded_at: new Date().toISOString(), kind: 'product' });
     await bumpGoal(prod.creator_id as string, priceCents - feeCents);
-    await notify({ userId: prod.creator_id as string, type: 'tip', actorId: userId }).catch(() => {});
+    await notify({ userId: prod.creator_id as string, type: 'tip', actorId: userId, amountCents: priceCents }).catch(() => {});
     return c.json({ url: null, status: 'succeeded' as const });
   }
   // One in-flight checkout per (buyer, product) — mirrors the unlock guard so a
@@ -543,7 +543,7 @@ monetize.post('/subscribe', requireAuth, requireNotBanned, rateLimit({ windowMs:
     await supabaseAdmin.from('tips').insert({ tipper_id: userId, creator_id: creatorId, amount_cents: priceCents, fee_cents: feeCents, net_cents: priceCents - feeCents, provider: 'mock', status: 'succeeded', succeeded_at: new Date().toISOString(), kind: 'subscription' });
     await bumpGoal(creatorId, priceCents - feeCents);
     await sendWelcomeDm(creatorId, userId);
-    await notify({ userId: creatorId, type: 'tip', actorId: userId }).catch(() => {});
+    await notify({ userId: creatorId, type: 'tip', actorId: userId, amountCents: priceCents }).catch(() => {});
     return c.json({ url: null, status: 'active' as const });
   }
   if (!creator.stripe_account_id) throw badRequest('This creator has not finished payout setup');
@@ -581,7 +581,7 @@ async function settleTip(tipId: string, paymentIntent: string | null): Promise<v
     .update({ status: 'succeeded', succeeded_at: new Date().toISOString(), provider_ref: paymentIntent ?? undefined })
     .eq('id', tipId)
     .eq('status', 'pending')
-    .select('creator_id, tipper_id, recipe_id, kind, net_cents, product_id')
+    .select('creator_id, tipper_id, recipe_id, kind, net_cents, amount_cents, product_id')
     .maybeSingle();
   if (error) throw error; // surfaced as 500 so Stripe retries
   if (!settled) return;
@@ -597,6 +597,7 @@ async function settleTip(tipId: string, paymentIntent: string | null): Promise<v
     type: 'tip',
     actorId: (settled.tipper_id as string | null) ?? (settled.creator_id as string),
     recipeId: (settled.recipe_id as string | null) ?? null,
+    amountCents: (settled.amount_cents as number | null) ?? null,
   }).catch(() => {});
 }
 
@@ -729,7 +730,7 @@ monetize.post('/webhook/stripe', async (c) => {
           if (insErr && !/duplicate key|unique/i.test(insErr.message)) throw insErr;
           if (!insErr) {
             await bumpGoal(meta!.creator_id, amount - feeCents);
-            await notify({ userId: meta!.creator_id, type: 'tip', actorId: meta!.subscriber_id }).catch(() => {});
+            await notify({ userId: meta!.creator_id, type: 'tip', actorId: meta!.subscriber_id, amountCents: amount }).catch(() => {});
           }
           if (obj.subscription) {
             await supabaseAdmin.from('subscriptions').update({ status: 'active', ...(obj.period_end ? { current_period_end: new Date(obj.period_end * 1000).toISOString() } : {}) }).eq('stripe_subscription_id', obj.subscription);

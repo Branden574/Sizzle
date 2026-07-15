@@ -17,7 +17,12 @@ function text(n: NotificationDTO): string {
   if (n.type === 'removed') return n.recipeTitle ? `Your post “${n.recipeTitle}” was removed — you can appeal it` : 'One of your posts was removed';
   if (n.type === 'restored') return n.recipeTitle ? `Your post “${n.recipeTitle}” was restored` : 'Your account was restored';
   if (n.type === 'banned') return 'Your account was suspended — open settings to appeal';
-  if (n.type === 'tip') return n.recipeTitle ? `${who} sent you a tip on “${n.recipeTitle}” 🎉` : `${who} sent you a tip 🎉`;
+  if (n.type === 'tip') {
+    // The amount is the whole point of an earning notification — lead with it.
+    const amt = n.amountCents != null ? `$${(n.amountCents / 100).toFixed(2)}` : null;
+    if (amt) return n.recipeTitle ? `${who} sent you ${amt} on “${n.recipeTitle}” 🎉` : `${who} sent you ${amt} 🎉`;
+    return n.recipeTitle ? `${who} sent you a tip on “${n.recipeTitle}” 🎉` : `${who} sent you a tip 🎉`;
+  }
   // Creator-account / payout system notifications (self-directed — ignore actor).
   if (n.type === 'creator_progress') return "You're getting close to Creator eligibility — keep it up! 📈";
   if (n.type === 'creator_eligible') return "🎉 You're eligible to become a Sizzle Creator — set up payouts to start earning";
@@ -33,6 +38,7 @@ export function NotificationsSheet() {
   const setShowNotifications = useSizzle((s) => s.setShowNotifications);
   const setOpenRecipe = useSizzle((s) => s.setOpenRecipe);
   const setOpenCook = useSizzle((s) => s.setOpenCook);
+  const setShowAnalytics = useSizzle((s) => s.setShowAnalytics);
 
   const { data: notifications, isLoading } = useNotifications();
   const markRead = useMarkNotificationsRead();
@@ -52,6 +58,10 @@ export function NotificationsSheet() {
 
   const open = (n: NotificationDTO) => {
     close();
+    // An earning notification is about YOUR money, so it belongs in your earnings
+    // — not the tipper's profile, which is where the recipe/actor fallback used to
+    // dump you with no sign of the tip or its amount.
+    if (n.type === 'tip') { setShowAnalytics(true); return; }
     if (n.recipeId) setOpenRecipe(n.recipeId);
     else setOpenCook(n.actor.id);
   };

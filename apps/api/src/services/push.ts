@@ -75,8 +75,9 @@ async function accessToken(acct: ServiceAccount): Promise<string | null> {
   return json.access_token;
 }
 
-/** Human-facing copy for each notification kind. `who` is the actor's name. */
-function copyFor(type: NotificationKind, who: string): { title: string; body: string } {
+/** Human-facing copy for each notification kind. `who` is the actor's name;
+ *  `amount` is a pre-formatted currency string (e.g. "$5.00") for earning kinds. */
+function copyFor(type: NotificationKind, who: string, amount?: string | null): { title: string; body: string } {
   switch (type) {
     case 'follow':
       return { title: 'New follower', body: `${who} started following you` };
@@ -99,7 +100,7 @@ function copyFor(type: NotificationKind, who: string): { title: string; body: st
     case 'message':
       return { title: 'New message', body: `${who} sent you a message` };
     case 'tip':
-      return { title: 'You got a tip! 🎉', body: `${who} sent you a tip` };
+      return { title: 'You got a tip! 🎉', body: amount ? `${who} sent you ${amount}` : `${who} sent you a tip` };
     case 'follow_request':
       return { title: 'Follow request', body: `${who} requested to follow you` };
     case 'creator_progress':
@@ -136,6 +137,7 @@ export async function sendPushForNotification(opts: {
   type: NotificationKind;
   actorId: string;
   recipeId?: string | null;
+  amountCents?: number | null;
 }): Promise<void> {
   const acct = account();
   if (!acct) return;
@@ -164,7 +166,9 @@ export async function sendPushForNotification(opts: {
         .single();
       who = actor?.display_name || (actor?.handle ? `@${actor.handle}` : 'Someone');
     }
-    const { title, body } = copyFor(opts.type, who);
+    // Pre-formatted here so copyFor stays presentation-only.
+    const amount = typeof opts.amountCents === 'number' ? `$${(opts.amountCents / 100).toFixed(2)}` : null;
+    const { title, body } = copyFor(opts.type, who, amount);
 
     const oauth = await accessToken(acct);
     if (!oauth) return;

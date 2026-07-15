@@ -491,6 +491,9 @@ export interface NotificationDTO {
   actor: CookSummary;
   recipeId: string | null;
   recipeTitle: string | null;
+  /** Gross amount in cents for earning notifications (tip/unlock/product/sub);
+   *  null for every other kind. Denormalized so the row can say how much. */
+  amountCents: number | null;
   read: boolean;
   createdAt: string;
   /** Relative label, e.g. "2h". */

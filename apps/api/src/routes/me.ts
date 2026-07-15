@@ -579,6 +579,7 @@ me.get('/notifications', async (c) => {
       actor: cookSummary(actorMap.get(n.actor_id)!),
       recipeId: n.recipe_id,
       recipeTitle: n.recipe_id ? titleMap.get(n.recipe_id) ?? null : null,
+      amountCents: (n.amount_cents as number | null) ?? null,
       read: n.read,
       createdAt: n.created_at,
       time: relativeTime(new Date(n.created_at)),
