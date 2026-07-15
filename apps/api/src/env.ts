@@ -43,6 +43,11 @@ const schema = z.object({
   // testable without keys. Keys from dashboard.stripe.com → Developers.
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  // Stripe API version for the v2 (Accounts) namespace only — v1 calls ride the
+  // account default. Overridable without a deploy because sources disagree on
+  // whether Accounts v2 wants the GA (`.dahlia`) or a `.preview` version string;
+  // if Stripe 400s asking for one, set this. Defaults in payments.ts.
+  STRIPE_V2_API_VERSION: z.string().optional(),
   // Where Stripe Checkout returns the tipper after paying/cancelling.
   APP_ORIGIN: z.string().default('https://getsizzle.app'),
   CRON_SECRET: z.string().optional(),

@@ -45,33 +45,143 @@ async function stripeGet<T>(path: string, account?: string): Promise<T> {
   return data;
 }
 
+/* ───────────────────────────── Stripe API v2 ─────────────────────────────
+ * Accounts moved to a v2 namespace: platforms created after Accounts v2 went GA
+ * (ours was) get a hard 400 from POST /v1/accounts — "Stripe no longer
+ * recommends Accounts v1 for new Connect integrations". Only ACCOUNT
+ * management moves; the money path (Checkout + destination charges) stays on v1
+ * because a v2 account is still an ordinary `acct_*` that v1 accepts verbatim as
+ * transfer_data[destination].
+ *
+ * v2 is JSON on a different base URL and needs real nested objects + booleans,
+ * which URLSearchParams can't express — hence a separate helper rather than
+ * bending stripe(). Keeping v2 isolated here caps the blast radius if the
+ * contract shifts.
+ */
+const STRIPE_V2_API = 'https://api.stripe.com/v2';
+
+/** Pinned + env-overridable on purpose: sources disagree on whether Accounts v2
+ *  needs the GA (`.dahlia`) or a `.preview` version string. If Stripe 400s asking
+ *  for a preview version, set STRIPE_V2_API_VERSION — no code change needed. */
+const STRIPE_V2_VERSION = env.STRIPE_V2_API_VERSION ?? '2026-06-24.dahlia';
+
+/** v2 surfaces errors as top-level {type,code,message}, not v1's {error:{message}}. */
+type StripeV2Err = { type?: string; code?: string; message?: string; error?: { message?: string } };
+
+async function stripeV2<T>(path: string, body?: unknown, method: 'POST' | 'GET' = 'POST'): Promise<T> {
+  const res = await fetch(`${STRIPE_V2_API}${path}`, {
+    method,
+    headers: {
+      authorization: `Bearer ${env.STRIPE_SECRET_KEY}`,
+      'stripe-version': STRIPE_V2_VERSION,
+      ...(method === 'POST' ? { 'content-type': 'application/json' } : {}),
+    },
+    ...(method === 'POST' ? { body: JSON.stringify(body ?? {}) } : {}),
+  });
+  const data = (await res.json()) as T & StripeV2Err;
+  // Handle BOTH envelope shapes or v2 failures degrade to a bare status code.
+  if (!res.ok) {
+    const msg = data.message ?? data.error?.message ?? [data.type, data.code].filter(Boolean).join(' ');
+    throw new Error(`stripe v2 ${path}: ${msg || res.status}`);
+  }
+  return data;
+}
+
 export const paymentsProvider: 'stripe' | 'mock' = stripeConfigured ? 'stripe' : 'mock';
 
-/** Create a Stripe Express account for a creator (returns the account id). */
+/**
+ * Create a connected account for a creator (returns the account id).
+ *
+ * Accounts v2. The id is an ordinary `acct_*` and is still handed verbatim to the
+ * v1 Checkout calls below as transfer_data[destination] — the destination-charge
+ * model is unchanged.
+ *
+ * `recipient` is the right configuration: Sizzle takes the charge on the PLATFORM
+ * and transfers out, so creators receive funds but are never merchant of record.
+ * (`merchant` would only be needed if we passed on_behalf_of.)
+ */
 export async function createConnectAccount(email: string | null): Promise<string> {
-  const acct = await stripe<{ id: string }>('/accounts', {
-    type: 'express',
-    ...(email ? { email } : {}),
-    'capabilities[transfers][requested]': 'true',
+  const acct = await stripeV2<{ id: string }>('/core/accounts', {
+    ...(email ? { contact_email: email } : {}),
+    // Replaces v1 `type: 'express'` — gives creators the Express hosted dashboard
+    // and is what makes /v1/accounts/{id}/login_links eligible below.
+    dashboard: 'express',
+    identity: { country: 'us' },
+    defaults: {
+      currency: 'usd',
+      // REQUIRED and PERMANENT — cannot be changed after creation. 'application'
+      // = Sizzle pays Stripe's fees and eats chargebacks / fraud / negative
+      // balances. That matches this file's model (processing comes out of our
+      // platform fee, not the creator's share) and is Stripe's own guidance for
+      // destination charges. It's also what we're already liable for today: with
+      // destination charges the platform is merchant of record either way.
+      responsibilities: { fees_collector: 'application', losses_collector: 'application' },
+    },
+    configuration: {
+      recipient: {
+        capabilities: {
+          // Replaces v1 capabilities[transfers][requested]. This exact path is the
+          // ONLY requestable capability under recipient — do NOT add `payouts` or
+          // `bank_accounts`: payouts is response-side only (Stripe derives it) and
+          // requesting it 400s. Bank details are collected by hosted onboarding.
+          stripe_balance: { stripe_transfers: { requested: true } },
+        },
+      },
+    },
+    // v2 returns null for any sub-object not named here — only `id` is safe without it.
+    include: ['configuration.recipient', 'identity', 'requirements'],
   });
   return acct.id;
 }
 
-/** One-time onboarding link for a connected account. */
+/**
+ * One-time hosted-onboarding link for a connected account. Tries the v2 endpoint
+ * and falls back to v1: the docs conflict on whether /v2/core/account_links is
+ * live yet, and v1 /account_links still accepts a v2 account id — so we try the
+ * forward-looking path but never strand a creator if it 404s.
+ */
 export async function createOnboardingLink(accountId: string): Promise<string> {
-  const link = await stripe<{ url: string }>('/account_links', {
-    account: accountId,
-    type: 'account_onboarding',
-    refresh_url: `${env.APP_ORIGIN}/?payouts=refresh`,
-    return_url: `${env.APP_ORIGIN}/?payouts=done`,
-  });
-  return link.url;
+  const refresh_url = `${env.APP_ORIGIN}/?payouts=refresh`;
+  const return_url = `${env.APP_ORIGIN}/?payouts=done`;
+  try {
+    const link = await stripeV2<{ url: string }>('/core/account_links', {
+      account: accountId,
+      use_case: {
+        type: 'account_onboarding',
+        // NB: refresh/return are nested under use_case in v2, not top-level as in v1.
+        account_onboarding: { configurations: ['recipient'], refresh_url, return_url },
+      },
+    });
+    if (link.url) return link.url;
+    throw new Error('v2 account_links returned no url');
+  } catch (err) {
+    console.warn('[payments] v2 account_links failed, falling back to v1:', (err as Error).message);
+    const link = await stripe<{ url: string }>('/account_links', {
+      account: accountId,
+      type: 'account_onboarding',
+      refresh_url,
+      return_url,
+    });
+    return link.url;
+  }
 }
 
-/** Whether the connected account has finished onboarding and can receive transfers. */
+/**
+ * Whether the connected account finished onboarding and can receive transfers.
+ *
+ * Reads the v2 capability status rather than v1's details_submitted/charges_enabled
+ * booleans: a recipient-only account is never merchant of record, so charges_enabled
+ * is not a meaningful signal for it. `stripe_transfers.status === 'active'` is the
+ * thing that actually gates money reaching the creator.
+ *
+ * The include[] params are load-bearing: without them v2 nulls out
+ * configuration.recipient and this silently returns false forever.
+ */
 export async function accountActive(accountId: string): Promise<boolean> {
-  const acct = await stripeGet<{ charges_enabled?: boolean; payouts_enabled?: boolean; details_submitted?: boolean }>(`/accounts/${accountId}`);
-  return !!acct.details_submitted && (!!acct.charges_enabled || !!acct.payouts_enabled);
+  const acct = await stripeV2<{
+    configuration?: { recipient?: { capabilities?: { stripe_balance?: { stripe_transfers?: { status?: string } } } } };
+  }>(`/core/accounts/${accountId}?include[0]=configuration.recipient&include[1]=requirements`, undefined, 'GET');
+  return acct.configuration?.recipient?.capabilities?.stripe_balance?.stripe_transfers?.status === 'active';
 }
 
 /** The connected account's live balance (USD cents), summed across the currency
