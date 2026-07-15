@@ -4,7 +4,7 @@ import { useRequireAuth } from '../../auth/useRequireAuth';
 import { useAuth } from '../../auth/useAuth';
 import { useAppealRecipe, useCookEvent, useCookLog, useDeleteRecipe, useDerivatives, useMe, useRecipe, useToggleDownload, useToggleSave, useUnlockRecipe } from '../../data/queries';
 import { getOffline } from '../../lib/offline';
-import { showMonetization } from '../../lib/native';
+import { canBuyInApp } from '../../lib/native';
 import { formatCount } from '../../lib/format';
 import { scaleIngredient } from '../../lib/ingredients';
 import { useShopping } from '../../lib/shopping';
@@ -273,11 +273,11 @@ export function RecipeSheet() {
                       <div style={{ fontSize: 30 }}>🔒</div>
                       <div style={{ fontSize: 16.5, fontWeight: 800, color: 'var(--text)', marginTop: 6 }}>Subscribers only</div>
                       <div style={{ fontSize: 13.5, color: 'var(--text-faint)', margin: '4px 0 14px', lineHeight: 1.5 }}>
-                        {showMonetization
+                        {canBuyInApp
                           ? `Subscribe to ${r.cook.name} to watch this — plus every subscriber-only post, video, ingredients & steps.`
                           : `This recipe is only available to ${r.cook.name}'s subscribers.`}
                       </div>
-                      {showMonetization && (
+                      {canBuyInApp && (
                         <Button
                           onClick={() => { if (requireAuth()) setOpenCook(r.cook.id); }}
                           style={{ width: '100%', height: 50, border: 'none', borderRadius: 14, background: `linear-gradient(135deg,${accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15.5, fontWeight: 800, cursor: 'pointer' }}
@@ -293,11 +293,11 @@ export function RecipeSheet() {
                       <div style={{ fontSize: 30 }}>🔒</div>
                       <div style={{ fontSize: 16.5, fontWeight: 800, color: 'var(--text)', marginTop: 6 }}>Premium recipe</div>
                       <div style={{ fontSize: 13.5, color: 'var(--text-faint)', margin: '4px 0 14px', lineHeight: 1.5 }}>
-                        {showMonetization
+                        {canBuyInApp
                           ? `Unlock ${r.cook.name}'s full recipe — video, ingredients & steps. ${r.cook.name} keeps 90%.`
                           : `This is one of ${r.cook.name}'s premium recipes.`}
                       </div>
-                      {showMonetization && (
+                      {canBuyInApp && (
                         <Button
                           onClick={() => { if (requireAuth()) unlock.mutate(r.id); }}
                           disabled={unlock.isPending}
@@ -306,7 +306,7 @@ export function RecipeSheet() {
                           {unlock.isPending ? 'Starting…' : `Unlock · $${(r.price / 100).toFixed(2)}`}
                         </Button>
                       )}
-                      {showMonetization && r.cook.subPriceCents != null && (
+                      {canBuyInApp && r.cook.subPriceCents != null && (
                         <Button
                           onClick={() => setOpenCook(r.cook.id)}
                           style={{ marginTop: 10, background: 'none', border: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 700, color: 'var(--text-faint)', textDecoration: 'underline', padding: 0 }}

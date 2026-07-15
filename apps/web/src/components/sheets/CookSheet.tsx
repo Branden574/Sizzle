@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Button, DismissBackdrop } from '../controls';
 import { useBuyProduct, useCancelSubscription, useCook, useCookProducts, useCookLive, useCookTiers, useMe, useSubscribe, useToggleBlock, useToggleFollow, useToggleMute } from '../../data/queries';
 import { useRequireAuth } from '../../auth/useRequireAuth';
-import { isNative, showMonetization } from '../../lib/native';
+import { isNative, canBuyInApp } from '../../lib/native';
 import { useSizzle } from '../../store';
 import { VerifiedBadge } from '../VerifiedBadge';
 import { SocialLinks } from '../SocialLinks';
@@ -123,7 +123,7 @@ export function CookSheet() {
               <div style={{ color: 'var(--text-faint)', fontSize: 14.5, marginTop: 2 }}>@{ck.handle}</div>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-              {showMonetization && ck.acceptsTips && (
+              {canBuyInApp && ck.acceptsTips && (
                 <Button
                   onClick={() => { if (requireAuth()) setTipFor({ creatorId: ck.id, name: ck.name }); }}
                   className="sz-press"
@@ -159,7 +159,7 @@ export function CookSheet() {
           <SocialLinks links={ck.links} size={34} />
           {!privateLocked && <LiveBanner cookId={ck.id} name={ck.name} />}
 
-          {!privateLocked && showMonetization && !isOwn && ck.subPriceCents != null && (
+          {!privateLocked && canBuyInApp && !isOwn && ck.subPriceCents != null && (
             ck.viewer.subscribed ? (
               <div style={{ marginTop: 16, display: 'flex', alignItems: 'center', gap: 10, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 16, padding: '12px 16px' }}>
                 <span style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', flex: 1 }}>⭐ Subscribed · unlocks {ck.name}'s premium recipes</span>
@@ -170,9 +170,9 @@ export function CookSheet() {
             )
           )}
 
-          {!privateLocked && showMonetization && !isOwn && <ProductShelf cookId={ck.id} />}
+          {!privateLocked && canBuyInApp && !isOwn && <ProductShelf cookId={ck.id} />}
 
-          {!privateLocked && showMonetization && ck.goal && ck.goal.targetCents > 0 && (
+          {!privateLocked && canBuyInApp && ck.goal && ck.goal.targetCents > 0 && (
             <div style={{ marginTop: 16, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 16, padding: '13px 16px' }}>
               <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 8 }}>
                 <span style={{ fontSize: 14, fontWeight: 800, color: 'var(--text)' }}>🎯 {ck.goal.label}</span>

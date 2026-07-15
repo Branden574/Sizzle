@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Button, DismissBackdrop } from '../controls';
 import { useSwipeDismiss } from '../../lib/useSwipeDismiss';
-import { showMonetization } from '../../lib/native';
+import { canBuyInApp } from '../../lib/native';
 import { platformFeeCents, PLATFORM_FEE_PCT } from '@sizzle/shared';
 import { useSendTip, useTipConfig } from '../../data/queries';
 import { useRequireAuth } from '../../auth/useRequireAuth';
@@ -29,7 +29,7 @@ export function TipSheet() {
   const swipe = useSwipeDismiss(() => setTipFor(null));
   // Payments are hidden on the native app (Apple 3.1.1 / Play Billing); this
   // sheet is unreachable there, but guard the render as defense in depth.
-  if (!tipFor || !showMonetization) return null;
+  if (!tipFor || !canBuyInApp) return null;
   const presets = cfg?.presetsCents ?? [100, 300, 500, 1000];
   const fee = platformFeeCents(amount);
   const net = amount - fee;

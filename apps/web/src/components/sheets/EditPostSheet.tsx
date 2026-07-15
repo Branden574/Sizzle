@@ -3,7 +3,7 @@ import { Button } from '../controls';
 import { PLATFORM_FEE_PCT, type RecipeDetail } from '@sizzle/shared';
 import { useEditRecipe, useMe, useMonetizationStatus, useRecipe, useSetRecipePoster, useSetRecipePrice, useSetRecipeVisibility } from '../../data/queries';
 import { uploadRecipeImage } from '../../lib/storage';
-import { showMonetization } from '../../lib/native';
+import { showCreatorMoney } from '../../lib/native';
 import { useSizzle } from '../../store';
 import { theme } from '../../theme';
 
@@ -172,7 +172,7 @@ export function EditPostSheet() {
                 {/* Premium / subscribers-only gating. Hidden entirely on native —
                     creators configure monetization on the web (Apple 3.1.1 / Play
                     Billing). Existing premium settings are preserved on save. */}
-                {showMonetization && (canMonetize ? (
+                {showCreatorMoney && (canMonetize ? (
                   <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 14, padding: 14 }}>
                     <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}>
                       <div style={{ minWidth: 0, paddingRight: 12 }}>

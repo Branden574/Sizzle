@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Button, DismissBackdrop } from '../controls';
 import { useSwipeDismiss } from '../../lib/useSwipeDismiss';
-import { showMonetization } from '../../lib/native';
+import { openExternal, showCreatorMoney } from '../../lib/native';
 import { PLATFORM_FEE_PCT, PLATFORM_FEE_RATIONALE, type CreatorAnalytics, type EarningKind, type EarningsSummary } from '@sizzle/shared';
 import { useAnalytics, useBroadcast, useCreateProduct, useCreateTier, useDeleteProduct, useDeleteTier, useEarnings, useMe, useMonetizationStatus, useMyProducts, useMyTiers, usePayout, useSetGoal, useSetSubPrice, useSetWelcomeDm, useStartOnboarding } from '../../data/queries';
 import { useSizzle } from '../../store';
@@ -73,7 +73,7 @@ export function AnalyticsSheet() {
               {/* The whole earnings + payouts + price/tier/product center is hidden
                   on native (Apple 3.1.1 / Play Billing) — creators manage money on
                   the web. Insights below stay visible. */}
-              {showMonetization && <Earnings />}
+              {showCreatorMoney && <Earnings />}
 
               <div style={{ fontSize: 12, color: 'var(--text-faint-2)', margin: '0 2px 8px', textTransform: 'uppercase', letterSpacing: '.06em' }}>Per post</div>
               {posts.length === 0 ? (
@@ -127,7 +127,7 @@ function Earnings() {
     if (onboard.isPending) return;
     setOnboardErr(null);
     onboard.mutate({ acceptTerms: true }, {
-      onSuccess: (res) => { if (res.url) window.open(res.url, '_blank', 'noopener'); },
+      onSuccess: (res) => { if (res.url) void openExternal(res.url); },
       onError: (e) => setOnboardErr(e instanceof Error ? e.message : 'Could not start payout setup.'),
     });
   };
@@ -301,7 +301,7 @@ function SubPriceEditor({ data }: { data: EarningsSummary | undefined }) {
 function Funnels({ data }: { data: CreatorAnalytics | undefined }) {
   const r = data?.retention;
   // Monetization analytics stay web-only alongside every other money surface.
-  const f = showMonetization ? (data?.unlockFunnel ?? null) : null;
+  const f = showCreatorMoney ? (data?.unlockFunnel ?? null) : null;
   const showRetention = r && r.started > 0;
   if (!showRetention && !f) return null;
   const bar = (label: string, value: number, base: number, note?: string) => {
@@ -482,7 +482,7 @@ function PayoutCard() {
         Available balance · next payout {next.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
       </div>
       {data.dashboardUrl && (
-        <Button onClick={() => window.open(data.dashboardUrl!, '_blank', 'noopener')} style={{ marginTop: 10, height: 38, padding: '0 14px', border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>Open payout dashboard →</Button>
+        <Button onClick={() => void openExternal(data.dashboardUrl!)} style={{ marginTop: 10, height: 38, padding: '0 14px', border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>Open payout dashboard →</Button>
       )}
       <div style={{ fontSize: 11.5, color: 'var(--text-faint-2)', lineHeight: 1.5, marginTop: 10 }}>{data.taxNote}</div>
     </div>

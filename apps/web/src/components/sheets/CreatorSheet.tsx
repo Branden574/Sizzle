@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { Button, DismissBackdrop } from '../controls';
 import { useSwipeDismiss } from '../../lib/useSwipeDismiss';
 import { CREATOR_FOLLOWER_REQ, CREATOR_VIEW_REQ } from '@sizzle/shared';
+import { openExternal } from '../../lib/native';
 import { useMe, useMonetizationStatus, useStartOnboarding } from '../../data/queries';
 import { useSizzle } from '../../store';
 import { formatCount } from '../../lib/format';
@@ -33,12 +34,15 @@ export function CreatorSheet() {
   const elig = me?.creatorEligibility;
   const openDashboard = () => { close(); setShowAnalytics(true); };
 
-  // Start (or resume) payout onboarding; on Stripe, open the returned URL.
+  // Start (or resume) payout onboarding. Stripe's hosted onboarding opens in an
+  // in-app browser sheet on native (never the app's own WebView — that would
+  // strand the user on Stripe). When they close it, useMonetizationStatus is
+  // already polling every 8s while `pending`, so the tier flips to active on its own.
   const becomeCreator = async () => {
     setErr(null);
     try {
       const res = await onboard.mutateAsync({ acceptTerms: true });
-      if (res.url) window.location.href = res.url; // Stripe onboarding
+      if (res.url) await openExternal(res.url);
       // Mock / already-active: status flips via the invalidated /me + /monetize.
     } catch (e) {
       setErr(e instanceof Error ? e.message : 'Could not start setup — please try again.');

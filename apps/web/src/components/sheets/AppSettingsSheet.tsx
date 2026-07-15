@@ -9,7 +9,7 @@ import { queryClient, useBlockedList, useMe, useSubmitSupportTicket, useToggleBl
 import { enablePush, disablePush } from '../../lib/push';
 import { clearPasscode } from '../../lib/applock';
 import { PasscodeSetup } from '../PasscodeLock';
-import { showMonetization } from '../../lib/native';
+import { showCreatorMoney } from '../../lib/native';
 import { PlayIcon, SpeakerIcon } from '../icons';
 import type { MeProfile } from '@sizzle/shared';
 
@@ -298,7 +298,7 @@ export function AppSettingsSheet() {
     { key: 'reposts', title: 'Reposts', sub: 'When someone reposts your recipe', icon: '🔁' },
     { key: 'messages', title: 'Messages', sub: 'When you get a direct message', icon: '✉️' },
     // Money surfaces stay web-only on native (Guideline 3.1.x hardening).
-    ...(showMonetization ? [{ key: 'tips' as const, title: 'Tips', sub: 'When someone tips you', icon: '💝' }] : []),
+    ...(showCreatorMoney ? [{ key: 'tips' as const, title: 'Tips', sub: 'When someone tips you', icon: '💝' }] : []),
   ] as const;
 
   // Header + back-navigation: legal / blocked are opened from within a section,
