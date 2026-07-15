@@ -283,10 +283,11 @@ monetize.post('/sub-price', requireAuth, async (c) => {
  *  API + Express dashboard link wire up when STRIPE_SECRET_KEY is set. */
 monetize.get('/payout', requireAuth, async (c) => {
   const userId = c.get('userId')!;
-  // Next automatic payout: the upcoming Friday (Stripe's default weekly schedule).
-  const now = new Date();
-  const next = new Date(now);
-  next.setDate(now.getDate() + ((5 - now.getDay() + 7) % 7 || 7));
+  // NOTE: no payout DATE is returned. The old "upcoming Friday" estimate was
+  // provably wrong (Stripe said Jul 22 where we said Jul 16) because the real date
+  // depends on each charge's rolling availability delay, which we can't compute —
+  // and a confidently wrong payout date is worse than none. Stripe's Express
+  // dashboard knows the real one; we link to it instead.
 
   // Live: read the creator's actual Stripe balance + mint a dashboard login link.
   // Falls back to the lifetime-net estimate if the balance/link call fails so the
@@ -304,7 +305,6 @@ monetize.get('/payout', requireAuth, async (c) => {
           provider: paymentsProvider,
           availableCents,
           pendingCents,
-          nextPayoutDate: next.toISOString(),
           dashboardUrl,
           taxNote: 'You are responsible for taxes on your creator earnings. A 1099-K is issued by our payment processor when thresholds are met.',
         });
@@ -322,7 +322,6 @@ monetize.get('/payout', requireAuth, async (c) => {
     provider: paymentsProvider,
     availableCents: totals?.net_cents ?? 0,
     pendingCents: 0,
-    nextPayoutDate: next.toISOString(),
     dashboardUrl: stripeConfigured ? `${env.APP_ORIGIN}/?payouts=dashboard` : null,
     taxNote: 'You are responsible for taxes on your creator earnings. A 1099-K is issued by our payment processor when thresholds are met.',
   });

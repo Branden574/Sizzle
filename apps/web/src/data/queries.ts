@@ -279,7 +279,7 @@ export function useRequestVerification() {
 export function usePayout(enabled: boolean) {
   return useQuery({
     queryKey: ['monetize', 'payout'],
-    queryFn: () => apiGet<{ provider: string; availableCents: number; pendingCents: number; nextPayoutDate: string; dashboardUrl: string | null; taxNote: string }>('/monetize/payout'),
+    queryFn: () => apiGet<{ provider: string; availableCents: number; pendingCents: number; dashboardUrl: string | null; taxNote: string }>('/monetize/payout'),
     enabled,
   });
 }

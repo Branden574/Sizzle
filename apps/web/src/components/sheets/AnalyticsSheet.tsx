@@ -477,15 +477,24 @@ function ProductsManager() {
 function PayoutCard() {
   const { data } = usePayout(true);
   if (!data) return null;
-  const next = new Date(data.nextPayoutDate);
+  // Headline the TOTAL (available + clearing), which is what Stripe's own dashboard
+  // shows and what the creator thinks of as "my money". Showing only `available`
+  // read as $0.00 for days after every payment — Stripe holds new funds pending on
+  // a rolling delay — so a creator's first-ever tip looked like it earned nothing.
+  const totalCents = data.availableCents + data.pendingCents;
   return (
     <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 16, padding: 16, marginBottom: 12 }}>
       <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline' }}>
         <span style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--text)' }}>Payouts</span>
-        <span style={{ fontFamily: "'Instrument Serif',serif", fontSize: 24, color: 'var(--text)' }}>{usd(data.availableCents)}</span>
+        <span style={{ fontFamily: "'Instrument Serif',serif", fontSize: 24, color: 'var(--text)' }}>{usd(totalCents)}</span>
       </div>
       <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 4 }}>
-        Available balance · next payout {next.toLocaleDateString(undefined, { month: 'short', day: 'numeric' })}
+        {data.pendingCents > 0
+          ? `${usd(data.availableCents)} ready · ${usd(data.pendingCents)} still clearing`
+          : 'Ready to pay out'}
+      </div>
+      <div style={{ fontSize: 11.5, color: 'var(--text-faint-2)', marginTop: 6, lineHeight: 1.5 }}>
+        New payments clear over a few days, then pay out to your bank automatically. Your dashboard has the exact date.
       </div>
       {data.dashboardUrl && (
         <Button onClick={() => void openExternal(data.dashboardUrl!)} style={{ marginTop: 10, height: 38, padding: '0 14px', border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>Open payout dashboard →</Button>
