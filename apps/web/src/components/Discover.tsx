@@ -6,6 +6,7 @@ import { useForYouFeed, usePantrySearch, useSearch, useTrendingTags } from '../d
 import { useSizzle } from '../store';
 import { formatCount } from '../lib/format';
 import { HeartIcon, SearchIcon } from './icons';
+import { PosterImg } from './PosterImg';
 
 export function Discover() {
   const setOpenRecipe = useSizzle((s) => s.setOpenRecipe);
@@ -183,7 +184,7 @@ export function Discover() {
             onClick={() => setOpenRecipe(r.id)}
             style={{ breakInside: 'avoid', width: '100%', marginBottom: 14, border: 'none', padding: 0, cursor: 'pointer', borderRadius: 20, overflow: 'hidden', position: 'relative', height: discoverHeights[i % discoverHeights.length], background: r.bg, display: 'block', textAlign: 'left' }}
           >
-            {(r.images[0] || r.video?.posterUrl) && <img src={r.images[0] || r.video?.posterUrl || ''} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
+            {(r.images[0] || r.video?.posterUrl) && <PosterImg src={r.images[0] || r.video?.posterUrl || ''} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
             <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, transparent 40%, rgba(0,0,0,.7))' }} />
             <div style={{ position: 'absolute', left: 13, right: 13, bottom: 12 }}>
               <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 19, lineHeight: 1.05, color: '#fff' }}>{r.title}</div>

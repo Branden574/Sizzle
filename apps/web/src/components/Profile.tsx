@@ -11,6 +11,7 @@ import { useShopping } from '../lib/shopping';
 import { VerifiedBadge } from './VerifiedBadge';
 import { SocialLinks } from './SocialLinks';
 import { BellIcon, BookmarkIcon, GearIcon, HeartIcon, ShareIcon } from './icons';
+import { PosterImg } from './PosterImg';
 
 const BANNER = 'radial-gradient(120% 120% at 70% 0%, var(--saffron,#f4a52c), var(--accent,#ff5a36) 60%, #c23a1a)';
 
@@ -206,7 +207,7 @@ function RecipeGrid({ items, empty, onOpenAt }: { items: RecipeCard[]; empty: st
           onClick={() => onOpenAt(i)}
           style={{ border: 'none', padding: 0, cursor: 'pointer', borderRadius: 14, overflow: 'hidden', position: 'relative', aspectRatio: '3 / 4', background: r.bg }}
         >
-          {(r.video?.posterUrl || r.images[0]) && <img src={r.video?.posterUrl || r.images[0]} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
+          {(r.video?.posterUrl || r.images[0]) && <PosterImg src={(r.video?.posterUrl || r.images[0])!} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
           <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg,transparent 38%, rgba(0,0,0,.74))' }} />
           {r.removed && <div style={{ position: 'absolute', top: 7, left: 7, background: 'rgba(216,82,30,.92)', color: '#fff', fontSize: 10, fontWeight: 800, padding: '3px 6px', borderRadius: 6 }}>Removed</div>}
           <div style={{ position: 'absolute', left: 8, right: 8, bottom: 26, fontFamily: "'Instrument Serif',serif", fontSize: 13.5, lineHeight: 1.05, color: '#fff', maxHeight: 30, overflow: 'hidden' }}>{r.title}</div>

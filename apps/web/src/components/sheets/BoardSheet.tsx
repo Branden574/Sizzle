@@ -3,6 +3,7 @@ import { useBoard } from '../../data/queries';
 import { boardShareUrl } from '../../lib/share';
 import { useSizzle } from '../../store';
 import { ChevronLeftIcon, ShareIcon } from '../icons';
+import { PosterImg } from '../PosterImg';
 
 /**
  * A shared PUBLIC board — someone's curated collection, opened from a /b/:id
@@ -57,7 +58,7 @@ export function BoardSheet() {
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 12, marginTop: 20 }}>
             {board.recipes.map((r) => (
               <Button key={r.id} onClick={() => setOpenRecipe(r.id)} style={{ border: 'none', padding: 0, cursor: 'pointer', borderRadius: 18, overflow: 'hidden', position: 'relative', aspectRatio: '3 / 4', background: r.bg, textAlign: 'left' }}>
-                {(r.video?.posterUrl || r.images[0]) && <img src={r.video?.posterUrl || r.images[0]} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />}
+                {(r.video?.posterUrl || r.images[0]) && <PosterImg src={(r.video?.posterUrl || r.images[0])!} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />}
                 <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg, transparent 40%, rgba(0,0,0,.7))' }} />
                 <div style={{ position: 'absolute', left: 12, right: 12, bottom: 11, fontFamily: "'Instrument Serif',serif", fontSize: 18, lineHeight: 1.08, color: '#fff' }}>{r.title}</div>
               </Button>

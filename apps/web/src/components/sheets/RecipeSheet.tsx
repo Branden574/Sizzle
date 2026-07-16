@@ -19,6 +19,7 @@ import { VerifiedBadge } from '../VerifiedBadge';
 import { StarRow } from '../Stars';
 import { MadeItPrompt } from '../MadeItPrompt';
 import { pressVars } from '../ui';
+import { PosterImg } from '../PosterImg';
 
 const accent = theme.accent;
 
@@ -458,7 +459,7 @@ export function RecipeSheet() {
                           >
                             <div style={{ width: 128, height: 170, borderRadius: 14, overflow: 'hidden', background: d.bg, position: 'relative' }}>
                               {(d.video?.posterUrl || d.images[0]) && (
-                                <img src={d.video?.posterUrl ?? d.images[0]} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />
+                                <PosterImg src={(d.video?.posterUrl ?? d.images[0])!} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} loading="lazy" />
                               )}
                               <div style={{ position: 'absolute', left: 8, right: 8, bottom: 7, color: '#fff', fontFamily: "'Instrument Serif',serif", fontSize: 15, lineHeight: 1.15, textShadow: '0 1px 4px rgba(0,0,0,.7)' }}>{d.title}</div>
                             </div>

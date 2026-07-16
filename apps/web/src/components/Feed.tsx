@@ -18,6 +18,7 @@ import { StarRow } from './Stars';
 import { ErrorBoundary } from './ErrorBoundary';
 import { LoadingScreen } from './Splash';
 import { markBootReady } from '../lib/bootProgress';
+import { PosterImg } from './PosterImg';
 import {
   CheckIcon,
   ChevronUpIcon,
@@ -413,7 +414,7 @@ export function FeedCard({ card, onClose }: { card: RecipeCard; onClose?: () => 
         <VideoPlayer src={videoSrc} poster={card.video?.posterUrl} active={active} immersive={immersive} />
       ) : (
         card.video?.posterUrl && (
-          <img src={card.video.posterUrl} alt="" decoding="async" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+          <PosterImg src={card.video.posterUrl} alt="" decoding="async" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
         )
       )}
       {!videoSrc && !hasImages && (
