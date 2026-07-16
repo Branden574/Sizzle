@@ -53,3 +53,8 @@ supabase/.branches
 # Playwright MCP run artifacts
 .playwright-mcp/
 .backups/
+
+# Local agent/tool config — holds a Supabase PAT. Never commit.
+.codex/
+# Scratch renders and stills, not app assets.
+*.jpeg
