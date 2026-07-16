@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="robots" content="noindex">
+<title>Payouts — Sizzle</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif&family=Hanken+Grotesk:wght@400;700;800&display=swap" rel="stylesheet">
+<style>
+  * { box-sizing: border-box; margin: 0; }
+  body {
+    min-height: 100dvh; display: flex; align-items: center; justify-content: center;
+    background: #0C0A09; color: #F5EFE6; font-family: 'Hanken Grotesk', 'Helvetica Neue', Helvetica, Arial, sans-serif;
+    padding: 24px; text-align: center;
+  }
+  .card { max-width: 380px; }
+  .mark { width: 44px; height: auto; margin: 0 auto 18px; display: block; }
+  .hairline {
+    height: 3px; width: 120px; margin: 22px auto 0; border-radius: 2px;
+    background: linear-gradient(90deg, #FFD23A, #FF7A2A, #FF5320, #E02F80, #8A1C66);
+  }
+  h1 { font-family: 'Instrument Serif', Georgia, serif; font-weight: 400; font-size: 30px; line-height: 1.18; margin-top: 20px; }
+  p  { margin-top: 12px; font-size: 15px; line-height: 1.65; color: #B3A698; }
+  .hint { margin-top: 26px; font-size: 13px; color: #8A7C70; }
+</style>
+</head>
+<body>
+  <main class="card">
+    <img class="mark" src="/email/sizzle-mark-512.png" alt="Sizzle" width="44" height="55"
+         onerror="this.style.display='none'">
+    <h1 id="headline">Payouts are set up 🎉</h1>
+    <p id="body">Stripe has everything it needs. Close this window to head back to Sizzle — your Creator account will show payouts as active.</p>
+    <div class="hairline" aria-hidden="true"></div>
+    <p class="hint" id="hint">You can safely close this tab.</p>
+  </main>
+  <script>
+    // The onboarding link expires after a few minutes; Stripe sends people here
+    // via refresh_url when that happens, and the copy has to say so — telling
+    // them "all done" on an expired session would strand payouts half-finished.
+    if (new URLSearchParams(location.search).get('state') === 'refresh') {
+      document.getElementById('headline').textContent = 'That setup link expired';
+      document.getElementById('body').textContent =
+        'No harm done — Stripe setup links only last a few minutes. Head back to Sizzle and tap “Set up payouts” again to pick up where you left off.';
+      document.getElementById('hint').textContent = 'Close this window to return to the app.';
+    }
+  </script>
+</body>
+</html>

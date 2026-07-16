@@ -178,8 +178,12 @@ export async function createConnectAccount(email: string | null): Promise<string
  * forward-looking path but never strand a creator if it 404s.
  */
 export async function createOnboardingLink(accountId: string): Promise<string> {
-  const refresh_url = `${env.APP_ORIGIN}/?payouts=refresh`;
-  const return_url = `${env.APP_ORIGIN}/?payouts=done`;
+  // A dedicated static page, NOT the SPA root: inside the in-app browser the
+  // user has no session, so the root serves the logged-out marketing page and
+  // the flow appears to dead-end. The static page tells them to close the
+  // window (which is what actually resumes the app via browserFinished).
+  const refresh_url = `${env.APP_ORIGIN}/payouts-done.html?state=refresh`;
+  const return_url = `${env.APP_ORIGIN}/payouts-done.html?state=done`;
   try {
     const link = await stripeV2<{ url: string }>('/core/account_links', {
       account: accountId,
