@@ -52,3 +52,4 @@ supabase/.branches
 
 # Playwright MCP run artifacts
 .playwright-mcp/
+.backups/
