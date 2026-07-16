@@ -19,9 +19,10 @@ const TERMS_SECTIONS: [string, string][] = [
   ['2. Eligibility', 'You must be at least 13 years old (or the minimum age in your jurisdiction) to use Sizzle.'],
   ['3. Your content', 'You keep ownership of the recipes, videos, and photos you post, and grant Sizzle a license to host and display them in the app.'],
   ['4. Acceptable use', 'No illegal, harmful, infringing, or abusive content. We may remove content and suspend accounts that break the rules.'],
-  ['5. Termination', 'You can delete your account at any time; we may suspend or terminate accounts that violate these Terms.'],
-  ['6. Disclaimers', 'Recipes are user-submitted — follow safe food-handling practices. The service is provided “as is,” without warranties.'],
-  ['7. Contact', 'Questions about these Terms can be sent to the support email listed in your finalized document.'],
+  ['5. Objectionable content', 'We have zero tolerance for objectionable content and abusive users. What you post is screened by automated filters; you can report any post, comment, or account, or block any user, from inside the app. We review every report and act within 24 hours — content that breaks the rules is removed and the user behind it may be ejected.'],
+  ['6. Termination', 'You can delete your account at any time; we may suspend or terminate accounts that violate these Terms.'],
+  ['7. Disclaimers', 'Recipes are user-submitted — follow safe food-handling practices. The service is provided “as is,” without warranties.'],
+  ['8. Contact', 'Questions about these Terms can be sent to the support email listed in your finalized document.'],
 ];
 
 const PRIVACY_SECTIONS: [string, string][] = [

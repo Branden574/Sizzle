@@ -6,11 +6,16 @@ import { formatCount } from '../../lib/format';
 import { isNative } from '../../lib/native';
 import { CameraIcon } from '../icons';
 
+/** Mirrors the API's `liveConfigured` (CLOUDFLARE_LIVE_INPUT_TOKEN). The client
+ *  can't read server env and no config endpoint carries this yet, so it's a
+ *  constant: flip it in the same change that wires real Live Inputs. Cosmetic
+ *  only — /live/start refuses on the server regardless. */
+const LIVE_ENABLED: boolean = false;
+
 /**
  * The "+" create menu. Replaces the old behavior where the nav "+" opened the
  * uploader directly — now it offers "New recipe" plus "Go live" (moved off the
- * cluttered profile action row). Go live stays web-only while the live provider
- * is the mock (App Store 2.1) — on native the nav "+" opens the uploader
+ * cluttered profile action row). On native the nav "+" opens the uploader
  * directly and this sheet is never shown.
  */
 export function CreateSheet() {
@@ -18,7 +23,7 @@ export function CreateSheet() {
   const setOpen = useSizzle((s) => s.setShowCreate);
   const setShowUpload = useSizzle((s) => s.setShowUpload);
   const { data: me } = useMe();
-  const { data: live } = useCookLive(me?.id ?? null);
+  const { data: live } = useCookLive(LIVE_ENABLED ? me?.id ?? null : null);
   const start = useStartLive();
   const end = useEndLive();
 
@@ -50,8 +55,8 @@ export function CreateSheet() {
             sub="Post a recipe video to your feed"
           />
 
-          {/* Go live — web only while the live provider is mock. */}
-          {!isNative && (
+          {/* Go live — web only, and only once real Live Inputs exist. */}
+          {LIVE_ENABLED && !isNative && (
             live ? (
               <CreateOption
                 onClick={endLive}

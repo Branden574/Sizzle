@@ -5,32 +5,35 @@ import { supabaseAdmin } from '../lib/supabase';
 import { canViewCookContent } from '../mappers';
 import { badRequest, dbFail } from '../lib/errors';
 import { assertUuid } from '../lib/validate';
-import { cloudflareConfigured } from '../env';
+import { liveConfigured } from '../env';
 import type { AppEnv } from '../types';
 
 export const live = new Hono<AppEnv>();
 
-// Mock playback: a sample HLS stream (same mock pattern as the video provider).
-// Real Cloudflare Stream Live Inputs return a per-session playback URL behind keys.
-const MOCK_PLAYBACK = 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8';
-
 const startSchema = z.object({ title: z.string().trim().min(1).max(120) });
 
 /** POST /live/start — go live. One session per creator; returns the existing one if
- *  already live. Mock playback URL until Cloudflare Stream Live is configured. */
+ *  already live. Refuses until Cloudflare Stream Live Inputs are configured. */
 live.post('/start', requireAuth, requireNotBanned, async (c) => {
+  // There is no capture/RTMP pipeline behind this yet. Refuse rather than hand
+  // back a playback URL we cannot honour — a session that streams someone else's
+  // sample video is worse than no live feature. Provisioning a real Live Input
+  // goes here once that pipeline exists.
+  if (!liveConfigured) {
+    return c.json({ error: { code: 'unavailable', message: 'Live streaming is not available yet.' } }, 503);
+  }
   const userId = c.get('userId')!;
   const body = startSchema.safeParse(await c.req.json().catch(() => null));
   if (!body.success) throw badRequest('Title required');
   const { data: existing } = await supabaseAdmin.from('live_sessions').select('id, playback_url').eq('creator_id', userId).eq('status', 'live').maybeSingle();
-  if (existing) return c.json({ id: existing.id, playbackUrl: existing.playback_url, provider: cloudflareConfigured ? 'cloudflare' : 'mock' });
+  if (existing) return c.json({ id: existing.id, playbackUrl: existing.playback_url, provider: existing.playback_url ? 'cloudflare' : null });
   const { data, error } = await supabaseAdmin
     .from('live_sessions')
-    .insert({ creator_id: userId, title: body.data.title, status: 'live', playback_url: MOCK_PLAYBACK })
+    .insert({ creator_id: userId, title: body.data.title, status: 'live', playback_url: null })
     .select('id, playback_url').single();
   if (error || !data) throw dbFail(error?.message ?? 'Could not start the session');
   await supabaseAdmin.from('profiles').update({ is_cook: true }).eq('id', userId);
-  return c.json({ id: data.id, playbackUrl: data.playback_url, provider: cloudflareConfigured ? 'cloudflare' : 'mock' }, 201);
+  return c.json({ id: data.id, playbackUrl: data.playback_url, provider: data.playback_url ? 'cloudflare' : null }, 201);
 });
 
 /** POST /live/end — end your current live session. */

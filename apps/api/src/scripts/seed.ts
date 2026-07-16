@@ -17,15 +17,6 @@ const SEED_DOMAIN = '@sizzle.dev';
 const SEED_PASSWORD = 'sizzle-demo-1234';
 const SAMPLE_HLS = 'https://test-streams.mux.dev/x36xhzz/x36xhzz.m3u8';
 
-function parseCount(s: string): number {
-  const m = String(s).trim().match(/^([\d.]+)\s*([kKmM]?)$/);
-  if (!m) return 0;
-  const n = parseFloat(m[1]!);
-  const suffix = (m[2] ?? '').toLowerCase();
-  const mult = suffix === 'm' ? 1_000_000 : suffix === 'k' ? 1_000 : 1;
-  return Math.round(n * mult);
-}
-
 function parseMinutes(s: string): number {
   const str = String(s).toLowerCase();
   const m = str.match(/([\d.]+)/);
@@ -59,6 +50,10 @@ async function main() {
     const id = data.user.id;
     cookId.set(c.id, id);
 
+    // Engagement counters are deliberately left at their zero defaults: the mock
+    // dataset's follower/like totals are illustrative, and a seeded account must
+    // never carry engagement it did not earn. They're recomputed at the end from
+    // the rows this script actually inserts.
     const { error: pErr } = await supabaseAdmin
       .from('profiles')
       .update({
@@ -67,9 +62,6 @@ async function main() {
         bio: c.bio,
         avatar_color: c.bg,
         is_cook: true,
-        follower_count: parseCount(c.followers),
-        following_count: parseCount(c.following),
-        total_likes: parseCount(c.likes),
       })
       .eq('id', id);
     if (pErr) throw pErr;
@@ -147,11 +139,6 @@ async function main() {
         post_type: isReview ? 'review' : 'recipe',
         rating,
         status: 'published',
-        like_count: parseCount(r.likeCount),
-        dislike_count: parseCount(r.dislikeCount),
-        comment_count: parseCount(r.commentCount),
-        save_count: Math.round(parseCount(r.likeCount) * 0.3),
-        share_count: parseCount(r.shareCount),
         // stagger timestamps so array order = feed order (newest first)
         created_at: new Date(now - i * 3_600_000).toISOString(),
       })
@@ -178,7 +165,12 @@ async function main() {
       text: b.text,
       created_at: new Date(now - i * 3_600_000 - (j + 1) * 600_000).toISOString(),
     }));
-    if (comments.length) await supabaseAdmin.from('comments').insert(comments);
+    // Inserting directly bypasses the RPC that maintains comment_count, so set it
+    // from the rows we actually wrote.
+    if (comments.length) {
+      await supabaseAdmin.from('comments').insert(comments);
+      await supabaseAdmin.from('recipes').update({ comment_count: comments.length }).eq('id', recipe.id);
+    }
 
     recipeCount++;
   }
@@ -189,9 +181,9 @@ async function main() {
   // cook's "following" set ({i+1,i+2,i+3}) differs from its "followers" set
   // ({i+2,i+3,i+4}) — the two lists are no longer identical — while the overlap
   // ({i+2,i+3}) still yields mutual-follow pairs for the repost feature to demo.
-  // Recompute the live counters afterwards (total_likes from recipe likes;
-  // following_count from real follows — follower_count stays the seeded "vanity"
-  // total used for badges). Insert directly so we don't double-count via the RPC.
+  // Insert directly so we don't double-count via the RPC, then recompute every
+  // counter from the rows actually inserted — a seeded profile's followers/likes
+  // must be earned from real rows, never a headline number.
   const ids = [...cookId.values()];
   const n = ids.length;
   const followRows = ids.flatMap((a, i) =>
@@ -203,9 +195,10 @@ async function main() {
   if (followRows.length) await supabaseAdmin.from('follows').upsert(followRows, { onConflict: 'follower_id,cook_id', ignoreDuplicates: true });
   for (const id of ids) {
     const { count: followingCount } = await supabaseAdmin.from('follows').select('*', { count: 'exact', head: true }).eq('follower_id', id);
+    const { count: followerCount } = await supabaseAdmin.from('follows').select('*', { count: 'exact', head: true }).eq('cook_id', id);
     const { data: recs } = await supabaseAdmin.from('recipes').select('like_count').eq('cook_id', id);
     const totalLikes = (recs ?? []).reduce((n, r) => n + (r.like_count as number), 0);
-    await supabaseAdmin.from('profiles').update({ following_count: followingCount ?? 0, total_likes: totalLikes }).eq('id', id);
+    await supabaseAdmin.from('profiles').update({ follower_count: followerCount ?? 0, following_count: followingCount ?? 0, total_likes: totalLikes }).eq('id', id);
   }
   console.log('• cross-follows + counters');
   console.log('✓ Seed complete.');

@@ -16,6 +16,11 @@ const schema = z.object({
   CLOUDFLARE_ACCOUNT_ID: z.string().optional(),
   CLOUDFLARE_STREAM_TOKEN: z.string().optional(),
   CLOUDFLARE_STREAM_WEBHOOK_SECRET: z.string().optional(),
+  // Cloudflare Stream Live Inputs — separate from the VOD token above because
+  // live is a separate, unbuilt pipeline (capture → RTMP → live input). Setting
+  // this is the switch that turns /live/start on; leave it unset until the
+  // capture side actually exists.
+  CLOUDFLARE_LIVE_INPUT_TOKEN: z.string().optional(),
 
   // Push notifications via Firebase Cloud Messaging HTTP v1. Paste the FULL
   // service-account JSON (Firebase console → Project settings → Service
@@ -88,6 +93,12 @@ if (!isLocalSupabase && (isLocalDemoKey(env.SUPABASE_SERVICE_ROLE_KEY) || isLoca
 /** True when the user opted into real Cloudflare Stream and supplied creds. */
 export const cloudflareConfigured =
   env.VIDEO_PROVIDER === 'cloudflare' && !!env.CLOUDFLARE_ACCOUNT_ID && !!env.CLOUDFLARE_STREAM_TOKEN;
+
+/** True when real Cloudflare Stream Live Inputs are wired. Deliberately NOT
+ *  implied by `cloudflareConfigured`: VOD being on Cloudflare says nothing about
+ *  live, which has no capture or RTMP pipeline yet. False everywhere until the
+ *  live input token is set. */
+export const liveConfigured = !!env.CLOUDFLARE_ACCOUNT_ID && !!env.CLOUDFLARE_LIVE_INPUT_TOKEN;
 
 // A secret key with no webhook secret can charge money but never settle the
 // ledger (the webhook 403s) — refuse to start rather than silently strand tips.

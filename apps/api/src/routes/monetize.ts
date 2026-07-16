@@ -30,6 +30,9 @@ interface StripeObj {
   invoice?: string;
   status?: string;
   amount_paid?: number;
+  /** Charge only: `amount_refunded` < `amount` means a PARTIAL refund. */
+  amount?: number;
+  amount_refunded?: number;
   subscription?: string;
   current_period_end?: number;
   period_end?: number;
@@ -438,8 +441,16 @@ monetize.post('/products/:id/buy', requireAuth, requireNotBanned, rateLimit({ wi
   if (!creator?.stripe_account_id) throw badRequest('This creator can’t accept payments yet');
   const { data: row, error } = await supabaseAdmin.from('tips').insert({ tipper_id: userId, creator_id: prod.creator_id, product_id: id, amount_cents: priceCents, fee_cents: feeCents, net_cents: priceCents - feeCents, provider: 'stripe', status: 'pending', kind: 'product' }).select('id').single();
   if (error || !row) throw dbFail(error?.message ?? 'Failed to start purchase');
-  const { url } = await createOneOffCheckout({ ledgerId: row.id, amountCents: priceCents, feeCents, creatorAccountId: creator.stripe_account_id as string, productName: prod.title as string });
-  return c.json({ url, status: 'pending' as const });
+  try {
+    const { url } = await createOneOffCheckout({ ledgerId: row.id, amountCents: priceCents, feeCents, creatorAccountId: creator.stripe_account_id as string, productName: prod.title as string });
+    return c.json({ url, status: 'pending' as const });
+  } catch (err) {
+    // No session was created, so checkout.session.expired never fires to reap this
+    // row — leaving it would trip the in-flight guard above on every retry, forever.
+    await supabaseAdmin.from('tips').delete().eq('id', row.id);
+    console.error('[monetize] product checkout failed:', (err as Error).message);
+    throw badRequest('Could not start the payment — please try again');
+  }
 });
 
 const tierSchema = z.object({
@@ -669,18 +680,32 @@ monetize.post('/webhook/stripe', async (c) => {
         // by payment_intent; subscription renewals by the invoice's payment_intent —
         // and charge.refunded also carries the invoice id, so match either ref.
         const refs = [obj.payment_intent, obj.invoice].filter((x): x is string => !!x);
-        if (refs.length) {
+        // charge.refunded ALSO fires for partial refunds, where the earning stands:
+        // a $1 goodwill refund on a $50 tip must not erase the $50. Only a fully
+        // refunded charge reverses. A dispute carries no amount_refunded (and its
+        // `amount` is the disputed amount, not the charge's), so it never takes the
+        // ratio path — a chargeback always reverses in full.
+        const fullReversal = event.type === 'charge.dispute.created' || (obj.amount_refunded ?? 0) >= (obj.amount ?? 0);
+        if (refs.length && fullReversal) {
           const { data: reversed } = await supabaseAdmin
             .from('tips')
             .update({ status: 'refunded' })
             .in('provider_ref', refs)
             .eq('status', 'succeeded')
-            .select('tipper_id, recipe_id, kind');
-          // Withdraw premium access alongside the ledger reversal: a refunded or
-          // charged-back unlock must no longer grant the recipe.
+            .select('tipper_id, creator_id, recipe_id, product_id, kind');
+          // Withdraw what the money bought alongside the ledger reversal: a refunded
+          // or charged-back purchase must not keep granting access.
           for (const row of reversed ?? []) {
             if (row.kind === 'unlock' && row.tipper_id && row.recipe_id) {
               await supabaseAdmin.from('recipe_unlocks').delete().eq('user_id', row.tipper_id).eq('recipe_id', row.recipe_id);
+            }
+            if (row.kind === 'product' && row.tipper_id && row.product_id) {
+              await supabaseAdmin.from('product_purchases').delete().eq('user_id', row.tipper_id).eq('product_id', row.product_id);
+            }
+            // Subscription access is keyed on status alone, so canceling the row
+            // (the one status the schema has for "over") ends it immediately.
+            if (row.kind === 'subscription' && row.tipper_id) {
+              await supabaseAdmin.from('subscriptions').update({ status: 'canceled' }).eq('subscriber_id', row.tipper_id).eq('creator_id', row.creator_id);
             }
           }
         }

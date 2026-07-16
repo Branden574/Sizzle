@@ -300,7 +300,7 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
             <a href="#creators">Creators</a>
             <a href="/privacy">Privacy</a>
             <Button className="linkbtn login" onClick={onLogin}>Log in</Button>
-            <Button className="btn btn-accent cta" onClick={app}>Get the app</Button>
+            <Button className="btn btn-accent cta" onClick={app}>Get early access</Button>
           </div>
         </div>
       </nav>
@@ -362,8 +362,7 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
               <span className="eyebrow">Hungry yet?</span>
               <h2 className="serif">Come get <span className="hot ital">hungry.</span></h2>
               <div className="ctas">
-                <Button className="store" onClick={app}><span className="ico"></span><span><span className="l1">Download on the</span><br /><span className="l2">App Store</span></span></Button>
-                <Button className="store" onClick={app}><span className="ico">▶</span><span><span className="l1">Get it on</span><br /><span className="l2">Google Play</span></span></Button>
+                <Button className="btn btn-accent" onClick={app}>Get early access</Button>
               </div>
               <Button className="weblink linkbtn" onClick={app}>Or open the web app <span className="arr">→</span></Button>
             </div>
@@ -642,10 +641,9 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
       <section className="cta-sec"><div className="wrap"><div className="cta-card">
         <div className="b serif">Sizzle</div>
         <h2 className="serif">Recipes you can actually make.</h2>
-        <p>Watch it. Scale it. Cook it. Free on iOS, Android, and the web.</p>
+        <p>Watch it. Scale it. Cook it. Free on the web — iOS and Android are on the way.</p>
         <div className="ctas">
-          <Button className="store on-cream" onClick={app}><span className="ico"></span><span><span className="l1">Download on the</span><br /><span className="l2">App Store</span></span></Button>
-          <Button className="store on-cream" onClick={app}><span className="ico">▶</span><span><span className="l1">Get it on</span><br /><span className="l2">Google Play</span></span></Button>
+          <Button className="btn btn-dark" onClick={app}>Get early access</Button>
         </div>
         <Button className="weblink linkbtn" onClick={app}>Or open the web app <span className="arr">→</span></Button>
       </div></div></section>
@@ -670,7 +668,7 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
           <div className="brand serif">Sizzle</div>
           <p className="tag">Watch it. Then actually cook it. The home for real recipes from real home cooks — at getsizzle.app.</p>
           <div className="nutri-cols">
-            <div><h6>Product</h6><a href="#how">How it works</a><a href="#features">Features</a><a href="#creators">For creators</a><Button className="fl" onClick={app}>Get the app</Button></div>
+            <div><h6>Product</h6><a href="#how">How it works</a><a href="#features">Features</a><a href="#creators">For creators</a><Button className="fl" onClick={app}>Get early access</Button></div>
             <div><h6>The menu</h6><a href="#menu">FAQ</a><a href="/contact">Contact</a><Button className="fl" onClick={onLogin}>Log in</Button></div>
             <div><h6>Legal</h6><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="/cookie-policy">Cookies</a></div>
           </div>
@@ -754,12 +752,8 @@ html.lenis::-webkit-scrollbar{display:none}
 .szl .btn{display:inline-flex;align-items:center;gap:10px;height:52px;padding:0 22px;border-radius:14px;font-weight:700;font-size:15px;cursor:pointer;border:none;transition:transform .15s}
 .szl .btn:hover{transform:translateY(-2px)}
 .szl .btn-accent{background:linear-gradient(180deg,#ff6a44,#ed4f2c);color:#fff;box-shadow:0 8px 24px rgba(237,79,44,.35)}
-.szl .store{display:inline-flex;align-items:center;gap:11px;height:56px;padding:0 22px;border-radius:14px;background:#1b1410;border:1px solid var(--line);color:#fff;cursor:pointer;transition:transform .15s;font-family:inherit;text-align:left}
-.szl .store:hover{transform:translateY(-2px)}
-.szl .store .ico{font-size:22px;line-height:1}
-.szl .store .l1{font-size:10.5px;color:var(--soft)}
-.szl .store .l2{font-size:16px;font-weight:700}
-.szl .store.on-cream{background:#171008}
+/* For the accent-orange CTA card, where .btn-accent would vanish into the background. */
+.szl .btn-dark{background:#171008;color:#fff;box-shadow:0 8px 24px rgba(0,0,0,.28)}
 .szl .nav{position:sticky;top:0;z-index:40;background:rgba(14,11,9,.72);backdrop-filter:blur(14px);border-bottom:1px solid var(--line)}
 .szl .nav .row{display:flex;align-items:center;justify-content:space-between;height:72px}
 .szl .brand{font-family:var(--serif);font-size:30px}

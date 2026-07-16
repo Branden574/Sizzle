@@ -243,7 +243,7 @@ export function useBuyProduct(cookId: string) {
 export function useStartLive() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: (title: string) => apiSend<{ id: string; playbackUrl: string | null; provider: string }>('POST', '/live/start', { title }),
+    mutationFn: (title: string) => apiSend<{ id: string; playbackUrl: string | null; provider: string | null }>('POST', '/live/start', { title }),
     onSuccess: () => void qc.invalidateQueries({ queryKey: ['live'] }),
   });
 }

@@ -15,6 +15,11 @@ import { pressVars } from '../ui';
 
 const accent = theme.accent;
 
+/** Mirrors the API's `liveConfigured` (CLOUDFLARE_LIVE_INPUT_TOKEN). The client
+ *  can't read server env and no config endpoint carries this yet, so it's a
+ *  constant: flip it in the same change that wires real Live Inputs. */
+const LIVE_ENABLED: boolean = false;
+
 export function CookSheet() {
   const openCook = useSizzle((s) => s.openCook);
   const setOpenCook = useSizzle((s) => s.setOpenCook);
@@ -321,8 +326,7 @@ function SubscribeTiers({ cookId, basePriceCents }: { cookId: string; basePriceC
 
 /** Live banner + player shown on a creator's profile while they're live. */
 function LiveBanner({ cookId, name }: { cookId: string; name: string }) {
-  // Mock-provider gate: no fake livestreams in the native review build.
-  if (isNative) return null;
+  if (!LIVE_ENABLED || isNative) return null;
   const { data: live } = useCookLive(cookId);
   if (!live) return null;
   return (

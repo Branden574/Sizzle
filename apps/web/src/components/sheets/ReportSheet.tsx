@@ -41,7 +41,7 @@ export function ReportSheet() {
         <div {...swipe.handlers} style={{ textAlign: 'center', padding: '16px 0 6px', position: 'relative' , ...swipe.handlers.style}}>
           <div style={{ position: 'absolute', top: 8, left: '50%', transform: 'translateX(-50%)', width: 42, height: 5, borderRadius: 3, background: 'var(--track)' }} />
           <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)', marginTop: 6 }}>{done ? 'Thanks for the report' : `Report this ${noun}`}</div>
-          <div style={{ fontSize: 13, color: 'var(--text-faint)', marginTop: 2 }}>{done ? "Our team will review it shortly." : 'Why are you reporting it?'}</div>
+          <div style={{ fontSize: 13, color: 'var(--text-faint)', marginTop: 2 }}>{done ? 'We review every report and act within 24 hours.' : 'Why are you reporting it?'}</div>
         </div>
 
         <div style={{ padding: '12px 22px 0' }}>

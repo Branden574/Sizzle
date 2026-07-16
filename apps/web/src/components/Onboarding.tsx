@@ -7,7 +7,6 @@ import { useSuggestedCooks } from '../data/queries';
 import { apiGet } from '../lib/api';
 import { countries, subdivisions, TERMS_VERSION } from '../lib/geo';
 import { LegalDoc } from './LegalDoc';
-import { formatCount } from '../lib/format';
 import { useSizzle } from '../store';
 import { theme } from '../theme';
 import { ChevronLeftIcon } from './icons';
@@ -200,15 +199,16 @@ function StepCooks({ followed, toggle }: { followed: Record<string, boolean>; to
   return (
     <div style={{ position: 'absolute', inset: 0, padding: '104px 0 0', display: 'flex', flexDirection: 'column', animation: STEP_IN }}>
       <div style={{ padding: '0 26px' }}>
-        <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 40, lineHeight: 1.02, color: 'var(--text)' }}>Top cooks on Sizzle</div>
+        <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 40, lineHeight: 1.02, color: 'var(--text)' }}>Cooks to follow</div>
         <p style={{ margin: '12px 0 18px', color: 'var(--text-soft)', fontSize: 15 }}>Following is optional — their newest recipes show up in your Following feed.</p>
       </div>
       <div style={{ flex: 1, overflowY: 'auto', padding: '4px 26px 130px', display: 'flex', flexDirection: 'column', gap: 14 }}>
-        {isLoading && <div style={{ color: 'var(--text-faint-2)', fontSize: 14, padding: '8px 2px' }}>Finding the platform's top cooks…</div>}
+        {isLoading && <div style={{ color: 'var(--text-faint-2)', fontSize: 14, padding: '8px 2px' }}>Finding cooks for you…</div>}
         {(suggested ?? []).map((c) => {
           const f = !!followed[c.id];
-          const followerLabel = `${formatCount(c.followers)} ${c.followers === 1 ? 'follower' : 'followers'}`;
-          const subtitle = c.matched.length ? `${followerLabel} · ${c.matched.join(' · ')}` : followerLabel;
+          // The cook's own bio, not a follower count: this list is a follow-picker,
+          // and Sizzle makes no popularity claim about who lands in it.
+          const subtitle = c.matched.length ? c.matched.join(' · ') : c.bio;
           return (
             <div key={c.id} style={{ display: 'flex', alignItems: 'center', gap: 14, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 22, padding: 14 }}>
               <div
