@@ -775,6 +775,22 @@ monetize.post('/webhook/stripe', async (c) => {
         // A Dispute points at its charge; a Charge is one.
         const chargeId = isDispute ? obj.charge : obj.id;
         const ct = chargeId ? await getChargeTransfer(chargeId) : null;
+        // Every charge WE create is a destination charge, so ours-but-transferless
+        // means Stripe hasn't attached the transfer yet, not that none is coming —
+        // a dispute can be raised in the same second as the charge, ahead of
+        // transfer.created. Proceeding would flip the ledger below, ack 200, and
+        // the clawback would never run: nothing gets redelivered. Throw instead;
+        // the transfer is there by the retry. Charges with no ledger row are not
+        // ours and fall through — retrying those would hammer the endpoint for
+        // days over other people's events.
+        if (!ct && chargeId) {
+          const oursRefs = [obj.payment_intent, obj.invoice].filter((x): x is string => !!x);
+          if (oursRefs.length) {
+            const { data: ours, error: oursErr } = await supabaseAdmin.from('tips').select('id').in('provider_ref', oursRefs).limit(1);
+            if (oursErr) throw oursErr;
+            if (ours?.length) throw new Error(`charge ${chargeId} is ours but its transfer is not attached yet — 5xx so Stripe re-delivers`);
+          }
+        }
         // What the platform is out, CUMULATIVELY — that is what the proportional
         // target is measured against. `amount_refunded` is already cumulative, but a
         // dispute's `amount` covers only that dispute and STACKS on any refund
@@ -835,6 +851,16 @@ monetize.post('/webhook/stripe', async (c) => {
         // moved money or touched a row in the first place.
         if (obj.status !== 'won' || !obj.charge) break;
         const ct = await getChargeTransfer(obj.charge);
+        // Same ours-but-transferless guard as the refund/dispute branch: flipping
+        // the row with ct null would skip the repay silently and permanently.
+        if (!ct) {
+          const oursRefs = [obj.payment_intent].filter((x): x is string => !!x);
+          if (oursRefs.length) {
+            const { data: ours, error: oursErr } = await supabaseAdmin.from('tips').select('id').in('provider_ref', oursRefs).limit(1);
+            if (oursErr) throw oursErr;
+            if (ours?.length) throw new Error(`charge ${obj.charge} is ours but its transfer is not attached yet — 5xx so Stripe re-delivers`);
+          }
+        }
         // A fully refunded charge's dispute win undoes nothing: the fan was made
         // whole by the REFUND, which stands (winning only returns the dispute's
         // debit), so the row stays `refunded`, access stays revoked, and the
