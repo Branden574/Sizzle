@@ -11,7 +11,7 @@ import { relativeTime } from '../lib/format';
 import { canViewCookContent, cookSummary, loadBlockedIds, type ProfileRow } from '../mappers';
 import { notify, systemNotify } from '../services/notify';
 import { moderate } from '../services/moderation';
-import { accountActive, cancelSubscriptionAtPeriodEnd, createConnectAccount, createDashboardLink, createOnboardingLink, createOneOffCheckout, createSubscriptionCheckout, getChargeTransfer, paymentsProvider, reverseTransfer, stripeBalance, StripeError, transferToCreator, type ChargeTransfer } from '../services/payments';
+import { accountActive, cancelSubscriptionAtPeriodEnd, createConnectAccount, createDashboardLink, createOnboardingLink, createOneOffCheckout, createSubscriptionCheckout, getChargeTransfer, hasTransferInGroup, paymentsProvider, reverseTransfer, stripeBalance, StripeError, transferToCreator, type ChargeTransfer } from '../services/payments';
 import { captureException } from '../lib/sentry';
 import type { AppEnv } from '../types';
 
@@ -913,7 +913,21 @@ monetize.post('/webhook/stripe', async (c) => {
           const grossOwedCents = Math.min(obj.amount ?? 0, disputeReversedCents);
           const repayCents = Math.min(netCents, Math.floor((grossOwedCents * netCents) / amountCents));
           if (ct && repayCents > 0) {
-            await transferToCreator({ destination: ct.destination, amountCents: repayCents, idempotencyKey: `won_${obj.id}_${row.id}` });
+            // Stripe replays a key's FIRST response — including errors — for the
+            // key's 24h TTL, so a fixed key that once captured balance_insufficient
+            // poisons every redelivery even after the balance refills (observed
+            // live). The hour bucket gives each retry epoch a fresh key; the
+            // transfer_group lookup is the durable double-pay guard across epochs,
+            // covering a transfer that succeeded but whose row flip below failed.
+            const repayGroup = `won_${obj.id}_${row.id}`;
+            if (!(await hasTransferInGroup(repayGroup))) {
+              await transferToCreator({
+                destination: ct.destination,
+                amountCents: repayCents,
+                transferGroup: repayGroup,
+                idempotencyKey: `${repayGroup}_h${Math.floor(Date.now() / 3_600_000)}`,
+              });
+            }
           }
           const { error: updErr } = await supabaseAdmin.from('tips').update({ status: 'succeeded' }).eq('id', row.id).eq('status', 'refunded');
           if (updErr) throw updErr;

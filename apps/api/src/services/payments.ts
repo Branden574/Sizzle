@@ -276,9 +276,17 @@ export async function reverseTransfer(transferId: string, amountCents: number, i
 }
 
 /** Re-pay a creator after a won dispute. Funded from the platform balance —
- *  a reversal can't be un-reversed, so winning means transferring afresh. */
-export async function transferToCreator(opts: { destination: string; amountCents: number; idempotencyKey: string }): Promise<void> {
-  await stripe('/transfers', { destination: opts.destination, amount: String(opts.amountCents), currency: 'usd' }, opts.idempotencyKey);
+ *  a reversal can't be un-reversed, so winning means transferring afresh.
+ *  `transferGroup` tags the transfer so hasTransferInGroup() can see it. */
+export async function transferToCreator(opts: { destination: string; amountCents: number; idempotencyKey: string; transferGroup: string }): Promise<void> {
+  await stripe('/transfers', { destination: opts.destination, amount: String(opts.amountCents), currency: 'usd', transfer_group: opts.transferGroup }, opts.idempotencyKey);
+}
+
+/** Whether a transfer tagged with this group already exists — the durable
+ *  "did this repay already happen?" check, independent of idempotency-key TTL. */
+export async function hasTransferInGroup(transferGroup: string): Promise<boolean> {
+  const res = await stripeGet<{ data?: { id: string }[] }>(`/transfers?transfer_group=${encodeURIComponent(transferGroup)}&limit=1`);
+  return !!res.data?.length;
 }
 
 /** A single-use login link to the creator's Stripe Express dashboard (where they
