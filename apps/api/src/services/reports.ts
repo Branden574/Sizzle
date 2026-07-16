@@ -1,5 +1,6 @@
 import type { ReportTargetType } from '@sizzle/shared';
 import { supabaseAdmin } from '../lib/supabase';
+import { sendEmail } from './email';
 import { forbidden, notFound } from '../lib/errors';
 import { logModeration } from './audit';
 
@@ -62,4 +63,14 @@ export async function fileReport(opts: {
       if (hid && hid.length) await logModeration({ action: 'auto_hide', targetRecipeId: opts.targetId, detail: `${distinct} reports` });
     }
   }
+
+  // The published Terms promise every report is reviewed within 24 hours.
+  // Nobody sits watching the admin dashboard, so the clock has to start with a
+  // push to a monitored inbox. Fire-and-forget: an email failure must never
+  // fail the report itself.
+  void sendEmail({
+    to: 'support@getsizzle.app',
+    subject: `[Sizzle] New ${opts.targetType} report — ${opts.category}`,
+    html: `<p>New report filed.</p><ul><li>Target: ${opts.targetType} <code>${opts.targetId}</code></li><li>Category: ${opts.category}</li><li>Reason: ${opts.reason ? String(opts.reason).slice(0, 500) : '(none given)'}</li></ul><p>Review in the admin dashboard within 24h of this email.</p>`,
+  }).catch(() => {});
 }

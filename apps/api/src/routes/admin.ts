@@ -99,10 +99,12 @@ admin.get('/stats', async (c) => {
   return c.json(stats);
 });
 
-/** GET /admin/reports — posts with ≥ REPORT_THRESHOLD distinct reporters. */
+/** GET /admin/reports — every recipe with at least one open reporter. The
+ *  published Terms promise review of EVERY report within 24h, so a solo report
+ *  must surface here — REPORT_THRESHOLD only gates the auto-hide escalation. */
 admin.get('/reports', async (c) => {
   const byRecipe = await openReportsByRecipe();
-  const flagged = [...byRecipe.entries()].filter(([, e]) => e.count >= REPORT_THRESHOLD);
+  const flagged = [...byRecipe.entries()].filter(([, e]) => e.count >= 1);
   if (flagged.length === 0) return c.json<AdminReportGroupDTO[]>([]);
 
   const recipeIds = flagged.map(([rid]) => rid);

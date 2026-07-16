@@ -32,10 +32,12 @@ seo.get('/:id', async (c) => {
 
   const { data: r } = await supabaseAdmin
     .from('recipes')
-    .select('id, title, caption, cuisine, tags, image_urls, video_asset_id, cook_id, price_cents, visibility, status, servings, time_minutes')
+    .select('id, title, caption, cuisine, tags, image_urls, video_asset_id, cook_id, price_cents, visibility, status, servings, time_minutes, auto_hidden')
     .eq('id', id)
     .maybeSingle();
-  if (!r || r.status !== 'published') return c.html(page404(), 404);
+  // auto_hidden is moderation state: content pulled pending review must vanish
+  // from the public web too, not just the in-app feed.
+  if (!r || r.status !== 'published' || r.auto_hidden) return c.html(page404(), 404);
 
   const [{ data: cook }, { data: video }, { data: ings }] = await Promise.all([
     supabaseAdmin.from('profiles').select('display_name, handle, avatar_url, private').eq('id', r.cook_id).maybeSingle(),

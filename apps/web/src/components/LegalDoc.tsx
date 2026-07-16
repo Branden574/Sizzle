@@ -4,9 +4,8 @@ import { CloseIcon } from './icons';
 
 /**
  * In-app Terms / Privacy viewer shown from the signup checkbox (and reusable in
- * Settings). The body is a plain-language summary; `LEGAL_URLS` point at
- * with your finalized, jurisdiction-aware documents (e.g. generated + hosted by
- * the hosted, authoritative documents on getsizzle.app.
+ * Settings). The body is a plain-language summary; `LEGAL_URLS` point at the
+ * hosted, authoritative documents on getsizzle.app.
  */
 export const LEGAL_URLS: { terms: string; privacy: string; cookies: string } = {
   terms: 'https://getsizzle.app/terms',
@@ -22,7 +21,7 @@ const TERMS_SECTIONS: [string, string][] = [
   ['5. Objectionable content', 'We have zero tolerance for objectionable content and abusive users. What you post is screened by automated filters; you can report any post, comment, or account, or block any user, from inside the app. We review every report and act within 24 hours — content that breaks the rules is removed and the user behind it may be ejected.'],
   ['6. Termination', 'You can delete your account at any time; we may suspend or terminate accounts that violate these Terms.'],
   ['7. Disclaimers', 'Recipes are user-submitted — follow safe food-handling practices. The service is provided “as is,” without warranties.'],
-  ['8. Contact', 'Questions about these Terms can be sent to the support email listed in your finalized document.'],
+  ['8. Contact', 'Questions about these Terms can be sent to support@getsizzle.app.'],
 ];
 
 const PRIVACY_SECTIONS: [string, string][] = [
@@ -32,7 +31,7 @@ const PRIVACY_SECTIONS: [string, string][] = [
   ['4. Your rights', 'Depending on your state/country you may have rights to access, correct, or delete your data, and to opt out of any sale/share of personal information (we do not sell your data).'],
   ['5. Data retention & security', 'We keep your data while your account is active and take reasonable measures to protect it.'],
   ['6. Children', 'Sizzle is not directed to children under 13, and we do not knowingly collect their data.'],
-  ['7. Contact', 'Privacy requests can be sent to the contact listed in your finalized document.'],
+  ['7. Contact', 'Privacy requests can be sent to privacy@getsizzle.app.'],
 ];
 
 export function LegalDoc({ which, onClose }: { which: 'terms' | 'privacy'; onClose: () => void }) {

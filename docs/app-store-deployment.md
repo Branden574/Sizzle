@@ -163,9 +163,11 @@ holds the app signing key; you keep the upload key.
 ## 5. Store listing copy (ready to paste)
 
 **Name:** Sizzle
-**Subtitle / short description (30/80 chars):** Watch it. Then actually cook it.
+**Subtitle (App Store, 27/30 chars):** Watch it. Actually cook it.
+**Short description (Google Play, 32/80 chars):** Watch it. Then actually cook it.
 **Category:** Food & Drink (secondary: Social Networking)
-**Age rating:** 12+ / Teen (user-generated content).
+**Copyright (ASC App Information):** © 2026 Branden Vincent-Walker
+**Age rating:** 13+ (Apple's updated tiers; UGC + messaging declared) / Teen on Play.
 
 **Promotional text (App Store, 170 chars):**
 > Full-screen video recipes from real home cooks. Swipe, save, and actually make
@@ -182,7 +184,7 @@ holds the app signing key; you keep the upload key.
 >   as you shop.
 > • Follow the cooks you love, comment, and share dishes with friends.
 > • Creators can post video recipes and photo carousels, see insights on their
->   posts, and earn support from the people who cook their food.
+>   posts, and build a following of people who cook their food.
 > • No ads in the feed. No endless preamble. Just the good part of cooking: the
 >   watching, the wanting, the making.
 >
@@ -327,13 +329,13 @@ monetization flags or the 1.2 surfaces change.
 > also spells out the filtering, enforcement and blocking measures above) and
 > shown to every user who submits a report.
 >
-> **Monetization (Guideline 3.1.1 / 3.1.3(b)).** The iOS app contains **no way for
-> a viewer to spend money** — there is no tipping, subscribing, premium unlock, or
-> product purchase anywhere in the app, and no link, button, or call to action
-> pointing to an external way to buy. Premium posts appear as neutral locked cards
-> with no price and no purchase path. Subscriptions and unlocks are acquired only
-> on our web app at getsizzle.app, which is a separate multiplatform service under
-> Guideline 3.1.3(b).
+> **Monetization (Guideline 3.1.1).** The iOS app contains **no way for a viewer
+> to spend money** — there is no tipping, subscribing, premium unlock, or product
+> purchase anywhere in the app, and no price, link, button, or call to action
+> pointing to one. Premium posts appear as neutral locked cards with no price and
+> no purchase path. Subscriptions and unlocks are acquired only on our website,
+> entirely outside the app; users who purchased on the web can access their
+> content in the app. This is the transactions-disabled-on-iOS configuration.
 >
 > Creator-side earnings and payout setup **are** present in the app (Profile →
 > Insights → Earnings, and the Creator sheet). This is business onboarding for
@@ -366,7 +368,7 @@ monetization flags or the 1.2 surfaces change.
 5. ~~Configure Apple Sign-In + publish Google OAuth~~ DONE — both are live and the
    native buttons ship (§2.5). Watch the Apple client secret's ~6-month expiry.
 6. App Store Connect: App Privacy form using the data inventory above; age
-   rating (UGC: pick 'Infrequent/Mild' user-generated content → 12+);
+   rating (complete the updated questionnaire: UGC = Yes, declare in-app filtering/reporting/blocking controls, messaging = Yes → lands at 13+, matching the in-app 13+ gate);
    screenshots (6.9" set committed under docs/store-assets), keywords,
    support URL https://getsizzle.app/contact, marketing URL
    https://getsizzle.app.
