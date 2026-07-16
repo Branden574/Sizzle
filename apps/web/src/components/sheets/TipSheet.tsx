@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Button, DismissBackdrop } from '../controls';
 import { useSwipeDismiss } from '../../lib/useSwipeDismiss';
 import { canBuyInApp } from '../../lib/native';
-import { platformFeeCents, PLATFORM_FEE_PCT } from '@sizzle/shared';
+import { creatorShareCents, platformShareCents, processingFeeCents } from '@sizzle/shared';
 import { useSendTip, useTipConfig } from '../../data/queries';
 import { useRequireAuth } from '../../auth/useRequireAuth';
 import { useSizzle } from '../../store';
@@ -12,9 +12,10 @@ const accent = theme.accent;
 const usd = (cents: number) => `$${(cents / 100).toFixed(2)}`;
 
 /**
- * Send a creator a tip. The 5.5% platform fee is shown up front — the tipper
- * sees exactly what the creator receives before paying, and test mode (no
- * Stripe keys) is clearly labelled.
+ * Send a creator a tip. The full split is itemized up front — card processing
+ * off the top, then Sizzle's share — so the tipper sees exactly what the
+ * creator receives before paying, and test mode (no Stripe keys) is clearly
+ * labelled.
  */
 export function TipSheet() {
   const tipFor = useSizzle((s) => s.tipFor);
@@ -22,7 +23,7 @@ export function TipSheet() {
   const requireAuth = useRequireAuth();
   const { data: cfg } = useTipConfig(!!tipFor);
   const send = useSendTip();
-  const [amount, setAmount] = useState(300);
+  const [amount, setAmount] = useState(500);
   const [done, setDone] = useState(false);
   const [err, setErr] = useState<string | null>(null);
 
@@ -30,9 +31,12 @@ export function TipSheet() {
   // Payments are hidden on the native app (Apple 3.1.1 / Play Billing); this
   // sheet is unreachable there, but guard the render as defense in depth.
   if (!tipFor || !canBuyInApp) return null;
-  const presets = cfg?.presetsCents ?? [100, 300, 500, 1000];
-  const fee = platformFeeCents(amount);
-  const net = amount - fee;
+  const presets = cfg?.presetsCents ?? [500, 1000, 2000, 5000];
+  // The same shared helpers the server settles with, so what's shown here is
+  // penny-exact what lands: processing off the top, then the split.
+  const processing = processingFeeCents(amount);
+  const platform = platformShareCents(amount);
+  const net = creatorShareCents(amount);
   const close = () => { setTipFor(null); setDone(false); setErr(null); };
 
   const pay = () => {
@@ -82,13 +86,20 @@ export function TipSheet() {
                 })}
               </div>
 
-              {/* The split, up front — no fine print. */}
+              {/* The whole split, itemized up front — no fine print. */}
               <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 14, padding: '12px 14px', marginBottom: 12 }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5, color: 'var(--text)', fontWeight: 600 }}>
-                  <span>{tipFor.name} receives</span><span>{usd(net)}</span>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: 'var(--text-faint)' }}>
+                  <span>Tip total</span><span>{usd(amount)}</span>
                 </div>
                 <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: 'var(--text-faint)', marginTop: 4 }}>
-                  <span>Sizzle platform fee ({PLATFORM_FEE_PCT}%)</span><span>{usd(fee)}</span>
+                  <span>Card processing</span><span>− {usd(processing)}</span>
+                </div>
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 12.5, color: 'var(--text-faint)', marginTop: 4 }}>
+                  <span>Sizzle share</span><span>− {usd(platform)}</span>
+                </div>
+                <div style={{ height: 1, background: 'var(--line)', margin: '8px 0' }} />
+                <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: 13.5, color: 'var(--text)', fontWeight: 700 }}>
+                  <span>{tipFor.name} receives</span><span>{usd(net)}</span>
                 </div>
               </div>
 

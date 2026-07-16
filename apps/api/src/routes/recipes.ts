@@ -482,8 +482,8 @@ const controlsSchema = z.object({
   likesEnabled: z.boolean().optional(),
   commentsEnabled: z.boolean().optional(),
   countsVisible: z.boolean().optional(),
-  // Premium price in cents (≥ $1), or null to make it free again.
-  priceCents: z.number().int().min(100).max(50_000).nullable().optional(),
+  // Premium price in cents (≥ $5 — see MIN_TIP), or null to make it free again.
+  priceCents: z.number().int().min(500).max(50_000).nullable().optional(),
   // Post visibility: public, or subscribers-only (requires an active sub price).
   visibility: z.enum(['public', 'subscribers']).optional(),
 });

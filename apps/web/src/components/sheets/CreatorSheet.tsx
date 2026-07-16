@@ -104,7 +104,7 @@ export function CreatorSheet() {
               <Perks />
               <label style={{ display: 'flex', alignItems: 'flex-start', gap: 10, margin: '16px 2px', cursor: 'pointer' }}>
                 <input type="checkbox" checked={accepted} onChange={(e) => setAccepted(e.target.checked)} style={{ width: 18, height: 18, marginTop: 1, accentColor: 'var(--accent,#ff5a36)' }} />
-                <span style={{ fontSize: 13, color: 'var(--text-faint)', lineHeight: 1.5 }}>I agree to the Sizzle Creator Terms and understand the {String(pctFee())}% platform fee on earnings.</span>
+                <span style={{ fontSize: 13, color: 'var(--text-faint)', lineHeight: 1.5 }}>I agree to the Sizzle Creator Terms and understand the split on earnings: card processing comes off the top, then Sizzle keeps {String(pctFee())}% of the rest.</span>
               </label>
               {err && <ErrText text={err} />}
               <Button variant="primary" fullWidth onClick={becomeCreator} disabled={!accepted || onboard.isPending}>
@@ -129,7 +129,7 @@ export function CreatorSheet() {
   );
 }
 
-/** Platform fee % for the terms line — kept in one place. */
+/** Sizzle's share (% of the post-processing amount) for the terms line — kept in one place. */
 function pctFee(): number { return 10; }
 
 function Hero({ icon, title, sub }: { icon: string; title: string; sub: string }) {

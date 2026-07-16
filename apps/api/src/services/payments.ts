@@ -1,29 +1,45 @@
 /**
- * Creator payments (tips) via Stripe Connect. Sizzle keeps PLATFORM_FEE_PCT of
- * every tip as an application fee — disclosed to both sides in the UI — and the
- * rest transfers to the creator's connected account. Card processing comes out
- * of the platform fee (destination charge), not the creator's share.
+ * Creator payments (tips) via Stripe Connect. Every payment splits Model B
+ * style — card processing comes off the top, then Sizzle keeps PLATFORM_FEE_PCT
+ * of the remainder — disclosed to both sides in the UI. Both non-creator parts
+ * travel as the application fee on a destination charge (the platform is
+ * fees_collector, so Stripe's processing cost is paid out of that fee), and the
+ * creator's share transfers to their connected account.
  *
  * Provider selection mirrors video hosting: real Stripe when STRIPE_SECRET_KEY
  * is set, otherwise a mock that succeeds instantly (clearly labelled test mode)
  * so the whole flow works in dev without keys. Stripe is called with plain
  * fetch (form-encoded), consistent with the OpenAI/FCM/Cloudflare services.
  */
+import { creatorShareCents } from '@sizzle/shared';
 import { env, stripeConfigured } from '../env';
 
 const STRIPE_API = 'https://api.stripe.com/v1';
 
-async function stripe<T>(path: string, params: Record<string, string>): Promise<T> {
+/** A Stripe API error. Carries `code` because the HTTP status alone cannot tell a
+ *  permanent refusal (balance_insufficient — a 400) from a transient one (429,
+ *  outage): callers that must decide whether a retry could ever succeed need it. */
+export class StripeError extends Error {
+  constructor(message: string, readonly code: string | null) {
+    super(message);
+    this.name = 'StripeError';
+  }
+}
+
+async function stripe<T>(path: string, params: Record<string, string>, idempotencyKey?: string): Promise<T> {
   const res = await fetch(`${STRIPE_API}${path}`, {
     method: 'POST',
     headers: {
       authorization: `Bearer ${env.STRIPE_SECRET_KEY}`,
       'content-type': 'application/x-www-form-urlencoded',
+      // Stripe dedupes retries of the same key for 24h. The webhook 5xxs on a DB
+      // failure to be re-delivered, so any call that MOVES money needs one.
+      ...(idempotencyKey ? { 'idempotency-key': idempotencyKey } : {}),
     },
     body: new URLSearchParams(params).toString(),
   });
-  const data = (await res.json()) as T & { error?: { message?: string } };
-  if (!res.ok) throw new Error(`stripe ${path}: ${data.error?.message ?? res.status}`);
+  const data = (await res.json()) as T & { error?: { message?: string; code?: string } };
+  if (!res.ok) throw new StripeError(`stripe ${path}: ${data.error?.message ?? res.status}`, data.error?.code ?? null);
   return data;
 }
 
@@ -116,10 +132,11 @@ export async function createConnectAccount(email: string | null): Promise<string
       currency: 'usd',
       // REQUIRED and PERMANENT — cannot be changed after creation. 'application'
       // = Sizzle pays Stripe's fees and eats chargebacks / fraud / negative
-      // balances. That matches this file's model (processing comes out of our
-      // platform fee, not the creator's share) and is Stripe's own guidance for
-      // destination charges. It's also what we're already liable for today: with
-      // destination charges the platform is merchant of record either way.
+      // balances. That matches this file's model (processing is collected inside
+      // the application fee, never taken from the creator's share) and is
+      // Stripe's own guidance for destination charges. It's also what we're
+      // already liable for today: with destination charges the platform is
+      // merchant of record either way.
       responsibilities: { fees_collector: 'application', losses_collector: 'application' },
     },
     configuration: {
@@ -199,6 +216,71 @@ export async function stripeBalance(accountId: string): Promise<{ availableCents
   return { availableCents: sum(bal.available), pendingCents: sum(bal.pending) };
 }
 
+/** A destination charge together with the transfer it pushed to the creator.
+ *  `transferCents` is the GROSS charge, not the creator's share — see reverseTransfer. */
+export interface ChargeTransfer {
+  chargeCents: number;
+  /** Cumulative across every refund on the charge — a dispute's `amount` is NOT. */
+  refundedCents: number;
+  transferId: string;
+  transferCents: number;
+  reversedCents: number;
+  destination: string;
+  paymentIntent: string | null;
+  invoice: string | null;
+}
+
+/**
+ * Look up what a charge actually paid the creator, for clawing it back later.
+ * Null when no transfer exists (mock rows, or a charge whose transfer was skipped) —
+ * there is then nothing to reverse.
+ *
+ * Read from Stripe rather than computed from our ledger on purpose: the reversal
+ * amount then stays correct regardless of how Stripe books the fee, and
+ * `amount_reversed` makes the caller idempotent for free.
+ */
+export async function getChargeTransfer(chargeId: string): Promise<ChargeTransfer | null> {
+  const ch = await stripeGet<{
+    amount?: number;
+    amount_refunded?: number;
+    payment_intent?: string | null;
+    invoice?: string | null;
+    transfer?: { id?: string; amount?: number; amount_reversed?: number; destination?: string } | null;
+  }>(`/charges/${chargeId}?expand[]=transfer`);
+  const tr = ch.transfer;
+  if (!tr?.id || !tr.destination) return null;
+  return {
+    chargeCents: ch.amount ?? 0,
+    refundedCents: ch.amount_refunded ?? 0,
+    transferId: tr.id,
+    transferCents: tr.amount ?? 0,
+    reversedCents: tr.amount_reversed ?? 0,
+    destination: tr.destination,
+    paymentIntent: ch.payment_intent ?? null,
+    invoice: ch.invoice ?? null,
+  };
+}
+
+/**
+ * Claw back `amountCents` of a transfer after a refund or chargeback.
+ *
+ * refund_application_fee MUST stay true. With application_fee_amount and no
+ * transfer_data[amount], Stripe transfers the FULL charge to the creator and then
+ * pulls the fee back from them — so the transfer is the gross amount, not their
+ * 90%. Reversing it without returning the fee would settle the creator at MINUS
+ * the fee on a sale they never got paid for, and hand the platform a profit on a
+ * refund. Stripe prorates the fee refund on a partial reversal.
+ */
+export async function reverseTransfer(transferId: string, amountCents: number, idempotencyKey: string): Promise<void> {
+  await stripe(`/transfers/${transferId}/reversals`, { amount: String(amountCents), refund_application_fee: 'true' }, idempotencyKey);
+}
+
+/** Re-pay a creator after a won dispute. Funded from the platform balance —
+ *  a reversal can't be un-reversed, so winning means transferring afresh. */
+export async function transferToCreator(opts: { destination: string; amountCents: number; idempotencyKey: string }): Promise<void> {
+  await stripe('/transfers', { destination: opts.destination, amount: String(opts.amountCents), currency: 'usd' }, opts.idempotencyKey);
+}
+
 /** A single-use login link to the creator's Stripe Express dashboard (where they
  *  manage bank details, see payouts, and download tax forms). */
 export async function createDashboardLink(accountId: string): Promise<string> {
@@ -207,9 +289,10 @@ export async function createDashboardLink(accountId: string): Promise<string> {
 }
 
 /**
- * Stripe Checkout session for a tip: the tipper pays `amountCents`, Sizzle
- * keeps `feeCents` as the application fee, the rest lands in the creator's
- * connected account (destination charge). Returns the hosted checkout URL.
+ * Stripe Checkout session for a tip: the tipper pays `amountCents`, `feeCents`
+ * (card processing + Sizzle's share) is kept as the application fee, the rest
+ * lands in the creator's connected account (destination charge). Returns the
+ * hosted checkout URL.
  */
 export async function createOneOffCheckout(opts: {
   ledgerId: string;
@@ -238,18 +321,24 @@ export async function createOneOffCheckout(opts: {
 }
 
 /**
- * Recurring subscription Checkout: the fan is billed `priceCents`/month, Sizzle
- * keeps `feePct`% of each renewal as the application fee, the rest transfers to
- * the creator's connected account. Metadata links the sub back to our rows.
+ * Recurring subscription Checkout: the fan is billed `priceCents`/month, the
+ * non-creator share of each renewal (processing + Sizzle, see creatorShareCents)
+ * is kept as the application fee, the rest transfers to the creator's connected
+ * account. Metadata links the sub back to our rows.
  */
 export async function createSubscriptionCheckout(opts: {
   creatorAccountId: string;
   priceCents: number;
-  feePct: number;
   creatorName: string;
   creatorId: string;
   subscriberId: string;
 }): Promise<{ url: string }> {
+  // Subscriptions only take a PERCENT fee, so express the fixed-price split as
+  // one, rounded to Stripe's 2 decimals — the settled fee can drift from the
+  // exact split by up to 2¢ per renewal (either direction), which we accept;
+  // the ledger row is computed from the invoice amount with the shared
+  // helpers, penny-exact.
+  const feePercent = (((opts.priceCents - creatorShareCents(opts.priceCents)) / opts.priceCents) * 100).toFixed(2);
   const session = await stripe<{ url: string }>('/checkout/sessions', {
     mode: 'subscription',
     'line_items[0][price_data][currency]': 'usd',
@@ -257,7 +346,7 @@ export async function createSubscriptionCheckout(opts: {
     'line_items[0][price_data][recurring][interval]': 'month',
     'line_items[0][price_data][product_data][name]': `${opts.creatorName} — monthly on Sizzle`,
     'line_items[0][quantity]': '1',
-    'subscription_data[application_fee_percent]': String(opts.feePct),
+    'subscription_data[application_fee_percent]': feePercent,
     'subscription_data[transfer_data][destination]': opts.creatorAccountId,
     'subscription_data[metadata][creator_id]': opts.creatorId,
     'subscription_data[metadata][subscriber_id]': opts.subscriberId,

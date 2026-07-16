@@ -1,6 +1,6 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Button } from '../controls';
-import { PLATFORM_FEE_PCT, type RecipeDetail } from '@sizzle/shared';
+import { creatorShareCents, MIN_PRICE_CENTS, type RecipeDetail } from '@sizzle/shared';
 import { useEditRecipe, useMe, useMonetizationStatus, useRecipe, useSetRecipePoster, useSetRecipePrice, useSetRecipeVisibility } from '../../data/queries';
 import { uploadRecipeImage } from '../../lib/storage';
 import { showCreatorMoney } from '../../lib/native';
@@ -43,6 +43,7 @@ export function EditPostSheet() {
   const [rating, setRating] = useState(0);
   const [premium, setPremium] = useState(false);
   const [price, setPrice] = useState('');
+  const [priceErr, setPriceErr] = useState(false);
   const [subOnly, setSubOnly] = useState(false);
   const [ready, setReady] = useState(false);
 
@@ -68,18 +69,22 @@ export function EditPostSheet() {
   const isReview = r?.postType === 'review';
   const canSave = !!r && title.trim().length > 0 && !edit.isPending;
 
-  // The premium price lives on a separate "controls" endpoint. Compute the
-  // desired value: only paid when this creator can monetize, it's a real recipe,
-  // premium is on, and the entered price is at least $1 (else clear it).
-  const desiredPriceCents = (): number | null => {
-    if (isReview || !canMonetize || !premium) return null;
-    const n = Math.round(parseFloat(price) * 100);
-    return Number.isFinite(n) && n >= 100 ? Math.min(n, 50_000) : null;
-  };
+  // The premium price lives on a separate "controls" endpoint. A price applies
+  // only when this creator can monetize, it's a real recipe, and premium is on.
+  // Making the post free again is ONLY the explicit premium toggle — a
+  // below-floor number blocks the save with an inline error instead of quietly
+  // clearing the price and publishing the recipe free.
+  const priceWanted = !isReview && canMonetize && premium;
+  const priceCentsInput = Math.round(parseFloat(price) * 100);
+  const priceInputValid = Number.isFinite(priceCentsInput) && priceCentsInput >= MIN_PRICE_CENTS;
 
   const save = () => {
     if (!r || !canSave) return;
-    const nextPrice = desiredPriceCents();
+    if (priceWanted && !priceInputValid) {
+      setPriceErr(true);
+      return;
+    }
+    const nextPrice = priceWanted ? Math.min(priceCentsInput, 50_000) : null;
     // Persist the price only if it actually changed (avoids a needless PATCH).
     if (nextPrice !== (r.price ?? null)) {
       setRecipePrice.mutate({ recipeId: r.id, priceCents: nextPrice });
@@ -179,16 +184,18 @@ export function EditPostSheet() {
                         <div style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--text)' }}>Premium recipe</div>
                         <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 2, lineHeight: 1.45 }}>Lock the video, ingredients &amp; steps behind a one-time price.</div>
                       </div>
-                      <input type="checkbox" checked={premium} onChange={(e) => setPremium(e.target.checked)} style={{ width: 20, height: 20, accentColor: accent, flex: 'none', cursor: 'pointer' }} />
+                      <input type="checkbox" checked={premium} onChange={(e) => { setPremium(e.target.checked); setPriceErr(false); }} style={{ width: 20, height: 20, accentColor: accent, flex: 'none', cursor: 'pointer' }} />
                     </label>
                     {premium && (
                       <div style={{ marginTop: 12 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg)', border: '1.5px solid var(--line-2)', borderRadius: 12, padding: '0 12px' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg)', border: `1.5px solid ${priceErr ? 'var(--danger-fg)' : 'var(--line-2)'}`, borderRadius: 12, padding: '0 12px' }}>
                           <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-faint)' }}>$</span>
-                          <input value={price} onChange={(e) => setPrice(e.target.value.replace(/[^0-9.]/g, '').slice(0, 6))} inputMode="decimal" placeholder="3.99" style={{ flex: 1, height: 44, border: 'none', background: 'transparent', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 800, outline: 'none', padding: '0 6px' }} />
+                          <input value={price} onChange={(e) => { setPrice(e.target.value.replace(/[^0-9.]/g, '').slice(0, 6)); setPriceErr(false); }} inputMode="decimal" placeholder="5.99" style={{ flex: 1, height: 44, border: 'none', background: 'transparent', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 800, outline: 'none', padding: '0 6px' }} />
                         </div>
-                        <div style={{ fontSize: 12, color: 'var(--text-faint-2)', marginTop: 8, lineHeight: 1.45 }}>
-                          You keep {100 - PLATFORM_FEE_PCT}% of every unlock. Minimum $1.00.
+                        <div style={{ fontSize: 12, color: priceErr ? 'var(--danger-fg)' : 'var(--text-faint-2)', fontWeight: priceErr ? 600 : undefined, marginTop: 8, lineHeight: 1.45 }}>
+                          {priceInputValid
+                            ? <>You receive ${(creatorShareCents(Math.min(priceCentsInput, 50_000)) / 100).toFixed(2)} per unlock, after card processing and Sizzle&rsquo;s share.</>
+                            : <>Minimum price is ${(MIN_PRICE_CENTS / 100).toFixed(2)}.</>}
                         </div>
                       </div>
                     )}

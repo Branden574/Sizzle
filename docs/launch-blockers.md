@@ -100,11 +100,19 @@ product yet. An agent can build the end-of-feed state in an hour.
 2. Re-scope / delete the Preview copies of both Stripe env vars (blocker 4)
    **before** the swap.
 3. Create the live webhook at `https://sizzle-chi.vercel.app/monetize/webhook/stripe`
-   subscribing to exactly what the switch reads (`monetize.ts:651-768`):
+   subscribing to exactly what the switch reads (`monetize.ts:706-998`):
    `checkout.session.completed`, `.async_payment_succeeded`,
    `.async_payment_failed`, `.expired`, `charge.refunded`,
-   `charge.dispute.created`, `customer.subscription.created/updated/deleted`,
-   `invoice.paid`. Payload style **Snapshot**, scope **"Your account"**.
+   `charge.dispute.created`, `charge.dispute.updated`, `charge.dispute.closed`,
+   `customer.subscription.created/updated/deleted`, `invoice.paid`. Payload style
+   **Snapshot**, scope **"Your account"**.
+
+   Both dispute events are load-bearing, not optional. Stripe delivers only what
+   you subscribe to, so omitting `charge.dispute.closed` means every dispute we
+   WIN claws back the creator's share, takes the money back from Stripe, and
+   never re-pays it — the creator eats a chargeback that never happened. Omitting
+   `charge.dispute.updated` misses an inquiry escalating into a real chargeback
+   (Stripe re-uses the same dispute, so no second `created` ever arrives).
 4. Set **both** env vars together on project `sizzle` (the API — the naming is
    reversed). `env.ts:94-96` throws at boot if the key is set without the webhook
    secret: a half-swap takes the **whole API** down, not just payments.

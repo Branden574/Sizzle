@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Button, DismissBackdrop } from '../controls';
 import { useSwipeDismiss } from '../../lib/useSwipeDismiss';
 import { openExternal, showCreatorMoney } from '../../lib/native';
-import { PLATFORM_FEE_PCT, PLATFORM_FEE_RATIONALE, type CreatorAnalytics, type EarningKind, type EarningsSummary } from '@sizzle/shared';
+import { creatorShareCents, MIN_PRICE_CENTS, PLATFORM_FEE_PCT, PLATFORM_FEE_RATIONALE, type CreatorAnalytics, type EarningKind, type EarningsSummary } from '@sizzle/shared';
 import { useAnalytics, useBroadcast, useCreateProduct, useCreateTier, useDeleteProduct, useDeleteTier, useEarnings, useMe, useMonetizationStatus, useMyProducts, useMyTiers, usePayout, useSetGoal, useSetSubPrice, useSetWelcomeDm, useStartOnboarding } from '../../data/queries';
 import { useSizzle } from '../../store';
 import { formatCount } from '../../lib/format';
@@ -18,6 +18,20 @@ const fmtWatch = (ms: number) => {
 
 /** Short label for a ledger row by earning type. */
 const KIND_LABEL: Record<EarningKind, string> = { support: 'Support', subscription: 'Subscription', unlock: 'Recipe unlock', product: 'Product' };
+
+/** Shared bits for the price editors: every paid surface floors at $5, and every
+ *  editor shows the creator the exact dollars they receive as they type. */
+const MIN_PRICE_MSG = `Minimum price is $${(MIN_PRICE_CENTS / 100).toFixed(2)}.`;
+const priceErrStyle = { fontSize: 12.5, fontWeight: 600, color: 'var(--danger-fg)', marginTop: 8 } as const;
+const receiveHintStyle = { fontSize: 12, color: 'var(--text-faint-2)', marginTop: 8, lineHeight: 1.45 } as const;
+/** "You receive $X.XX per <unit>" for a typed dollar string, or null while the
+ *  input is empty/below the floor. Dollars, not percentages — the share is 90%
+ *  of what's left AFTER card processing, and dollars are unambiguous. */
+function receiveLine(dollars: string, unit: string, maxCents: number): string | null {
+  const cents = Math.round(parseFloat(dollars) * 100);
+  if (!Number.isFinite(cents) || cents < MIN_PRICE_CENTS) return null;
+  return `You receive ${usd(creatorShareCents(Math.min(cents, maxCents)))} ${unit}, after card processing and Sizzle's share.`;
+}
 
 /** Creator insights — totals + per-post engagement. Opened from your profile. */
 export function AnalyticsSheet() {
@@ -106,9 +120,10 @@ export function AnalyticsSheet() {
 }
 
 /**
- * Earnings — support, subscriptions, and recipe unlocks, with the 10% platform
- * fee broken out on every surface (totals AND each earning) plus the full
- * why-this-is-fair rationale. Creators should never wonder where a cent went.
+ * Earnings — support, subscriptions, and recipe unlocks, with the full split
+ * (card processing off the top, then Sizzle's share) broken out on every
+ * surface (totals AND each earning) plus the why-this-is-fair rationale.
+ * Creators should never wonder where a cent went.
  */
 function Earnings() {
   const status = useMonetizationStatus(true);
@@ -155,7 +170,7 @@ function Earnings() {
           <div style={{ fontSize: 13, color: 'var(--text-faint)', margin: '4px 0 10px', lineHeight: 1.5 }}>
             {st === 'pending'
               ? "You started payout setup but didn't finish. Stripe's setup links expire after a few minutes — tap below and we'll open a fresh one right where you left off."
-              : <>Turn on payouts to earn from monthly subscriptions, premium recipes, and one-off support. You keep {100 - PLATFORM_FEE_PCT}% of everything.</>}
+              : <>Turn on payouts to earn from monthly subscriptions, premium recipes, and one-off support. You keep {100 - PLATFORM_FEE_PCT}% of what&rsquo;s left after card processing.</>}
           </div>
           {st !== 'pending' && <div style={{ fontSize: 12.5, color: 'var(--text-faint-2)', lineHeight: 1.55, marginBottom: 12 }}>{PLATFORM_FEE_RATIONALE}</div>}
           {onboardErr && <div style={{ fontSize: 12.5, fontWeight: 600, color: '#d8521e', background: 'rgba(216,82,30,.1)', borderRadius: 10, padding: '9px 12px', marginBottom: 10 }}>{onboardErr}</div>}
@@ -180,7 +195,7 @@ function Earnings() {
             </div>
             <div style={{ height: 1, background: 'var(--line)', margin: '10px 0' }} />
             <Row label={`Payments received (${data?.totals.tipCount ?? 0})`} value={usd(data?.totals.grossCents ?? 0)} />
-            <Row label={`Sizzle platform fee (${PLATFORM_FEE_PCT}%)`} value={`− ${usd(data?.totals.feeCents ?? 0)}`} faint />
+            <Row label="Card processing + Sizzle share" value={`− ${usd(data?.totals.feeCents ?? 0)}`} faint />
             <Row label="You keep" value={usd(data?.totals.netCents ?? 0)} bold />
             {(data?.activeSubs ?? 0) > 0 && (
               <>
@@ -244,18 +259,21 @@ function Earnings() {
   );
 }
 
-/** Set (or clear) your monthly subscription price. $0/blank turns subscriptions off. */
+/** Set your monthly subscription price. Turning subscriptions OFF is only the
+ *  explicit red button below — never a side effect of typing a low number. */
 function SubPriceEditor({ data }: { data: EarningsSummary | undefined }) {
   const setSubPrice = useSetSubPrice();
   const current = data?.subPriceCents ?? null;
   const [editing, setEditing] = useState(false);
   const [dollars, setDollars] = useState('');
+  const [priceErr, setPriceErr] = useState(false);
 
-  const open = () => { setDollars(current != null ? (current / 100).toFixed(2) : ''); setEditing(true); };
+  const open = () => { setDollars(current != null ? (current / 100).toFixed(2) : ''); setPriceErr(false); setEditing(true); };
+  const receive = receiveLine(dollars, 'per month', 50_000);
   const save = () => {
     const n = Math.round(parseFloat(dollars) * 100);
-    const priceCents = Number.isFinite(n) && n >= 100 ? Math.min(n, 50_000) : null;
-    setSubPrice.mutate(priceCents, { onSuccess: () => setEditing(false) });
+    if (!Number.isFinite(n) || n < MIN_PRICE_CENTS) { setPriceErr(true); return; }
+    setSubPrice.mutate(Math.min(n, 50_000), { onSuccess: () => setEditing(false) });
   };
 
   return (
@@ -264,7 +282,7 @@ function SubPriceEditor({ data }: { data: EarningsSummary | undefined }) {
         <div style={{ minWidth: 0 }}>
           <div style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--text)' }}>Monthly subscription</div>
           <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 2 }}>
-            {current != null ? `Fans can subscribe for ${usd(current)}/mo — you keep ${usd(current - Math.floor((current * PLATFORM_FEE_PCT) / 100))}.` : 'Off — set a price to let fans subscribe monthly.'}
+            {current != null ? `Fans can subscribe for ${usd(current)}/mo — you receive ${usd(creatorShareCents(current))}.` : 'Off — set a price to let fans subscribe monthly.'}
           </div>
         </div>
         {!editing && (
@@ -281,9 +299,9 @@ function SubPriceEditor({ data }: { data: EarningsSummary | undefined }) {
               <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-faint)' }}>$</span>
               <input
                 value={dollars}
-                onChange={(e) => setDollars(e.target.value.replace(/[^0-9.]/g, '').slice(0, 6))}
+                onChange={(e) => { setDollars(e.target.value.replace(/[^0-9.]/g, '').slice(0, 6)); setPriceErr(false); }}
                 inputMode="decimal"
-                placeholder="4.99"
+                placeholder="5.99"
                 autoFocus
                 style={{ flex: 1, height: 44, border: 'none', background: 'transparent', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 800, outline: 'none', padding: '0 6px' }}
               />
@@ -293,6 +311,8 @@ function SubPriceEditor({ data }: { data: EarningsSummary | undefined }) {
               {setSubPrice.isPending ? '…' : 'Save'}
             </Button>
           </div>
+          {priceErr && <div style={priceErrStyle}>{MIN_PRICE_MSG}</div>}
+          {receive && <div style={receiveHintStyle}>{receive}</div>}
           <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: 8 }}>
             <Button onClick={() => setSubPrice.mutate(null, { onSuccess: () => setEditing(false) })} style={{ background: 'none', border: 'none', color: 'var(--danger-fg)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', padding: 0 }}>Turn off subscriptions</Button>
             <Button onClick={() => setEditing(false)} style={{ background: 'none', border: 'none', color: 'var(--text-faint)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer', padding: 0 }}>Cancel</Button>
@@ -380,11 +400,14 @@ function TiersManager() {
   const [adding, setAdding] = useState(false);
   const [name, setName] = useState('');
   const [price, setPrice] = useState('');
+  const [priceErr, setPriceErr] = useState(false);
   const [perks, setPerks] = useState('');
   const tiers = data?.tiers ?? [];
+  const receive = receiveLine(price, 'per month per subscriber', 50_000);
   const save = () => {
+    if (!name.trim()) return;
     const cents = Math.round(parseFloat(price) * 100);
-    if (!name.trim() || !(cents >= 100)) return;
+    if (!Number.isFinite(cents) || cents < MIN_PRICE_CENTS) { setPriceErr(true); return; }
     create.mutate({ name: name.trim(), priceCents: Math.min(cents, 50_000), perks: perks.trim() || null }, { onSuccess: () => { setName(''); setPrice(''); setPerks(''); setAdding(false); } });
   };
   return (
@@ -408,11 +431,13 @@ function TiersManager() {
         <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <div style={{ display: 'flex', gap: 8 }}>
             <input value={name} onChange={(e) => setName(e.target.value.slice(0, 60))} placeholder="Tier name" style={{ flex: 1, height: 44, border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 15, outline: 'none', padding: '0 12px', minWidth: 0 }} />
-            <div style={{ display: 'flex', alignItems: 'center', width: 100, background: 'var(--bg)', border: '1.5px solid var(--line-2)', borderRadius: 12, padding: '0 10px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', width: 100, background: 'var(--bg)', border: `1.5px solid ${priceErr ? 'var(--danger-fg)' : 'var(--line-2)'}`, borderRadius: 12, padding: '0 10px' }}>
               <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-faint)' }}>$</span>
-              <input value={price} onChange={(e) => setPrice(e.target.value.replace(/[^0-9.]/g, '').slice(0, 6))} inputMode="decimal" placeholder="9.99" style={{ flex: 1, height: 44, border: 'none', background: 'transparent', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 800, outline: 'none', padding: '0 4px', minWidth: 0 }} />
+              <input value={price} onChange={(e) => { setPrice(e.target.value.replace(/[^0-9.]/g, '').slice(0, 6)); setPriceErr(false); }} inputMode="decimal" placeholder="9.99" style={{ flex: 1, height: 44, border: 'none', background: 'transparent', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 800, outline: 'none', padding: '0 4px', minWidth: 0 }} />
             </div>
           </div>
+          {priceErr && <div style={{ ...priceErrStyle, marginTop: 0 }}>{MIN_PRICE_MSG}</div>}
+          {receive && <div style={{ ...receiveHintStyle, marginTop: 0 }}>{receive}</div>}
           <input value={perks} onChange={(e) => setPerks(e.target.value.slice(0, 200))} placeholder="Perks (e.g. all premium recipes + monthly Q&A)" style={{ height: 44, border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 13.5, outline: 'none', padding: '0 12px' }} />
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <Button onClick={save} disabled={create.isPending} style={{ height: 40, padding: '0 18px', border: 'none', borderRadius: 12, background: `linear-gradient(135deg,${theme.accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 14, fontWeight: 800, cursor: 'pointer', opacity: create.isPending ? 0.7 : 1 }}>{create.isPending ? '…' : 'Add tier'}</Button>
@@ -432,11 +457,14 @@ function ProductsManager() {
   const [adding, setAdding] = useState(false);
   const [title, setTitle] = useState('');
   const [price, setPrice] = useState('');
+  const [priceErr, setPriceErr] = useState(false);
   const [fileUrl, setFileUrl] = useState('');
   const products = data?.products ?? [];
+  const receive = receiveLine(price, 'per sale', 50_000_00);
   const save = () => {
+    if (!title.trim()) return;
     const cents = Math.round(parseFloat(price) * 100);
-    if (!title.trim() || !(cents >= 100)) return;
+    if (!Number.isFinite(cents) || cents < MIN_PRICE_CENTS) { setPriceErr(true); return; }
     create.mutate({ title: title.trim(), priceCents: Math.min(cents, 50_000_00), fileUrl: fileUrl.trim() || null }, { onSuccess: () => { setTitle(''); setPrice(''); setFileUrl(''); setAdding(false); } });
   };
   return (
@@ -445,7 +473,7 @@ function ProductsManager() {
         <div style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--text)' }}>Digital products</div>
         {!adding && <Button onClick={() => setAdding(true)} style={{ height: 34, padding: '0 14px', border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 13, fontWeight: 800, cursor: 'pointer' }}>+ Add</Button>}
       </div>
-      {products.length === 0 && !adding && <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 4 }}>Sell a cookbook, meal plan, or guide — you keep {100 - PLATFORM_FEE_PCT}%.</div>}
+      {products.length === 0 && !adding && <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 4 }}>Sell a cookbook, meal plan, or guide — you keep {100 - PLATFORM_FEE_PCT}% of what&rsquo;s left after card processing.</div>}
       {products.map((p) => (
         <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 0', borderBottom: '1px solid var(--line)' }}>
           <div style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</div>
@@ -457,12 +485,14 @@ function ProductsManager() {
         <div style={{ marginTop: 12, display: 'flex', flexDirection: 'column', gap: 8 }}>
           <input value={title} onChange={(e) => setTitle(e.target.value.slice(0, 120))} placeholder="Title (e.g. 30-Day Meal Plan)" style={{ height: 44, border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 15, outline: 'none', padding: '0 12px' }} />
           <div style={{ display: 'flex', gap: 8 }}>
-            <div style={{ display: 'flex', alignItems: 'center', width: 110, background: 'var(--bg)', border: '1.5px solid var(--line-2)', borderRadius: 12, padding: '0 12px' }}>
+            <div style={{ display: 'flex', alignItems: 'center', width: 110, background: 'var(--bg)', border: `1.5px solid ${priceErr ? 'var(--danger-fg)' : 'var(--line-2)'}`, borderRadius: 12, padding: '0 12px' }}>
               <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-faint)' }}>$</span>
-              <input value={price} onChange={(e) => setPrice(e.target.value.replace(/[^0-9.]/g, '').slice(0, 6))} inputMode="decimal" placeholder="9.99" style={{ flex: 1, height: 44, border: 'none', background: 'transparent', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 800, outline: 'none', padding: '0 4px', minWidth: 0 }} />
+              <input value={price} onChange={(e) => { setPrice(e.target.value.replace(/[^0-9.]/g, '').slice(0, 6)); setPriceErr(false); }} inputMode="decimal" placeholder="9.99" style={{ flex: 1, height: 44, border: 'none', background: 'transparent', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 800, outline: 'none', padding: '0 4px', minWidth: 0 }} />
             </div>
             <input value={fileUrl} onChange={(e) => setFileUrl(e.target.value)} placeholder="Download URL (optional)" style={{ flex: 1, height: 44, border: '1.5px solid var(--line-2)', borderRadius: 12, background: 'var(--bg)', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 13.5, outline: 'none', padding: '0 12px', minWidth: 0 }} />
           </div>
+          {priceErr && <div style={{ ...priceErrStyle, marginTop: 0 }}>{MIN_PRICE_MSG}</div>}
+          {receive && <div style={{ ...receiveHintStyle, marginTop: 0 }}>{receive}</div>}
           <div style={{ display: 'flex', justifyContent: 'space-between' }}>
             <Button onClick={save} disabled={create.isPending} style={{ height: 40, padding: '0 18px', border: 'none', borderRadius: 12, background: `linear-gradient(135deg,${theme.accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 14, fontWeight: 800, cursor: 'pointer', opacity: create.isPending ? 0.7 : 1 }}>{create.isPending ? '…' : 'Add product'}</Button>
             <Button onClick={() => setAdding(false)} style={{ background: 'none', border: 'none', color: 'var(--text-faint)', fontSize: 12.5, fontWeight: 700, cursor: 'pointer' }}>Cancel</Button>

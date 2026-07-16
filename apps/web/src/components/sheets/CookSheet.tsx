@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { creatorShareCents } from '@sizzle/shared';
 import { Button, DismissBackdrop } from '../controls';
 import { useBuyProduct, useCancelSubscription, useCook, useCookProducts, useCookLive, useCookTiers, useMe, useSubscribe, useToggleBlock, useToggleFollow, useToggleMute } from '../../data/queries';
 import { useRequireAuth } from '../../auth/useRequireAuth';
@@ -171,11 +172,11 @@ export function CookSheet() {
                 <Button onClick={() => { if (window.confirm(`Cancel your subscription to ${ck.name}? You keep access until the month ends.`)) cancelSub.mutate(ck.id); }} disabled={cancelSub.isPending} style={{ background: 'none', border: 'none', color: 'var(--text-faint)', fontFamily: "'Hanken Grotesk'", fontSize: 13, fontWeight: 700, cursor: 'pointer', textDecoration: 'underline' }}>Cancel</Button>
               </div>
             ) : (
-              <SubscribeTiers cookId={ck.id} basePriceCents={ck.subPriceCents} />
+              <SubscribeTiers cookId={ck.id} name={ck.name} basePriceCents={ck.subPriceCents} />
             )
           )}
 
-          {!privateLocked && canBuyInApp && !isOwn && <ProductShelf cookId={ck.id} />}
+          {!privateLocked && canBuyInApp && !isOwn && <ProductShelf cookId={ck.id} name={ck.name} />}
 
           {!privateLocked && canBuyInApp && ck.goal && ck.goal.targetCents > 0 && (
             <div style={{ marginTop: 16, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 16, padding: '13px 16px' }}>
@@ -262,7 +263,7 @@ function CookStat({ value, label, border, onClick }: { value: string; label: str
 }
 
 /** A creator's digital products, with buy / download. */
-function ProductShelf({ cookId }: { cookId: string }) {
+function ProductShelf({ cookId, name }: { cookId: string; name: string }) {
   const requireAuth = useRequireAuth();
   const { data: products } = useCookProducts(cookId);
   const buy = useBuyProduct(cookId);
@@ -276,6 +277,7 @@ function ProductShelf({ cookId }: { cookId: string }) {
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</div>
               {p.description && <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.description}</div>}
+              {!p.owned && <div style={{ fontSize: 11.5, color: 'var(--text-faint-2)', marginTop: 2 }}>{name} receives ${(creatorShareCents(p.priceCents) / 100).toFixed(2)}</div>}
             </div>
             {p.owned ? (
               p.fileUrl
@@ -294,7 +296,7 @@ function ProductShelf({ cookId }: { cookId: string }) {
 }
 
 /** Subscribe UI — a tier picker when the creator offers tiers, else the flat price. */
-function SubscribeTiers({ cookId, basePriceCents }: { cookId: string; basePriceCents: number }) {
+function SubscribeTiers({ cookId, name, basePriceCents }: { cookId: string; name: string; basePriceCents: number }) {
   const requireAuth = useRequireAuth();
   const subscribe = useSubscribe();
   const { data: tiers } = useCookTiers(cookId);
@@ -310,6 +312,7 @@ function SubscribeTiers({ cookId, basePriceCents }: { cookId: string; basePriceC
                   white-space:nowrap and it inherits here, so without the override a
                   wordy tier blows the card out sideways. */}
               {t.perks && <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 2, lineHeight: 1.35, whiteSpace: 'normal', overflowWrap: 'anywhere' }}>{t.perks}</div>}
+              <div style={{ fontSize: 11.5, color: 'var(--text-faint-2)', marginTop: 2, whiteSpace: 'normal' }}>{name} receives ${(creatorShareCents(t.priceCents) / 100).toFixed(2)}/mo</div>
             </div>
             <div style={{ flex: 'none', padding: '7px 14px', borderRadius: 12, background: `linear-gradient(135deg,${accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 14, fontWeight: 800 }}>${(t.priceCents / 100).toFixed(2)}/mo</div>
           </Button>
@@ -318,9 +321,12 @@ function SubscribeTiers({ cookId, basePriceCents }: { cookId: string; basePriceC
     );
   }
   return (
-    <Button onClick={() => go()} disabled={subscribe.isPending} className="sz-press" style={{ ...pressVars(0.97), width: '100%', marginTop: 16, height: 50, borderRadius: 15, border: 'none', background: `linear-gradient(135deg,${accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15.5, fontWeight: 800, cursor: 'pointer' }}>
-      {subscribe.isPending ? 'Starting…' : `⭐ Subscribe · $${(basePriceCents / 100).toFixed(2)}/mo`}
-    </Button>
+    <>
+      <Button onClick={() => go()} disabled={subscribe.isPending} className="sz-press" style={{ ...pressVars(0.97), width: '100%', marginTop: 16, height: 50, borderRadius: 15, border: 'none', background: `linear-gradient(135deg,${accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15.5, fontWeight: 800, cursor: 'pointer' }}>
+        {subscribe.isPending ? 'Starting…' : `⭐ Subscribe · $${(basePriceCents / 100).toFixed(2)}/mo`}
+      </Button>
+      <div style={{ fontSize: 11.5, color: 'var(--text-faint-2)', textAlign: 'center', marginTop: 8 }}>{name} receives ${(creatorShareCents(basePriceCents) / 100).toFixed(2)}/mo</div>
+    </>
   );
 }
 

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { creatorShareCents } from '@sizzle/shared';
 import { Button, DismissBackdrop } from '../controls';
 import { useRequireAuth } from '../../auth/useRequireAuth';
 import { useAuth } from '../../auth/useAuth';
@@ -294,7 +295,7 @@ export function RecipeSheet() {
                       <div style={{ fontSize: 16.5, fontWeight: 800, color: 'var(--text)', marginTop: 6 }}>Premium recipe</div>
                       <div style={{ fontSize: 13.5, color: 'var(--text-faint)', margin: '4px 0 14px', lineHeight: 1.5 }}>
                         {canBuyInApp
-                          ? `Unlock ${r.cook.name}'s full recipe — video, ingredients & steps. ${r.cook.name} keeps 90%.`
+                          ? `Unlock ${r.cook.name}'s full recipe — video, ingredients & steps.`
                           : `This is one of ${r.cook.name}'s premium recipes.`}
                       </div>
                       {canBuyInApp && (
@@ -305,6 +306,11 @@ export function RecipeSheet() {
                         >
                           {unlock.isPending ? 'Starting…' : `Unlock · $${(r.price / 100).toFixed(2)}`}
                         </Button>
+                      )}
+                      {canBuyInApp && (
+                        <div style={{ fontSize: 11.5, color: 'var(--text-faint-2)', marginTop: 8 }}>
+                          {r.cook.name} receives ${(creatorShareCents(r.price) / 100).toFixed(2)}
+                        </div>
                       )}
                       {canBuyInApp && r.cook.subPriceCents != null && (
                         <Button

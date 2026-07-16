@@ -273,25 +273,52 @@ export interface CookProfile {
 /** The signed-in user's own profile. */
 /* ─────────────────────────── monetization ─────────────────────────── */
 
-/** Platform fee on creator earnings, in percent. Shown verbatim to users —
- *  Sizzle is transparent about its cut. Card processing (Stripe) comes OUT of
- *  this fee, not out of the creator's share. */
+/** Sizzle's share of what remains after card processing, in percent. Shown
+ *  verbatim to users — Sizzle is transparent about its cut. */
 export const PLATFORM_FEE_PCT = 10;
 
+/** Card processing, modeled on Stripe US card pricing. The split every surface
+ *  shows is computed from these, so the numbers a fan sees pre-checkout are the
+ *  numbers that settle. */
+export const PROCESSING_PCT = 2.9;
+export const PROCESSING_FIXED_CENTS = 30;
+
+/** Minimum price/tip in cents across every paid surface ($5). Mirrors the API's
+ *  MIN_TIP and the DB CHECK floors — keep all three in step. */
+export const MIN_PRICE_CENTS = 500;
+
 /** One-line version of the fee disclosure (tip sheet, receipts). */
-export const PLATFORM_FEE_SHORT = `Sizzle keeps ${PLATFORM_FEE_PCT}% to run the platform — creators keep the rest.`;
+export const PLATFORM_FEE_SHORT =
+  `Card processing (about ${PROCESSING_PCT}% + ${PROCESSING_FIXED_CENTS}¢) comes off the top; ` +
+  `of the rest, Sizzle keeps ${PLATFORM_FEE_PCT}% and creators keep ${100 - PLATFORM_FEE_PCT}%.`;
 
 /** Why the fee exists and why we think it's fair — shown to creators wherever
  *  earnings appear. Honest and specific, not marketing fluff. */
 export const PLATFORM_FEE_RATIONALE =
-  `Sizzle keeps ${PLATFORM_FEE_PCT}% of each tip — you keep ${100 - PLATFORM_FEE_PCT}%. ` +
-  `And card processing comes out of OUR ${PLATFORM_FEE_PCT}%, not yours: Stripe's ~3% + 30¢ per tip, ` +
-  `plus video hosting and streaming and the moderation that keeps the feed worth being on. ` +
-  `Compared to the rest — YouTube takes 30–45%, TikTok up to 50%, and Patreon 8–12% with payment fees on top of that. ` +
+  `Every payment splits the same way, in the open: card processing (about ${PROCESSING_PCT}% + ${PROCESSING_FIXED_CENTS}¢) ` +
+  `comes off the top, Sizzle keeps ${PLATFORM_FEE_PCT}% of the rest, and you keep the other ${100 - PLATFORM_FEE_PCT}%. ` +
+  `Sizzle's share pays for video hosting and streaming and the moderation that keeps the feed worth being on — ` +
+  `other platforms typically take a far larger cut. ` +
   `Zero ads, we never sell your data, and we only make money when you do.`;
 
-/** Fee for a gross amount in cents. Rounds DOWN so rounding always favors the
- *  creator — the effective fee never exceeds the stated 5.5%. */
+/** Card-processing cost for a gross amount in cents (comes off the top). */
+export const processingFeeCents = (amountCents: number): number =>
+  Math.round((amountCents * PROCESSING_PCT) / 100) + PROCESSING_FIXED_CENTS;
+
+/** Sizzle's share: PLATFORM_FEE_PCT of what remains after processing. Rounds
+ *  DOWN so rounding always favors the creator. */
+export const platformShareCents = (amountCents: number): number =>
+  Math.floor(((amountCents - processingFeeCents(amountCents)) * PLATFORM_FEE_PCT) / 100);
+
+/** The creator's share — the remainder, so the split is penny-exact:
+ *  processingFeeCents(a) + platformShareCents(a) + creatorShareCents(a) === a
+ *  for every a (verified by hand at $5.00: 45 + 45 + 410 = 500). */
+export const creatorShareCents = (amountCents: number): number =>
+  amountCents - processingFeeCents(amountCents) - platformShareCents(amountCents);
+
+/** The pre-Model-B fee (a flat PLATFORM_FEE_PCT of gross, processing paid out of
+ *  it). Kept only so ledger rows written under that model still display the fee
+ *  they were actually charged; new charges use the helpers above. */
 export const platformFeeCents = (amountCents: number): number => Math.floor((amountCents * PLATFORM_FEE_PCT) / 100);
 
 export type MonetizationStatus = 'none' | 'pending' | 'active';

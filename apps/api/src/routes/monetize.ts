@@ -1,7 +1,7 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { PLATFORM_FEE_PCT, platformFeeCents, type EarningKind, type EarningsSummary, type TipConfig, type TipDTO } from '@sizzle/shared';
+import { creatorShareCents, PLATFORM_FEE_PCT, type EarningKind, type EarningsSummary, type TipConfig, type TipDTO } from '@sizzle/shared';
 import { requireAuth, requireNotBanned } from '../middleware/auth';
 import { rateLimit } from '../middleware/rateLimit';
 import { env, stripeConfigured } from '../env';
@@ -11,15 +11,19 @@ import { relativeTime } from '../lib/format';
 import { canViewCookContent, cookSummary, loadBlockedIds, type ProfileRow } from '../mappers';
 import { notify, systemNotify } from '../services/notify';
 import { moderate } from '../services/moderation';
-import { accountActive, cancelSubscriptionAtPeriodEnd, createConnectAccount, createDashboardLink, createOnboardingLink, createOneOffCheckout, createSubscriptionCheckout, paymentsProvider, stripeBalance } from '../services/payments';
+import { accountActive, cancelSubscriptionAtPeriodEnd, createConnectAccount, createDashboardLink, createOnboardingLink, createOneOffCheckout, createSubscriptionCheckout, getChargeTransfer, paymentsProvider, reverseTransfer, stripeBalance, StripeError, transferToCreator, type ChargeTransfer } from '../services/payments';
+import { captureException } from '../lib/sentry';
 import type { AppEnv } from '../types';
 
 export const monetize = new Hono<AppEnv>();
 
-/** Tip guardrails (cents). */
-const MIN_TIP = 100; // $1
+/** Tip guardrails (cents). The floor keeps small payments worth making: card
+ *  processing (~2.9% + 30¢) comes off the top before the 90/10 split, and below
+ *  ~$5 the fixed 30¢ eats an outsized share of what the fan pays. Every other
+ *  price floor (and the DB CHECKs) matches it. */
+const MIN_TIP = 500; // $5
 const MAX_TIP = 50_000; // $500
-const PRESETS = [100, 300, 500, 1000];
+const PRESETS = [500, 1000, 2000, 5000];
 
 type StripeMeta = { tip_id?: string; creator_id?: string; subscriber_id?: string };
 interface StripeObj {
@@ -36,6 +40,8 @@ interface StripeObj {
   subscription?: string;
   current_period_end?: number;
   period_end?: number;
+  /** Dispute only: the charge it's raised against. */
+  charge?: string;
   metadata?: StripeMeta;
   subscription_details?: { metadata?: StripeMeta };
   /** Newer API versions nest an invoice's subscription metadata + id under
@@ -171,8 +177,10 @@ monetize.post('/tip', requireAuth, requireNotBanned, rateLimit({ windowMs: 60_00
     tipRecipeId = rec ? recipeId : null;
   }
 
-  // The ledger row records the exact split: gross = platform fee + creator net.
-  const feeCents = platformFeeCents(amountCents);
+  // The ledger row records the exact split. fee_cents carries everything that
+  // isn't the creator's — card processing off the top plus Sizzle's share of the
+  // rest — so gross − fee is exactly what the creator receives.
+  const feeCents = amountCents - creatorShareCents(amountCents);
   const netCents = amountCents - feeCents;
   const { data: tip, error } = await supabaseAdmin
     .from('tips')
@@ -256,7 +264,7 @@ monetize.post('/unlock', requireAuth, requireNotBanned, rateLimit({ windowMs: 60
   if (liveMode && !creator.stripe_account_id) throw badRequest('This creator has not finished payout setup');
 
   const amountCents = rec.price_cents as number;
-  const feeCents = platformFeeCents(amountCents);
+  const feeCents = amountCents - creatorShareCents(amountCents);
   const { data: ledger, error } = await supabaseAdmin
     .from('tips')
     .insert({ tipper_id: userId, creator_id: rec.cook_id, recipe_id: recipeId, amount_cents: amountCents, fee_cents: feeCents, net_cents: amountCents - feeCents, provider: liveMode ? 'stripe' : 'mock', status: 'pending', kind: 'unlock' })
@@ -284,7 +292,7 @@ monetize.post('/unlock', requireAuth, requireNotBanned, rateLimit({ windowMs: 60
 
 /* ─────────────────────────── subscriptions ─────────────────────────── */
 
-const subPriceSchema = z.object({ priceCents: z.number().int().min(100).max(50_000).nullable() });
+const subPriceSchema = z.object({ priceCents: z.number().int().min(500).max(50_000).nullable() });
 
 /** POST /monetize/sub-price — the creator sets (or clears) their monthly price. */
 monetize.post('/sub-price', requireAuth, async (c) => {
@@ -368,7 +376,7 @@ monetize.post('/goal', requireAuth, async (c) => {
 const productSchema = z.object({
   title: z.string().trim().min(1).max(120),
   description: z.string().trim().max(1000).nullable().optional(),
-  priceCents: z.number().int().min(100).max(50_000_00),
+  priceCents: z.number().int().min(500).max(50_000_00),
   fileUrl: z.string().url().max(1000).nullable().optional(),
 });
 
@@ -418,7 +426,7 @@ monetize.post('/products/:id/buy', requireAuth, requireNotBanned, rateLimit({ wi
   if (already) return c.json({ url: null, status: 'succeeded' as const });
 
   const priceCents = prod.price_cents as number;
-  const feeCents = platformFeeCents(priceCents);
+  const feeCents = priceCents - creatorShareCents(priceCents);
   if (!stripeConfigured) {
     // Mock: grant + record instantly.
     await supabaseAdmin.from('product_purchases').upsert({ user_id: userId, product_id: id }, { onConflict: 'user_id,product_id' });
@@ -455,7 +463,7 @@ monetize.post('/products/:id/buy', requireAuth, requireNotBanned, rateLimit({ wi
 
 const tierSchema = z.object({
   name: z.string().trim().min(1).max(60),
-  priceCents: z.number().int().min(100).max(50_000),
+  priceCents: z.number().int().min(500).max(50_000),
   perks: z.string().trim().max(500).nullable().optional(),
 });
 
@@ -556,12 +564,15 @@ monetize.post('/subscribe', requireAuth, requireNotBanned, rateLimit({ windowMs:
     tierId = parsed.data.tierId;
   }
   if (!creator || creator.banned || creator.monetization_status !== 'active' || !priceCents) throw badRequest('This creator does not offer subscriptions');
+  // The DB CHECKs enforce the floor; re-assert before checkout as defense in
+  // depth so a stale pre-floor price can never be billed monthly.
+  if (priceCents < MIN_TIP) throw badRequest('This subscription price is below the minimum — the creator needs to update it');
   const { data: existing } = await supabaseAdmin.from('subscriptions').select('id, status').eq('subscriber_id', userId).eq('creator_id', creatorId).maybeSingle();
   if (existing && existing.status === 'active') return c.json({ url: null, status: 'active' as const });
 
   if (!stripeConfigured) {
     // Mock: activate + record the first month instantly (no provider_ref → no unique clash on re-sub).
-    const feeCents = platformFeeCents(priceCents);
+    const feeCents = priceCents - creatorShareCents(priceCents);
     await supabaseAdmin.from('subscriptions').upsert(
       { subscriber_id: userId, creator_id: creatorId, price_cents: priceCents, tier_id: tierId, status: 'active', current_period_end: new Date(Date.now() + 30 * 86_400_000).toISOString() },
       { onConflict: 'subscriber_id,creator_id' },
@@ -576,7 +587,6 @@ monetize.post('/subscribe', requireAuth, requireNotBanned, rateLimit({ windowMs:
   const { url } = await createSubscriptionCheckout({
     creatorAccountId: creator.stripe_account_id as string,
     priceCents,
-    feePct: PLATFORM_FEE_PCT,
     creatorName: (creator.display_name as string) || 'a Sizzle creator',
     creatorId,
     subscriberId: userId,
@@ -627,6 +637,67 @@ async function settleTip(tipId: string, paymentIntent: string | null): Promise<v
   }).catch(() => {});
 }
 
+/** Stripe error codes a reversal retry could never get past. `balance_insufficient`
+ *  means the creator has already paid the money out — their balance will not refill
+ *  because we asked again. Everything else (429, 5xx, network) is worth a retry. */
+const PERMANENT_REVERSAL_CODES = new Set(['balance_insufficient']);
+
+/** Terminal dispute statuses where nothing should be revoked: the money came back.
+ *  (`warning_closed` is terminal too, but the inquiry gate breaks before this.) */
+const DISPUTE_SETTLED_FOR_US = new Set(['won', 'prevented']);
+
+/**
+ * Claw back the creator's share of a charge the platform is now out of pocket on.
+ * Reverses `lostCents` (CUMULATIVE — see the callers) worth of the destination
+ * transfer, PROPORTIONALLY and net of anything already reversed, so a Dashboard
+ * refund with "reverse transfer" ticked, a redelivered event, and a partial refund
+ * all land on the right number, and forgetting the checkbox costs nothing.
+ *
+ * Throws on a reversal that a retry could still fix, so the webhook 5xxs and Stripe
+ * re-delivers. Returns normally only when the money is genuinely unrecoverable.
+ */
+async function recoverFromCreator(ct: ChargeTransfer, lostCents: number, keyPrefix: string): Promise<void> {
+  if (ct.chargeCents <= 0) return;
+  const target = Math.min(Math.floor((ct.transferCents * lostCents) / ct.chargeCents), ct.transferCents);
+  const delta = target - ct.reversedCents;
+  // Already reversed far enough — by us, or by an operator ticking "reverse
+  // transfer" in the Dashboard. NOT HANDLED: a Dashboard reversal done WITHOUT
+  // also refunding the application fee settles the creator at minus the fee, and
+  // amount_reversed looks identical either way, so this gate cannot see it.
+  // Catching it would cost an application-fee lookup on every redelivery of every
+  // refund to salvage one operator slip whose real fix is to refund in-app.
+  if (delta <= 0) return;
+  try {
+    // The cumulative TARGET in the key, not the delta: the target is monotonic, so
+    // each distinct reversal state gets its own key, while two equal-sized deltas
+    // (two identical partial refunds) would share a delta-based key and Stripe
+    // would replay the first response — silently skipping the second clawback.
+    // Same key with a different amount (an operator reversing mid-flight shifts
+    // the delta) is a hard 400 from Stripe, which rethrows below and re-delivers.
+    await reverseTransfer(ct.transferId, delta, `${keyPrefix}_${target}`);
+  } catch (err) {
+    const code = err instanceof StripeError ? err.code : null;
+    // Rethrowing a permanent refusal would re-deliver for three days into the same
+    // empty balance, and an endpoint that keeps failing gets DISABLED — which would
+    // stop settling tips for EVERY creator over one creator's balance. Recovering
+    // $9 must never outrank settling everyone's money.
+    if (!code || !PERMANENT_REVERSAL_CODES.has(code)) throw err;
+    // console.error is the durable record here: captureException is a no-op unless
+    // SENTRY_DSN is set, and this is the one path that loses money silently.
+    console.error(
+      '[monetize] transfer reversal refused — creator share NOT recovered, platform is out of pocket:',
+      `transfer=${ct.transferId} destination=${ct.destination} amountCents=${delta}`,
+      (err as Error).message,
+    );
+    await captureException(err, {
+      issue: 'transfer reversal failed — creator share NOT recovered, platform is out of pocket',
+      transferId: ct.transferId,
+      destination: ct.destination,
+      amountCents: delta,
+    });
+  }
+}
+
 /**
  * POST /monetize/webhook/stripe — settle / void / refund tips from Stripe events.
  * Signature + timestamp verified (replay window ±5 min). Returns 5xx on a DB
@@ -675,24 +746,68 @@ monetize.post('/webhook/stripe', async (c) => {
         if (validTipId) await supabaseAdmin.from('tips').delete().eq('id', validTipId).eq('status', 'pending');
         break;
       case 'charge.refunded':
-      case 'charge.dispute.created': {
+      case 'charge.dispute.created':
+      case 'charge.dispute.updated': {
+        const isDispute = event.type !== 'charge.refunded';
+        // An INQUIRY (Amex/Discover pre-dispute) also arrives as dispute.created,
+        // but debits nothing — the customer still holds a charge they paid for.
+        // Reversing or revoking on one would claw back a creator and cut off a
+        // paying fan over a question. Stripe marks all three inquiry states
+        // warning_* (needs_response / under_review / closed), and that status is the
+        // documented signal — the withdrawal balance transaction is not guaranteed
+        // to be attached yet when the payload is snapshotted, so gating on that
+        // instead would silently never reverse a real chargeback. Escalation to a
+        // real chargeback arrives as dispute.UPDATED, never a second created —
+        // hence both events.
+        if (isDispute && (obj.status ?? '').startsWith('warning_')) break;
+        // A dispute already settled in our favour must touch NOTHING — money or
+        // rows. The money never left (won) or leaves as its own charge.refunded
+        // (prevented, per RDR semantics), so reversing here would claw back a
+        // creator on a dispute we didn't lose — and when such an event is the
+        // FIRST dispute event we ever see (webhook subscribed mid-dispute), the
+        // ledger gate below would skip the flip too, so dispute.closed(won) would
+        // find no `refunded` row and never re-pay what this branch just took.
+        // (`lost` is deliberately NOT in that set: re-running it is a no-op — the
+        // row is already `refunded`, so the guarded update matches nothing —
+        // while skipping it would leave a fan with paid access if an `updated`
+        // is the FIRST dispute event we ever see.)
+        if (isDispute && DISPUTE_SETTLED_FOR_US.has(obj.status ?? '')) break;
+        // A Dispute points at its charge; a Charge is one.
+        const chargeId = isDispute ? obj.charge : obj.id;
+        const ct = chargeId ? await getChargeTransfer(chargeId) : null;
+        // What the platform is out, CUMULATIVELY — that is what the proportional
+        // target is measured against. `amount_refunded` is already cumulative, but a
+        // dispute's `amount` covers only that dispute and STACKS on any refund
+        // already given (refund $3 of $10, customer disputes the other $7), so read
+        // the refunded total off the charge and add it. Reading the dispute alone
+        // would target $7 of a $10 loss and leave the creator holding the rest.
+        const lostCents = isDispute ? (ct?.refundedCents ?? 0) + (obj.amount ?? 0) : (obj.amount_refunded ?? 0);
+        // MONEY FIRST, and on its own gate. A partial refund leaves the earning
+        // standing (below) but still has to claw back its share — otherwise every
+        // partial refund quietly leaves the creator's cut on the platform's tab.
+        if (ct && lostCents > 0) {
+          await recoverFromCreator(ct, lostCents, isDispute ? `rev_${obj.id}` : `rev_${chargeId}`);
+        }
         // Reverse the earning this charge paid for. One-off tips/unlocks are keyed
         // by payment_intent; subscription renewals by the invoice's payment_intent —
-        // and charge.refunded also carries the invoice id, so match either ref.
-        const refs = [obj.payment_intent, obj.invoice].filter((x): x is string => !!x);
+        // and the charge also carries the invoice id, so match either ref. Read them
+        // off the charge: a Dispute has no invoice of its own.
+        const refs = [ct?.paymentIntent ?? obj.payment_intent, ct?.invoice ?? obj.invoice].filter((x): x is string => !!x);
         // charge.refunded ALSO fires for partial refunds, where the earning stands:
         // a $1 goodwill refund on a $50 tip must not erase the $50. Only a fully
         // refunded charge reverses. A dispute carries no amount_refunded (and its
         // `amount` is the disputed amount, not the charge's), so it never takes the
-        // ratio path — a chargeback always reverses in full.
-        const fullReversal = event.type === 'charge.dispute.created' || (obj.amount_refunded ?? 0) >= (obj.amount ?? 0);
+        // ratio path — a chargeback always reverses in full (won/prevented broke
+        // out above, before any money moved).
+        const fullReversal = isDispute || (obj.amount_refunded ?? 0) >= (obj.amount ?? 0);
         if (refs.length && fullReversal) {
-          const { data: reversed } = await supabaseAdmin
+          const { data: reversed, error: revErr } = await supabaseAdmin
             .from('tips')
             .update({ status: 'refunded' })
             .in('provider_ref', refs)
             .eq('status', 'succeeded')
             .select('tipper_id, creator_id, recipe_id, product_id, kind');
+          if (revErr) throw revErr;
           // Withdraw what the money bought alongside the ledger reversal: a refunded
           // or charged-back purchase must not keep granting access.
           for (const row of reversed ?? []) {
@@ -708,6 +823,86 @@ monetize.post('/webhook/stripe', async (c) => {
               await supabaseAdmin.from('subscriptions').update({ status: 'canceled' }).eq('subscriber_id', row.tipper_id).eq('creator_id', row.creator_id);
             }
           }
+        }
+        break;
+      }
+      case 'charge.dispute.closed': {
+        // Only a WIN needs undoing: Stripe returns the disputed amount and the
+        // dispute fee, so the earning we reversed and the access we revoked were
+        // both taken back in error. `lost` needs nothing (the reversal already ran
+        // when the dispute opened — waiting until now to claw back would find the
+        // creator's balance long since paid out); warning_closed/prevented never
+        // moved money or touched a row in the first place.
+        if (obj.status !== 'won' || !obj.charge) break;
+        const ct = await getChargeTransfer(obj.charge);
+        // A fully refunded charge's dispute win undoes nothing: the fan was made
+        // whole by the REFUND, which stands (winning only returns the dispute's
+        // debit), so the row stays `refunded`, access stays revoked, and the
+        // reversal that ran was the refund's — not ours to repay. The modal case
+        // is refund → fan disputes anyway → we submit the refund as evidence and
+        // win: repaying here would pay the creator for a sale that was returned.
+        if (ct && ct.chargeCents > 0 && ct.refundedCents >= ct.chargeCents) break;
+        const refs = [ct?.paymentIntent ?? obj.payment_intent, ct?.invoice].filter((x): x is string => !!x);
+        if (!refs.length) break;
+        // Only the reversal issued FOR THIS DISPUTE is owed back. amount_reversed
+        // is cumulative across refund-driven reversals too, so subtract the
+        // refund's proportional share (the same target the refund path aims at):
+        // repaying off the raw total would also hand back a partial refund's
+        // clawback — e.g. $3 refunded of a $10 tip, the $7 dispute won, must
+        // repay the $7 share only; the $3 refund still stands.
+        const refundReversedCents = ct && ct.chargeCents > 0
+          ? Math.min(Math.floor((ct.transferCents * ct.refundedCents) / ct.chargeCents), ct.transferCents)
+          : 0;
+        const disputeReversedCents = Math.max(0, (ct?.reversedCents ?? 0) - refundReversedCents);
+        // Every DB error below is checked and thrown: supabase-js RESOLVES errors
+        // into { data: null, error }, so an unchecked read would yield no rows, ack
+        // 200, and Stripe would never re-deliver — leaving the won dispute forever
+        // unpaid and the fan locked out, which is the bug this branch exists to fix.
+        const { data: rows, error: selErr } = await supabaseAdmin
+          .from('tips')
+          .select('id, tipper_id, creator_id, recipe_id, product_id, kind, amount_cents, net_cents')
+          .in('provider_ref', refs)
+          .eq('status', 'refunded');
+        if (selErr) throw selErr;
+        for (const row of rows ?? []) {
+          const amountCents = (row.amount_cents as number | null) ?? 0;
+          const netCents = (row.net_cents as number | null) ?? 0;
+          // A row missing its split can't be re-paid correctly. Leave it
+          // `refunded` — visible to a redelivery or a human — rather than flip it
+          // to `succeeded` with the creator silently never re-paid.
+          if (amountCents <= 0 || netCents <= 0) {
+            console.error(`[monetize] dispute ${obj.id} won but tips row ${row.id} has no amount/net split — left refunded for manual reconciliation`);
+            continue;
+          }
+          // Re-pay BEFORE flipping the row. A transfer failure then 5xxs with the
+          // row still reading `refunded`, so the redelivery retries it; flipping
+          // first would leave nothing to match and strand the creator unpaid.
+          // Only re-pay what was genuinely clawed back FOR THE DISPUTE, capped at
+          // its own amount — when the reversal failed (creator already paid out)
+          // they never lost it, and paying now would hand them the money a second
+          // time out of the platform's pocket.
+          // Scale it to the NET share: reversing gross R also handed the creator
+          // back the fee on R, so they were only ever out R × net/amount. Re-paying
+          // R would leave them up by that fee, out of the platform's pocket.
+          const grossOwedCents = Math.min(obj.amount ?? 0, disputeReversedCents);
+          const repayCents = Math.min(netCents, Math.floor((grossOwedCents * netCents) / amountCents));
+          if (ct && repayCents > 0) {
+            await transferToCreator({ destination: ct.destination, amountCents: repayCents, idempotencyKey: `won_${obj.id}_${row.id}` });
+          }
+          const { error: updErr } = await supabaseAdmin.from('tips').update({ status: 'succeeded' }).eq('id', row.id).eq('status', 'refunded');
+          if (updErr) throw updErr;
+          if (row.kind === 'unlock' && row.tipper_id && row.recipe_id) {
+            const { error: unlockErr } = await supabaseAdmin.from('recipe_unlocks').upsert({ user_id: row.tipper_id, recipe_id: row.recipe_id }, { onConflict: 'user_id,recipe_id', ignoreDuplicates: true });
+            if (unlockErr) throw unlockErr;
+          }
+          if (row.kind === 'product' && row.tipper_id && row.product_id) {
+            const { error: purchErr } = await supabaseAdmin.from('product_purchases').upsert({ user_id: row.tipper_id, product_id: row.product_id }, { onConflict: 'user_id,product_id', ignoreDuplicates: true });
+            if (purchErr) throw purchErr;
+          }
+          // Subscriptions are NOT resurrected: customer.subscription.* owns that
+          // row and Stripe may have genuinely canceled the sub during the weeks a
+          // dispute takes, so forcing it back to active here could hand out access
+          // Stripe is no longer billing for. The fan re-subscribes.
         }
         break;
       }
@@ -756,7 +951,10 @@ monetize.post('/webhook/stripe', async (c) => {
         // retried invoice.paid still dedupes on the unique provider_ref index.
         const ref = obj.payment_intent ?? invoiceId;
         if (ref && amount > 0 && isUuid(meta?.creator_id) && isUuid(meta?.subscriber_id)) {
-          const feeCents = platformFeeCents(amount);
+          // The exact Model B split from the invoice amount — NOT the decimal
+          // percent Stripe applied (that one can drift a cent; the ledger is the
+          // number both sides were shown).
+          const feeCents = amount - creatorShareCents(amount);
           const { error: insErr } = await supabaseAdmin.from('tips').insert({
             tipper_id: meta!.subscriber_id,
             creator_id: meta!.creator_id,
@@ -910,10 +1108,11 @@ monetize.get('/earnings', requireAuth, async (c) => {
   const tips = (rows ?? []) as TipRow[];
   const totalsRow = (Array.isArray(agg) ? agg[0] : agg) as { gross_cents: number; fee_cents: number; net_cents: number; tip_count: number } | null;
 
-  // MRR net of the platform fee, computed per-sub (matches how each charge is split).
+  // MRR as what the creator receives, computed per-sub (matches how each
+  // renewal is split: processing off the top, then the platform share).
   const activeSubList = (activeSubRows ?? []) as { price_cents: number }[];
   const activeSubs = activeSubList.length;
-  const mrrCents = activeSubList.reduce((n, s) => n + (s.price_cents - Math.floor((s.price_cents * PLATFORM_FEE_PCT) / 100)), 0);
+  const mrrCents = activeSubList.reduce((n, s) => n + creatorShareCents(s.price_cents), 0);
   const byPostRaw = (byPostRows ?? []) as { recipe_id: string; net_cents: number; earn_count: number }[];
   const topRaw = (topRows ?? []) as { supporter_id: string; net_cents: number; cnt: number }[];
 

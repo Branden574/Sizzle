@@ -47,7 +47,7 @@ const PHASES: Phase[] = [
     title: 'Get Paid',
     tagline: 'Creators earn — your recipes make money, with a transparent 90/10 split.',
     status: 'shipped',
-    points: ['Fan subscriptions (monthly support)', 'Sell premium recipes you price', 'One-off support (tips)', 'Transparent payouts — you keep 90%'],
+    points: ['Fan subscriptions (monthly support)', 'Sell premium recipes you price', 'One-off support (tips)', 'Transparent payouts — 90% of every dollar after card processing'],
   },
 ];
 
