@@ -152,6 +152,21 @@ export async function createConnectAccount(email: string | null): Promise<string
     },
     // v2 returns null for any sub-object not named here — only `id` is safe without it.
     include: ['configuration.recipient', 'identity', 'requirements'],
+  }).catch(async (err: unknown) => {
+    // Live and test gate v2 independently: the sandbox hard-blocks v1 ("no longer
+    // recommended for new integrations") while livemode can reject v2 outright
+    // ("Accounts v2 is not enabled for your livemode merchant") until the platform
+    // finishes Connect onboarding. Same integration, opposite refusals — so fall
+    // back to the v1 Express shape this file used before the v2 migration, which
+    // yields an identical acct_* the rest of the money path already accepts.
+    if (err instanceof Error && /accounts v2 is not enabled/i.test(err.message)) {
+      return stripe<{ id: string }>('/accounts', {
+        type: 'express',
+        email,
+        'capabilities[transfers][requested]': 'true',
+      });
+    }
+    throw err;
   });
   return acct.id;
 }
