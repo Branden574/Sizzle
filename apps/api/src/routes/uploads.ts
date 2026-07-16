@@ -52,6 +52,39 @@ uploads.post('/video', requireAuth, rateLimit({ windowMs: 60_000, max: 20, name:
       throw badRequest('Video/poster URL must be in your own Supabase Storage folder for this project');
     }
 
+    // When Cloudflare is configured, relay the uploaded clip into Stream for
+    // transcoding — iOS records HEVC, which won't play on Android/older browsers,
+    // and Cloudflare normalizes it to H.264/HLS that plays everywhere. The client
+    // uploads to Supabase Storage (which works from the native WKWebView, unlike
+    // the direct Stream upload), then we pull it in here. The finalize cron drives
+    // the asset to ready. Poster stays as the client's JPEG (cross-platform) until
+    // Cloudflare's thumbnail replaces it on the ready-hop. mp4_url is left NULL so
+    // the raw HEVC is never served to an incompatible client while transcoding.
+    const streamProvider = getStreamProvider();
+    if (cloudflareConfigured && streamProvider.ingestFromUrl) {
+      try {
+        const { providerUid } = await streamProvider.ingestFromUrl(provided.uploadedUrl);
+        const { data: asset, error } = await supabaseAdmin
+          .from('video_assets')
+          .insert({
+            owner_id: userId,
+            provider: 'cloudflare',
+            provider_uid: providerUid,
+            status: 'pending',
+            poster_url: provided.posterUrl ?? null,
+            duration_seconds: provided.durationSeconds ?? null,
+          })
+          .select('id')
+          .single();
+        if (!error && asset) {
+          return c.json<DirectUploadTicket>({ videoAssetId: asset.id, uploadUrl: '', provider: 'cloudflare' }, 201);
+        }
+        // Insert failed — fall through to the raw-storage asset below rather than lose the post.
+      } catch {
+        // Cloudflare copy failed — serve the raw upload rather than dead-end the post.
+      }
+    }
+
     const { data: asset, error } = await supabaseAdmin
       .from('video_assets')
       .insert({

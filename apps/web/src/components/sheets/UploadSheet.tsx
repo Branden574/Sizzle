@@ -142,12 +142,17 @@ export function UploadSheet() {
           setVideoErr(`Videos can be up to ${Math.round(MAX_DURATION_SECONDS / 60)} minutes long.`);
           return;
         }
-        if (videoConfig?.provider === 'cloudflare') {
-          // Register first → upload the clip to Cloudflare. We do NOT block on
-          // transcoding here — that used to freeze the composer at 100% for up to
-          // two minutes. The post is created right away and the asset finishes
-          // transcoding in the background (see useUploadRecipe → finalize), which
-          // upgrades the card from poster → playable and re-moderates the thumbnail.
+        // The Cloudflare DIRECT upload (multipart POST straight from the client to
+        // upload.cloudflarestream.com) does not deliver the body from the iOS
+        // WKWebView — the slot stays "Pending Upload" and the post dead-ends. The
+        // whole rest of the pipeline is fine (register, transcode, playback all
+        // verified), and Supabase Storage uploads DO work from the native shell
+        // (photos/avatars prove it). So native routes through Supabase storage;
+        // the server relays it into Cloudflare for transcoding (uploads.ts).
+        if (videoConfig?.provider === 'cloudflare' && !isNative) {
+          // Web browsers deliver the multipart body fine — keep the direct path.
+          // We do NOT block on transcoding here; the post is created right away and
+          // the asset finishes in the background (useUploadRecipe → finalize).
           const ticket = await apiSend<DirectUploadTicket>('POST', '/uploads/video', {});
           await uploadToCloudflare(ticket.uploadUrl, videoFile, setProgress);
           setProgress(100);

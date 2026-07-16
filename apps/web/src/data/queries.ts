@@ -1157,18 +1157,23 @@ export function useUploadRecipe() {
       if (videoAssetId) {
         return apiSend<RecipeDetail>('POST', '/recipes', { ...input, videoAssetId });
       }
-      // Supabase flow: register the already-uploaded storage URL.
+      // Supabase flow: register the already-uploaded storage URL. When the server
+      // relayed it into Cloudflare (provider 'cloudflare'), the asset is still
+      // transcoding — poll it to ready so the card upgrades poster → playable
+      // (the finalize cron is the backstop if the client goes away).
       const ticket = await apiSend<DirectUploadTicket>('POST', '/uploads/video', video ?? undefined);
-      return apiSend<RecipeDetail>('POST', '/recipes', { ...input, videoAssetId: ticket.videoAssetId });
+      const detail = await apiSend<RecipeDetail>('POST', '/recipes', { ...input, videoAssetId: ticket.videoAssetId });
+      if (ticket.provider === 'cloudflare') finalizeVideoAsset(ticket.videoAssetId, qc, detail.id);
+      return detail;
     },
     onSuccess: (_detail, variables) => {
       void qc.invalidateQueries({ queryKey: ['feed'] });
       void qc.invalidateQueries({ queryKey: ['cook'] });
       void qc.invalidateQueries({ queryKey: keys.me });
       void qc.invalidateQueries({ queryKey: ['me', 'drafts'] });
-      // Cloudflare posts are created before transcoding finishes — keep polling in
-      // the background so the card becomes playable (and its thumbnail is moderated)
-      // without the composer having to wait.
+      // Cloudflare-direct posts (web) are created before transcoding finishes —
+      // keep polling in the background so the card becomes playable (and its
+      // thumbnail is moderated) without the composer having to wait.
       if (variables.videoAssetId) finalizeVideoAsset(variables.videoAssetId, qc, _detail?.id);
     },
   });

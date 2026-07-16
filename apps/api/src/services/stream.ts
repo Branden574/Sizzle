@@ -22,6 +22,11 @@ export interface VideoStreamProvider {
   readonly name: string;
   createDirectUpload(opts: { maxDurationSeconds?: number }): Promise<CreateUploadResult>;
   getAsset(providerUid: string): Promise<AssetStatus>;
+  /** Pull an already-uploaded clip (a public URL) into the provider for
+   *  transcoding. Optional — only Cloudflare implements it. Lets the native
+   *  client upload to Supabase Storage (which works from the WKWebView, unlike
+   *  the direct Stream upload) and have the server relay it in. */
+  ingestFromUrl?(url: string): Promise<{ providerUid: string }>;
 }
 
 /**
@@ -66,6 +71,21 @@ class CloudflareStream implements VideoStreamProvider {
     const json = (await res.json()) as { success: boolean; result?: { uid: string; uploadURL: string } };
     if (!json.success || !json.result) throw new Error('Cloudflare direct_upload failed');
     return { providerUid: json.result.uid, uploadUrl: json.result.uploadURL };
+  }
+
+  /** Copy-from-URL: Cloudflare fetches the clip from `url` and transcodes it —
+   *  normalizing iOS HEVC to cross-platform H.264/HLS. The source URL must stay
+   *  publicly reachable until the pull completes (our Supabase videos bucket is
+   *  public and we don't delete). requireSignedURLs:false to match the direct path. */
+  async ingestFromUrl(url: string): Promise<{ providerUid: string }> {
+    const res = await fetch(`${this.base}/copy`, {
+      method: 'POST',
+      headers: this.headers,
+      body: JSON.stringify({ url, requireSignedURLs: false }),
+    });
+    const json = (await res.json()) as { success: boolean; result?: { uid: string }; errors?: unknown };
+    if (!json.success || !json.result) throw new Error(`Cloudflare copy failed: ${JSON.stringify(json.errors)}`);
+    return { providerUid: json.result.uid };
   }
 
   async getAsset(uid: string): Promise<AssetStatus> {
