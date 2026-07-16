@@ -65,6 +65,21 @@ export const useAuth = create<AuthState>((set, get) => ({
     if (get().initialized) return;
     set({ initialized: true });
 
+    // Supabase lands auth-link failures (expired or already-used recovery and
+    // confirmation links) in the URL fragment, and nothing consumed it — the
+    // user was silently dumped on the home screen with no explanation. Surface
+    // it once, wherever they are, then scrub the URL so refreshes stay clean.
+    const frag = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+    const errCode = frag.get('error_code');
+    if (errCode) {
+      const friendly = /expired|otp|invalid/i.test(errCode)
+        ? 'That link has expired or was already used. If you still need it, request a fresh one from Sign in → Forgot password.'
+        : frag.get('error_description')?.replace(/\+/g, ' ') ?? 'That sign-in link didn’t work. Please request a new one.';
+      window.history.replaceState(null, '', window.location.pathname + window.location.search);
+      set({ error: friendly });
+      window.alert(friendly);
+    }
+
     supabase.auth.getSession().then(({ data }) => {
       const session = data.session;
       set({
