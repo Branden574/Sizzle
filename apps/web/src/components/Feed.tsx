@@ -10,6 +10,7 @@ import { useSizzle } from '../store';
 import { theme } from '../theme';
 import { formatCount } from '../lib/format';
 import { VideoPlayer } from './VideoPlayer';
+import { getLocalClip } from '../lib/localClips';
 import { ImageCarousel } from './ImageCarousel';
 import { VerifiedBadge } from './VerifiedBadge';
 import { Hashtags } from './Hashtags';
@@ -371,8 +372,12 @@ export function FeedCard({ card, onClose }: { card: RecipeCard; onClose?: () => 
   const { cook, viewer, counts, controls } = card;
   const hasImages = card.images.length > 0;
   // Prefer the HLS stream (Cloudflare: adaptive bitrate, CDN egress) over the
-  // raw MP4; mp4Url stays as the fallback for the bundled seed videos.
-  const videoSrc = !hasImages ? card.video?.hlsUrl || card.video?.mp4Url || null : null;
+  // raw MP4; mp4Url stays as the fallback for the bundled seed videos. A clip
+  // YOU just posted plays instantly from the still-on-device local file
+  // (TikTok-style) while Cloudflare transcodes — no "Processing…" wait for the
+  // creator; the remote HLS takes over on the next mount once it's ready.
+  const remoteSrc = !hasImages ? card.video?.hlsUrl || card.video?.mp4Url || null : null;
+  const videoSrc = remoteSrc ?? (!hasImages ? getLocalClip(card.id) : null);
   // Controls are now persisted server-side + enforced for every viewer.
   const showLikes = controls.likesEnabled;
   const showComments = controls.commentsEnabled;

@@ -7,6 +7,7 @@ import { useAppealRecipe, useCookEvent, useCookLog, useDeleteRecipe, useDerivati
 import { getOffline } from '../../lib/offline';
 import { canBuyInApp } from '../../lib/native';
 import { formatCount } from '../../lib/format';
+import { getLocalClip } from '../../lib/localClips';
 import { scaleIngredient } from '../../lib/ingredients';
 import { useShopping } from '../../lib/shopping';
 import { useSizzle } from '../../store';
@@ -67,7 +68,8 @@ export function RecipeSheet() {
   const isOwner = !!r && !!me && r.cook.id === me.id;
   const isReview = r?.postType === 'review';
   // Prefer HLS (Cloudflare adaptive stream) over raw MP4 — same order as the feed.
-  const headerVideo = r?.video?.hlsUrl || r?.video?.mp4Url || null;
+  // A clip you JUST posted plays instantly from the local file while it transcodes.
+  const headerVideo = r?.video?.hlsUrl || r?.video?.mp4Url || (r ? getLocalClip(r.id) : null);
   const headerImages = r?.images ?? [];
   // A freshly-posted clip has no playable URL until Cloudflare finishes — surface
   // an honest "Processing…" state instead of a bare gradient that reads as broken.
@@ -232,6 +234,19 @@ export function RecipeSheet() {
                     <StatCard label="Serves" value={formatServes(r.servings * scale)} />
                     <StatCard label="Level" value={r.level} />
                   </div>
+
+                  {/* Nutrition per serving — only when the creator filled it in. */}
+                  {r.macros && (
+                    <div style={{ marginTop: 10, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 16, padding: '12px 14px' }}>
+                      <div style={{ fontSize: 11, fontWeight: 800, letterSpacing: '.4px', textTransform: 'uppercase', color: 'var(--text-faint)', marginBottom: 8 }}>Nutrition · per serving</div>
+                      <div style={{ display: 'flex', gap: 8 }}>
+                        {r.macros.calories != null && <MacroStat value={String(r.macros.calories)} label="Calories" />}
+                        {r.macros.proteinG != null && <MacroStat value={`${r.macros.proteinG}g`} label="Protein" />}
+                        {r.macros.carbsG != null && <MacroStat value={`${r.macros.carbsG}g`} label="Carbs" />}
+                        {r.macros.fatG != null && <MacroStat value={`${r.macros.fatG}g`} label="Fat" />}
+                      </div>
+                    </div>
+                  )}
 
                   <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 12, padding: '8px 8px 8px 14px', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 14 }}>
                     <span style={{ flex: 1, fontSize: 13.5, fontWeight: 700, color: 'var(--text-muted)' }}>
@@ -608,6 +623,16 @@ function RecipeHeaderVideo({ src, poster, onExpand }: { src: string; poster?: st
 /** Serving count after scaling — rounded to the nearest half. */
 function formatServes(n: number): string {
   return String(Math.round(n * 2) / 2);
+}
+
+/** One nutrition figure (value on top, label under) in the macros row. */
+function MacroStat({ value, label }: { value: string; label: string }) {
+  return (
+    <div style={{ flex: 1, textAlign: 'center' }}>
+      <div style={{ fontSize: 17, fontWeight: 800, color: 'var(--text)', fontVariantNumeric: 'tabular-nums' }}>{value}</div>
+      <div style={{ fontSize: 11.5, color: 'var(--text-soft)', fontWeight: 600, marginTop: 1 }}>{label}</div>
+    </div>
+  );
 }
 
 function StatCard({ label, value }: { label: string; value: string }) {

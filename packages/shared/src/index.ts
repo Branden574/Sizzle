@@ -147,11 +147,21 @@ export interface RecipeCard {
 /** A post is either a recipe/tutorial or a foodie review. */
 export type PostType = 'recipe' | 'review';
 
+/** Nutrition per serving, creator-entered. Fields the creator left blank are null. */
+export interface RecipeMacros {
+  calories: number | null;
+  proteinG: number | null;
+  carbsG: number | null;
+  fatG: number | null;
+}
+
 /** Full recipe detail (card + caption + ingredients + ordered method). */
 export interface RecipeDetail extends RecipeCard {
   caption: string | null;
   ingredients: string[];
   steps: string[];
+  /** Nutrition per serving — null when the creator set none of the fields. */
+  macros: RecipeMacros | null;
   /** The owner-pinned comment, surfaced on the sheet and in cook mode. */
   chefsNote: { text: string; authorName: string } | null;
 }
@@ -704,6 +714,8 @@ export interface CreateRecipeInput {
   level: string;
   ingredients: string[];
   steps: string[];
+  /** Nutrition per serving (all fields optional; blank = not shown). */
+  macros?: { calories?: number; proteinG?: number; carbsG?: number; fatG?: number };
   /** Free-text caption; hashtags in it become the recipe's tags. */
   caption?: string;
   /** 'recipe' (default) or 'review'. */

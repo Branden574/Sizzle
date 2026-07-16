@@ -4,6 +4,7 @@ import { creatorShareCents, MIN_PRICE_CENTS, type RecipeDetail } from '@sizzle/s
 import { useEditRecipe, useMe, useMonetizationStatus, useRecipe, useSetRecipePoster, useSetRecipePrice, useSetRecipeVisibility } from '../../data/queries';
 import { uploadRecipeImage } from '../../lib/storage';
 import { showCreatorMoney } from '../../lib/native';
+import { buildMacros, MacroInput } from './UploadSheet';
 import { useSizzle } from '../../store';
 import { theme } from '../../theme';
 
@@ -40,6 +41,10 @@ export function EditPostSheet() {
   const [caption, setCaption] = useState('');
   const [ingredients, setIngredients] = useState('');
   const [steps, setSteps] = useState('');
+  const [calories, setCalories] = useState('');
+  const [proteinG, setProteinG] = useState('');
+  const [carbsG, setCarbsG] = useState('');
+  const [fatG, setFatG] = useState('');
   const [rating, setRating] = useState(0);
   const [premium, setPremium] = useState(false);
   const [price, setPrice] = useState('');
@@ -57,6 +62,10 @@ export function EditPostSheet() {
     setCaption(r.caption ?? '');
     setIngredients(r.ingredients.join('\n'));
     setSteps(r.steps.join('\n'));
+    setCalories(r.macros?.calories != null ? String(r.macros.calories) : '');
+    setProteinG(r.macros?.proteinG != null ? String(r.macros.proteinG) : '');
+    setCarbsG(r.macros?.carbsG != null ? String(r.macros.carbsG) : '');
+    setFatG(r.macros?.fatG != null ? String(r.macros.fatG) : '');
     setRating(r.rating ?? 0);
     setPremium(r.price != null);
     setPrice(r.price != null ? (r.price / 100).toFixed(2) : '');
@@ -105,6 +114,7 @@ export function EditPostSheet() {
         caption: caption.trim() || undefined,
         ingredients: isReview ? [] : ingredients.split('\n').map((s) => s.trim()).filter(Boolean),
         steps: isReview ? [] : steps.split('\n').map((s) => s.trim()).filter(Boolean),
+        macros: isReview ? undefined : buildMacros(calories, proteinG, carbsG, fatG),
         rating: isReview && rating > 0 ? rating : undefined,
       },
       { onSuccess: () => setEditPostFor(null) },
@@ -172,6 +182,16 @@ export function EditPostSheet() {
                 <div>
                   <label style={labelStyle}>Method · one step per line</label>
                   <textarea value={steps} onChange={(e) => setSteps(e.target.value)} rows={5} style={{ ...field, resize: 'vertical', lineHeight: 1.5 }} />
+                </div>
+
+                <div>
+                  <label style={labelStyle}>Nutrition per serving · optional</label>
+                  <div style={{ display: 'flex', gap: 8 }}>
+                    <MacroInput label="Cal" value={calories} onChange={setCalories} placeholder="520" fieldStyle={field} mutedColor="var(--text-faint)" />
+                    <MacroInput label="Protein" value={proteinG} onChange={setProteinG} placeholder="32" unit="g" fieldStyle={field} mutedColor="var(--text-faint)" />
+                    <MacroInput label="Carbs" value={carbsG} onChange={setCarbsG} placeholder="48" unit="g" fieldStyle={field} mutedColor="var(--text-faint)" />
+                    <MacroInput label="Fat" value={fatG} onChange={setFatG} placeholder="18" unit="g" fieldStyle={field} mutedColor="var(--text-faint)" />
+                  </div>
                 </div>
 
                 {/* Premium / subscribers-only gating. Hidden entirely on native —

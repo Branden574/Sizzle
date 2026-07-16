@@ -8,6 +8,7 @@ import { apiSend } from '../../lib/api';
 import { useSizzle } from '../../store';
 import { theme } from '../../theme';
 import { probeVideo, uploadPoster, uploadRecipeImage, uploadToCloudflare, uploadVideo } from '../../lib/storage';
+import { rememberLocalClip } from '../../lib/localClips';
 import { CameraRecorder } from '../CameraRecorder';
 import { NativeCameraRecorder } from '../NativeCameraRecorder';
 import { VideoTrimmer } from '../VideoTrimmer';
@@ -58,6 +59,11 @@ export function UploadSheet() {
   const [caption, setCaption] = useState('');
   const [ingredients, setIngredients] = useState(() => uploadPrefill?.ingredients ?? '');
   const [steps, setSteps] = useState(() => uploadPrefill?.steps ?? '');
+  // Nutrition per serving (all optional).
+  const [calories, setCalories] = useState('');
+  const [proteinG, setProteinG] = useState('');
+  const [carbsG, setCarbsG] = useState('');
+  const [fatG, setFatG] = useState('');
 
   const isReview = postType === 'review';
 
@@ -199,6 +205,7 @@ export function UploadSheet() {
         caption: caption.trim() || undefined,
         ingredients: isReview ? [] : ingredients.split('\n').map((s) => s.trim()).filter(Boolean),
         steps: isReview ? [] : steps.split('\n').map((s) => s.trim()).filter(Boolean),
+        macros: isReview ? undefined : buildMacros(calories, proteinG, carbsG, fatG),
         postType,
         rating: isReview && rating > 0 ? rating : undefined,
         status,
@@ -210,7 +217,10 @@ export function UploadSheet() {
       },
       {
         onSuccess: (detail) => {
-          if (videoUrl) URL.revokeObjectURL(videoUrl);
+          // Keep the local clip alive under its new recipe id — the feed/viewer
+          // play it INSTANTLY (TikTok-style) while Cloudflare transcodes.
+          if (videoUrl && detail?.id) rememberLocalClip(detail.id, videoUrl);
+          else if (videoUrl) URL.revokeObjectURL(videoUrl);
           photos.forEach((p) => URL.revokeObjectURL(p.url));
           setUploadPrefill(null);
           setShowUpload(false);
@@ -445,6 +455,15 @@ export function UploadSheet() {
                 <label style={labelStyle}>Method · one step per line</label>
                 <textarea value={steps} onChange={(e) => setSteps(e.target.value)} rows={4} placeholder={'Halve and score the eggplants.\nSear cut-side down until caramelized.'} style={{ ...field, resize: 'vertical', lineHeight: 1.5 }} />
               </div>
+              <div>
+                <label style={labelStyle}>Nutrition per serving · optional</label>
+                <div style={{ display: 'flex', gap: 8 }}>
+                  <MacroInput label="Cal" value={calories} onChange={setCalories} placeholder="520" />
+                  <MacroInput label="Protein" value={proteinG} onChange={setProteinG} placeholder="32" unit="g" />
+                  <MacroInput label="Carbs" value={carbsG} onChange={setCarbsG} placeholder="48" unit="g" />
+                  <MacroInput label="Fat" value={fatG} onChange={setFatG} placeholder="18" unit="g" />
+                </div>
+              </div>
             </>
           )}
           {(videoErr || upload.isError) && <div style={{ color: '#ff8a6b', fontSize: 13.5, fontWeight: 600 }}>{videoErr ?? "Couldn't post — please try again."}</div>}
@@ -501,6 +520,43 @@ export function UploadSheet() {
           </Button>
         </div>
       </div>
+    </div>
+  );
+}
+
+/** Parse the four optional macro inputs into the create payload (or nothing). */
+export function buildMacros(calories: string, proteinG: string, carbsG: string, fatG: string):
+  { calories?: number; proteinG?: number; carbsG?: number; fatG?: number } | undefined {
+  const num = (s: string, max: number) => {
+    const n = parseInt(s, 10);
+    return Number.isFinite(n) && n >= 0 ? Math.min(n, max) : undefined;
+  };
+  const m = { calories: num(calories, 30000), proteinG: num(proteinG, 2000), carbsG: num(carbsG, 2000), fatG: num(fatG, 2000) };
+  return m.calories === undefined && m.proteinG === undefined && m.carbsG === undefined && m.fatG === undefined ? undefined : m;
+}
+
+/** One numeric nutrition field (calories / protein / carbs / fat). The composer
+ *  is always dark; the edit sheet passes its themed field/label styles. */
+export function MacroInput({ label, value, onChange, placeholder, unit, fieldStyle = field, mutedColor = 'rgba(255,255,255,.45)' }: {
+  label: string; value: string; onChange: (v: string) => void; placeholder: string; unit?: string;
+  fieldStyle?: CSSProperties; mutedColor?: string;
+}) {
+  return (
+    <div style={{ flex: 1, minWidth: 0 }}>
+      <div style={{ position: 'relative' }}>
+        <input
+          value={value}
+          onChange={(e) => onChange(e.target.value.replace(/[^0-9]/g, '').slice(0, 5))}
+          inputMode="numeric"
+          placeholder={placeholder}
+          aria-label={`${label}${unit ? ` (${unit})` : ''} per serving`}
+          style={{ ...fieldStyle, padding: '13px 10px', textAlign: 'center' }}
+        />
+        {unit && value && (
+          <span style={{ position: 'absolute', right: 8, top: '50%', transform: 'translateY(-50%)', fontSize: 12, color: mutedColor, pointerEvents: 'none' }}>{unit}</span>
+        )}
+      </div>
+      <div style={{ textAlign: 'center', fontSize: 11, fontWeight: 700, color: mutedColor, marginTop: 4 }}>{label}</div>
     </div>
   );
 }

@@ -58,3 +58,8 @@ supabase/.branches
 .codex/
 # Scratch renders and stills, not app assets.
 *.jpeg
+
+# Local-only: API CLI deploys exclude web/native assets. Committing this would break the frontend build.
+.vercelignore
+# Vercel CLI local project link
+.vercel

@@ -675,6 +675,8 @@ export type EditRecipeInput = {
   caption?: string;
   ingredients: string[];
   steps: string[];
+  /** Nutrition per serving; a blank field clears the stored value. */
+  macros?: { calories?: number; proteinG?: number; carbsG?: number; fatG?: number };
   rating?: number;
 };
 export function useEditRecipe() {
@@ -1097,9 +1099,17 @@ export function useVideoConfig() {
   });
 }
 
-/** Poll a Cloudflare asset until it finishes transcoding (or give up). */
-export async function pollVideoReady(assetId: string, tries = 60, intervalMs = 2000): Promise<boolean> {
-  for (let i = 0; i < tries; i++) {
+/**
+ * Poll a Cloudflare asset until it finishes transcoding (or give up). Fast 2s
+ * cadence for the first minute (short clips finish here), then a 5s backoff for
+ * up to ~10 minutes total — the old fixed 2-minute window silently expired on
+ * longer clips/uploads and left the card stuck on "Processing…" until a manual
+ * refresh, because nothing ever refetched after the poll gave up.
+ */
+export async function pollVideoReady(assetId: string): Promise<boolean> {
+  const started = Date.now();
+  const MAX_MS = 10 * 60_000;
+  while (Date.now() - started < MAX_MS) {
     try {
       const s = await apiGet<VideoAssetStatus>(`/uploads/video/${assetId}/status`);
       if (s.status === 'ready') return true;
@@ -1107,7 +1117,7 @@ export async function pollVideoReady(assetId: string, tries = 60, intervalMs = 2
     } catch {
       /* transient — keep polling */
     }
-    await new Promise((r) => setTimeout(r, intervalMs));
+    await new Promise((r) => setTimeout(r, Date.now() - started < 60_000 ? 2000 : 5000));
   }
   return false; // timed out; the post still carries the asset id and self-heals on load
 }

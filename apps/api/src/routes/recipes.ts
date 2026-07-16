@@ -47,6 +47,15 @@ async function getRecipeDetail(viewerId: string | undefined, recipeId: string): 
     if (author && !author.banned) chefsNote = { text: pinnedRow.text as string, authorName: (author.display_name as string) || `@${author.handle}` };
   }
 
+  // Nutrition per serving — null unless the creator filled in at least one field.
+  const m = {
+    calories: (row.calories as number | null) ?? null,
+    proteinG: (row.protein_g as number | null) ?? null,
+    carbsG: (row.carbs_g as number | null) ?? null,
+    fatG: (row.fat_g as number | null) ?? null,
+  };
+  const macros = m.calories == null && m.proteinG == null && m.carbsG == null && m.fatG == null ? null : m;
+
   // Premium gating: withhold the recipe body from a locked card (the client shows
   // an unlock CTA). The card's media was already stripped in the mapper.
   return {
@@ -54,6 +63,7 @@ async function getRecipeDetail(viewerId: string | undefined, recipeId: string): 
     caption: (row.caption as string | null) ?? null,
     ingredients: card.locked ? [] : (ings ?? []).map((i) => i.text as string),
     steps: card.locked ? [] : (steps ?? []).map((s) => s.text as string),
+    macros: card.locked ? null : macros,
     chefsNote: card.locked ? null : chefsNote,
   };
 }
@@ -65,6 +75,14 @@ recipes.get('/:id', optionalAuth, async (c) => {
   return c.json(detail);
 });
 
+/** Nutrition per serving — every field optional; a blank field stores NULL. */
+const macrosSchema = z.object({
+  calories: z.number().int().min(0).max(30000).optional(),
+  proteinG: z.number().int().min(0).max(2000).optional(),
+  carbsG: z.number().int().min(0).max(2000).optional(),
+  fatG: z.number().int().min(0).max(2000).optional(),
+}).optional();
+
 const createSchema = z.object({
   videoAssetId: z.string().uuid().optional(),
   images: z.array(z.string().url()).min(1).max(8).optional(),
@@ -75,6 +93,7 @@ const createSchema = z.object({
   level: z.string().max(20).default('Easy'),
   ingredients: z.array(z.string().min(1)).max(40).default([]),
   steps: z.array(z.string().min(1)).max(40).default([]),
+  macros: macrosSchema,
   caption: z.string().max(600).optional(),
   postType: z.enum(['recipe', 'review']).default('recipe'),
   rating: z.number().int().min(1).max(5).optional(),
@@ -175,6 +194,10 @@ recipes.post('/', requireAuth, requireNotBanned, rateLimit({ windowMs: 60_000, m
       status,
       scheduled_at: willSchedule ? scheduledAt!.toISOString() : null,
       origin_recipe_id: originRecipeId,
+      calories: input.postType === 'review' ? null : (input.macros?.calories ?? null),
+      protein_g: input.postType === 'review' ? null : (input.macros?.proteinG ?? null),
+      carbs_g: input.postType === 'review' ? null : (input.macros?.carbsG ?? null),
+      fat_g: input.postType === 'review' ? null : (input.macros?.fatG ?? null),
     })
     .select('id')
     .single();
@@ -928,6 +951,7 @@ const updateSchema = z.object({
   level: z.string().max(20).default('Easy'),
   ingredients: z.array(z.string().min(1)).max(40).default([]),
   steps: z.array(z.string().min(1)).max(40).default([]),
+  macros: macrosSchema,
   caption: z.string().max(600).optional(),
   rating: z.number().int().min(1).max(5).optional(),
 });
@@ -970,6 +994,12 @@ recipes.patch('/:id', requireAuth, requireNotBanned, rateLimit({ windowMs: 60_00
       caption: input.caption ?? null,
       tags,
       rating: isReview ? (input.rating ?? null) : null,
+      // The edit form always sends the current nutrition values, so a blank
+      // field intentionally clears the stored one.
+      calories: isReview ? null : (input.macros?.calories ?? null),
+      protein_g: isReview ? null : (input.macros?.proteinG ?? null),
+      carbs_g: isReview ? null : (input.macros?.carbsG ?? null),
+      fat_g: isReview ? null : (input.macros?.fatG ?? null),
     })
     .eq('id', id);
   if (error) throw dbFail(error.message);
