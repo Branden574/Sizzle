@@ -1,0 +1,42 @@
+SIZZLE · WELCOME
+
+YOU'RE IN
+
+WELCOME TO SIZZLE, {{name}}
+
+Sixty-second videos from creators who actually make things. Watch,
+remix, and when you're ready — hit record.
+
+Set up my profile:
+{{action_url}}
+
+Discover creators:
+{{secondary_url}}
+
+FIRST STEPS
+  1. Add a photo and bio — profiles with faces get 4× more follows
+  2. Follow 5 creators to tune your feed
+  3. Post your first Sizzle — 60 seconds, no pressure
+
+--
+Sizzle
+
+Help Center:
+{{help_url}}
+Privacy:
+{{privacy_url}}
+Terms:
+{{terms_url}}
+Support:
+{{support_url}}
+Notification settings:
+{{settings_url}}
+
+Get the app — App Store:
+{{appstore_url}}
+Get the app — Google Play:
+{{play_url}}
+
+Sent because you created a Sizzle account.
+Sizzle Inc · 1550 Vine Street, Los Angeles, CA 90028
+© 2026 Sizzle Inc.

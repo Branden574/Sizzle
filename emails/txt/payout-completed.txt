@@ -1,0 +1,42 @@
+SIZZLE · CREATOR EARNINGS
+======================================================================
+
+PAYOUT COMPLETED
+
+{{amount}}
+
+Your {{period}} earnings are on the way. Most banks post Sizzle
+payouts within 1–2 business days.
+
+PAYOUT DETAILS
+----------------------------------------------------------------------
+Earning period:  {{earning_period}}
+Method:          {{method}}
+Initiated:       {{initiated_date}}
+Reference:       {{reference}}
+
+View earnings breakdown:
+{{action_url}}
+
+Amounts shown before local taxes. Statements for your records live
+in Earnings → Documents:
+{{documents_url}}
+
+======================================================================
+SIZZLE
+
+Payout settings:
+{{payout_settings_url}}
+Tax center:
+{{tax_center_url}}
+Help Center:
+{{help_url}}
+
+Download on the App Store:
+{{appstore_url}}
+Get it on Google Play:
+{{play_url}}
+
+Transactional receipt — required for your records.
+Sizzle Inc · 1550 Vine Street, Los Angeles, CA 90028 · © 2026
+Sizzle Inc.

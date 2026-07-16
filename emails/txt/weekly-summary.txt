@@ -1,0 +1,53 @@
+SIZZLE · WEEKLY RECAP
+======================================================================
+
+{{week_range}}
+
+{{headline}}
+
+YOUR WEEK
+----------------------------------------------------------------------
+Views:      {{views_total}}    (up {{views_delta}})
+Followers:  +{{followers_new}}    (up {{followers_delta}})
+Likes:      {{likes_total}}    (up {{likes_delta}})
+
+TOP SIZZLE THIS WEEK
+----------------------------------------------------------------------
+"{{video_title}}"
+{{video_views}} views · {{video_likes}} likes · {{video_comments}}
+comments
+
+HIGHLIGHTS
+----------------------------------------------------------------------
+- {{top_follower}} and {{other_follower_count}} other creators
+  followed you
+- Your comment replies earned {{reply_likes}} likes
+- You're in the top {{rank_pct}}% of {{category}} creators this week
+
+Open my analytics:
+{{action_url}}
+
+======================================================================
+SIZZLE
+
+Weekly recap: on — manage in notification settings:
+{{settings_url}}
+Unsubscribe:
+{{unsubscribe_url}}
+Help Center:
+{{help_url}}
+Privacy:
+{{privacy_url}}
+Terms:
+{{terms_url}}
+Support:
+{{support_url}}
+
+Download on the App Store:
+{{appstore_url}}
+Get it on Google Play:
+{{play_url}}
+
+Digest of your creator activity — one email, once a week.
+Sizzle Inc · 1550 Vine Street, Los Angeles, CA 90028 · © 2026
+Sizzle Inc.

@@ -1,0 +1,44 @@
+SIZZLE · ACCOUNT SECURITY
+
+WAS THIS YOU?
+
+Your Sizzle account was just opened on a device we haven't seen
+before. If this was you, you're all set — no action needed.
+
+SIGN-IN DETAILS
+  Device:    {{device}}
+  Location:  {{location}} (approximate)
+  Time:      {{time}}
+
+This was me:
+{{confirm_url}}
+
+Secure my account:
+{{secure_url}}
+
+"Secure my account" signs out all devices and walks you through a
+password change — takes under two minutes.
+
+Need help? Contact Sizzle Support:
+{{support_url}}
+
+--
+Sizzle
+
+Help Center:
+{{help_url}}
+Privacy:
+{{privacy_url}}
+Terms:
+{{terms_url}}
+Support:
+{{support_url}}
+
+Get the app — App Store:
+{{appstore_url}}
+Get the app — Google Play:
+{{play_url}}
+
+Security alerts can't be turned off — they keep your account safe.
+Sizzle Inc · 1550 Vine Street, Los Angeles, CA 90028
+© 2026 Sizzle Inc.

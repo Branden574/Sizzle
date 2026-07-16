@@ -1,0 +1,46 @@
+SIZZLE · MILESTONE
+
+{{headline}}
+
+"{{video_title}}" just crossed {{view_count}} views — your biggest
+Sizzle yet.
+
+  {{video_title}}
+  posted {{post_date}} · {{days_to_milestone}} days to 100K
+
+  Views:     {{views}}
+  Likes:     {{likes}}
+  Shares:    {{shares}}
+  Comments:  {{comments}}
+
+View full analytics:
+{{action_url}}
+
+CREATOR PROGRAM · ALMOST ELIGIBLE ({{eligibility_pct}}%)
+Qualified views: done. {{followers_needed}} more followers to go.
+Eligibility is confirmed by review once thresholds are met.
+
+--
+Sizzle
+
+Help Center:
+{{help_url}}
+Privacy:
+{{privacy_url}}
+Terms:
+{{terms_url}}
+Support:
+{{support_url}}
+
+Get the app — App Store:
+{{appstore_url}}
+Get the app — Google Play:
+{{play_url}}
+Notification settings:
+{{settings_url}}
+Unsubscribe:
+{{unsubscribe_url}}
+
+Milestone emails are on — manage them in notification settings.
+Sizzle Inc · 1550 Vine Street, Los Angeles, CA 90028
+© 2026 Sizzle Inc.

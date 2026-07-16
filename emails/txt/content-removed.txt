@@ -1,0 +1,48 @@
+SIZZLE · POLICY UPDATE
+
+A VIDEO WAS REMOVED FROM YOUR PROFILE
+
+After a review, we removed one of your Sizzles for violating our
+Community Guidelines. We know this isn't the email you wanted —
+here's exactly what happened and what you can do.
+
+  Video:         "{{video_title}}"
+  Posted:        {{post_date}} · removed {{removed_date}}
+  Policy:        {{policy}}
+  What happens:  {{consequence}}
+
+Appeal this decision:
+{{appeal_url}}
+
+Read the policy:
+{{policy_url}}
+
+Appeals are reviewed by a person, usually within 48 hours. If we got
+it wrong, the video is restored and this notice is wiped from your
+record.
+
+Questions? Contact Sizzle Support:
+{{support_url}}
+
+--
+Sizzle
+
+Help Center:
+{{help_url}}
+Privacy:
+{{privacy_url}}
+Terms:
+{{terms_url}}
+Support:
+{{support_url}}
+
+Get the app — App Store:
+{{appstore_url}}
+Get the app — Google Play:
+{{play_url}}
+Community Guidelines:
+{{guidelines_url}}
+
+Policy notices can't be turned off.
+Sizzle Inc · 1550 Vine Street, Los Angeles, CA 90028
+© 2026 Sizzle Inc.

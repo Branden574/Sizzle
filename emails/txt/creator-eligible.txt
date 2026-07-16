@@ -1,0 +1,56 @@
+SIZZLE · CREATOR PROGRAM
+======================================================================
+
+YOU QUALIFY
+
+YOU'VE EARNED YOUR SHOT, {{name}}
+
+You've hit every threshold for the Sizzle Creator Program. The
+application is now open for your account.
+
+YOUR NUMBERS
+----------------------------------------------------------------------
+Followers:        {{followers}}  [met]
+Qualified views:  {{qualified_views}}  [met]
+Standing:         Good  [met]
+
+WHAT YOU UNLOCK
+----------------------------------------------------------------------
+- Monetization — ad revenue share and viewer gifts
+- Creator analytics with audience breakdowns
+- The gold creator badge, everywhere you appear
+- Priority support from the creator team
+
+Apply to the Creator Program:
+{{action_url}}
+
+Applications are reviewed within 5 business days. Applying doesn't
+guarantee acceptance. Eligibility terms:
+{{program_terms_url}}
+
+======================================================================
+SIZZLE
+
+Help Center:
+{{help_url}}
+Privacy:
+{{privacy_url}}
+Terms:
+{{terms_url}}
+Support:
+{{support_url}}
+Program terms:
+{{program_terms_url}}
+Notification settings:
+{{settings_url}}
+
+Download on the App Store:
+{{appstore_url}}
+Get it on Google Play:
+{{play_url}}
+
+Creator Program updates are on for your account — manage them in
+notification settings or unsubscribe:
+{{unsubscribe_url}}
+Sizzle Inc · 1550 Vine Street, Los Angeles, CA 90028 · © 2026
+Sizzle Inc.

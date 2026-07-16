@@ -1,0 +1,44 @@
+SIZZLE — CREATOR PROGRAM
+
+APPLICATION APPROVED
+
+You're a Sizzle Creator
+
+Your badge is live and monetization is switched on. Three quick setups
+and your first payout cycle starts today.
+
+  1. Connect your payout method      — 2 min
+  2. Complete tax information        — 5 min
+  3. Tour your earnings dashboard    — 3 min
+
+Set up monetization:
+{{action_url}}
+
+Browse creator resources:
+{{resources_url}}
+
+------------------------------------------------------------
+
+Sizzle
+
+Help Center:
+{{help_url}}
+Privacy:
+{{privacy_url}}
+Terms:
+{{terms_url}}
+Support:
+{{support_url}}
+Program terms:
+{{program_terms_url}}
+Creator handbook:
+{{handbook_url}}
+
+Download on the App Store:
+{{appstore_url}}
+Get it on Google Play:
+{{play_url}}
+
+Sent because your Creator Program application was approved.
+Sizzle Inc - 1550 Vine Street, Los Angeles, CA 90028
+(c) 2026 Sizzle Inc.

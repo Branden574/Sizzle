@@ -1,0 +1,46 @@
+SIZZLE · CREATOR PROGRAM
+
+ALMOST THERE — THE CREATOR PROGRAM IS WITHIN REACH
+Overall progress: {{overall_pct}}%
+
+You're closer than most creators ever get, {{name}}. Here's exactly
+what's left.
+
+  Followers:               {{followers}} / {{followers_target}}
+  Qualified views (90d):   {{qualified_views}} / {{views_target}}
+
+  [x] Account in good standing
+  [x] Two-factor authentication on
+  [ ] {{followers_needed}} more followers
+  [ ] {{views_needed}} more qualified views
+
+Track my progress:
+{{action_url}}
+
+Meeting the thresholds unlocks the application — final eligibility
+is confirmed during review.
+
+--
+Sizzle
+
+Help Center:
+{{help_url}}
+Privacy:
+{{privacy_url}}
+Terms:
+{{terms_url}}
+Support:
+{{support_url}}
+
+Get the app — App Store:
+{{appstore_url}}
+Get the app — Google Play:
+{{play_url}}
+Program terms:
+{{program_terms_url}}
+Notification settings:
+{{settings_url}}
+
+Creator Program updates are on for your account.
+Sizzle Inc · 1550 Vine Street, Los Angeles, CA 90028
+© 2026 Sizzle Inc.

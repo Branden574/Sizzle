@@ -1,0 +1,49 @@
+SIZZLE · MILESTONE
+======================================================================
+
+MILESTONE UNLOCKED
+
+WELCOME TO THE 1K CLUB
+
+Your Sizzle community is growing. One thousand people have chosen to
+follow your journey — and they're watching.
+
+@{{handle}}
+{{follower_count}} followers · reached {{date}}
++{{monthly_gain}} this month
+
+Share the milestone:
+{{action_url}}
+
+View my analytics:
+{{analytics_url}}
+
+At 10K followers you unlock the Creator Program — monetization,
+analytics and priority support. See creator tools:
+{{creator_tools_url}}
+
+======================================================================
+SIZZLE
+
+Help Center:
+{{help_url}}
+Privacy:
+{{privacy_url}}
+Terms:
+{{terms_url}}
+Support:
+{{support_url}}
+Notification settings:
+{{settings_url}}
+Unsubscribe:
+{{unsubscribe_url}}
+
+Download on the App Store:
+{{appstore_url}}
+Get it on Google Play:
+{{play_url}}
+
+Milestone emails are on — manage them in notification settings or
+unsubscribe with the link above.
+Sizzle Inc · 1550 Vine Street, Los Angeles, CA 90028 · © 2026
+Sizzle Inc.

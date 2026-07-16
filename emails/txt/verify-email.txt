@@ -1,0 +1,41 @@
+SIZZLE · ACCOUNT SECURITY
+
+ONE LAST STEP
+
+CONFIRM YOUR EMAIL
+
+You're seconds away from your first Sizzle. Confirm {{email}} so we
+know it's really you.
+
+Verify my email:
+{{action_url}}
+
+Or enter this code in the app:
+
+    {{code}}
+
+Code expires in {{expiry_minutes}} minutes · never share it.
+
+Didn't create a Sizzle account? Ignore this email and the account
+won't be activated.
+
+--
+Sizzle
+
+Help Center:
+{{help_url}}
+Privacy:
+{{privacy_url}}
+Terms:
+{{terms_url}}
+Support:
+{{support_url}}
+
+Get the app — App Store:
+{{appstore_url}}
+Get the app — Google Play:
+{{play_url}}
+
+Sent because this address was used to create a Sizzle account.
+Sizzle Inc · 1550 Vine Street, Los Angeles, CA 90028
+© 2026 Sizzle Inc.
