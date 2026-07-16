@@ -1,6 +1,6 @@
 # Sizzle — Build Progress
 
-Running log so any session can pick up cleanly. **Last updated:** 2026-06-20.
+Running log so any session can pick up cleanly. **Last updated:** 2026-07-16.
 
 Stack: **Node + TypeScript**, **Hono** API, **Supabase** (Postgres/Auth/Storage), **Cloudflare Stream** (video, behind an interface — mock by default), Vite/React web client. Monorepo via npm workspaces.
 
@@ -295,3 +295,25 @@ API bundles to `apps/api/dist/index.js` (`npm run build -w @sizzle/api`), runs w
 - **Google (A4)**: OAuth consent screen → "Publish app" (no code).
 - **Apple Sign-In (A2)**: Apple Services ID + key → Supabase Auth → Apple provider (client button already wired).
 - **Vercel note**: the `sizzle-api` "Ignored Build Step" mis-skips some api-only commits — verify deploys via `gh api repos/Branden574/Sizzle/commits/<sha>/status` (look for "Deployment has completed", not "Skipped"/"inactive").
+
+---
+
+## Launch sprint — 2026-07-16 (payments live, video fixed, submission prep)
+
+**Shipped + verified today:**
+- **Stripe LIVE end-to-end** — Connect Express (v2 with v1 fallback), destination charges, Model B pricing (processing fee off the top, then 90/10 split, $5 floors), transparent charge breakdown, loss-protection (transfer reversals, dispute lifecycle incl. redelivery + hour-bucketed idempotency — live-fire tested against the deployed webhook), payouts onboarding lands on `payouts-done.html`.
+- **Reviewer email chain proven** — `review@getsizzle.app` → Cloudflare Email Routing → dedicated ops Gmail; Resend suppression cleared; delivery confirmed. 12 production email templates in `emails/` (+ SPEC, partials, txt mirrors); Supabase recovery template installed.
+- **Video posting on native FIXED** — root cause: iOS WKWebView never delivers the multipart body to Cloudflare direct upload. Native now uploads to Supabase Storage; the API relays into Cloudflare via `/copy` (normalizes HEVC→H.264/HLS). Proven E2E on production + a real post from the device.
+- **TikTok-instant playback** — own posts play immediately from the local file (`localClips`); transcode poll extended 2min→10min adaptive (the old cap left cards stuck on "Processing"); posters retry transient 404s (`PosterImg`) instead of showing a broken-image icon. OTA 1.0.40–1.0.42.
+- **Recipe macros per serving** — `calories/protein_g/carbs_g/fat_g` on `recipes`, DTOs, create/edit API (gated behind premium locks), composer + edit inputs, recipe-sheet display. Roundtrip-verified on production.
+- **Compliance pass** — real support/privacy contacts, "Get Paid" roadmap gated off iOS, reports view fixes, SEO hides auto-hidden posts; expired auth links now explain themselves.
+- **App Store Connect** — build 22 (VALID) attached, MANUAL release, export compliance answered.
+
+**Still needed before submitting:**
+1. Branden on build 22: one fresh email signup, one demo-account sign-in (`review@getsizzle.app`), confirm the posted video plays end-to-end. (Video posting itself re-verified ✓.)
+2. ASC listing forms (agent drives, Branden approves): privacy nutrition labels, age rating questionnaire → 13+, copyright `© 2026 Branden Vincent-Walker`, subtitle, corrected review notes → then Submit for review.
+3. Decision: landscape orientation is unlocked — ship build 22 as-is, lock in the first post-launch binary.
+4. **Reconnect the Vercel GitHub webhook** (dashboard → either project → Settings → Git; disconnect/reconnect or reinstall the GitHub App). Pushes currently do NOT auto-deploy; CLI deploys are the workaround.
+5. Email templates: final hex-by-hex design pass; wire the remaining templates into Supabase Auth + API send paths.
+
+**Deferred / post-launch:** PO Box before promoting paid content; Stripe 1099 tax setting; premium-media signed URLs (Cloudflare `requireSignedURLs`); Supabase leaked-password protection toggle; feed virtualization; Creator Phase 2b notifications; Apple external-purchase link (Option C); Apple client secret regen ~every 6 months (`scripts/gen-apple-secret.mjs`).
