@@ -25,9 +25,31 @@ export const keys = {
 };
 
 /* ─────────────────────────── queries ────────────────────────────── */
+// Disk snapshot of /me so the Profile tab PAINTS INSTANTLY on a cold start
+// (header, avatar, stats from cache) while the fresh fetch runs silently —
+// no more multi-second skeleton when tapping Profile right after app launch.
+const ME_CACHE_KEY = 'sizzle.cache.me';
+function readMeSnapshot(): MeProfile | undefined {
+  try {
+    const raw = localStorage.getItem(ME_CACHE_KEY);
+    return raw ? (JSON.parse(raw) as MeProfile) : undefined;
+  } catch { return undefined; }
+}
+
 export function useMe() {
   const authed = useAuth((s) => s.status === 'authed');
-  return useQuery({ queryKey: keys.me, queryFn: () => apiGet<MeProfile>('/me'), enabled: authed });
+  return useQuery({
+    queryKey: keys.me,
+    queryFn: async () => {
+      const me = await apiGet<MeProfile>('/me');
+      try { localStorage.setItem(ME_CACHE_KEY, JSON.stringify(me)); } catch { /* full/private */ }
+      return me;
+    },
+    enabled: authed,
+    // Cached paint + immediate background refresh (updatedAt 0 = always stale).
+    initialData: readMeSnapshot,
+    initialDataUpdatedAt: 0,
+  });
 }
 
 /** Creator insights (own profile). */

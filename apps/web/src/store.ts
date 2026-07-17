@@ -234,14 +234,11 @@ export const useSizzle = create<SizzleState>((set) => ({
   onbStep: 0,
   tastes: {},
   followed: {},
-  // Restore the last tab synchronously at boot — an OTA reload, jetsam, or cold
-  // start puts the user back where they were instead of always on the feed.
-  tab: (() => {
-    try {
-      const t = localStorage.getItem('sizzle.lastTab');
-      return t === 'feed' || t === 'discover' || t === 'saved' || t === 'profile' ? t : 'feed';
-    } catch { return 'feed'; }
-  })(),
+  // A fresh launch always opens on the FEED — it's the primed, instant surface
+  // (restoring to e.g. Profile made the app "open slow" while that tab cold-
+  // fetched). Mid-session resets were the real bug and are fixed at the root:
+  // OTA updates now apply only on app kill, never on a backgrounding.
+  tab: 'feed',
   feed: prefs0.defaultFeed,
   immersive: false,
   appUnlocked: false,

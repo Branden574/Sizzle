@@ -182,6 +182,8 @@ export const useAuth = create<AuthState>((set, get) => ({
     // without this the next account inherits the previous user's count.
     await clearBadge();
     await supabase.auth.signOut();
+    // Cached profile snapshot must not flash for the NEXT account.
+    try { localStorage.removeItem('sizzle.cache.me'); } catch { /* private mode */ }
     // Drop the app-lock passcode so it can't carry over to the next account.
     await clearPasscode();
     useSizzle.getState().setAppLockEnabled(false);
