@@ -6,6 +6,12 @@ Stack: **Node + TypeScript**, **Hono** API, **Supabase** (Postgres/Auth/Storage)
 
 ---
 
+## 2026-07-17 — Build 28 SUBMITTED (OTA onLaunch policy); replaces 27
+
+- OTA apply timing was `autoUpdate:'atBackground'` + a `setMultiDelay(background 5min)` gate → kill-and-reopen did NOT apply updates (only a full 5-min background did), which is unintuitive and read as "updates not showing." Switched native config to **`autoUpdate:'onLaunch'`** (verified in ios capacitor.config.json) — pending bundle applies on the next cold start (kill→reopen), session-safe (no mid-session reload), no delay hack. setMultiDelay removed.
+- Build 28 (submission 2b292407, WAITING_FOR_REVIEW; build-27 submission canceled). OTA 1.0.68 live.
+- Confirmed via plugin.capgo.app/updates: server serves build-27 devices the latest bundle (1.0.67) fine — "Plan inactive" (now paid/active) and the Compatibility "Unresolved" rows are INFORMATIONAL, not delivery blockers; runtime `Capacitor.isPluginAvailable()` guards handle old-build/new-bundle fallback.
+
 ## 2026-07-17 — BUILD 27 SUBMITTED (critical OTA-wedge fix); replaces 26
 
 - **CRITICAL caught pre-approval:** the 1.0.61 `setMultiDelay({kind:'kill'})` policy permanently wedged OTA installs — `installNext()` skips while ANY delay condition exists; the plugin clears the kill condition at native launch but our per-boot re-arm closed the only install window. Devices on JS >=1.0.61 (builds 25/26 builtins) could download but NEVER apply bundles (field-hit: Branden stuck on 1.0.62 with 1.0.64 pending). Verified in plugin Swift source.
