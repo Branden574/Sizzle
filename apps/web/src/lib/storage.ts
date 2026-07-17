@@ -251,39 +251,59 @@ export function captureVideoPoster(file: File): Promise<Blob | null> {
 
     let settled = false;
     let capturing = false;
+    // Diagnostic breadcrumb: which signal we last reached. Logged on failure so a
+    // device report can pinpoint WHERE capture dies instead of guessing.
+    let stage = 'init';
     const done = (b: Blob | null) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
       try { video.pause(); video.removeAttribute('src'); video.load(); } catch { /* detached */ }
       URL.revokeObjectURL(url);
+      if (!b) console.warn(`[poster] capture failed at stage=${stage} (${(file.size / 1048576).toFixed(1)}MB ${file.type || 'unknown'})`);
       resolve(b);
     };
     const timer = setTimeout(() => done(null), 15000);
 
+    // Grab is RETRYABLE: a zero-size canvas or null blob releases the latch so a
+    // later frame signal can try again (the old code gave up permanently on the
+    // first dud attempt — one early black frame meant no cover at all).
     const grab = () => {
-      if (capturing) return;
+      if (capturing || settled) return;
       capturing = true;
       try {
         const canvas = document.createElement('canvas');
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
         const ctx = canvas.getContext('2d');
-        if (!ctx || !canvas.width) return done(null);
+        if (!ctx || !canvas.width) { capturing = false; return; }
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        canvas.toBlob((b) => done(b), 'image/jpeg', 0.72);
+        canvas.toBlob((b) => { if (b) done(b); else capturing = false; }, 'image/jpeg', 0.72);
       } catch {
-        done(null);
+        capturing = false;
       }
     };
 
-    video.onerror = () => done(null);
+    video.onerror = () => { stage = `error:${video.error?.code ?? '?'}`; done(null); };
+    video.onloadedmetadata = () => { stage = 'metadata'; };
     video.onloadeddata = () => {
+      stage = 'loadeddata';
+      // BEST signal: requestVideoFrameCallback fires when a frame is actually
+      // PRESENTED (WebKit supports it) — no guessing from playback position.
+      const rvfc = (video as HTMLVideoElement & { requestVideoFrameCallback?: (cb: () => void) => void }).requestVideoFrameCallback?.bind(video);
+      if (rvfc) rvfc(() => { stage = 'frame-presented'; grab(); });
       const p = video.play();
-      if (p && typeof p.catch === 'function') p.catch(() => grab()); // if autoplay is blocked, try a static grab
+      if (p && typeof p.catch === 'function') {
+        p.catch(() => {
+          // Autoplay blocked: seeking also presents a frame with preload=auto.
+          stage = 'play-blocked';
+          try { video.currentTime = 0.1; } catch { grab(); }
+        });
+      }
     };
-    // A real frame has rendered once playback advances — capture it, then stop.
-    video.ontimeupdate = () => { if (video.currentTime >= 0.05) grab(); };
+    video.onseeked = () => { stage = 'seeked'; grab(); };
+    // Playback advanced — a real frame has rendered (fallback when rVFC absent).
+    video.ontimeupdate = () => { if (video.currentTime >= 0.05) { stage = 'playing'; grab(); } };
   });
 }
 
