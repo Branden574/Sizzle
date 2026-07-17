@@ -6,6 +6,10 @@ Stack: **Node + TypeScript**, **Hono** API, **Supabase** (Postgres/Auth/Storage)
 
 ---
 
+## 2026-07-17 — Build 25 SUBMITTED for App Store review (replaced 24)
+
+Branden chose 25 for the 1.0: canceled the build-24 submission, attached build 25 (processed id bbfbe0f5), **WAITING_FOR_REVIEW** (submission ebbc21b9). 1.0 ships with the complete upload system: instant native pick + background-URLSession uploads + resume + tile.
+
 ## 2026-07-17 — Build 25: native background uploads (TestFlight) + OTA 1.0.60
 
 - **Build 25** (uploaded to ASC, TestFlight): `@capgo/capacitor-uploader` — byte transfers run in a native **background URLSession** (verified `URLSessionConfiguration.background` in plugin source) PUTing from the picker's file path. Uploads survive backgrounding AND swipe-kill; next launch claims the completion event (plugin re-delivers until acknowledged) and publishes without re-uploading. Build-24 review submission untouched.
