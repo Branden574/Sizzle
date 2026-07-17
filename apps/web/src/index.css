@@ -38,6 +38,11 @@ body {
   --accent: #ff5a36;
   --accent-press: #e23a18;
   --saffron: #f4a52c;
+  /* Premium recipe gold — deeper in light mode so the frame reads on white surfaces. */
+  --premium-gold: #b07d1e;
+  --premium-gold-hi: #e6c368;
+  --premium-gold-deep: #8a5f12;
+  --premium-gold-glow: rgba(176, 125, 30, 0.32);
   /* surfaces */
   --bg: #faf3ea;
   --bg-soft: #faf6f0;
@@ -148,6 +153,11 @@ body {
   --accent: #ff6a48;
   --accent-press: #e8462a;
   --saffron: #f4a52c;
+  /* Premium recipe gold — brighter in dark mode, but kept short of neon. */
+  --premium-gold: #d8b25c;
+  --premium-gold-hi: #ffe6a6;
+  --premium-gold-deep: #a6791f;
+  --premium-gold-glow: rgba(216, 178, 92, 0.26);
   --bg: #15110d;
   --bg-soft: #1b1611;
   --surface: #221b15;
@@ -532,7 +542,9 @@ button {
 /* CSS backstop mirroring the JS reduced-motion guard. */
 @media (prefers-reduced-motion: reduce) {
   .sz-glow__halo { animation: none !important; }
+  .sz-premium-frame::after { animation: none !important; opacity: 0 !important; }
 }
+.sz-reduce-motion .sz-premium-frame::after { animation: none !important; opacity: 0 !important; }
 @media (prefers-reduced-transparency: reduce) {
   .sz-glow__halo { filter: none !important; opacity: .14; }
 }
@@ -717,6 +729,35 @@ input {
 }
 .sz-gold-badge {
   animation: sz-gold-shine 2.2s ease-in-out infinite;
+}
+
+/* Premium recipe thumbnail frame: a refined metallic-gold border with a slow,
+   restrained light sweep. GPU-friendly (transform/opacity only). The sweep is
+   staggered per tile via --sz-premium-delay so a grid never shimmers in unison,
+   and it's idle ~80% of each cycle (a brief glint, not a constant shine). */
+.sz-premium-frame {
+  border: 1.5px solid var(--premium-gold);
+  box-shadow:
+    inset 0 0 0 1px var(--premium-gold-hi),
+    0 2px 12px var(--premium-gold-glow);
+  overflow: hidden;
+}
+.sz-premium-frame::after {
+  content: '';
+  position: absolute;
+  top: 0;
+  bottom: 0;
+  left: -60%;
+  width: 45%;
+  background: linear-gradient(105deg, transparent, rgba(255, 255, 255, 0.5), transparent);
+  transform: translateX(0);
+  opacity: 0;
+  animation: sz-premium-shimmer 7s ease-in-out var(--sz-premium-delay, 0s) infinite;
+}
+@keyframes sz-premium-shimmer {
+  0%, 20% { transform: translateX(0); opacity: 0; }
+  24% { opacity: 0.9; }
+  40%, 100% { transform: translateX(360%); opacity: 0; }
 }
 
 /* Reduce-motion preference (Settings → Appearance): neutralize the entrance

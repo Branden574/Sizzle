@@ -12,6 +12,7 @@ import { VerifiedBadge } from './VerifiedBadge';
 import { SocialLinks } from './SocialLinks';
 import { BellIcon, BookmarkIcon, GearIcon, HeartIcon, PlayIcon, ShareNodesIcon } from './icons';
 import { PosterImg } from './PosterImg';
+import { PremiumOverlay } from './PremiumOverlay';
 
 const BANNER = 'radial-gradient(120% 120% at 70% 0%, var(--saffron,#f4a52c), var(--accent,#ff5a36) 60%, #c23a1a)';
 
@@ -186,6 +187,7 @@ export function Profile() {
         ) : (
           <RecipeGrid
             items={gridItems}
+            myId={me?.id}
             empty={tab === 'posts' ? 'Videos you post will show up here.' : tab === 'liked' ? 'Videos you like will show up here.' : 'Recipes you save will collect here.'}
             onOpenAt={(i) => setViewer({ items: gridItems, index: i })}
           />
@@ -196,7 +198,7 @@ export function Profile() {
 }
 
 /** A 3-column thumbnail grid of recipes; tap a tile to open the swipeable viewer. */
-function RecipeGrid({ items, empty, onOpenAt }: { items: RecipeCard[]; empty: string; onOpenAt: (index: number) => void }) {
+function RecipeGrid({ items, empty, onOpenAt, myId }: { items: RecipeCard[]; empty: string; onOpenAt: (index: number) => void; myId?: string }) {
   if (items.length === 0) {
     return <div style={{ padding: 30, textAlign: 'center', background: 'var(--surface)', border: '1px dashed var(--line-2)', borderRadius: 20, color: 'var(--text-faint-2)', fontSize: 14 }}>{empty}</div>;
   }
@@ -210,6 +212,7 @@ function RecipeGrid({ items, empty, onOpenAt }: { items: RecipeCard[]; empty: st
         >
           {(r.video?.posterUrl || r.images[0]) && <PosterImg src={(r.video?.posterUrl || r.images[0])!} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
           <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg,transparent 38%, rgba(0,0,0,.74))' }} />
+          <PremiumOverlay card={r} radius={14} isOwn={!!myId && r.cook.id === myId} index={i} />
           {r.removed && <div style={{ position: 'absolute', top: 7, left: 7, background: 'rgba(216,82,30,.92)', color: '#fff', fontSize: 10, fontWeight: 800, padding: '3px 6px', borderRadius: 6 }}>Removed</div>}
           <div style={{ position: 'absolute', left: 8, right: 8, bottom: 26, fontFamily: "'Instrument Serif',serif", fontSize: 13.5, lineHeight: 1.05, color: '#fff', maxHeight: 30, overflow: 'hidden' }}>{r.title}</div>
           <div style={{ position: 'absolute', left: 8, bottom: 8, display: 'flex', alignItems: 'center', gap: 10, color: '#fff', fontSize: 11.5, fontWeight: 700, textShadow: '0 1px 3px rgba(0,0,0,.6)' }}>

@@ -35,6 +35,14 @@ export interface VideoStreamProvider {
   /** Delete the provider-side asset (recipe/account deletion). Best-effort:
    *  resolves even when the asset is already gone. No-op on the mock. */
   deleteAsset?(providerUid: string): Promise<void>;
+  /** Toggle Cloudflare signed-URL protection on an asset. Premium / subscribers-only
+   *  videos flip this ON so their HLS manifest AND thumbnail require a short-lived
+   *  token; free videos stay public (fast, edge-cached). Optional — only Cloudflare. */
+  setRequireSignedURLs?(providerUid: string, required: boolean): Promise<void>;
+  /** Mint a short-lived signed playback token for a signed asset. The API hands this
+   *  ONLY to entitled viewers (owner / unlocked / active subscriber); the client
+   *  appends it as `?token=` to the manifest (and poster) URL. Optional — Cloudflare. */
+  signPlaybackToken?(providerUid: string, ttlSeconds: number): Promise<string>;
 }
 
 /**
@@ -58,6 +66,13 @@ class MockStream implements VideoStreamProvider {
       posterUrl: null,
       duration: 30,
     };
+  }
+
+  // Signed-URL protection is a no-op on the mock (its sample stream is public);
+  // returning a throwaway token keeps the local premium flow exercisable.
+  async setRequireSignedURLs(): Promise<void> {}
+  async signPlaybackToken(): Promise<string> {
+    return 'mock-playback-token';
   }
 }
 
@@ -173,6 +188,35 @@ class CloudflareStream implements VideoStreamProvider {
     if (!res.ok && res.status !== 404) {
       throw new Error(`Cloudflare deleteAsset ${uid} → HTTP ${res.status}`);
     }
+  }
+
+  /** Flip signed-URL protection on/off. Cloudflare's edit endpoint is a POST to the
+   *  video with the changed fields. Idempotent (setting the same value is fine). */
+  async setRequireSignedURLs(uid: string, required: boolean): Promise<void> {
+    const res = await fetchWithTimeout(`${this.base}/${uid}`, {
+      method: 'POST',
+      headers: this.headers,
+      body: JSON.stringify({ requireSignedURLs: required }),
+    }, 10_000);
+    if (res.status === 404) throw new AssetNotFoundError(`Cloudflare asset ${uid} not found`);
+    if (!res.ok) throw new Error(`Cloudflare setRequireSignedURLs ${uid} → HTTP ${res.status}`);
+  }
+
+  /** Mint a signed token via Cloudflare's per-video /token endpoint (uses the Stream
+   *  API token — no separate signing key to provision). `exp` bounds its lifetime so
+   *  a leaked token dies quickly; the caller only issues one to an entitled viewer. */
+  async signPlaybackToken(uid: string, ttlSeconds: number): Promise<string> {
+    const exp = Math.floor(Date.now() / 1000) + Math.max(60, ttlSeconds);
+    const res = await fetchWithTimeout(`${this.base}/${uid}/token`, {
+      method: 'POST',
+      headers: this.headers,
+      body: JSON.stringify({ exp }),
+    }, 8_000);
+    if (res.status === 404) throw new AssetNotFoundError(`Cloudflare asset ${uid} not found`);
+    if (!res.ok) throw new Error(`Cloudflare signPlaybackToken ${uid} → HTTP ${res.status}`);
+    const json = (await res.json()) as { success: boolean; result?: { token?: string } };
+    if (!json.success || !json.result?.token) throw new Error(`Cloudflare token mint ${uid} failed`);
+    return json.result.token;
   }
 }
 

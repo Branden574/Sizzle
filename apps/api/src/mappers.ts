@@ -204,7 +204,7 @@ async function loadViewerCtx(
     recipeIds.length ? db.from('reposts').select('recipe_id').eq('user_id', viewerId).in('recipe_id', recipeIds) : Promise.resolve({ data: null }),
     recipeIds.length ? db.from('recipe_unlocks').select('recipe_id').eq('user_id', viewerId).in('recipe_id', recipeIds) : Promise.resolve({ data: null }),
     cookIds.length ? db.from('follows').select('cook_id').eq('follower_id', viewerId).in('cook_id', cookIds) : Promise.resolve({ data: null }),
-    cookIds.length ? db.from('subscriptions').select('creator_id').eq('subscriber_id', viewerId).eq('status', 'active').in('creator_id', cookIds) : Promise.resolve({ data: null }),
+    cookIds.length ? db.from('subscriptions').select('creator_id, current_period_end').eq('subscriber_id', viewerId).eq('status', 'active').in('creator_id', cookIds) : Promise.resolve({ data: null }),
   ]);
 
   for (const r of reactions.data ?? []) (r.kind === 'like' ? ctx.likes : ctx.dislikes).add(r.recipe_id as string);
@@ -213,7 +213,15 @@ async function loadViewerCtx(
   for (const rp of reposts.data ?? []) ctx.reposts.add(rp.recipe_id as string);
   for (const u of unlocks.data ?? []) ctx.unlocked.add(u.recipe_id as string);
   for (const f of follows.data ?? []) ctx.follows.add(f.cook_id as string);
-  for (const s of subs.data ?? []) ctx.subscribedTo.add(s.creator_id as string);
+  // Grant subscription access only while the paid period hasn't lapsed — a
+  // status='active' row whose current_period_end is in the past is a subscription
+  // Stripe hasn't flipped to canceled yet (webhook delay); don't hand out content
+  // for a period the viewer no longer paid for. Null period end = benefit of doubt.
+  const nowMs = Date.now();
+  for (const s of subs.data ?? []) {
+    const end = (s as { creator_id: string; current_period_end: string | null }).current_period_end;
+    if (!end || new Date(end).getTime() > nowMs) ctx.subscribedTo.add(s.creator_id as string);
+  }
   return ctx;
 }
 
@@ -240,6 +248,9 @@ function toCard(r: RecipeRow, cook: ProfileRow, video: VideoRow | null, ctx: Vie
   // Premium price: subscribers get it for free (subscription already grants access).
   const premiumLocked = price != null && !isOwner && !ctx.unlocked.has(r.id) && !subscribed;
   const locked = subscribersOnly || premiumLocked;
+  // A recipe is premium (its video must be signed) whenever it's priced or
+  // subscribers-only — independent of THIS viewer's access.
+  const isPremiumRecipe = price != null || r.visibility === 'subscribers';
   const dto = videoDTO(video);
   return {
     id: r.id,
@@ -251,7 +262,10 @@ function toCard(r: RecipeRow, cook: ProfileRow, video: VideoRow | null, ctx: Vie
     level: r.level,
     bg: r.bg,
     cook: cookSummary(cook),
-    video: locked && dto ? { ...dto, hlsUrl: null, mp4Url: null } : dto,
+    // Premium video URLs are NEVER embedded in the card (even for entitled viewers);
+    // the client fetches a short-lived signed URL on demand from /recipes/:id/playback.
+    // `signed:true` tells it which path to take; non-entitled (locked) can't fetch.
+    video: dto && isPremiumRecipe ? { ...dto, hlsUrl: null, mp4Url: null, signed: true } : dto,
     images: locked ? [] : r.image_urls ?? [],
     counts: { likes: r.like_count, dislikes: r.dislike_count, comments: r.comment_count, saves: r.save_count, shares: r.share_count, cooks: r.cook_count ?? 0, views: r.view_count ?? 0 },
     viewer: viewerState(r.id, r.cook_id, ctx),

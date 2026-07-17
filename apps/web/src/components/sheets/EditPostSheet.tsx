@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Button } from '../controls';
-import { creatorShareCents, MIN_PRICE_CENTS, type RecipeDetail } from '@sizzle/shared';
+import { isPremiumPriceTier, type RecipeDetail } from '@sizzle/shared';
+import { PremiumPriceFields } from '../PremiumPriceFields';
 import { useEditRecipe, useMe, useMonetizationStatus, useRecipe, useSetRecipePoster, useSetRecipePrice, useSetRecipeVisibility } from '../../data/queries';
 import { uploadRecipeImage } from '../../lib/storage';
 import { showCreatorMoney } from '../../lib/native';
@@ -47,7 +48,7 @@ export function EditPostSheet() {
   const [fatG, setFatG] = useState('');
   const [rating, setRating] = useState(0);
   const [premium, setPremium] = useState(false);
-  const [price, setPrice] = useState('');
+  const [priceCents, setPriceCents] = useState<number | null>(null);
   const [priceErr, setPriceErr] = useState(false);
   const [subOnly, setSubOnly] = useState(false);
   const [ready, setReady] = useState(false);
@@ -68,7 +69,7 @@ export function EditPostSheet() {
     setFatG(r.macros?.fatG != null ? String(r.macros.fatG) : '');
     setRating(r.rating ?? 0);
     setPremium(r.price != null);
-    setPrice(r.price != null ? (r.price / 100).toFixed(2) : '');
+    setPriceCents(r.price ?? null);
     setSubOnly(r.visibility === 'subscribers');
     setReady(true);
   }, [r?.id]);
@@ -84,24 +85,27 @@ export function EditPostSheet() {
   // below-floor number blocks the save with an inline error instead of quietly
   // clearing the price and publishing the recipe free.
   const priceWanted = !isReview && canMonetize && premium;
-  const priceCentsInput = Math.round(parseFloat(price) * 100);
-  const priceInputValid = Number.isFinite(priceCentsInput) && priceCentsInput >= MIN_PRICE_CENTS;
+  const priceValid = isPremiumPriceTier(priceCents);
 
   const save = () => {
     if (!r || !canSave) return;
-    if (priceWanted && !priceInputValid) {
+    if (priceWanted && !priceValid) {
       setPriceErr(true);
       return;
     }
-    const nextPrice = priceWanted ? Math.min(priceCentsInput, 50_000) : null;
-    // Persist the price only if it actually changed (avoids a needless PATCH).
-    if (nextPrice !== (r.price ?? null)) {
-      setRecipePrice.mutate({ recipeId: r.id, priceCents: nextPrice });
-    }
-    // Persist subscribers-only visibility if it changed.
-    const nextVisibility = canMonetize && subOnly && !isReview ? 'subscribers' : 'public';
-    if (nextVisibility !== (r.visibility ?? 'public')) {
-      setRecipeVisibility.mutate({ recipeId: r.id, visibility: nextVisibility });
+    // Only touch pricing/visibility once the monetization status is KNOWN. If the
+    // status query is still loading or errored, canMonetize reads false — deriving
+    // nextPrice=null from that would silently strip the price AND unprotect the
+    // premium video on an ordinary caption edit. Unknown = leave price untouched.
+    if (monetize.isSuccess) {
+      const nextPrice = priceWanted ? priceCents : null;
+      if (nextPrice !== (r.price ?? null)) {
+        setRecipePrice.mutate({ recipeId: r.id, priceCents: nextPrice });
+      }
+      const nextVisibility = canMonetize && subOnly && !isReview ? 'subscribers' : 'public';
+      if (nextVisibility !== (r.visibility ?? 'public')) {
+        setRecipeVisibility.mutate({ recipeId: r.id, visibility: nextVisibility });
+      }
     }
     edit.mutate(
       {
@@ -194,46 +198,17 @@ export function EditPostSheet() {
                   </div>
                 </div>
 
-                {/* Premium / subscribers-only gating. Hidden entirely on native —
-                    creators configure monetization on the web (Apple 3.1.1 / Play
-                    Billing). Existing premium settings are preserved on save. */}
-                {showCreatorMoney && (canMonetize ? (
-                  <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 14, padding: 14 }}>
-                    <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}>
-                      <div style={{ minWidth: 0, paddingRight: 12 }}>
-                        <div style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--text)' }}>Premium recipe</div>
-                        <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 2, lineHeight: 1.45 }}>Lock the video, ingredients &amp; steps behind a one-time price.</div>
-                      </div>
-                      <input type="checkbox" checked={premium} onChange={(e) => { setPremium(e.target.checked); setPriceErr(false); }} style={{ width: 20, height: 20, accentColor: accent, flex: 'none', cursor: 'pointer' }} />
-                    </label>
-                    {premium && (
-                      <div style={{ marginTop: 12 }}>
-                        <div style={{ display: 'flex', alignItems: 'center', background: 'var(--bg)', border: `1.5px solid ${priceErr ? 'var(--danger-fg)' : 'var(--line-2)'}`, borderRadius: 12, padding: '0 12px' }}>
-                          <span style={{ fontSize: 16, fontWeight: 800, color: 'var(--text-faint)' }}>$</span>
-                          <input value={price} onChange={(e) => { setPrice(e.target.value.replace(/[^0-9.]/g, '').slice(0, 6)); setPriceErr(false); }} inputMode="decimal" placeholder="5.99" style={{ flex: 1, height: 44, border: 'none', background: 'transparent', color: 'var(--text)', fontFamily: "'Hanken Grotesk'", fontSize: 16, fontWeight: 800, outline: 'none', padding: '0 6px' }} />
-                        </div>
-                        <div style={{ fontSize: 12, color: priceErr ? 'var(--danger-fg)' : 'var(--text-faint-2)', fontWeight: priceErr ? 600 : undefined, marginTop: 8, lineHeight: 1.45 }}>
-                          {priceInputValid
-                            ? <>You receive ${(creatorShareCents(Math.min(priceCentsInput, 50_000)) / 100).toFixed(2)} per unlock, after card processing and Sizzle&rsquo;s share.</>
-                            : <>Minimum price is ${(MIN_PRICE_CENTS / 100).toFixed(2)}.</>}
-                        </div>
-                      </div>
-                    )}
-                    {/* Subscribers-only: an ongoing perk for monthly subscribers. */}
-                    <div style={{ height: 1, background: 'var(--line)', margin: '14px 0' }} />
-                    <label style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', cursor: 'pointer' }}>
-                      <div style={{ minWidth: 0, paddingRight: 12 }}>
-                        <div style={{ fontSize: 14.5, fontWeight: 800, color: 'var(--text)' }}>Subscribers only</div>
-                        <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 2, lineHeight: 1.45 }}>Only your monthly subscribers can watch — everyone else sees a locked teaser inviting them to subscribe.</div>
-                      </div>
-                      <input type="checkbox" checked={subOnly} onChange={(e) => setSubOnly(e.target.checked)} style={{ width: 20, height: 20, accentColor: accent, flex: 'none', cursor: 'pointer' }} />
-                    </label>
-                  </div>
-                ) : (
-                  <div style={{ background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 14, padding: 14, fontSize: 12.5, color: 'var(--text-faint)', lineHeight: 1.45 }}>
-                    💰 Want to charge for this recipe? Set up payouts in <b style={{ color: 'var(--text)' }}>your insights</b> first — then you can make it premium.
-                  </div>
-                ))}
+                {/* Premium / subscribers-only pricing — the same tier picker used at
+                    upload. Only a monetization-active creator can set a price (the
+                    component shows a payouts nudge otherwise). */}
+                {showCreatorMoney && (
+                  <PremiumPriceFields
+                    value={{ premium, priceCents, subOnly }}
+                    onChange={(v) => { setPremium(v.premium); setPriceCents(v.priceCents); setSubOnly(v.subOnly); setPriceErr(false); }}
+                    canMonetize={canMonetize}
+                    priceErr={priceErr}
+                  />
+                )}
               </>
             )}
             {(edit.isError || setRecipePrice.isError) && <div style={{ color: 'var(--danger-fg)', fontSize: 13.5, fontWeight: 600 }}>Couldn’t save — please try again.</div>}

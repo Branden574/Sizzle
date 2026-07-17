@@ -22,7 +22,8 @@ let package = Package(
         .package(name: "CapgoCameraPreview", path: "../../../../../node_modules/@capgo/camera-preview"),
         .package(name: "CapgoCapacitorNativeBiometric", path: "../../../../../node_modules/@capgo/capacitor-native-biometric"),
         .package(name: "CapgoCapacitorUpdater", path: "../../../../../node_modules/@capgo/capacitor-updater"),
-        .package(name: "CapgoCapacitorUploader", path: "../../../../../node_modules/@capgo/capacitor-uploader")
+        .package(name: "CapgoCapacitorUploader", path: "../../../../../node_modules/@capgo/capacitor-uploader"),
+        .package(name: "RevenuecatPurchasesCapacitor", path: "../../../../../node_modules/@revenuecat/purchases-capacitor")
     ],
     targets: [
         .target(
@@ -40,7 +41,8 @@ let package = Package(
                 .product(name: "CapgoCameraPreview", package: "CapgoCameraPreview"),
                 .product(name: "CapgoCapacitorNativeBiometric", package: "CapgoCapacitorNativeBiometric"),
                 .product(name: "CapgoCapacitorUpdater", package: "CapgoCapacitorUpdater"),
-                .product(name: "CapgoCapacitorUploader", package: "CapgoCapacitorUploader")
+                .product(name: "CapgoCapacitorUploader", package: "CapgoCapacitorUploader"),
+                .product(name: "RevenuecatPurchasesCapacitor", package: "RevenuecatPurchasesCapacitor")
             ]
         )
     ]

@@ -5,7 +5,7 @@ import type { RecipeCard } from '@sizzle/shared';
 import { useAuth } from '../auth/useAuth';
 import { useRequireAuth } from '../auth/useRequireAuth';
 import { useForYouFeed, useFollowingFeed, useMe, useToggleDislike, useToggleFollow, useToggleLike, useToggleRepost, useToggleSave } from '../data/queries';
-import { apiSend } from '../lib/api';
+import { apiGet, apiSend } from '../lib/api';
 import { useSizzle } from '../store';
 import { theme } from '../theme';
 import { formatCount } from '../lib/format';
@@ -407,7 +407,24 @@ export const FeedCard = memo(function FeedCard({ card, onClose, suppressed = fal
   // YOU just posted plays instantly from the still-on-device local file
   // (TikTok-style) while Cloudflare transcodes — no "Processing…" wait for the
   // creator; the remote HLS takes over on the next mount once it's ready.
-  const remoteSrc = !hasImages ? card.video?.hlsUrl || card.video?.mp4Url || null : null;
+  // Premium (signed) videos never carry their playback URL in the card. Once this
+  // card is near AND we're entitled (not locked), fetch a short-lived signed URL on
+  // demand. A locked viewer's request is 403'd → signedSrc stays null → the locked
+  // overlay shows instead of a player. The owner's just-posted clip still plays
+  // instantly from the on-device file until the signed URL arrives.
+  const isSigned = !hasImages && !!card.video?.signed && !card.locked && card.video?.status === 'ready';
+  const [signedSrc, setSignedSrc] = useState<string | null>(null);
+  useEffect(() => {
+    if (!isSigned || !near) return;
+    let cancelled = false;
+    void apiGet<{ hlsUrl: string }>(`/recipes/${card.id}/playback`)
+      .then((r) => { if (!cancelled) setSignedSrc(r.hlsUrl); })
+      .catch(() => {});
+    return () => { cancelled = true; };
+  }, [isSigned, near, card.id]);
+  const remoteSrc = !hasImages
+    ? (card.video?.signed ? signedSrc : (card.video?.hlsUrl || card.video?.mp4Url || null))
+    : null;
   const videoSrc = remoteSrc ?? (!hasImages ? getLocalClip(card.id) : null);
   // Controls are now persisted server-side + enforced for every viewer.
   const showLikes = controls.likesEnabled;

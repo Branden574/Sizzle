@@ -42,6 +42,7 @@
     "@capgo/capacitor-updater": "^8.51.0",
     "@capgo/capacitor-uploader": "^8.3.3",
     "@gsap/react": "^2.1.2",
+    "@revenuecat/purchases-capacitor": "^13.2.3",
     "@sizzle/shared": "*",
     "@supabase/supabase-js": "^2.45.4",
     "@tanstack/react-query": "^5.59.16",

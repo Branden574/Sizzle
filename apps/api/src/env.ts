@@ -48,6 +48,16 @@ const schema = z.object({
   // testable without keys. Keys from dashboard.stripe.com → Developers.
   STRIPE_SECRET_KEY: z.string().optional(),
   STRIPE_WEBHOOK_SECRET: z.string().optional(),
+  // RevenueCat (Apple IAP for premium recipe unlocks). REVENUECAT_API_KEY is the v1
+  // REST SECRET key (server-side receipt verification); REVENUECAT_WEBHOOK_AUTH is the
+  // exact Authorization header value set in the RevenueCat dashboard webhook config,
+  // matched on the refund webhook. Both from app.revenuecat.com → project settings.
+  REVENUECAT_API_KEY: z.string().optional(),
+  REVENUECAT_WEBHOOK_AUTH: z.string().optional(),
+  // Set to 'true' ONLY for a staging/TestFlight test pass to accept Apple SANDBOX
+  // purchases (free, $0) as valid unlocks. MUST be unset/false in production launch,
+  // or a sandbox Apple ID would unlock premium recipes for free.
+  ALLOW_SANDBOX_IAP: z.string().optional(),
   // Stripe API version for the v2 (Accounts) namespace only — v1 calls ride the
   // account default. Overridable without a deploy because sources disagree on
   // whether Accounts v2 wants the GA (`.dahlia`) or a `.preview` version string;
@@ -108,3 +118,5 @@ if (env.STRIPE_SECRET_KEY && !env.STRIPE_WEBHOOK_SECRET) {
 
 /** True when real Stripe payments are wired up (otherwise tipping runs the mock provider). */
 export const stripeConfigured = !!env.STRIPE_SECRET_KEY;
+/** RevenueCat wired for server-side IAP verification (the confirm endpoint no-ops without it). */
+export const revenueCatConfigured = !!env.REVENUECAT_API_KEY;

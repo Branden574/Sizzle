@@ -1,6 +1,7 @@
 import { Hono, type Context } from 'hono';
 import { z } from 'zod';
 import type { CommentDTO, CookLogDTO, RecipeDetail } from '@sizzle/shared';
+import { isPremiumPriceTier } from '@sizzle/shared';
 import { optionalAuth, requireAuth, requireNotBanned } from '../middleware/auth';
 import { env } from '../env';
 import { supabaseAdmin } from '../lib/supabase';
@@ -13,6 +14,8 @@ import { moderate, moderateImages } from '../services/moderation';
 import { fileReport } from '../services/reports';
 import { parseHashtags } from '../services/hashtags';
 import { notify } from '../services/notify';
+import { syncVideoProtection } from '../services/videoFinalize';
+import { getStreamProvider } from '../services/stream';
 import type { AppEnv } from '../types';
 
 export const recipes = new Hono<AppEnv>();
@@ -101,6 +104,9 @@ const createSchema = z.object({
   scheduledAt: z.string().datetime().optional(),
   /** Lineage: the recipe this post was cooked from ("Cook this"). */
   originRecipeId: z.string().uuid().optional(),
+  // Premium at create (mirrors PATCH /controls) — server-validated ≥$5 floor.
+  priceCents: z.number().int().min(500).max(50_000).nullable().optional(),
+  visibility: z.enum(['public', 'subscribers']).optional(),
 }).refine((v) => v.postType === 'review' || v.rating === undefined, {
   message: 'rating is only allowed on a review',
   path: ['rating'],
@@ -184,6 +190,23 @@ recipes.post('/', requireAuth, requireNotBanned, rateLimit({ windowMs: 60_000, m
   const willSchedule = input.status === 'scheduled' && scheduledAt != null && scheduledAt.getTime() > Date.now();
   const status = input.status === 'draft' ? 'draft' : willSchedule ? 'scheduled' : 'published';
 
+  // Premium at create: pricing / subscribers-only requires an active payout
+  // account (mirrors PATCH /controls) — validated up front so a priced post is
+  // never briefly free/public before a follow-up controls PATCH. A review post
+  // can't be premium (it's proof-of-cook, not sellable content).
+  const priceCents = input.postType === 'review' ? null : (input.priceCents ?? null);
+  const visibility = input.postType === 'review' ? 'public' : (input.visibility ?? 'public');
+  if (priceCents !== null && !isPremiumPriceTier(priceCents)) throw badRequest('Choose one of the available price tiers');
+  if (priceCents !== null || visibility === 'subscribers') {
+    const { data: prof } = await supabaseAdmin
+      .from('profiles')
+      .select('monetization_status, sub_price_cents')
+      .eq('id', userId)
+      .maybeSingle();
+    if (prof?.monetization_status !== 'active') throw badRequest('Set up payouts before pricing a recipe');
+    if (visibility === 'subscribers' && !prof?.sub_price_cents) throw badRequest('Set a monthly subscription price before posting subscribers-only');
+  }
+
   const { data: recipe, error } = await supabaseAdmin
     .from('recipes')
     .insert({
@@ -203,6 +226,8 @@ recipes.post('/', requireAuth, requireNotBanned, rateLimit({ windowMs: 60_000, m
       status,
       scheduled_at: willSchedule ? scheduledAt!.toISOString() : null,
       origin_recipe_id: originRecipeId,
+      price_cents: priceCents,
+      visibility,
       calories: input.postType === 'review' ? null : (input.macros?.calories ?? null),
       protein_g: input.postType === 'review' ? null : (input.macros?.proteinG ?? null),
       carbs_g: input.postType === 'review' ? null : (input.macros?.carbsG ?? null),
@@ -236,6 +261,16 @@ recipes.post('/', requireAuth, requireNotBanned, rateLimit({ windowMs: 60_000, m
 
   // Publishing makes you a cook.
   await supabaseAdmin.from('profiles').update({ is_cook: true }).eq('id', userId);
+
+  // A recipe published premium/subscribers-only with a READY video must have its
+  // Cloudflare video signed + poster made UID-free NOW: the finalize hop can't have
+  // done it if it ran before this recipe existed (it saw no linked recipe → treated
+  // the video as free, keeping the UID-bearing thumbnail). No-op when the video isn't
+  // ready yet — finalize applies protection on the ready-hop, which now finds this
+  // recipe. Without this a short clip that transcodes mid-compose stays streamable.
+  if (input.videoAssetId && (priceCents != null || visibility === 'subscribers')) {
+    await syncVideoProtection(input.videoAssetId, true);
+  }
 
   const detail = await getRecipeDetail(userId, recipe.id);
   return c.json(detail, 201);
@@ -537,15 +572,25 @@ recipes.patch('/:id/controls', requireAuth, async (c) => {
   const id = assertUuid(c.req.param('id'), 'recipe');
   const parsed = controlsSchema.safeParse(await c.req.json().catch(() => null));
   if (!parsed.success) throw badRequest('Invalid post controls');
-  const { data: rec } = await supabaseAdmin.from('recipes').select('cook_id').eq('id', id).maybeSingle();
+  const { data: rec } = await supabaseAdmin
+    .from('recipes')
+    .select('cook_id, video_asset_id, price_cents, visibility, post_type')
+    .eq('id', id)
+    .maybeSingle<{ cook_id: string; video_asset_id: string | null; price_cents: number | null; visibility: string | null; post_type: string | null }>();
   if (!rec) throw notFound('Recipe not found');
   if (rec.cook_id !== userId) throw forbidden('You can only change controls on your own posts');
+  // A review is proof-of-cook, not sellable content — mirror the create-path guard so
+  // the edit path can't paywall or subscriber-gate a review.
+  if (rec.post_type === 'review' && (parsed.data.priceCents != null || parsed.data.visibility === 'subscribers')) {
+    throw badRequest("A review can't be made premium");
+  }
   const patch: Record<string, boolean | number | string | null> = {};
   if (parsed.data.likesEnabled !== undefined) patch.likes_enabled = parsed.data.likesEnabled;
   if (parsed.data.commentsEnabled !== undefined) patch.comments_enabled = parsed.data.commentsEnabled;
   if (parsed.data.countsVisible !== undefined) patch.counts_visible = parsed.data.countsVisible;
   if (parsed.data.priceCents !== undefined) {
     if (parsed.data.priceCents !== null) {
+      if (!isPremiumPriceTier(parsed.data.priceCents)) throw badRequest('Choose one of the available price tiers');
       const { data: prof } = await supabaseAdmin.from('profiles').select('monetization_status').eq('id', userId).maybeSingle();
       if (prof?.monetization_status !== 'active') throw badRequest('Set up payouts before pricing a recipe');
     }
@@ -562,7 +607,77 @@ recipes.patch('/:id/controls', requireAuth, async (c) => {
     const { error } = await supabaseAdmin.from('recipes').update(patch).eq('id', id);
     if (error) throw dbFail(error.message);
   }
+  // If pricing/visibility changed, make the video's signed-URL protection match the
+  // new premium state (no-op unless the video is a ready Cloudflare asset).
+  if (parsed.data.priceCents !== undefined || parsed.data.visibility !== undefined) {
+    const newPrice = parsed.data.priceCents !== undefined ? parsed.data.priceCents : rec.price_cents;
+    const newVisibility = parsed.data.visibility !== undefined ? parsed.data.visibility : rec.visibility;
+    await syncVideoProtection(rec.video_asset_id, newPrice != null || newVisibility === 'subscribers');
+  }
   return c.json({ ok: true });
+});
+
+/**
+ * GET /recipes/:id/playback — short-lived signed HLS URL for a PREMIUM video,
+ * handed ONLY to an entitled viewer (owner / one-off unlock / active subscription).
+ * Premium cards omit the playback URL (video.signed=true), so the paid video can't
+ * be grabbed from the feed payload; the client calls this on demand when it's about
+ * to play. Server-authoritative — the entitlement is checked here, not on the client.
+ */
+recipes.get('/:id/playback', optionalAuth, async (c) => {
+  const userId = c.get('userId');
+  const id = assertUuid(c.req.param('id'), 'recipe');
+  const { data: rec } = await supabaseAdmin
+    .from('recipes')
+    .select('cook_id, price_cents, visibility, video_asset_id')
+    .eq('id', id)
+    .maybeSingle<{ cook_id: string; price_cents: number | null; visibility: string | null; video_asset_id: string | null }>();
+  if (!rec || !rec.video_asset_id) throw notFound('Recipe not found');
+  const { data: asset } = await supabaseAdmin
+    .from('video_assets')
+    .select('provider, provider_uid, hls_url, status')
+    .eq('id', rec.video_asset_id)
+    .maybeSingle<{ provider: string | null; provider_uid: string | null; hls_url: string | null; status: string | null }>();
+  if (!asset || asset.status !== 'ready' || !asset.hls_url) throw notFound('Video not ready');
+
+  const premium = rec.price_cents != null || rec.visibility === 'subscribers';
+  // Free video: nothing to gate — hand back the public URL (the client normally
+  // wouldn't ask, but this keeps the endpoint safe if it does).
+  if (!premium) return c.json({ hlsUrl: asset.hls_url });
+
+  // Entitlement (server-authoritative): owner, a one-off unlock, or an active,
+  // non-expired subscription to the creator.
+  let entitled = !!userId && rec.cook_id === userId;
+  if (!entitled && userId) {
+    const [{ data: unlock }, { data: sub }] = await Promise.all([
+      supabaseAdmin.from('recipe_unlocks').select('user_id').eq('user_id', userId).eq('recipe_id', id).maybeSingle(),
+      supabaseAdmin
+        .from('subscriptions')
+        .select('current_period_end')
+        .eq('subscriber_id', userId)
+        .eq('creator_id', rec.cook_id)
+        .eq('status', 'active')
+        .maybeSingle<{ current_period_end: string | null }>(),
+    ]);
+    const subActive = !!sub && (!sub.current_period_end || new Date(sub.current_period_end).getTime() > Date.now());
+    entitled = !!unlock || subActive;
+  }
+  if (!entitled) throw forbidden('This recipe is locked');
+
+  // Mint a short-lived signed token. Cloudflare signed URLs replace the video UID
+  // in the path with the token; on the mock / a non-Cloudflare asset there's nothing
+  // to sign, so return the stored URL.
+  const provider = getStreamProvider();
+  if (asset.provider !== 'cloudflare' || !asset.provider_uid || !provider.signPlaybackToken) {
+    return c.json({ hlsUrl: asset.hls_url });
+  }
+  try {
+    const token = await provider.signPlaybackToken(asset.provider_uid, 60 * 60 * 4); // 4h session
+    return c.json({ hlsUrl: asset.hls_url.replace(asset.provider_uid, token) });
+  } catch (err) {
+    console.error('[playback] signing failed', { id, err: String(err) });
+    throw dbFail('Could not prepare playback');
+  }
 });
 
 /** POST /recipes/:id/publish — flip the owner's draft or scheduled post live now. */

@@ -1,9 +1,10 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Button, GlassButton } from '../controls';
-import { MAX_DURATION_SECONDS, MAX_UPLOAD_BYTES, type PostType } from '@sizzle/shared';
+import { MAX_DURATION_SECONDS, MAX_UPLOAD_BYTES, isPremiumPriceTier, type PostType } from '@sizzle/shared';
 import { useAuth } from '../../auth/useAuth';
 import { useRequireAuth } from '../../auth/useRequireAuth';
-import { useUploadRecipe, useVideoConfig } from '../../data/queries';
+import { useUploadRecipe, useVideoConfig, useMonetizationStatus } from '../../data/queries';
+import { PremiumPriceFields } from '../PremiumPriceFields';
 import { useSizzle } from '../../store';
 import { theme } from '../../theme';
 import { getVideoDuration, captureVideoPoster, uploadRecipeImage } from '../../lib/storage';
@@ -64,6 +65,8 @@ export function UploadSheet() {
   const upload = useUploadRecipe();
   const { data: videoConfig } = useVideoConfig();
   const user = useAuth((s) => s.user);
+  const monetize = useMonetizationStatus(!!user);
+  const canMonetize = monetize.data?.status === 'active';
 
   // "Cook this" lineage: pre-fill the composer from the origin recipe.
   const uploadPrefill = useSizzle((s) => s.uploadPrefill);
@@ -72,6 +75,11 @@ export function UploadSheet() {
   const [postType, setPostType] = useState<PostType>('recipe');
   const [scheduleAt, setScheduleAt] = useState('');
   const [rating, setRating] = useState(0);
+  // Premium pricing (recipes only; gated on an active payout account below).
+  const [premium, setPremium] = useState(false);
+  const [priceCents, setPriceCents] = useState<number | null>(null);
+  const [subOnly, setSubOnly] = useState(false);
+  const [priceErr, setPriceErr] = useState(false);
   const [title, setTitle] = useState('');
   const [cuisine, setCuisine] = useState('');
   const [time, setTime] = useState('');
@@ -307,6 +315,17 @@ export function UploadSheet() {
     const status = mode === 'draft' ? 'draft' : scheduleAt ? 'scheduled' : 'published';
     const scheduledAt = mode !== 'draft' && scheduleAt ? new Date(scheduleAt).toISOString() : undefined;
 
+    // Premium: only a monetization-active creator can price a recipe (reviews never
+    // can). Block the post if Premium is on but no valid price tier is chosen.
+    const wantPremium = !isReview && canMonetize && premium;
+    if (wantPremium && !isPremiumPriceTier(priceCents)) {
+      setPriceErr(true);
+      bail('Pick a price to make this recipe premium, or turn Premium off.');
+      return;
+    }
+    const premiumPriceCents = wantPremium ? priceCents ?? undefined : undefined;
+    const visibility = !isReview && canMonetize && subOnly ? ('subscribers' as const) : undefined;
+
     // TIKTOK-STYLE VIDEO POST: hand the whole upload+publish to the global
     // background task, close the composer IMMEDIATELY, and land the user back on
     // the feed — <UploadProgressTile> (top-left) shows live progress, then ✓, or
@@ -327,6 +346,8 @@ export function UploadSheet() {
         status,
         scheduledAt,
         originRecipeId: uploadPrefill?.originRecipeId,
+        priceCents: premiumPriceCents,
+        visibility,
       };
       const started = useUploadTask.getState().start({
         userId: user.id,
@@ -393,6 +414,8 @@ export function UploadSheet() {
         scheduledAt,
         images,
         originRecipeId: uploadPrefill?.originRecipeId,
+        priceCents: premiumPriceCents,
+        visibility,
       },
       {
         onSuccess: (detail) => {
@@ -654,6 +677,12 @@ export function UploadSheet() {
                   <MacroInput label="Fat" value={fatG} onChange={setFatG} placeholder="18" unit="g" />
                 </div>
               </div>
+              <PremiumPriceFields
+                value={{ premium, priceCents, subOnly }}
+                onChange={(v) => { setPremium(v.premium); setPriceCents(v.priceCents); setSubOnly(v.subOnly); setPriceErr(false); }}
+                canMonetize={canMonetize}
+                priceErr={priceErr}
+              />
             </>
           )}
           {(videoErr || upload.isError) && <div style={{ color: '#ff8a6b', fontSize: 13.5, fontWeight: 600 }}>{videoErr ?? "Couldn't post — please try again."}</div>}

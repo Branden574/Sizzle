@@ -8,6 +8,7 @@ import { nativeSignInOAuth } from '../lib/nativeOAuth';
 import { disablePush } from '../lib/push';
 import { clearBadge } from '../lib/badge';
 import { clearPasscode } from '../lib/applock';
+import { initRevenueCat, logoutRevenueCat } from '../lib/revenuecat';
 import { useSizzle } from '../store';
 
 /**
@@ -88,6 +89,7 @@ export const useAuth = create<AuthState>((set, get) => ({
         status: session ? 'authed' : get().status === 'guest' ? 'guest' : 'anon',
       });
       if (session) void get().loadProfile();
+      if (session?.user?.id) void initRevenueCat(session.user.id);
     });
 
     supabase.auth.onAuthStateChange((event, session) => {
@@ -101,6 +103,10 @@ export const useAuth = create<AuthState>((set, get) => ({
       });
       if (session) void get().loadProfile();
       else set({ profile: null });
+      // Bind the RevenueCat (Apple IAP) user to our auth user so a purchase maps
+      // back to the buyer; detach on sign-out. Native-only, no-op on web.
+      if (session?.user?.id) void initRevenueCat(session.user.id);
+      else void logoutRevenueCat();
     });
   },
 

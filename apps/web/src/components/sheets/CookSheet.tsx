@@ -8,6 +8,7 @@ import { useSizzle } from '../../store';
 import { VerifiedBadge } from '../VerifiedBadge';
 import { SocialLinks } from '../SocialLinks';
 import { VideoPlayer } from '../VideoPlayer';
+import { PremiumOverlay } from '../PremiumOverlay';
 import { theme } from '../../theme';
 import { formatCount } from '../../lib/format';
 import { cookShareUrl, nativeShare } from '../../lib/share';
@@ -215,7 +216,7 @@ export function CookSheet() {
           <>
           <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', margin: '24px 0 12px' }}>Recipes</div>
           <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: 14 }}>
-            {ck.recipes.map((d) => (
+            {ck.recipes.map((d, i) => (
               <Button
                 key={d.id}
                 onClick={() => setOpenRecipe(d.id)}
@@ -230,6 +231,7 @@ export function CookSheet() {
                   <PosterImg src={(d.video?.posterUrl || d.images[0])!} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
                 )}
                 <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg,transparent 42%, rgba(0,0,0,.72))' }} />
+                {!d.removed && !d.autoHidden && <PremiumOverlay card={d} radius={18} index={i} isOwn={isOwn} />}
                 {d.removed ? (
                   <div style={{ position: 'absolute', inset: 0, background: 'rgba(20,14,12,.78)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 12, textAlign: 'center' }}>
                     <div style={{ fontSize: 13.5, fontWeight: 800, color: '#ff8a6b' }}>Video removed</div>

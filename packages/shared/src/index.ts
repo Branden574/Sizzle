@@ -58,6 +58,11 @@ export interface VideoAssetDTO {
   posterUrl: string | null;
   /** Seconds (null until known). */
   duration: number | null;
+  /** True for premium/subscribers-only videos: hlsUrl/mp4Url are withheld from the
+   *  card (for EVERY viewer) and an entitled viewer must fetch a short-lived signed
+   *  playback URL on demand from `GET /recipes/:id/playback`. Keeps the paid video
+   *  ungrabbable even from an entitled viewer's payload. */
+  signed?: boolean;
 }
 
 export interface RecipeCounts {
@@ -304,6 +309,25 @@ export const PROCESSING_FIXED_CENTS = 30;
  *  MIN_TIP and the DB CHECK floors — keep all three in step. */
 export const MIN_PRICE_CENTS = 500;
 
+/**
+ * Premium recipe unlock price tiers (cents). Apple requires every purchasable price
+ * to be a pre-made In-App Purchase product, so creators pick a tier rather than
+ * typing a free amount. Each tier maps to a CONSUMABLE App Store product; the buyer
+ * purchases it and the server records which recipe the purchase unlocked. All ≥
+ * MIN_PRICE_CENTS. This list is the single source of truth for the price picker,
+ * the server-side write validation, and the App Store / RevenueCat product catalog.
+ */
+export const PREMIUM_PRICE_TIERS = [599, 999, 1499, 1999] as const;
+export type PremiumPriceTier = (typeof PREMIUM_PRICE_TIERS)[number];
+/** App Store / RevenueCat consumable product id for a price tier (e.g. 599 → "premium_unlock_599"). */
+export function premiumProductId(cents: number): string {
+  return `premium_unlock_${cents}`;
+}
+/** Whether a cents amount is one of the offered tiers — enforced on every write. */
+export function isPremiumPriceTier(cents: number | null | undefined): boolean {
+  return cents != null && (PREMIUM_PRICE_TIERS as readonly number[]).includes(cents);
+}
+
 /** One-line version of the fee disclosure (tip sheet, receipts). */
 export const PLATFORM_FEE_SHORT =
   `Card processing (about ${PROCESSING_PCT}% + ${PROCESSING_FIXED_CENTS}¢) comes off the top; ` +
@@ -332,6 +356,18 @@ export const platformShareCents = (amountCents: number): number =>
  *  for every a (verified by hand at $5.00: 45 + 45 + 410 = 500). */
 export const creatorShareCents = (amountCents: number): number =>
   amountCents - processingFeeCents(amountCents) - platformShareCents(amountCents);
+
+/** Apple's In-App Purchase commission (Small Business Program = 15% under $1M/yr). */
+export const APPLE_IAP_PCT = 15;
+/** Apple's cut on an IAP unlock — comes off the top, the way processing does on web. */
+export const appleFeeCents = (amountCents: number): number =>
+  Math.round((amountCents * APPLE_IAP_PCT) / 100);
+/** Sizzle's share on an IAP unlock: PLATFORM_FEE_PCT of what remains after Apple. */
+export const platformShareCentsIAP = (amountCents: number): number =>
+  Math.floor(((amountCents - appleFeeCents(amountCents)) * PLATFORM_FEE_PCT) / 100);
+/** The creator's take-home on an IAP unlock — the remainder (penny-exact split). */
+export const creatorShareCentsIAP = (amountCents: number): number =>
+  amountCents - appleFeeCents(amountCents) - platformShareCentsIAP(amountCents);
 
 /** The pre-Model-B fee (a flat PLATFORM_FEE_PCT of gross, processing paid out of
  *  it). Kept only so ledger rows written under that model still display the fee
@@ -735,6 +771,13 @@ export interface CreateRecipeInput {
   status?: 'draft' | 'scheduled' | 'published';
   /** ISO time to auto-publish when status is 'scheduled'. */
   scheduledAt?: string;
+  /** Premium: unlock price in cents (≥ MIN_PRICE_CENTS), or null/omitted for free.
+   *  Requires an active payout account. Set at create so a priced post is never
+   *  briefly free/public before a follow-up controls PATCH. */
+  priceCents?: number | null;
+  /** 'subscribers' makes it subscribers-only (requires a monthly sub price set);
+   *  'public' (default) is visible to everyone. */
+  visibility?: 'public' | 'subscribers';
 }
 
 /** Response from requesting a direct (client-side) video upload. */

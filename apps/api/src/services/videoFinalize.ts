@@ -11,6 +11,31 @@ function storagePathFromPublicUrl(url: string): string | null {
 }
 
 /**
+ * Re-host a (public, already-moderated) Cloudflare thumbnail into OUR Storage so a
+ * premium poster teaser never carries the Cloudflare video UID — the UID is what
+ * let a non-purchaser reconstruct the HLS manifest and stream the paid video. Runs
+ * only for premium videos with no usable client poster. Returns the public Storage
+ * URL, or `fallback` (the client poster, or null) if the copy fails — NEVER the raw
+ * Cloudflare URL, so a failure degrades to "no poster" rather than a UID leak.
+ */
+async function rehostPosterPublic(assetId: string, cfThumbUrl: string, fallback: string | null): Promise<string | null> {
+  try {
+    const res = await fetch(cfThumbUrl);
+    if (!res.ok) throw new Error(`fetch thumb HTTP ${res.status}`);
+    const bytes = new Uint8Array(await res.arrayBuffer());
+    const path = `premium-posters/${assetId}.jpg`;
+    const { error } = await supabaseAdmin.storage
+      .from('videos')
+      .upload(path, bytes, { contentType: 'image/jpeg', upsert: true });
+    if (error) throw new Error(error.message);
+    return supabaseAdmin.storage.from('videos').getPublicUrl(path).data.publicUrl;
+  } catch (err) {
+    console.error('[finalize] premium poster re-host failed — using fallback', { assetId, err: String(err) });
+    return fallback;
+  }
+}
+
+/**
  * Media teardown for a video asset — deletes the Cloudflare Stream asset AND the
  * raw Supabase Storage objects (source clip, mp4, poster). Never throws (a
  * user-facing delete must not block on it), but RETURNS whether every target was
@@ -57,6 +82,55 @@ export async function deleteAssetMedia(asset: {
     }
   }
   return ok;
+}
+
+/**
+ * Make a recipe's Cloudflare video match its premium state when a creator changes
+ * pricing AFTER the video is already live (the edit path). Premium/subscribers-only
+ * videos flip requireSignedURLs ON — and any Cloudflare-hosted poster (which leaks
+ * the UID) is first re-hosted UID-free — so the paid video can't be grabbed; making
+ * it free again flips protection OFF.
+ *
+ * Only touches a READY video: before `ready`, protection is applied by the finalize
+ * ready-hop AFTER thumbnail moderation (which fetches the still-public thumbnail) —
+ * signing it early would wedge moderation. Best-effort + logged; a failure must not
+ * block the edit. Called from PATCH /recipes/:id/controls (create needs nothing:
+ * the video finalizes after the price is set, and finalize reads it).
+ */
+export async function syncVideoProtection(videoAssetId: string | null, premium: boolean): Promise<void> {
+  if (!videoAssetId) return;
+  const { data: asset } = await supabaseAdmin
+    .from('video_assets')
+    .select('provider, provider_uid, poster_url, status, source_url, mp4_url')
+    .eq('id', videoAssetId)
+    .maybeSingle<{ provider: string | null; provider_uid: string | null; poster_url: string | null; status: string | null; source_url: string | null; mp4_url: string | null }>();
+  if (!asset || asset.provider !== 'cloudflare' || !asset.provider_uid || asset.status !== 'ready') return;
+  const provider = getStreamProvider();
+  if (!provider.setRequireSignedURLs) return;
+  // Replace a Cloudflare-hosted poster with a UID-free copy BEFORE signing (the
+  // re-host fetch needs the thumbnail to still be public).
+  if (premium && asset.poster_url && !storagePathFromPublicUrl(asset.poster_url)) {
+    const rehosted = await rehostPosterPublic(videoAssetId, asset.poster_url, null);
+    if (rehosted) await supabaseAdmin.from('video_assets').update({ poster_url: rehosted }).eq('id', videoAssetId);
+  }
+  // Drop the raw source / mp4 from the public bucket — an unprotected full-quality
+  // copy of a now-paid video (mirrors the finalize premium cleanup; a video that was
+  // finalized while free never had these removed).
+  if (premium) {
+    const paths = [asset.source_url, asset.mp4_url]
+      .filter((u): u is string => !!u)
+      .map(storagePathFromPublicUrl)
+      .filter((p): p is string => !!p);
+    if (paths.length) {
+      const { error } = await supabaseAdmin.storage.from('videos').remove([...new Set(paths)]);
+      if (error) console.error('[premium] premium source cleanup failed', { videoAssetId, err: error.message });
+    }
+  }
+  try {
+    await provider.setRequireSignedURLs(asset.provider_uid, premium);
+  } catch (err) {
+    console.error('[premium] failed to sync signed-URL protection', { videoAssetId, premium, err: String(err) });
+  }
 }
 
 /**
@@ -240,11 +314,53 @@ export async function finalizeProviderAsset(assetId: string, providerUid: string
 
     // Clean → publish. This is the only place we write the CF poster, so we never
     // overwrite the client's upload poster with a not-yet-live CF thumbnail.
+    //
+    // PREMIUM PROTECTION: a Cloudflare thumbnail URL embeds the video UID, and the
+    // HLS manifest is trivially reconstructed from it — so surfacing that poster on
+    // a locked card lets a non-purchaser stream the paid video. For a premium recipe
+    // we publish a UID-free poster instead (the client's public teaser, else a
+    // re-hosted copy of THIS moderated thumbnail) and drop the raw source MP4 from
+    // the public bucket now that Cloudflare holds the transcode. Free videos keep
+    // the Cloudflare thumbnail (fast + edge-cached).
+    const { data: linkedRecipe } = await supabaseAdmin
+      .from('recipes')
+      .select('price_cents, visibility')
+      .eq('video_asset_id', assetId)
+      .maybeSingle<{ price_cents: number | null; visibility: string | null }>();
+    const premium = !!(linkedRecipe && (linkedRecipe.price_cents != null || linkedRecipe.visibility === 'subscribers'));
+
+    let posterUrl: string | null = a.posterUrl;
+    if (premium) {
+      // a.posterUrl is non-null here (guarded above; the fail-closed defer returns
+      // when it's missing) — assert past the await-widened narrowing.
+      const clientPoster = current.poster_url && storagePathFromPublicUrl(current.poster_url) ? current.poster_url : null;
+      posterUrl = clientPoster ?? (await rehostPosterPublic(assetId, a.posterUrl!, null));
+    }
+
     await supabaseAdmin
       .from('video_assets')
-      .update({ status: 'ready', hls_url: a.hlsUrl, poster_url: a.posterUrl, duration_seconds: a.duration, last_polled_at: nowIso })
+      .update({ status: 'ready', hls_url: a.hlsUrl, poster_url: posterUrl, duration_seconds: a.duration, last_polled_at: nowIso })
       .eq('id', assetId);
-    return a;
+
+    if (premium && current.source_url) {
+      const srcPath = storagePathFromPublicUrl(current.source_url);
+      if (srcPath) {
+        const { error: rmErr } = await supabaseAdmin.storage.from('videos').remove([srcPath]);
+        if (rmErr) console.error('[finalize] premium source cleanup failed', { assetId, err: rmErr.message });
+      }
+    }
+    // Sign the premium video LAST — after moderation (which needed the public
+    // thumbnail) and after the poster is already UID-free. Now the HLS manifest +
+    // Cloudflare thumbnail require a token; entitled viewers fetch a signed URL from
+    // /recipes/:id/playback.
+    if (premium) {
+      try {
+        await provider.setRequireSignedURLs?.(uid, true);
+      } catch (err) {
+        console.error('[finalize] enabling signed URLs on premium video failed', { assetId, uid, err: String(err) });
+      }
+    }
+    return { ...a, posterUrl };
   }
 
   if (a.status === 'error') {

@@ -5,6 +5,7 @@ import { useSizzle } from '../store';
 import { apiGet, apiSend, setAdminUnlockToken } from '../lib/api';
 import { syncBadge } from '../lib/badge';
 import { onExternalBrowserClosed } from '../lib/native';
+import { purchaseUnlock } from '../lib/revenuecat';
 import { removeOffline, saveOffline } from '../lib/offline';
 import { releaseLocalClip } from '../lib/localClips';
 
@@ -141,6 +142,44 @@ export function useUnlockRecipe() {
         window.open(res.url, '_blank', 'noopener');
         invalidateOnReturn(qc, [keys.recipe(recipeId), ['feed'], ['cook']]);
       } else {
+        void qc.invalidateQueries({ queryKey: keys.recipe(recipeId) });
+        void qc.invalidateQueries({ queryKey: ['feed'] });
+        void qc.invalidateQueries({ queryKey: ['cook'] });
+      }
+    },
+  });
+}
+
+/**
+ * Buy + unlock a premium recipe via Apple In-App Purchase (native). Runs the
+ * RevenueCat purchase, then asks the SERVER to verify it and grant the unlock —
+ * retried a few times because RevenueCat's server can lag the on-device purchase by
+ * a second. Returns whether the recipe ended up unlocked (and whether the buyer
+ * cancelled the Apple sheet, so the UI can stay silent on cancel).
+ */
+export function useIapUnlock() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ recipeId, productId }: { recipeId: string; productId: string }) => {
+      // Confirm-FIRST: if a prior purchase of this tier is still unclaimed (e.g. a
+      // previous confirm lagged or failed), grant from it instead of charging again —
+      // this is what prevents a double-charge when the buyer taps Unlock a second time.
+      const pre = await apiSend<{ unlocked: boolean }>('POST', '/monetize/iap/confirm', { recipeId }).catch(() => ({ unlocked: false }));
+      if (pre.unlocked) return { unlocked: true, cancelled: false, pending: false };
+      const outcome = await purchaseUnlock(productId);
+      if (outcome === 'cancelled') return { unlocked: false, cancelled: true, pending: false };
+      // Purchase is done on-device; RevenueCat's server can lag a second — retry.
+      for (let i = 0; i < 5; i++) {
+        const res = await apiSend<{ unlocked: boolean }>('POST', '/monetize/iap/confirm', { recipeId }).catch(() => ({ unlocked: false }));
+        if (res.unlocked) return { unlocked: true, cancelled: false, pending: false };
+        await new Promise((r) => setTimeout(r, 1500));
+      }
+      // Charged but not reflected yet — do NOT re-buy on retry (confirm-first claims
+      // it); the UI shows a "processing" state instead of resetting to the buy button.
+      return { unlocked: false, cancelled: false, pending: true };
+    },
+    onSuccess: (res, { recipeId }) => {
+      if (res.unlocked) {
         void qc.invalidateQueries({ queryKey: keys.recipe(recipeId) });
         void qc.invalidateQueries({ queryKey: ['feed'] });
         void qc.invalidateQueries({ queryKey: ['cook'] });

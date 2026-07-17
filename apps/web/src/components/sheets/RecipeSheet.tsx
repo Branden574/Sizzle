@@ -1,13 +1,14 @@
 import { useEffect, useRef, useState } from 'react';
-import { creatorShareCents } from '@sizzle/shared';
+import { creatorShareCents, creatorShareCentsIAP, premiumProductId } from '@sizzle/shared';
 import { Button, DismissBackdrop } from '../controls';
 import { useRequireAuth } from '../../auth/useRequireAuth';
 import { useAuth } from '../../auth/useAuth';
-import { useAppealRecipe, useCookEvent, useCookLog, useDeleteRecipe, useDerivatives, useMe, useRecipe, useToggleDownload, useToggleSave, useUnlockRecipe } from '../../data/queries';
+import { useAppealRecipe, useCookEvent, useCookLog, useDeleteRecipe, useDerivatives, useMe, useRecipe, useToggleDownload, useToggleSave, useUnlockRecipe, useIapUnlock } from '../../data/queries';
 import { getOffline } from '../../lib/offline';
-import { canBuyInApp } from '../../lib/native';
+import { canBuyInApp, isNative } from '../../lib/native';
 import { formatCount } from '../../lib/format';
 import { getLocalClip } from '../../lib/localClips';
+import { apiGet } from '../../lib/api';
 import { scaleIngredient } from '../../lib/ingredients';
 import { useShopping } from '../../lib/shopping';
 import { useSizzle } from '../../store';
@@ -36,6 +37,7 @@ export function RecipeSheet() {
   const save = useToggleSave();
   const download = useToggleDownload();
   const unlock = useUnlockRecipe();
+  const iapUnlock = useIapUnlock();
   const cookEvent = useCookEvent();
   const setUploadPrefill = useSizzle((s) => s.setUploadPrefill);
   const setShowUpload = useSizzle((s) => s.setShowUpload);
@@ -76,9 +78,22 @@ export function RecipeSheet() {
   const suppressHeaderClick = useRef(false);
   const isOwner = !!r && !!me && r.cook.id === me.id;
   const isReview = r?.postType === 'review';
+  // Premium (signed) videos never carry their URL in the payload — an entitled viewer
+  // fetches a short-lived signed playback URL on demand (mirrors the feed). Without
+  // this, a buyer who just paid would see no video in the sheet.
+  const [signedSrc, setSignedSrc] = useState<string | null>(null);
+  const signedVideo = !!r?.video?.signed && !r?.locked && r?.video?.status === 'ready';
+  useEffect(() => {
+    setSignedSrc(null);
+    if (!signedVideo || !r) return;
+    let cancelled = false;
+    void apiGet<{ hlsUrl: string }>(`/recipes/${r.id}/playback`).then((res) => { if (!cancelled) setSignedSrc(res.hlsUrl); }).catch(() => {});
+    return () => { cancelled = true; };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [signedVideo, r?.id]);
   // Prefer HLS (Cloudflare adaptive stream) over raw MP4 — same order as the feed.
   // A clip you JUST posted plays instantly from the local file while it transcodes.
-  const headerVideo = r?.video?.hlsUrl || r?.video?.mp4Url || (r ? getLocalClip(r.id) : null);
+  const headerVideo = (r?.video?.signed ? signedSrc : (r?.video?.hlsUrl || r?.video?.mp4Url)) || (r ? getLocalClip(r.id) : null);
   const headerImages = r?.images ?? [];
   // A freshly-posted clip has no playable URL until Cloudflare finishes — surface
   // an honest "Processing…" state instead of a bare gradient that reads as broken.
@@ -344,27 +359,51 @@ export function RecipeSheet() {
                     </div>
                   )}
 
-                  {r.locked && !r.subscribersOnly && r.price != null && (
+                  {r.locked && !r.subscribersOnly && r.price != null && (() => {
+                    // One-off unlock: native buys via Apple IAP, web via Stripe. The
+                    // take-home line reflects the platform's fees (Apple 15% vs card
+                    // processing). Subscriptions aren't wired for IAP, so the
+                    // "subscribe instead" nudge stays web-only.
+                    const price = r.price!;
+                    const canUnlock = canBuyInApp || isNative;
+                    const buying = unlock.isPending || iapUnlock.isPending;
+                    const share = isNative ? creatorShareCentsIAP(price) : creatorShareCents(price);
+                    const onUnlock = () => {
+                      if (!requireAuth()) return;
+                      if (isNative) iapUnlock.mutate({ recipeId: r.id, productId: premiumProductId(price) });
+                      else unlock.mutate(r.id);
+                    };
+                    return (
                     <div style={{ marginTop: 22, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 18, padding: 20, textAlign: 'center' }}>
                       <div style={{ fontSize: 30 }}>🔒</div>
                       <div style={{ fontSize: 16.5, fontWeight: 800, color: 'var(--text)', marginTop: 6 }}>Premium recipe</div>
                       <div style={{ fontSize: 13.5, color: 'var(--text-faint)', margin: '4px 0 14px', lineHeight: 1.5 }}>
-                        {canBuyInApp
+                        {canUnlock
                           ? `Unlock ${r.cook.name}'s full recipe — video, ingredients & steps.`
                           : `This is one of ${r.cook.name}'s premium recipes.`}
                       </div>
-                      {canBuyInApp && (
+                      {canUnlock && (
                         <Button
-                          onClick={() => { if (requireAuth()) unlock.mutate(r.id); }}
-                          disabled={unlock.isPending}
+                          onClick={onUnlock}
+                          disabled={buying}
                           style={{ width: '100%', height: 50, border: 'none', borderRadius: 14, background: `linear-gradient(135deg,${accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15.5, fontWeight: 800, cursor: 'pointer' }}
                         >
-                          {unlock.isPending ? 'Starting…' : `Unlock · $${(r.price / 100).toFixed(2)}`}
+                          {buying ? 'Unlocking…' : `Unlock · $${(price / 100).toFixed(2)}`}
                         </Button>
                       )}
-                      {canBuyInApp && (
+                      {canUnlock && (
                         <div style={{ fontSize: 11.5, color: 'var(--text-faint-2)', marginTop: 8 }}>
-                          {r.cook.name} receives ${(creatorShareCents(r.price) / 100).toFixed(2)}
+                          {r.cook.name} receives ${(share / 100).toFixed(2)}
+                        </div>
+                      )}
+                      {iapUnlock.isError && (
+                        <div style={{ fontSize: 12, color: 'var(--danger-fg)', marginTop: 8, fontWeight: 600 }}>
+                          Couldn’t complete the purchase — please try again.
+                        </div>
+                      )}
+                      {iapUnlock.data?.pending && (
+                        <div style={{ fontSize: 12, color: 'var(--text-faint-2)', marginTop: 8, fontWeight: 600 }}>
+                          Purchase received — unlocking shortly. It won’t charge you again if you tap Unlock once more.
                         </div>
                       )}
                       {canBuyInApp && r.cook.subPriceCents != null && (
@@ -376,7 +415,8 @@ export function RecipeSheet() {
                         </Button>
                       )}
                     </div>
-                  )}
+                    );
+                  })()}
 
                   {!r.locked && (
                   <>

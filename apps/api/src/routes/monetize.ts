@@ -1,10 +1,10 @@
 import { Hono } from 'hono';
 import { z } from 'zod';
 import { createHmac, timingSafeEqual } from 'node:crypto';
-import { creatorShareCents, PLATFORM_FEE_PCT, type EarningKind, type EarningsSummary, type TipConfig, type TipDTO } from '@sizzle/shared';
+import { creatorShareCents, creatorShareCentsIAP, PLATFORM_FEE_PCT, premiumProductId, type EarningKind, type EarningsSummary, type TipConfig, type TipDTO } from '@sizzle/shared';
 import { requireAuth, requireNotBanned } from '../middleware/auth';
 import { rateLimit } from '../middleware/rateLimit';
-import { env, stripeConfigured } from '../env';
+import { env, stripeConfigured, revenueCatConfigured } from '../env';
 import { supabaseAdmin } from '../lib/supabase';
 import { badRequest, dbFail, notFound } from '../lib/errors';
 import { relativeTime } from '../lib/format';
@@ -13,6 +13,7 @@ import { notify, systemNotify } from '../services/notify';
 import { moderate } from '../services/moderation';
 import { accountActive, cancelSubscriptionAtPeriodEnd, createConnectAccount, createDashboardLink, createOnboardingLink, createOneOffCheckout, createSubscriptionCheckout, getChargeTransfer, hasTransferInGroup, paymentsProvider, reverseTransfer, stripeBalance, StripeError, transferToCreator, type ChargeTransfer } from '../services/payments';
 import { captureException } from '../lib/sentry';
+import { fetchNonSubscriptions, type RCNonSubscription } from '../services/revenuecat';
 import type { AppEnv } from '../types';
 
 export const monetize = new Hono<AppEnv>();
@@ -288,6 +289,93 @@ monetize.post('/unlock', requireAuth, requireNotBanned, rateLimit({ windowMs: 60
   await supabaseAdmin.from('recipe_unlocks').upsert({ user_id: userId, recipe_id: recipeId }, { onConflict: 'user_id,recipe_id', ignoreDuplicates: true });
   await notify({ userId: rec.cook_id as string, type: 'tip', actorId: userId, recipeId, amountCents }).catch(() => {});
   return c.json({ url: null, status: 'succeeded' as const });
+});
+
+/**
+ * POST /monetize/iap/confirm — grant a premium recipe unlock after an Apple In-App
+ * Purchase (native). The client buys the recipe's price-tier consumable via
+ * RevenueCat, then calls this with the recipeId. We VERIFY server-side that the buyer
+ * actually holds an unconsumed purchase of that tier's product (RevenueCat already
+ * validated the Apple receipt), map it to this recipe, and write the unlock. The
+ * store transaction id is the idempotency key — one purchase unlocks exactly one
+ * recipe, even under retries or two same-tier buys. Never trusts the client that a
+ * purchase happened, and never trusts a client-supplied price.
+ */
+monetize.post('/iap/confirm', requireAuth, requireNotBanned, rateLimit({ windowMs: 60_000, max: 30, name: 'iap-confirm' }), async (c) => {
+  const userId = c.get('userId')!;
+  const parsed = unlockSchema.safeParse(await c.req.json().catch(() => null));
+  if (!parsed.success) throw badRequest('Invalid');
+  const { recipeId } = parsed.data;
+
+  const { data: rec } = await supabaseAdmin.from('recipes').select('id, cook_id, price_cents, status').eq('id', recipeId).maybeSingle();
+  if (!rec || rec.status !== 'published') throw notFound('Recipe not found');
+  if (rec.cook_id !== userId && !(await canViewCookContent(supabaseAdmin, rec.cook_id as string, userId))) throw notFound('Recipe not found');
+  if (!rec.price_cents) throw badRequest('This recipe is free');
+  if (rec.cook_id === userId) return c.json({ unlocked: true });
+
+  // Idempotent: already unlocked (a prior confirm, a web unlock, or a subscription).
+  const { data: already } = await supabaseAdmin.from('recipe_unlocks').select('recipe_id').eq('user_id', userId).eq('recipe_id', recipeId).maybeSingle();
+  if (already) return c.json({ unlocked: true });
+
+  if (!revenueCatConfigured) throw badRequest('In-app purchases are not available right now');
+
+  const price = rec.price_cents as number;
+  const expectedProduct = premiumProductId(price);
+  let purchases: RCNonSubscription[];
+  try {
+    purchases = (await fetchNonSubscriptions(userId))[expectedProduct] ?? [];
+  } catch (err) {
+    console.error('[iap] RevenueCat verify failed', { userId, recipeId, err: String(err) });
+    throw dbFail('Could not verify your purchase — please try again');
+  }
+  // Only real App Store purchases count: drop SANDBOX (TestFlight / dev / $0 — never
+  // charged) unless explicitly allowed for a staging test, and require Apple's store
+  // transaction id (the shared idempotency key with the refund webhook).
+  const allowSandbox = env.ALLOW_SANDBOX_IAP === 'true';
+  const usable = purchases.filter((p) => !!p.store_transaction_id && (allowSandbox || !p.is_sandbox));
+  if (!usable.length) return c.json({ unlocked: false }); // not visible yet, not purchased, or sandbox-only
+
+  // Skip transactions already spent on another recipe; take the newest that's free.
+  const ids = usable.map((p) => p.store_transaction_id as string);
+  const { data: consumed } = await supabaseAdmin.from('iap_transactions').select('transaction_id').in('transaction_id', ids);
+  const consumedSet = new Set((consumed ?? []).map((r) => r.transaction_id as string));
+  const fresh = usable
+    .filter((p) => !consumedSet.has(p.store_transaction_id as string))
+    .sort((a, b) => new Date(b.purchase_date).getTime() - new Date(a.purchase_date).getTime())[0];
+  if (!fresh) return c.json({ unlocked: false }); // every purchase of this tier already spent elsewhere
+  const transactionId = fresh.store_transaction_id as string;
+
+  // Claim the transaction (its PK dedupes a race), then grant. On a unique violation
+  // it was just claimed — report whether the recipe ended up unlocked.
+  const { error: insErr } = await supabaseAdmin.from('iap_transactions').insert({
+    transaction_id: transactionId, user_id: userId, recipe_id: recipeId, product_id: expectedProduct, price_cents: price, store: 'app_store',
+  });
+  if (insErr) {
+    if ((insErr as { code?: string }).code === '23505') {
+      const { data: now } = await supabaseAdmin.from('recipe_unlocks').select('recipe_id').eq('user_id', userId).eq('recipe_id', recipeId).maybeSingle();
+      return c.json({ unlocked: !!now });
+    }
+    throw dbFail(insErr.message);
+  }
+  await supabaseAdmin.from('recipe_unlocks').upsert({ user_id: userId, recipe_id: recipeId }, { onConflict: 'user_id,recipe_id', ignoreDuplicates: true });
+
+  // Record the sale in the earnings ledger (Apple 15% off the top, then Sizzle 10% of
+  // the rest) so the creator is credited + paid and their funding goal advances —
+  // mirroring the web unlock path. Best-effort: the sale is already durably in
+  // iap_transactions, so a ledger hiccup never fails the grant (which would re-charge
+  // on retry). provider_ref = the Apple transaction id, for reconciliation.
+  const netCents = creatorShareCentsIAP(price);
+  const { error: tipErr } = await supabaseAdmin.from('tips').insert({
+    tipper_id: userId, creator_id: rec.cook_id, recipe_id: recipeId,
+    amount_cents: price, fee_cents: price - netCents, net_cents: netCents,
+    provider: 'apple', status: 'succeeded', kind: 'unlock', provider_ref: transactionId,
+    succeeded_at: new Date().toISOString(),
+  });
+  if (tipErr) console.error('[iap] earnings ledger insert failed (sale recorded in iap_transactions)', { transactionId, err: tipErr.message });
+  else await bumpGoal(rec.cook_id as string, netCents);
+
+  await notify({ userId: rec.cook_id as string, type: 'tip', actorId: userId, recipeId, amountCents: price }).catch(() => {});
+  return c.json({ unlocked: true });
 });
 
 /* ─────────────────────────── subscriptions ─────────────────────────── */
@@ -697,6 +785,78 @@ async function recoverFromCreator(ct: ChargeTransfer, lostCents: number, keyPref
     });
   }
 }
+
+/**
+ * POST /monetize/webhook/revenuecat — REVOKE a premium unlock when Apple refunds or
+ * charges back the purchase. Grants happen via /iap/confirm (which knows the recipe);
+ * this webhook only needs the store transaction id to find the exact unlock to pull.
+ * Authenticated by the shared Authorization header value set in the RevenueCat
+ * dashboard, compared in constant time.
+ */
+monetize.post('/webhook/revenuecat', async (c) => {
+  const expected = env.REVENUECAT_WEBHOOK_AUTH;
+  const auth = c.req.header('authorization') ?? '';
+  if (!expected || auth.length !== expected.length || !timingSafeEqual(Buffer.from(auth), Buffer.from(expected))) {
+    return c.json({ error: { code: 'unauthorized', message: 'Bad webhook auth' } }, 401);
+  }
+  const body = (await c.req.json().catch(() => null)) as { event?: { type?: string; transaction_id?: string; store_transaction_id?: string } } | null;
+  const ev = body?.event;
+  if (!ev) return c.json({ ok: true });
+
+  if (ev.type === 'REFUND' || ev.type === 'CANCELLATION') {
+    const txn = ev.store_transaction_id ?? ev.transaction_id;
+    if (txn) {
+      const { data: row, error: lookupErr } = await supabaseAdmin
+        .from('iap_transactions')
+        .select('user_id, recipe_id')
+        .eq('transaction_id', txn)
+        .maybeSingle();
+      // A read FAILURE must retry, not silently 200 — otherwise the refunded unlock
+      // would survive forever (RevenueCat wouldn't redeliver).
+      if (lookupErr) {
+        console.error('[iap] refund revoke: lookup failed', { txn, err: lookupErr.message });
+        return c.json({ error: { code: 'retry', message: 'lookup failed' } }, 500);
+      }
+      if (row) {
+        // DELETE the grant FIRST (idempotent), then stamp revoked_at — so revoked_at
+        // is only ever set once access is actually gone. Any failure returns 500 so
+        // RevenueCat redelivers and the revoke completes (a refunded buyer must never
+        // keep access). Not guarding on revoked_at: a re-delete is harmless and
+        // self-heals a prior partial failure.
+        const { error: delErr } = await supabaseAdmin.from('recipe_unlocks').delete().eq('user_id', row.user_id).eq('recipe_id', row.recipe_id);
+        if (delErr) {
+          console.error('[iap] refund revoke: unlock delete failed', { txn, err: delErr.message });
+          return c.json({ error: { code: 'retry', message: 'revoke failed' } }, 500);
+        }
+        const { error: updErr } = await supabaseAdmin.from('iap_transactions').update({ revoked_at: new Date().toISOString() }).eq('transaction_id', txn);
+        if (updErr) {
+          console.error('[iap] refund revoke: mark-revoked failed', { txn, err: updErr.message });
+          return c.json({ error: { code: 'retry', message: 'mark failed' } }, 500);
+        }
+        // Reverse the earnings ledger: flip the succeeded 'apple' unlock row to
+        // 'refunded' (so it drops out of the creator's earnings + payout) and unwind
+        // the funding goal — mirroring the Stripe refund path. The status='succeeded'
+        // filter makes this idempotent across redelivery (no double reversal).
+        const { data: reversed, error: revErr } = await supabaseAdmin
+          .from('tips')
+          .update({ status: 'refunded' })
+          .eq('provider', 'apple')
+          .eq('provider_ref', txn)
+          .eq('status', 'succeeded')
+          .select('creator_id, net_cents');
+        if (revErr) {
+          console.error('[iap] refund revoke: ledger reversal failed', { txn, err: revErr.message });
+          return c.json({ error: { code: 'retry', message: 'ledger reversal failed' } }, 500);
+        }
+        for (const t of reversed ?? []) {
+          try { await bumpGoal(t.creator_id as string, -((t.net_cents as number) ?? 0)); } catch { /* funding goal is a soft counter — best-effort */ }
+        }
+        console.error('[iap] revoked unlock on refund', { txn, userId: row.user_id, recipeId: row.recipe_id });
+      }
+    }
+  }
+  return c.json({ ok: true });
+});
 
 /**
  * POST /monetize/webhook/stripe — settle / void / refund tips from Stripe events.
