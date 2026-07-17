@@ -1,4 +1,4 @@
-import { useState, type ReactNode } from 'react';
+import { useEffect, useState, type ReactNode } from 'react';
 import { Button, DismissBackdrop, SegmentedControl } from '../controls';
 import { useSwipeDismiss } from '../../lib/useSwipeDismiss';
 import { useAuth } from '../../auth/useAuth';
@@ -14,8 +14,35 @@ import { showCreatorMoney } from '../../lib/native';
 import { PlayIcon, SpeakerIcon } from '../icons';
 import type { MeProfile } from '@sizzle/shared';
 
-const APP_VERSION = '1.0.0';
+const APP_VERSION = __APP_VERSION__; // build-time (web / fallback)
 const SUPPORT_EMAIL = 'support@getsizzle.app';
+
+/**
+ * Live version string: the OTA bundle version (what JS is actually running, via
+ * Capgo) + the native app version and build number. Falls back to the build-time
+ * version on web. Best-effort — never throws.
+ */
+async function resolveVersionLabel(): Promise<string> {
+  let ota = '';
+  let nativeVer = '';
+  let build = '';
+  try {
+    const { CapacitorUpdater } = await import('@capgo/capacitor-updater');
+    const cur = await CapacitorUpdater.current();
+    const v = cur?.bundle?.version;
+    if (v && v !== 'builtin') ota = v;
+  } catch { /* web or plugin absent */ }
+  try {
+    const { App } = await import('@capacitor/app');
+    const info = await App.getInfo();
+    nativeVer = info?.version ?? '';
+    build = info?.build ?? '';
+  } catch { /* web */ }
+  // e.g. "1.0.49 · v1.0 (23)"  (OTA bundle · App Store version (build))
+  const otaPart = ota || APP_VERSION;
+  const nativePart = nativeVer ? ` · v${nativeVer}${build ? ` (${build})` : ''}` : '';
+  return `${otaPart}${nativePart}`;
+}
 
 /** 38px rounded icon tile that leads every row. */
 function IconChip({ children, dim }: { children: ReactNode; dim?: boolean }) {
@@ -175,6 +202,8 @@ export function AppSettingsSheet() {
   const [delBusy, setDelBusy] = useState(false);
   const [delConfirm, setDelConfirm] = useState('');
   const [cacheCleared, setCacheCleared] = useState(false);
+  const [versionLabel, setVersionLabel] = useState<string>(APP_VERSION);
+  useEffect(() => { void resolveVersionLabel().then(setVersionLabel); }, []);
   const [legal, setLegal] = useState<'terms' | 'privacy' | null>(null);
   const [showBlocked, setShowBlocked] = useState(false);
   const [section, setSection] = useState<SectionKey | null>(null);
@@ -382,7 +411,7 @@ export function AppSettingsSheet() {
             >
               Log out
             </Button>
-            <div style={{ textAlign: 'center', color: 'var(--text-faint-2)', fontSize: 12.5, margin: '16px 0 14px' }}>Sizzle v{APP_VERSION}</div>
+            <div style={{ textAlign: 'center', color: 'var(--text-faint-2)', fontSize: 12.5, margin: '16px 0 14px' }}>Sizzle {versionLabel}</div>
             <Button variant="primary" size="lg" fullWidth onClick={close}>Done</Button>
           </div>
         ) : (

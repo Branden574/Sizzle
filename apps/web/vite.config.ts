@@ -33,8 +33,13 @@ function staticPages() {
   };
 }
 
+// Build-time app version (from package.json) — the web/fallback shown in Settings.
+// On native the live OTA bundle version + native build are read at runtime.
+const APP_VERSION = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version as string;
+
 // https://vite.dev/config/
 export default defineConfig({
+  define: { __APP_VERSION__: JSON.stringify(APP_VERSION) },
   plugins: [staticPages(), react()],
   server: {
     // Don't trigger HMR reloads when `tsc -b` / `vite build` write these.
