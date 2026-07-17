@@ -25,18 +25,10 @@ if (Capacitor.isNativePlatform()) {
   // the last good bundle after appReadyTimeout — the safety net for OTA pushes.
   void CapacitorUpdater.notifyAppReady();
 
-  // Session-safe OTA policy: a pending update may apply only after the app has
-  // been BACKGROUNDED for 5+ minutes (a natural session boundary). Quick
-  // app-switches never reload the WebView mid-session (protecting recordings,
-  // drafts, uploads), but real absences let updates through promptly.
-  //
-  // Do NOT use kind:'kill' here: the plugin clears the kill condition at native
-  // launch and blocks installNext() while ANY condition exists — re-arming it at
-  // every JS boot (which is unavoidable, this code runs each boot) permanently
-  // wedges updates: downloaded bundles sit pending forever. Field-hit on build
-  // 26 (device stuck on 1.0.62 with 1.0.64 downloaded). The background condition
-  // self-evaluates per event, so per-boot re-arming is safe.
-  void CapacitorUpdater.setMultiDelay({ delayConditions: [{ kind: 'background', value: '300000' }] }).catch(() => {});
+  // OTA apply timing is handled natively by autoUpdate:'onLaunch' (capacitor
+  // .config.ts) — a downloaded bundle applies on the next cold start. No runtime
+  // delay condition needed (an earlier setMultiDelay approach caused an OTA wedge
+  // and a confusing 5-min-background requirement — removed).
 }
 
 createRoot(document.getElementById('root')!).render(

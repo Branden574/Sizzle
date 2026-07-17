@@ -31,7 +31,12 @@ const config: CapacitorConfig = {
     //   npx @capgo/cli bundle upload app.sizzle.mobile --path dist --channel production
     CapacitorUpdater: {
       appId: 'app.sizzle.mobile',
-      autoUpdate: 'atBackground',
+      // Apply a downloaded OTA on the next COLD LAUNCH (kill → reopen) — the
+      // behavior every OTA system uses and the one users expect. It never
+      // reloads mid-session (the swipe-out→feed bug that 'atBackground' caused),
+      // and needs no setMultiDelay hack (that gated on a 5-min background, which
+      // broke the intuitive kill-and-reopen and confused testing).
+      autoUpdate: 'onLaunch',
       defaultChannel: 'production',
     },
   },
