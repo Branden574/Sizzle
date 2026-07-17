@@ -6,6 +6,17 @@ Stack: **Node + TypeScript**, **Hono** API, **Supabase** (Postgres/Auth/Storage)
 
 ---
 
+## 2026-07-16 (late) — Upload "stuck at 99%" ROOT CAUSE + TikTok background uploads (1.0.55)
+
+- **ROOT CAUSE of days of failed uploads:** Supabase's **project-global storage `fileSizeLimit` was 50 MB** (a default that silently overrides the videos bucket's 2 GiB limit). Every clip >50 MB transferred fully (→99%) then was rejected; the client showed nothing and blindly re-uploaded. Confirmed via storage logs + Management API; **raised to 2 GiB** via `PATCH /v1/projects/:ref/config/storage` (instant, no deploy). Branden's 154 MB clip posted immediately after.
+- Contributing client bugs fixed along the way (1.0.52/53): poster capture ran **in parallel** with the transfer (decode+upload contention), and the composer preview was an **`autoPlay loop` video** decoding the whole clip while the form was open → replaced with a static cover captured once at pick.
+- **1.0.55 — TikTok-style background upload:** Post closes the composer instantly; the upload runs in a global task (`lib/uploadTask.ts`); `UploadProgressTile` (top-left over the feed) shows cover+progress → ✓, or the REAL failure reason with Retry. One task at a time. NOTE: survives navigation, not app-kill — that needs the planned native uploader binary.
+- **Transparent upload errors:** `StorageUploadError` surfaces the server's true rejection (Supabase hides 413/403/415 inside HTTP-400 bodies); permanent rejections no longer trigger the silent full re-upload. Size gate now at pick (2 GiB honest limit + copy), duration gate at pick too.
+- **Posters were silently 400ing** (every `POST /object/videos/.../poster-*.jpg` failed → thumbnails fell back to Cloudflare's ~10s-late frame). Moved posters/photos onto the proven signed-URL PUT path + loud logging. Verify on device.
+- **Three architecture audits completed** (client media/memory, upload pipeline, feed/data layer) — top findings: account-deletion cascade orphans all Cloudflare/Supabase media (CRITICAL, no teardown/GC); no orphan-asset GC; client_upload_id idempotency bypassed on the live path (dup posts on retry); feed list never virtualized + `['feed']` invalidation refetches every cached page of both feeds; `releaseLocalClip` never called (session-long video-blob leak). Full reports in session task outputs; fixes queued.
+
+---
+
 ## Phase roadmap
 
 | Phase | Scope | Status |
