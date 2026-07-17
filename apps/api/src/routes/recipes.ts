@@ -616,17 +616,21 @@ recipes.post('/:id/view', requireAuth, requireNotBanned, rateLimit({ windowMs: 6
   const body = viewSchema.safeParse(await c.req.json().catch(() => null));
   if (!body.success) throw badRequest('Invalid view payload', body.error.flatten());
   const cookId = await recipeCookIdUnblocked(id, userId);
-  await supabaseAdmin.from('recipe_views').insert({
-    user_id: userId,
-    recipe_id: id,
-    dwell_ms: body.data.dwellMs,
-    completed: body.data.completed,
-    skipped: body.data.skipped,
-  });
-  // Bump the public/eligibility view counter (→ profiles.total_video_views via
-  // trigger), excluding the creator's own views. (Per-user/day dedup + bot
-  // filtering land in the fraud phase; self-view exclusion is the baseline.)
-  if (userId !== cookId) await supabaseAdmin.rpc('bump_view_count', { rid: id });
+  // A creator watching their OWN post is not a view — skip it entirely (event
+  // row AND counter). Logging self-views polluted insights (a creator's own 9
+  // watches showed as 9 views while the profile counter, which already excluded
+  // them, showed 0) and would skew ranking. One rule, applied to both.
+  if (userId !== cookId) {
+    await supabaseAdmin.from('recipe_views').insert({
+      user_id: userId,
+      recipe_id: id,
+      dwell_ms: body.data.dwellMs,
+      completed: body.data.completed,
+      skipped: body.data.skipped,
+    });
+    // Bump the public/eligibility view counter (→ profiles.total_video_views via trigger).
+    await supabaseAdmin.rpc('bump_view_count', { rid: id });
+  }
   return c.json({ ok: true });
 });
 

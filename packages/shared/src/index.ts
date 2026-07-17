@@ -68,6 +68,8 @@ export interface RecipeCounts {
   shares: number;
   /** Qualified cooks — distinct users who finished cooking this in cook mode. */
   cooks: number;
+  /** Public view count for THIS video (excludes the creator's own views). */
+  views: number;
 }
 
 /** The viewer's relationship to a recipe/cook (all false for guests). */

@@ -11,7 +11,7 @@ import { VideoPlayer } from '../VideoPlayer';
 import { theme } from '../../theme';
 import { formatCount } from '../../lib/format';
 import { cookShareUrl } from '../../lib/share';
-import { ChevronLeftIcon, DotsIcon, ShareIcon } from '../icons';
+import { ChevronLeftIcon, DotsIcon, PlayIcon, ShareIcon } from '../icons';
 import { pressVars } from '../ui';
 
 const accent = theme.accent;
@@ -235,6 +235,9 @@ export function CookSheet() {
                 <div style={{ position: 'absolute', left: 12, right: 12, bottom: 11 }}>
                   <div style={{ color: 'rgba(255,255,255,.75)', fontSize: 11, fontWeight: 600 }}>{d.time}</div>
                   <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 18, lineHeight: 1.05, color: '#fff', marginTop: 2 }}>{d.title}</div>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: 5, marginTop: 5, color: '#fff', fontSize: 11.5, fontWeight: 700, textShadow: '0 1px 3px rgba(0,0,0,.6)' }}>
+                    <PlayIcon size={12} fill="#fff" /> {formatCount(d.counts.views)} views
+                  </div>
                 </div>
               </Button>
             ))}

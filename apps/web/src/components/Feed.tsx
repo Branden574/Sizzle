@@ -358,7 +358,7 @@ export const FeedCard = memo(function FeedCard({ card, onClose, suppressed = fal
             const open = useSizzle.getState().commentsFor;
             if (open && open !== card.id) useSizzle.getState().setCommentsFor(null);
           } else if (start) {
-            if (authed) logView(card.id, Date.now() - start);
+            if (authed && card.cook.id !== myIdRef.current) logView(card.id, Date.now() - start);
             start = 0;
           }
         }
@@ -381,7 +381,7 @@ export const FeedCard = memo(function FeedCard({ card, onClose, suppressed = fal
     );
     domObs.observe(el);
     return () => {
-      if (start && authed) logView(card.id, Date.now() - start);
+      if (start && authed && card.cook.id !== myIdRef.current) logView(card.id, Date.now() - start);
       obs.disconnect();
       nearObs.disconnect();
       domObs.disconnect();
@@ -394,6 +394,11 @@ export const FeedCard = memo(function FeedCard({ card, onClose, suppressed = fal
   const openMore = useSizzle((s) => s.openMore);
   const setRepostFor = useSizzle((s) => s.setRepostFor);
   const myId = useMe().data?.id;
+  // The view-logging observer runs in a stable effect; a ref keeps my id fresh
+  // inside its callback so a creator watching their OWN post never logs a view
+  // (the server enforces this too — this just skips the pointless round-trip).
+  const myIdRef = useRef<string | undefined>(undefined);
+  myIdRef.current = myId;
 
   const { cook, viewer, counts, controls } = card;
   const hasImages = card.images.length > 0;

@@ -119,6 +119,8 @@ export interface RecipeRow {
   cook_count: number | null;
   /** Send-to-friend count (DM shares) — the sends-per-reach ranking signal. */
   send_count: number | null;
+  /** Public view count (self-views excluded — bump_view_count skips the creator). */
+  view_count: number | null;
   /** Lineage: the recipe this post was cooked from ("Cook this"). */
   origin_recipe_id: string | null;
   created_at: string;
@@ -251,7 +253,7 @@ function toCard(r: RecipeRow, cook: ProfileRow, video: VideoRow | null, ctx: Vie
     cook: cookSummary(cook),
     video: locked && dto ? { ...dto, hlsUrl: null, mp4Url: null } : dto,
     images: locked ? [] : r.image_urls ?? [],
-    counts: { likes: r.like_count, dislikes: r.dislike_count, comments: r.comment_count, saves: r.save_count, shares: r.share_count, cooks: r.cook_count ?? 0 },
+    counts: { likes: r.like_count, dislikes: r.dislike_count, comments: r.comment_count, saves: r.save_count, shares: r.share_count, cooks: r.cook_count ?? 0, views: r.view_count ?? 0 },
     viewer: viewerState(r.id, r.cook_id, ctx),
     controls: {
       likesEnabled: r.likes_enabled ?? true,
