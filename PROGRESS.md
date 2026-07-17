@@ -6,6 +6,12 @@ Stack: **Node + TypeScript**, **Hono** API, **Supabase** (Postgres/Auth/Storage)
 
 ---
 
+## 2026-07-17 — Build 25: native background uploads (TestFlight) + OTA 1.0.60
+
+- **Build 25** (uploaded to ASC, TestFlight): `@capgo/capacitor-uploader` — byte transfers run in a native **background URLSession** (verified `URLSessionConfiguration.background` in plugin source) PUTing from the picker's file path. Uploads survive backgrounding AND swipe-kill; next launch claims the completion event (plugin re-delivers until acknowledged) and publishes without re-uploading. Build-24 review submission untouched.
+- **OTA 1.0.60**: (a) resume-after-kill — in-flight job + checkpoints persist to Preferences; relaunch restores the tile as "interrupted — Retry" (file re-read from the native path; publish-only resume when bytes finished); (b) the native picker's fallback to the transcoding input is now VISIBLE in the composer (root cause of "sometimes instant, sometimes 20s": iCloud-offloaded originals); (c) native-uploader JS path shipped dormant, activates on build 25.
+- Branden field-verified build 24: pick instant, cover shows, upload instant. Swipe-kill mid-upload killed the transfer (expected pre-25) → drove this build.
+
 ## 2026-07-17 — Build 24 submitted for App Store review (replaces 23)
 
 - **Build 24** = build 23 + native PHPicker (`@capawesome/capacitor-file-picker`, `skipTranscoding`) — picking a library video is now instant (the WebView `<input>` made iOS re-encode the clip first: the 15-20s "preparing" wait). Binary-guarded; JS falls back to the input on build 23. Embeds web 1.0.59.
