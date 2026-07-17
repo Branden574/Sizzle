@@ -8,6 +8,7 @@ import { badRequest, dbFail, notFound } from '../lib/errors';
 import { assertUuid } from '../lib/validate';
 import { cloudflareConfigured, env } from '../env';
 import { getStreamProvider } from '../services/stream';
+import { moderateImages } from '../services/moderation';
 import { finalizeProviderAsset } from '../services/videoFinalize';
 import { rateLimit } from '../middleware/rateLimit';
 import { generateCaptions } from '../services/transcribe';
@@ -219,6 +220,43 @@ uploads.post(
     return c.json<DirectUploadTicket>({ videoAssetId: asset.id as string, uploadUrl, provider: 'cloudflare-tus' }, 201);
   },
 );
+
+const posterSchema = z.object({ posterUrl: z.string().url().max(1000) });
+
+/**
+ * POST /uploads/video/:id/poster — set the client-captured poster on an asset
+ * AFTER provisioning. Poster capture runs in PARALLEL with the (long) tus upload
+ * so it never blocks the transfer; when it's ready the client sets it here, giving
+ * an INSTANT thumbnail without waiting for Cloudflare to transcode. Only applies
+ * while the asset is still pre-ready — once ready, the moderated Cloudflare
+ * thumbnail is authoritative. Owner-checked + moderated.
+ */
+uploads.post('/video/:id/poster', requireAuth, async (c) => {
+  const id = assertUuid(c.req.param('id'), 'asset');
+  const userId = c.get('userId')!;
+  const body = posterSchema.safeParse(await c.req.json().catch(() => ({})));
+  if (!body.success) throw badRequest('Invalid poster URL');
+  const posterUrl = body.data.posterUrl;
+  const ownFolder = `${env.SUPABASE_URL.replace(/\/$/, '')}/storage/v1/object/public/videos/${userId}/`;
+  if (!posterUrl.startsWith(ownFolder)) throw badRequest('Poster URL must be in your own Supabase Storage folder for this project');
+
+  const { data: asset } = await supabaseAdmin
+    .from('video_assets')
+    .select('id, owner_id, status')
+    .eq('id', id)
+    .maybeSingle();
+  if (!asset || asset.owner_id !== userId) throw notFound('Video not found');
+  // Only set the client poster before the asset is ready; after that the
+  // moderated Cloudflare thumbnail wins.
+  if (!['pending', 'uploading', 'processing'].includes(asset.status as string)) return c.json({ ok: true, skipped: true });
+
+  // Moderate the client poster — it's shown to every viewer.
+  const mod = await moderateImages([posterUrl]);
+  if (!mod.ok) throw badRequest(mod.reason ?? 'Poster failed moderation');
+
+  await supabaseAdmin.from('video_assets').update({ poster_url: posterUrl }).eq('id', id);
+  return c.json({ ok: true });
+});
 
 /** Cloudflare Stream webhook → mark the asset ready with hls/poster. */
 uploads.post('/webhook/cloudflare-stream', async (c) => {

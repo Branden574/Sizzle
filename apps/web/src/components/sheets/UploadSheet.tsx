@@ -7,7 +7,7 @@ import { useUploadRecipe, useVideoConfig, type UploadRecipeInput } from '../../d
 import { apiSend } from '../../lib/api';
 import { useSizzle } from '../../store';
 import { theme } from '../../theme';
-import { probeVideo, uploadPoster, uploadRecipeImage, uploadToCloudflare, uploadVideo, uploadVideoTus } from '../../lib/storage';
+import { getVideoDuration, captureVideoPoster, uploadPoster, uploadRecipeImage, uploadToCloudflare, uploadVideo, uploadVideoTus } from '../../lib/storage';
 import { ApiError } from '../../lib/api';
 import { rememberLocalClip } from '../../lib/localClips';
 import { CameraRecorder } from '../CameraRecorder';
@@ -175,16 +175,18 @@ export function UploadSheet() {
         setPrepping(true);
         setProgress(0);
         setVideoErr(null);
-        // Probe (metadata + best-effort poster). Fast: never blocks the upload.
-        const probe = await probeVideo(videoFile);
-        if (probe.durationSeconds && probe.durationSeconds > MAX_DURATION_SECONDS) {
+        // Duration only (fast metadata) — gates the length limit. Never blocks.
+        const durationSeconds = await getVideoDuration(videoFile);
+        if (durationSeconds && durationSeconds > MAX_DURATION_SECONDS) {
           bail(`Videos can be up to ${Math.round(MAX_DURATION_SECONDS / 60)} minutes long.`);
           return;
         }
-        // Upload the small poster to Supabase FIRST (fast) so the thumbnail shows
-        // instantly, independent of when Cloudflare finishes transcoding.
-        let posterUrl: string | undefined;
-        if (probe.poster) posterUrl = await uploadPoster(user.id, probe.poster).catch(() => undefined);
+        // Capture + upload the poster IN PARALLEL with the video upload — it runs on
+        // its own timeline (briefly plays the clip to grab a real iOS frame) and
+        // never delays the transfer. Set on the asset once the upload finishes.
+        const posterPromise: Promise<string | undefined> = captureVideoPoster(videoFile)
+          .then((b) => (b ? uploadPoster(user.id, b).catch(() => undefined) : undefined))
+          .catch(() => undefined);
 
         // FAST PATH: resumable tus DIRECTLY to Cloudflare Stream. No Supabase relay,
         // no 2 GiB cap, chunked + resumable, works from the WKWebView (PATCH-based).
@@ -192,8 +194,7 @@ export function UploadSheet() {
         try {
           const ticket = await apiSend<DirectUploadTicket>('POST', '/uploads/tus', {
             uploadLength: videoFile.size,
-            durationSeconds: probe.durationSeconds ?? undefined,
-            posterUrl,
+            durationSeconds: durationSeconds ?? undefined,
             clientUploadId: clientUploadIdRef.current,
           });
           if (ticket.resumed && ticket.videoAssetId) {
@@ -210,7 +211,15 @@ export function UploadSheet() {
           console.warn('[upload] tus path failed, falling back', e);
         }
 
-        if (!tusOk) {
+        if (tusOk && videoAssetId) {
+          // Set the client poster now → INSTANT thumbnail (the poster ran in
+          // parallel and is almost always ready by the time the upload finishes).
+          const posterUrl = await posterPromise;
+          if (posterUrl) {
+            try { await apiSend('POST', `/uploads/video/${videoAssetId}/poster`, { posterUrl }); }
+            catch (e) { console.warn('[upload] set poster failed', e); }
+          }
+        } else {
           // LEGACY FALLBACK: web → Cloudflare basic direct (multipart); native/other
           // → Supabase storage + server /copy relay.
           if (videoConfig?.provider === 'cloudflare' && !isNative) {
@@ -219,8 +228,9 @@ export function UploadSheet() {
             setProgress(99);
             videoAssetId = ticket.videoAssetId;
           } else {
+            const posterUrl = await posterPromise;
             const uploadedUrl = await uploadVideo(user.id, videoFile, setProgress);
-            video = { uploadedUrl, posterUrl, durationSeconds: probe.durationSeconds ?? undefined };
+            video = { uploadedUrl, posterUrl, durationSeconds: durationSeconds ?? undefined };
           }
         }
       } catch (e) {

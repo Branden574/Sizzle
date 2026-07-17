@@ -33,6 +33,7 @@ export function uploadVideoTus(
 ): Promise<void> {
   return new Promise((resolve, reject) => {
     let done = false;
+    const startedAt = Date.now();
     let lastProgressAt = Date.now();
     let stallTimer: ReturnType<typeof setInterval> | null = null;
 
@@ -56,7 +57,14 @@ export function uploadVideoTus(
         lastProgressAt = Date.now();
         opts.onProgress?.(total ? Math.min(99, Math.round((sent / total) * 100)) : 0);
       },
-      onSuccess: () => finish(() => resolve()),
+      onSuccess: () => finish(() => {
+        // Real transfer measurement (visible in the remote Safari console during a
+        // device test) — proves the actual upload speed instead of guessing.
+        const secs = (Date.now() - startedAt) / 1000;
+        const mb = file.size / 1_048_576;
+        console.log(`[upload] tus DONE: ${mb.toFixed(1)} MB in ${secs.toFixed(1)}s = ${(mb / Math.max(secs, 0.001)).toFixed(2)} MB/s (${((file.size * 8) / 1e6 / Math.max(secs, 0.001)).toFixed(1)} Mbps), direct→Cloudflare`);
+        resolve();
+      }),
     });
 
     const onAbort = () => finish(() => { void upload.abort(); reject(new DOMException('Upload cancelled', 'AbortError')); });
@@ -133,38 +141,65 @@ export async function uploadVideo(userId: string, file: File, onProgress?: (pct:
 }
 
 /**
- * Read a video's duration (seconds) and capture a poster frame as a JPEG blob.
- * Best-effort — resolves with whatever it could read.
+ * FAST: read only the video's duration (metadata). Used to gate the length limit
+ * before upload — never blocks (resolves within ~3s or null). No frame capture.
  */
-export function probeVideo(file: File): Promise<{ durationSeconds: number | null; poster: Blob | null }> {
+export function getVideoDuration(file: File): Promise<number | null> {
   return new Promise((resolve) => {
     const url = URL.createObjectURL(file);
     const video = document.createElement('video');
     video.muted = true;
     video.playsInline = true;
-    // preload='metadata' ONLY. NEVER 'auto' — 'auto' loads the entire file before
-    // this promise resolves, and the upload is awaited on this, so a large clip
-    // stalls the whole upload at 0%. The poster below is strictly BEST-EFFORT.
     video.preload = 'metadata';
     video.src = url;
-
     let settled = false;
-    let duration: number | null = null;
-    const done = (poster: Blob | null) => {
+    const done = (d: number | null) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
       URL.revokeObjectURL(url);
-      try { video.pause(); video.removeAttribute('src'); video.load(); } catch { /* already detached */ }
-      resolve({ durationSeconds: duration, poster });
+      try { video.removeAttribute('src'); video.load(); } catch { /* detached */ }
+      resolve(d);
     };
-    // HARD CAP: poster capture must NEVER delay the upload. If we can't grab a
-    // frame fast, ship without it — the server generates a Cloudflare thumbnail as
-    // the backstop, and the grid refreshes when it's ready. Reliability of the
-    // upload always wins over an instant client-side thumbnail.
-    const timer = setTimeout(() => done(null), 2500);
+    const timer = setTimeout(() => done(null), 3000);
+    video.onerror = () => done(null);
+    video.onloadedmetadata = () => done(Number.isFinite(video.duration) ? Math.round(video.duration) : null);
+  });
+}
 
-    const capture = () => {
+/**
+ * RELIABLE poster capture for the iOS WKWebView. drawImage(video) captures a
+ * BLACK frame on iOS unless the video has actually rendered one — so we load real
+ * frame data, briefly PLAY the muted clip (allowed: muted+playsInline), and grab
+ * the first frame that's actually presented (timeupdate past 0). Runs in PARALLEL
+ * with the upload, so its slowness never delays the transfer. Best-effort: resolves
+ * null if it genuinely can't (the Cloudflare thumbnail is the backstop).
+ */
+export function captureVideoPoster(file: File): Promise<Blob | null> {
+  return new Promise((resolve) => {
+    const url = URL.createObjectURL(file);
+    const video = document.createElement('video');
+    video.muted = true;
+    video.defaultMuted = true;
+    video.playsInline = true;
+    video.preload = 'auto'; // safe here — this is NOT on the upload critical path
+    video.src = url;
+
+    let settled = false;
+    let capturing = false;
+    const done = (b: Blob | null) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(timer);
+      try { video.pause(); video.removeAttribute('src'); video.load(); } catch { /* detached */ }
+      URL.revokeObjectURL(url);
+      resolve(b);
+    };
+    const timer = setTimeout(() => done(null), 12000);
+
+    const grab = () => {
+      if (capturing) return;
+      capturing = true;
       try {
         const canvas = document.createElement('canvas');
         canvas.width = video.videoWidth;
@@ -172,26 +207,19 @@ export function probeVideo(file: File): Promise<{ durationSeconds: number | null
         const ctx = canvas.getContext('2d');
         if (!ctx || !canvas.width) return done(null);
         ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-        canvas.toBlob((b) => done(b), 'image/jpeg', 0.7);
+        canvas.toBlob((b) => done(b), 'image/jpeg', 0.72);
       } catch {
         done(null);
       }
     };
 
     video.onerror = () => done(null);
-    video.onloadedmetadata = () => {
-      duration = Number.isFinite(video.duration) ? Math.round(video.duration) : null;
-      // Seek a touch in for a representative frame; the seek pulls just that
-      // segment (not the whole file).
-      try { video.currentTime = Math.min(0.1, video.duration || 0); } catch { /* draw on timeout */ }
+    video.onloadeddata = () => {
+      const p = video.play();
+      if (p && typeof p.catch === 'function') p.catch(() => grab()); // if autoplay is blocked, try a static grab
     };
-    video.onseeked = () => {
-      // requestVideoFrameCallback paints on an actually-presented frame (avoids the
-      // iOS black-frame), but the 2.5s cap guarantees we never wait on it.
-      const rvfc = (video as unknown as { requestVideoFrameCallback?: (cb: () => void) => void }).requestVideoFrameCallback;
-      if (typeof rvfc === 'function') rvfc.call(video, () => capture());
-      else capture();
-    };
+    // A real frame has rendered once playback advances — capture it, then stop.
+    video.ontimeupdate = () => { if (video.currentTime >= 0.05) grab(); };
   });
 }
 
