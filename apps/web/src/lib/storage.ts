@@ -79,10 +79,10 @@ export function probeVideo(file: File): Promise<{ durationSeconds: number | null
     const video = document.createElement('video');
     video.muted = true;
     video.playsInline = true;
-    // 'auto' (not 'metadata'): iOS WKWebView needs the actual frame DATA loaded
-    // before drawImage(video) yields a real frame instead of a black one. The file
-    // is local (a picked/recorded clip), so this reads from disk, not the network.
-    video.preload = 'auto';
+    // preload='metadata' ONLY. NEVER 'auto' — 'auto' loads the entire file before
+    // this promise resolves, and the upload is awaited on this, so a large clip
+    // stalls the whole upload at 0%. The poster below is strictly BEST-EFFORT.
+    video.preload = 'metadata';
     video.src = url;
 
     let settled = false;
@@ -95,10 +95,11 @@ export function probeVideo(file: File): Promise<{ durationSeconds: number | null
       try { video.pause(); video.removeAttribute('src'); video.load(); } catch { /* already detached */ }
       resolve({ durationSeconds: duration, poster });
     };
-    // Safety net: some clips never fire the events (e.g. an undecodable codec),
-    // which would otherwise hang the upload forever. The server-side Cloudflare
-    // thumbnail is the backstop when we resolve with a null poster here.
-    const timer = setTimeout(() => done(null), 10000);
+    // HARD CAP: poster capture must NEVER delay the upload. If we can't grab a
+    // frame fast, ship without it — the server generates a Cloudflare thumbnail as
+    // the backstop, and the grid refreshes when it's ready. Reliability of the
+    // upload always wins over an instant client-side thumbnail.
+    const timer = setTimeout(() => done(null), 2500);
 
     const capture = () => {
       try {
@@ -117,17 +118,13 @@ export function probeVideo(file: File): Promise<{ durationSeconds: number | null
     video.onerror = () => done(null);
     video.onloadedmetadata = () => {
       duration = Number.isFinite(video.duration) ? Math.round(video.duration) : null;
-    };
-    // Seek only once real frame data is available (readyState >= HAVE_CURRENT_DATA),
-    // so the seeked frame is actually decodable on iOS — seeking off loadedmetadata
-    // (readyState 1) captured a black frame in WKWebView.
-    video.onloadeddata = () => {
-      try { video.currentTime = Math.min(0.1, video.duration || 0); }
-      catch { capture(); }
+      // Seek a touch in for a representative frame; the seek pulls just that
+      // segment (not the whole file).
+      try { video.currentTime = Math.min(0.1, video.duration || 0); } catch { /* draw on timeout */ }
     };
     video.onseeked = () => {
-      // requestVideoFrameCallback fires when a real frame is actually presented —
-      // the reliable "paintable now" signal on iOS. Fall back to an immediate draw.
+      // requestVideoFrameCallback paints on an actually-presented frame (avoids the
+      // iOS black-frame), but the 2.5s cap guarantees we never wait on it.
       const rvfc = (video as unknown as { requestVideoFrameCallback?: (cb: () => void) => void }).requestVideoFrameCallback;
       if (typeof rvfc === 'function') rvfc.call(video, () => capture());
       else capture();
