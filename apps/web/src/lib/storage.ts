@@ -171,9 +171,11 @@ export function getVideoDuration(file: File): Promise<number | null> {
  * RELIABLE poster capture for the iOS WKWebView. drawImage(video) captures a
  * BLACK frame on iOS unless the video has actually rendered one — so we load real
  * frame data, briefly PLAY the muted clip (allowed: muted+playsInline), and grab
- * the first frame that's actually presented (timeupdate past 0). Runs in PARALLEL
- * with the upload, so its slowness never delays the transfer. Best-effort: resolves
- * null if it genuinely can't (the Cloudflare thumbnail is the backstop).
+ * the first frame that's actually presented (timeupdate past 0). Runs BEFORE the
+ * transfer (not in parallel — decoding + uploading the same large file at once
+ * stalls the upload on iOS), so it's time-boxed tight (6s) to bound the delay it
+ * adds. Best-effort: resolves null if it genuinely can't (the Cloudflare thumbnail
+ * is the backstop) so it never blocks the post.
  */
 export function captureVideoPoster(file: File): Promise<Blob | null> {
   return new Promise((resolve) => {
@@ -195,7 +197,7 @@ export function captureVideoPoster(file: File): Promise<Blob | null> {
       URL.revokeObjectURL(url);
       resolve(b);
     };
-    const timer = setTimeout(() => done(null), 12000);
+    const timer = setTimeout(() => done(null), 6000);
 
     const grab = () => {
       if (capturing) return;

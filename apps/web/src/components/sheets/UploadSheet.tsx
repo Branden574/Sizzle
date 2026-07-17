@@ -188,12 +188,18 @@ export function UploadSheet() {
           bail(`Videos can be up to ${Math.round(MAX_DURATION_SECONDS / 60)} minutes long.`);
           return;
         }
-        // Capture + upload the poster IN PARALLEL with the video upload — it runs on
-        // its own timeline (briefly plays the clip to grab a real iOS frame) and
-        // never delays the transfer. Set on the asset once the upload finishes.
-        const posterPromise: Promise<string | undefined> = captureVideoPoster(videoFile)
-          .then((b) => (b ? uploadPoster(user.id, b).catch(() => undefined) : undefined))
-          .catch(() => undefined);
+        // Capture + upload the poster BEFORE the transfer — NOT in parallel. Grabbing
+        // a real iOS frame means decoding the clip (preload='auto' + play); doing that
+        // at the same time as the byte transfer makes the WKWebView decode and upload
+        // the same 150+ MB file simultaneously, and the memory/decode contention
+        // stalls the transfer's final flush (the "stuck at 99%" bug). Capture first
+        // (~1–3s, time-boxed), fully release the decoder, THEN transfer with memory
+        // freed. Best-effort — Cloudflare's generated thumbnail is the backstop.
+        let posterUrl: string | undefined;
+        try {
+          const posterBlob = await captureVideoPoster(videoFile);
+          if (posterBlob) posterUrl = await uploadPoster(user.id, posterBlob).catch(() => undefined);
+        } catch { /* best-effort; fall through without a poster */ }
 
         // Experimental resumable tus path — OFF in production (see TRY_TUS above).
         let tusOk = false;
@@ -217,7 +223,6 @@ export function UploadSheet() {
         }
 
         if (tusOk && videoAssetId) {
-          const posterUrl = await posterPromise;
           if (posterUrl) {
             try { await apiSend('POST', `/uploads/video/${videoAssetId}/poster`, { posterUrl }); }
             catch (e) { console.warn('[upload] set poster failed', e); }
@@ -230,11 +235,10 @@ export function UploadSheet() {
           videoAssetId = ticket.videoAssetId;
         } else {
           // NATIVE — the PROVEN 1.0.45 path: upload to Supabase, server relays into
-          // Cloudflare. Start the transfer FIRST; the poster capture runs in parallel
-          // and is awaited after, so it NEVER delays the upload. Poster is passed
-          // inline so the post gets its instant thumbnail.
+          // Cloudflare. The poster was captured + uploaded above (sequentially), so the
+          // decoder is released and the transfer runs with the WebView's memory freed.
+          // Poster is passed inline so the post gets its instant thumbnail.
           const uploadedUrl = await uploadVideo(user.id, videoFile, setProgress);
-          const posterUrl = await posterPromise;
           video = { uploadedUrl, posterUrl, durationSeconds: durationSeconds ?? undefined };
         }
       } catch (e) {
