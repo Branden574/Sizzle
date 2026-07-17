@@ -7,7 +7,8 @@ import { useUploadRecipe, useVideoConfig, type UploadRecipeInput } from '../../d
 import { apiSend } from '../../lib/api';
 import { useSizzle } from '../../store';
 import { theme } from '../../theme';
-import { probeVideo, uploadPoster, uploadRecipeImage, uploadToCloudflare, uploadVideo } from '../../lib/storage';
+import { probeVideo, uploadPoster, uploadRecipeImage, uploadToCloudflare, uploadVideo, uploadVideoTus } from '../../lib/storage';
+import { ApiError } from '../../lib/api';
 import { rememberLocalClip } from '../../lib/localClips';
 import { CameraRecorder } from '../CameraRecorder';
 import { NativeCameraRecorder } from '../NativeCameraRecorder';
@@ -78,6 +79,15 @@ export function UploadSheet() {
   const [recording, setRecording] = useState(false);
   const [trimming, setTrimming] = useState(false);
 
+  // Upload plumbing: abort the in-flight transfer on Cancel/close; a stable
+  // clientUploadId per picked clip makes a retried/double-tapped submit idempotent
+  // (server returns the same asset + recipe, never a duplicate); submittingRef is a
+  // SYNCHRONOUS double-tap guard (state updates lag a render, so two fast taps can
+  // both pass the canPost check).
+  const uploadAbortRef = useRef<AbortController | null>(null);
+  const clientUploadIdRef = useRef<string>('');
+  const submittingRef = useRef(false);
+
   // Photo posts (carousel).
   const photoInputRef = useRef<HTMLInputElement>(null);
   const [mediaKind, setMediaKind] = useState<'video' | 'photo'>('video');
@@ -107,6 +117,8 @@ export function UploadSheet() {
     setPreviewAspect(0);
     setVideoFile(file);
     setVideoUrl(URL.createObjectURL(file));
+    // Fresh idempotency key per picked clip (retries of THIS clip reuse it).
+    clientUploadIdRef.current = crypto.randomUUID();
   };
 
   const pickVideo = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -116,9 +128,23 @@ export function UploadSheet() {
   };
 
   const close = () => {
+    // Abort any in-flight transfer so closing the sheet doesn't leave an upload
+    // running (and doesn't later surprise-publish it).
+    uploadAbortRef.current?.abort();
+    uploadAbortRef.current = null;
     if (videoUrl) URL.revokeObjectURL(videoUrl);
     setUploadPrefill(null);
     setShowUpload(false);
+  };
+
+  /** Map an upload failure to a specific, honest user message (P0.4). */
+  const uploadErrorMessage = (e: unknown): string => {
+    if (e instanceof ApiError) {
+      if (e.status === 429) return "You've hit today's upload limit. Try again tomorrow.";
+      if (e.status === 401) return 'Your session expired — sign in again to post.';
+      if (e.status === 400 && e.message) return e.message;
+    }
+    return "Couldn't upload the video — check your connection and try again. Your draft is safe.";
   };
 
   const busy = prepping || upload.isPending;
@@ -129,6 +155,12 @@ export function UploadSheet() {
   const submit = async (mode: 'publish' | 'draft' = 'publish') => {
     if (!requireAuth()) return;
     if (!canPost) return;
+    // Synchronous double-tap guard: `busy` (state) lags a render, so two fast taps
+    // can both pass canPost — this ref blocks the second one immediately.
+    if (submittingRef.current) return;
+    submittingRef.current = true;
+    if (!clientUploadIdRef.current) clientUploadIdRef.current = crypto.randomUUID();
+    const bail = (msg?: string) => { setPrepping(false); setSubmitMode(null); submittingRef.current = false; if (msg) setVideoErr(msg); };
     setSubmitMode(mode);
     const status = mode === 'draft' ? 'draft' : scheduleAt ? 'scheduled' : 'published';
     const scheduledAt = mode !== 'draft' && scheduleAt ? new Date(scheduleAt).toISOString() : undefined;
@@ -137,42 +169,66 @@ export function UploadSheet() {
     let videoAssetId: string | undefined;
     let images: string[] | undefined;
     if (mediaKind === 'video' && videoFile && user) {
+      const controller = new AbortController();
+      uploadAbortRef.current = controller;
       try {
         setPrepping(true);
         setProgress(0);
         setVideoErr(null);
-        // Probe first (metadata only) so a too-long clip is rejected before the upload.
+        // Probe (metadata + best-effort poster). Fast: never blocks the upload.
         const probe = await probeVideo(videoFile);
         if (probe.durationSeconds && probe.durationSeconds > MAX_DURATION_SECONDS) {
-          setPrepping(false);
-          setVideoErr(`Videos can be up to ${Math.round(MAX_DURATION_SECONDS / 60)} minutes long.`);
+          bail(`Videos can be up to ${Math.round(MAX_DURATION_SECONDS / 60)} minutes long.`);
           return;
         }
-        // The Cloudflare DIRECT upload (multipart POST straight from the client to
-        // upload.cloudflarestream.com) does not deliver the body from the iOS
-        // WKWebView — the slot stays "Pending Upload" and the post dead-ends. The
-        // whole rest of the pipeline is fine (register, transcode, playback all
-        // verified), and Supabase Storage uploads DO work from the native shell
-        // (photos/avatars prove it). So native routes through Supabase storage;
-        // the server relays it into Cloudflare for transcoding (uploads.ts).
-        if (videoConfig?.provider === 'cloudflare' && !isNative) {
-          // Web browsers deliver the multipart body fine — keep the direct path.
-          // We do NOT block on transcoding here; the post is created right away and
-          // the asset finishes in the background (useUploadRecipe → finalize).
-          const ticket = await apiSend<DirectUploadTicket>('POST', '/uploads/video', {});
-          await uploadToCloudflare(ticket.uploadUrl, videoFile, setProgress);
-          setProgress(100);
-          videoAssetId = ticket.videoAssetId;
-        } else {
-          const uploadedUrl = await uploadVideo(user.id, videoFile, setProgress);
-          let posterUrl: string | undefined;
-          if (probe.poster) posterUrl = await uploadPoster(user.id, probe.poster).catch(() => undefined);
-          video = { uploadedUrl, posterUrl, durationSeconds: probe.durationSeconds ?? undefined };
+        // Upload the small poster to Supabase FIRST (fast) so the thumbnail shows
+        // instantly, independent of when Cloudflare finishes transcoding.
+        let posterUrl: string | undefined;
+        if (probe.poster) posterUrl = await uploadPoster(user.id, probe.poster).catch(() => undefined);
+
+        // FAST PATH: resumable tus DIRECTLY to Cloudflare Stream. No Supabase relay,
+        // no 2 GiB cap, chunked + resumable, works from the WKWebView (PATCH-based).
+        let tusOk = false;
+        try {
+          const ticket = await apiSend<DirectUploadTicket>('POST', '/uploads/tus', {
+            uploadLength: videoFile.size,
+            durationSeconds: probe.durationSeconds ?? undefined,
+            posterUrl,
+            clientUploadId: clientUploadIdRef.current,
+          });
+          if (ticket.resumed && ticket.videoAssetId) {
+            // Idempotent retry (double-submit): the asset already exists — reuse it.
+            videoAssetId = ticket.videoAssetId; setProgress(99); tusOk = true;
+          } else if (ticket.provider === 'cloudflare-tus' && ticket.uploadUrl && ticket.videoAssetId) {
+            await uploadVideoTus(ticket.uploadUrl, videoFile, { onProgress: setProgress, signal: controller.signal });
+            videoAssetId = ticket.videoAssetId; setProgress(99); tusOk = true;
+          }
+        } catch (e) {
+          if ((e as Error)?.name === 'AbortError') { bail(); return; }
+          // Otherwise fall through to the legacy path (keeps uploads working if the
+          // tus provision or transfer fails on this device).
+          console.warn('[upload] tus path failed, falling back', e);
         }
-      } catch {
-        setPrepping(false);
-        setVideoErr("Couldn't upload the video — please try again.");
+
+        if (!tusOk) {
+          // LEGACY FALLBACK: web → Cloudflare basic direct (multipart); native/other
+          // → Supabase storage + server /copy relay.
+          if (videoConfig?.provider === 'cloudflare' && !isNative) {
+            const ticket = await apiSend<DirectUploadTicket>('POST', '/uploads/video', {});
+            await uploadToCloudflare(ticket.uploadUrl, videoFile, setProgress);
+            setProgress(99);
+            videoAssetId = ticket.videoAssetId;
+          } else {
+            const uploadedUrl = await uploadVideo(user.id, videoFile, setProgress);
+            video = { uploadedUrl, posterUrl, durationSeconds: probe.durationSeconds ?? undefined };
+          }
+        }
+      } catch (e) {
+        if ((e as Error)?.name === 'AbortError') { bail(); return; }
+        bail(uploadErrorMessage(e));
         return;
+      } finally {
+        uploadAbortRef.current = null;
       }
       setPrepping(false);
     } else if (mediaKind === 'photo' && photos.length && user) {
@@ -187,8 +243,7 @@ export function UploadSheet() {
         }
         images = urls;
       } catch {
-        setPrepping(false);
-        setVideoErr("Couldn't upload your photos — please try again.");
+        bail("Couldn't upload your photos — please try again.");
         return;
       }
       setPrepping(false);
@@ -230,7 +285,8 @@ export function UploadSheet() {
           setTab('profile');
           if (mode === 'publish' && !scheduleAt && detail?.id) setShareAfterPost({ id: detail.id, title: detail.title });
         },
-        onSettled: () => setSubmitMode(null),
+        onSettled: () => { setSubmitMode(null); submittingRef.current = false; },
+        onError: (e) => setVideoErr(uploadErrorMessage(e)),
       },
     );
   };
@@ -471,16 +527,19 @@ export function UploadSheet() {
       </div>
 
       <div style={{ padding: '14px 20px 32px', flex: 'none' }}>
-        {prepping && (
+        {(prepping || upload.isPending) && (
           <div style={{ marginBottom: 14 }}>
             <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', marginBottom: 7 }}>
-              <span style={{ color: 'rgba(255,255,255,.85)', fontSize: 13.5, fontWeight: 700 }}>{progress >= 100 ? 'Finishing up…' : 'Uploading your video…'}</span>
-              <span style={{ color: '#fff', fontSize: 14, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{progress}%</span>
+              {/* Honest progress: the bar only reflects the BYTE upload (0–99%). Once
+                  bytes are up we show an indeterminate "Publishing…" while the post
+                  is created — we never show 100% before the post actually exists. */}
+              <span style={{ color: 'rgba(255,255,255,.85)', fontSize: 13.5, fontWeight: 700 }}>{upload.isPending || progress >= 99 ? 'Publishing…' : 'Uploading your video…'}</span>
+              {prepping && !upload.isPending && <span style={{ color: '#fff', fontSize: 14, fontWeight: 800, fontVariantNumeric: 'tabular-nums' }}>{progress}%</span>}
             </div>
             <div style={{ height: 8, borderRadius: 5, background: 'rgba(255,255,255,.14)', overflow: 'hidden' }}>
               <div
-                className={progress === 0 ? 'sz-upload-indeterminate' : undefined}
-                style={{ height: '100%', width: progress === 0 ? '40%' : `${progress}%`, borderRadius: 5, background: `linear-gradient(90deg, ${accent}, #ffb52e)`, transition: 'width .25s ease', boxShadow: '0 0 12px rgba(255,138,72,.6)' }}
+                className={progress === 0 || upload.isPending ? 'sz-upload-indeterminate' : undefined}
+                style={{ height: '100%', width: progress === 0 || upload.isPending ? '40%' : `${progress}%`, borderRadius: 5, background: `linear-gradient(90deg, ${accent}, #ffb52e)`, transition: 'width .25s ease', boxShadow: '0 0 12px rgba(255,138,72,.6)' }}
               />
             </div>
           </div>

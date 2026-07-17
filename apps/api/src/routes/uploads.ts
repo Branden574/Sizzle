@@ -138,6 +138,88 @@ uploads.post(
   return c.json<DirectUploadTicket>({ videoAssetId: asset.id, uploadUrl, provider: provider.name }, 201);
 });
 
+// Sanity ceiling on the declared upload size (Cloudflare enforces the real limit
+// by DURATION via maxDurationSeconds; this just rejects absurd values). 20 GiB
+// comfortably covers a 30-min 4K clip.
+const MAX_UPLOAD_BYTES = 20 * 1024 * 1024 * 1024;
+
+const tusSchema = z.object({
+  uploadLength: z.number().int().positive().max(MAX_UPLOAD_BYTES),
+  durationSeconds: z.number().int().min(0).max(MAX_DURATION_SECONDS).optional(),
+  posterUrl: z.string().url().max(1000).optional(),
+  clientUploadId: z.string().uuid(),
+});
+
+/**
+ * POST /uploads/tus — provision a one-time RESUMABLE (tus) upload URL so the
+ * client streams the video DIRECTLY to Cloudflare (no Supabase relay, no 2 GiB
+ * bucket cap, chunked + resumable, works from the WKWebView). Idempotent on
+ * clientUploadId: a retried/double-tapped provision returns the SAME asset
+ * instead of minting a second Cloudflare upload. Cloudflare caps the clip length
+ * at MAX_DURATION_SECONDS (denial-of-wallet protection).
+ */
+uploads.post(
+  '/tus',
+  requireAuth,
+  rateLimit({ windowMs: 60_000, max: 20, name: 'upload' }),
+  rateLimit({ windowMs: 86_400_000, max: 50, name: 'upload-daily' }),
+  async (c) => {
+    const userId = c.get('userId')!;
+    const body = tusSchema.safeParse(await c.req.json().catch(() => ({})));
+    if (!body.success) throw badRequest('Invalid upload request', body.error.flatten());
+    const { uploadLength, durationSeconds, posterUrl, clientUploadId } = body.data;
+
+    // The poster (small, uploaded to Supabase for the instant thumbnail) must live
+    // in the caller's own folder — same anti-injection rule as /video.
+    if (posterUrl) {
+      const ownFolder = `${env.SUPABASE_URL.replace(/\/$/, '')}/storage/v1/object/public/videos/${userId}/`;
+      if (!posterUrl.startsWith(ownFolder)) {
+        throw badRequest('Poster URL must be in your own Supabase Storage folder for this project');
+      }
+    }
+
+    // Idempotency: a repeated provision for the same (owner, clientUploadId)
+    // returns the existing asset — the client resumes its persisted tus upload
+    // rather than starting a second Cloudflare upload.
+    const { data: existing } = await supabaseAdmin
+      .from('video_assets')
+      .select('id')
+      .eq('owner_id', userId)
+      .eq('client_upload_id', clientUploadId)
+      .maybeSingle();
+    if (existing) {
+      return c.json<DirectUploadTicket>({ videoAssetId: existing.id as string, uploadUrl: '', provider: 'cloudflare-tus', resumed: true }, 200);
+    }
+
+    const provider = getStreamProvider();
+    // Fall back to the storage-relay path when tus isn't available (mock/local dev,
+    // or Cloudflare unconfigured) — the client handles both providers.
+    if (!(cloudflareConfigured && provider.createTusUpload)) {
+      return c.json<DirectUploadTicket>({ videoAssetId: '', uploadUrl: '', provider: 'storage' }, 200);
+    }
+
+    const { providerUid, uploadUrl } = await provider.createTusUpload({ uploadLength, maxDurationSeconds: MAX_DURATION_SECONDS });
+    const { data: asset, error } = await supabaseAdmin
+      .from('video_assets')
+      .insert({
+        owner_id: userId,
+        provider: 'cloudflare',
+        provider_uid: providerUid,
+        status: 'pending',
+        poster_url: posterUrl ?? null,
+        duration_seconds: durationSeconds ?? null,
+        client_upload_id: clientUploadId,
+      })
+      .select('id')
+      .single();
+    if (error || !asset) {
+      console.error('[uploads] tus asset insert failed', { userId, err: error?.message });
+      throw dbFail(error?.message ?? 'Failed to create video asset');
+    }
+    return c.json<DirectUploadTicket>({ videoAssetId: asset.id as string, uploadUrl, provider: 'cloudflare-tus' }, 201);
+  },
+);
+
 /** Cloudflare Stream webhook → mark the asset ready with hls/poster. */
 uploads.post('/webhook/cloudflare-stream', async (c) => {
   const secret = env.CLOUDFLARE_STREAM_WEBHOOK_SECRET;

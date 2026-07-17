@@ -1,3 +1,4 @@
+import { Upload } from 'tus-js-client';
 import { webEnv } from './env';
 import { supabase } from './supabase';
 
@@ -14,6 +15,68 @@ function xhrPut(url: string, file: File, onProgress?: (pct: number) => void): Pr
     xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`upload failed (${xhr.status})`)));
     xhr.onerror = () => reject(new Error('upload network error'));
     xhr.send(file);
+  });
+}
+
+/**
+ * Upload a video DIRECTLY to Cloudflare Stream via the resumable tus protocol.
+ * `uploadUrl` is the one-time URL the server provisioned (POST /uploads/tus). tus
+ * is PATCH-based (works from the iOS WKWebView), chunked, and resumable — a
+ * network drop resumes from the last committed offset instead of restarting, and
+ * a half-open socket is caught by the stall watchdog. No Supabase relay, no 2 GiB
+ * cap. Rejects with an AbortError when `signal` fires.
+ */
+export function uploadVideoTus(
+  uploadUrl: string,
+  file: File,
+  opts: { onProgress?: (pct: number) => void; signal?: AbortSignal } = {},
+): Promise<void> {
+  return new Promise((resolve, reject) => {
+    let done = false;
+    let lastProgressAt = Date.now();
+    let stallTimer: ReturnType<typeof setInterval> | null = null;
+
+    const finish = (fn: () => void) => {
+      if (done) return;
+      done = true;
+      if (stallTimer) clearInterval(stallTimer);
+      opts.signal?.removeEventListener('abort', onAbort);
+      fn();
+    };
+
+    const upload = new Upload(file, {
+      uploadUrl, // resume/upload straight to the CF one-time URL (no creation POST)
+      // Cloudflare tus requires a constant chunk size that's a multiple of 256 KiB.
+      // 50 MiB = 200 × 256 KiB — big enough to be efficient, small enough to resume.
+      chunkSize: 50 * 1024 * 1024,
+      retryDelays: [0, 1000, 3000, 5000, 10000, 20000], // backoff on network/5xx
+      removeFingerprintOnSuccess: true,
+      onError: (err) => finish(() => reject(err instanceof Error ? err : new Error(String(err)))),
+      onProgress: (sent, total) => {
+        lastProgressAt = Date.now();
+        opts.onProgress?.(total ? Math.min(99, Math.round((sent / total) * 100)) : 0);
+      },
+      onSuccess: () => finish(() => resolve()),
+    });
+
+    const onAbort = () => finish(() => { void upload.abort(); reject(new DOMException('Upload cancelled', 'AbortError')); });
+    if (opts.signal) {
+      if (opts.signal.aborted) return onAbort();
+      opts.signal.addEventListener('abort', onAbort);
+    }
+
+    // Stall watchdog: a half-open connection can freeze with no error and no
+    // progress (the "bar stuck forever" case). If nothing moves for 45s, abort +
+    // restart — tus resumes from the last committed offset (HEAD), so no re-send.
+    stallTimer = setInterval(() => {
+      if (done) return;
+      if (Date.now() - lastProgressAt > 45_000) {
+        lastProgressAt = Date.now();
+        void upload.abort().then(() => { if (!done) upload.start(); }).catch(() => {});
+      }
+    }, 15_000);
+
+    upload.start();
   });
 }
 

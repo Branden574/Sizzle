@@ -21,6 +21,11 @@ export interface AssetStatus {
 export interface VideoStreamProvider {
   readonly name: string;
   createDirectUpload(opts: { maxDurationSeconds?: number }): Promise<CreateUploadResult>;
+  /** Provision a one-time RESUMABLE (tus) upload URL. The client then tus-uploads
+   *  (PATCH) directly to the returned URL — no API token on the client, chunked +
+   *  resumable, and PATCH-based so it works from the iOS WKWebView (unlike the
+   *  multipart POST that forced the Supabase relay). Optional — only Cloudflare. */
+  createTusUpload?(opts: { uploadLength: number; maxDurationSeconds?: number }): Promise<CreateUploadResult>;
   getAsset(providerUid: string): Promise<AssetStatus>;
   /** Pull an already-uploaded clip (a public URL) into the provider for
    *  transcoding. Optional — only Cloudflare implements it. Lets the native
@@ -92,6 +97,33 @@ class CloudflareStream implements VideoStreamProvider {
     return { providerUid: json.result.uid, uploadUrl: json.result.uploadURL };
   }
 
+  /** tus direct-creator upload: provision a one-time upload URL the client streams
+   *  the video to, resumably, straight to Cloudflare. maxDurationSeconds reserves
+   *  storage and CAPS the accepted clip length (denial-of-wallet protection). */
+  async createTusUpload(opts: { uploadLength: number; maxDurationSeconds?: number }): Promise<CreateUploadResult> {
+    // Upload-Metadata is comma-separated `key base64(value)` pairs (tus spec).
+    const meta = `maxDurationSeconds ${Buffer.from(String(opts.maxDurationSeconds ?? 1800)).toString('base64')}`;
+    const res = await fetchWithTimeout(
+      `https://api.cloudflare.com/client/v4/accounts/${env.CLOUDFLARE_ACCOUNT_ID}/stream?direct_user=true`,
+      {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${env.CLOUDFLARE_STREAM_TOKEN}`,
+          'Tus-Resumable': '1.0.0',
+          'Upload-Length': String(opts.uploadLength),
+          'Upload-Metadata': meta,
+        },
+      },
+      10_000,
+    );
+    if (!res.ok) throw new Error(`Cloudflare tus create → HTTP ${res.status}`);
+    // The one-time upload URL is in the Location header; the video UID in stream-media-id.
+    const uploadUrl = res.headers.get('Location');
+    const providerUid = res.headers.get('stream-media-id');
+    if (!uploadUrl || !providerUid) throw new Error('Cloudflare tus create missing Location/stream-media-id');
+    return { providerUid, uploadUrl };
+  }
+
   /** Copy-from-URL: Cloudflare fetches the clip from `url` and transcodes it —
    *  normalizing iOS HEVC to cross-platform H.264/HLS. The source URL must stay
    *  publicly reachable until the pull completes (our Supabase videos bucket is
@@ -100,7 +132,9 @@ class CloudflareStream implements VideoStreamProvider {
     const res = await fetchWithTimeout(`${this.base}/copy`, {
       method: 'POST',
       headers: this.headers,
-      body: JSON.stringify({ url, requireSignedURLs: false }),
+      // maxDurationSeconds caps the accepted clip length on the relay path too
+      // (the direct + tus paths already cap it) — denial-of-wallet protection.
+      body: JSON.stringify({ url, requireSignedURLs: false, maxDurationSeconds: 1800 }),
     }, 15_000);
     const json = (await res.json()) as { success: boolean; result?: { uid: string }; errors?: unknown };
     if (!json.success || !json.result) throw new Error(`Cloudflare copy failed: ${JSON.stringify(json.errors)}`);

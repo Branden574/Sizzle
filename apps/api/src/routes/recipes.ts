@@ -136,6 +136,15 @@ recipes.post('/', requireAuth, requireNotBanned, rateLimit({ windowMs: 60_000, m
       .eq('id', input.videoAssetId)
       .maybeSingle();
     if (!asset || asset.owner_id !== userId) throw badRequest('Unknown or unowned video asset');
+    // Idempotency: a retried / double-submitted create for the SAME video asset must
+    // not publish a second post (unique index recipes_video_asset_uidx also enforces
+    // this at the DB). Return the existing recipe instead of a duplicate or a 500.
+    const { data: existingRecipe } = await supabaseAdmin
+      .from('recipes').select('id').eq('video_asset_id', input.videoAssetId).maybeSingle();
+    if (existingRecipe) {
+      const detail = await getRecipeDetail(userId, existingRecipe.id as string);
+      if (detail) return c.json(detail, 200);
+    }
     // Vision-moderate the video's poster/thumbnail (a cheap proxy for the clip;
     // the recipe is only created once transcoding is done, so the poster exists).
     if (asset.poster_url) {

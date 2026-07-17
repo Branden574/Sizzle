@@ -82,6 +82,10 @@ const POLL_FRESHNESS_MS = 8_000;
 // minutes — long enough to cover the thumbnail-404 window, short enough that a
 // provider outage doesn't wedge every post until the 2h abandon sweep.
 const MODERATION_MAX_ATTEMPTS = 20;
+// Hard cap on clip length (mirrors MAX_DURATION_SECONDS in @sizzle/shared). Cloudflare
+// enforces this at ingest via maxDurationSeconds, but we re-check on the ready-hop
+// as defense-in-depth against a provider that let a longer clip through.
+const MAX_DURATION_SECONDS = 1800;
 
 interface AssetRow {
   status: AssetStatus['status'];
@@ -166,6 +170,19 @@ export async function finalizeProviderAsset(assetId: string, providerUid: string
   const nowIso = new Date().toISOString();
 
   if (a.status === 'ready') {
+    // Over-duration reject (denial-of-wallet defense): never publish a clip longer
+    // than the cap, and tear down its media so it stops costing storage.
+    if (a.duration && a.duration > MAX_DURATION_SECONDS + 5) {
+      console.error('[finalize] clip exceeds max duration — rejecting', { assetId, uid, duration: a.duration });
+      await supabaseAdmin
+        .from('video_assets')
+        .update({ status: 'error', hls_url: null, poster_url: null, last_polled_at: nowIso })
+        .eq('id', assetId);
+      await supabaseAdmin.from('recipes').update({ status: 'removed', auto_hidden: true }).eq('video_asset_id', assetId);
+      await deleteAssetMedia({ provider: 'cloudflare', provider_uid: uid });
+      return { ...a, status: 'error', hlsUrl: null, posterUrl: null };
+    }
+
     // Fail CLOSED: can't moderate without a thumbnail. Right after ready the CF
     // thumbnail URL 404s for a few seconds — defer, don't publish unmoderated.
     if (!a.posterUrl) {

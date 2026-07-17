@@ -256,6 +256,16 @@ export default function App() {
       // reads that happened on another device, pushes that arrived while
       // backgrounded, and anything a per-action sync missed.
       if (isActive) void syncBadge();
+      // Foreground-resume re-check (P0.5): a video that finished transcoding while
+      // the app was backgrounded — or whose Cloudflare thumbnail became ready —
+      // won't have refreshed (the JS finalize poll is suspended when backgrounded).
+      // Refetch the profile grid + feeds so the new post + its thumbnail appear
+      // without the user having to close and reopen the app.
+      if (isActive) {
+        void queryClient.invalidateQueries({ queryKey: ['cook'] });
+        void queryClient.invalidateQueries({ queryKey: ['me'] });
+        void queryClient.invalidateQueries({ queryKey: ['feed'] });
+      }
     });
     return () => { void handle.then((l) => l.remove()); };
   }, [setAppUnlocked]);

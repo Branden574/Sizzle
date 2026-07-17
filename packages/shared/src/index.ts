@@ -14,13 +14,14 @@ export type ReactionKind = 'like' | 'dislike';
 export type VideoStatus = 'pending' | 'uploading' | 'processing' | 'ready' | 'error';
 
 /**
- * Upload limits. The web client enforces these before upload; the API mirrors
- * the duration cap as a literal (it imports only types from this package, so it
- * can't read these at runtime). Supabase storage `file_size_limit` in
- * config.toml must be >= MAX_UPLOAD_BYTES.
+ * Upload limits. The REAL limiter is MAX_DURATION_SECONDS — with the resumable
+ * tus path the video streams directly to Cloudflare (which enforces the duration
+ * cap and handles multi-GB clips), so the byte gate is just a sanity ceiling that
+ * must be generous enough for a 30-min 4K clip (~10-15 GB) not to be rejected as
+ * "too large". The server tus endpoint applies its own ceiling.
  */
 export const MAX_DURATION_SECONDS = 1800; // 30 minutes
-export const MAX_UPLOAD_BYTES = 5 * 1024 * 1024 * 1024; // 5 GiB — headroom for 4K/30-min
+export const MAX_UPLOAD_BYTES = 15 * 1024 * 1024 * 1024; // 15 GiB sanity ceiling (duration is the real cap)
 /** Longest supported side for a 4K upload (UHD 3840×2160 / DCI 4096). */
 export const MAX_VIDEO_LONG_SIDE = 4096;
 
@@ -733,10 +734,14 @@ export interface CreateRecipeInput {
 /** Response from requesting a direct (client-side) video upload. */
 export interface DirectUploadTicket {
   videoAssetId: string;
-  /** One-time URL the client uploads bytes to (Cloudflare Stream, or mock). */
+  /** One-time URL the client uploads bytes to (Cloudflare Stream, or mock).
+   *  For provider "cloudflare-tus" this is the resumable tus endpoint. */
   uploadUrl: string;
-  /** "cloudflare" | "mock" — so the client knows the upload protocol. */
+  /** "cloudflare-tus" | "cloudflare" | "storage" | "mock" — the upload protocol. */
   provider: string;
+  /** True when an existing asset was returned for a repeated clientUploadId
+   *  (idempotent retry) — the client resumes its persisted tus upload. */
+  resumed?: boolean;
 }
 
 /** Which upload flow the client should use (driven by the API's VIDEO_PROVIDER). */
