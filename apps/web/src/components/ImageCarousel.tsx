@@ -204,7 +204,10 @@ export function ImageCarousel({ images }: { images: string[] }) {
         </>
       )}
 
-      <div style={{ position: 'absolute', top: 14, left: '50%', transform: 'translateX(-50%)', display: 'flex', gap: 5, zIndex: 6, pointerEvents: 'none' }}>
+      {/* Page dots. Offset by the safe-area top so they clear the notch/Dynamic
+          Island on the full-bleed feed (where top:14 hid them entirely), and sit
+          in a subtle pill so white dots stay visible over a bright photo. */}
+      <div style={{ position: 'absolute', top: 'calc(env(safe-area-inset-top, 0px) + 14px)', left: '50%', transform: 'translateX(-50%)', display: 'flex', alignItems: 'center', gap: 5, zIndex: 6, pointerEvents: 'none', padding: '5px 8px', borderRadius: 100, background: 'rgba(0,0,0,.3)', backdropFilter: 'blur(4px)' }}>
         {images.map((_, i) => (
           <div
             key={i}
@@ -212,7 +215,7 @@ export function ImageCarousel({ images }: { images: string[] }) {
               width: i === idx ? 18 : 6,
               height: 6,
               borderRadius: 3,
-              background: i === idx ? '#fff' : 'rgba(255,255,255,.5)',
+              background: i === idx ? '#fff' : 'rgba(255,255,255,.55)',
               boxShadow: '0 1px 3px rgba(0,0,0,.4)',
               transition: 'width .2s ease, background .2s ease',
             }}
