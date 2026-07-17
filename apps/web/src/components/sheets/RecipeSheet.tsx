@@ -66,6 +66,14 @@ export function RecipeSheet() {
 
   if (!openRecipe) return null;
   const close = () => setOpenRecipe(null);
+
+  // Drag-to-dismiss state (header gesture — see the header div below).
+  const [dragY, setDragY] = useState(0);
+  const [dragging, setDragging] = useState(false);
+  const dragYRef = useRef(0);
+  dragYRef.current = dragY;
+  const headerDrag = useRef<{ y0: number; moved: boolean } | null>(null);
+  const suppressHeaderClick = useRef(false);
   const isOwner = !!r && !!me && r.cook.id === me.id;
   const isReview = r?.postType === 'review';
   // Prefer HLS (Cloudflare adaptive stream) over raw MP4 — same order as the feed.
@@ -91,8 +99,39 @@ export function RecipeSheet() {
   return (
     <div style={{ position: 'absolute', inset: 0, zIndex: 97 }}>
       <DismissBackdrop onDismiss={close} />
-      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, top: 44, background: 'var(--bg)', borderRadius: '30px 30px 0 0', overflow: 'hidden', animation: 'sz-slideUp .42s cubic-bezier(.16,1,.3,1)', display: 'flex', flexDirection: 'column' }}>
-        <div style={{ position: 'relative', height: hasMedia ? 300 : 230, flex: 'none', background: hasVideoSlot && !headerVideo ? '#0d0b0a' : (r?.bg ?? 'linear-gradient(165deg,#2a160e,#b5471f)') }}>
+      <div style={{ position: 'absolute', left: 0, right: 0, bottom: 0, top: 44, background: 'var(--bg)', borderRadius: '30px 30px 0 0', overflow: 'hidden', animation: 'sz-slideUp .42s cubic-bezier(.16,1,.3,1)', display: 'flex', flexDirection: 'column', transform: dragY ? `translateY(${dragY}px)` : undefined, transition: dragging ? 'none' : 'transform .22s ease' }}>
+        {/* Drag DOWN anywhere on the header to dismiss (the pill implies it; now
+            it works). Taps still reach the buttons/video — the gesture only takes
+            over after 8px of downward movement, and the swallowed click after a
+            drag is suppressed so releasing over a button doesn't press it. */}
+        <div
+          onPointerDown={(e) => { headerDrag.current = { y0: e.clientY, moved: false }; }}
+          onPointerMove={(e) => {
+            const d = headerDrag.current;
+            if (!d) return;
+            const dy = e.clientY - d.y0;
+            if (!d.moved && dy > 8) {
+              d.moved = true;
+              setDragging(true);
+              try { (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId); } catch { /* older webkit */ }
+            }
+            if (d.moved) setDragY(Math.max(0, dy));
+          }}
+          onPointerUp={() => {
+            const d = headerDrag.current;
+            headerDrag.current = null;
+            if (d?.moved) {
+              suppressHeaderClick.current = true;
+              setDragging(false);
+              if (dragYRef.current > 120) { setDragY(0); close(); return; }
+              setDragY(0);
+            }
+          }}
+          onPointerCancel={() => { headerDrag.current = null; setDragging(false); setDragY(0); }}
+          onClickCapture={(e) => {
+            if (suppressHeaderClick.current) { suppressHeaderClick.current = false; e.stopPropagation(); e.preventDefault(); }
+          }}
+          style={{ position: 'relative', height: hasMedia ? 300 : 230, flex: 'none', touchAction: 'none', background: hasVideoSlot && !headerVideo ? '#0d0b0a' : (r?.bg ?? 'linear-gradient(165deg,#2a160e,#b5471f)') }}>
           {headerVideo ? (
             <RecipeHeaderVideo src={headerVideo} poster={r?.video?.posterUrl} onExpand={() => { if (r) { setViewer({ items: [r], index: 0 }); setOpenRecipe(null); } }} />
           ) : headerImages.length > 0 ? (
