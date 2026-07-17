@@ -13,6 +13,7 @@ import { formatCount } from '../../lib/format';
 import { cookShareUrl } from '../../lib/share';
 import { ChevronLeftIcon, DotsIcon, PlayIcon, ShareIcon } from '../icons';
 import { pressVars } from '../ui';
+import { PosterImg } from '../PosterImg';
 
 const accent = theme.accent;
 
@@ -217,8 +218,16 @@ export function CookSheet() {
               <Button
                 key={d.id}
                 onClick={() => setOpenRecipe(d.id)}
-                style={{ border: 'none', padding: 0, cursor: 'pointer', borderRadius: 18, overflow: 'hidden', position: 'relative', height: 180, background: d.images && d.images.length > 0 ? `center/cover no-repeat url(${d.images[0]})` : d.bg, textAlign: 'left' }}
+                style={{ border: 'none', padding: 0, cursor: 'pointer', borderRadius: 18, overflow: 'hidden', position: 'relative', height: 180, background: d.bg, textAlign: 'left' }}
               >
+                {/* Render the VIDEO poster (not just photo posts) via PosterImg —
+                    same as the own-profile grid, with retry for Cloudflare
+                    thumbnails that 404 for a moment right after ready. Previously
+                    videos showed only the gradient bg → "thumbnails don't show
+                    on other profiles". */}
+                {(d.video?.posterUrl || d.images?.[0]) && (
+                  <PosterImg src={(d.video?.posterUrl || d.images[0])!} alt="" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+                )}
                 <div style={{ position: 'absolute', inset: 0, background: 'linear-gradient(180deg,transparent 42%, rgba(0,0,0,.72))' }} />
                 {d.removed ? (
                   <div style={{ position: 'absolute', inset: 0, background: 'rgba(20,14,12,.78)', display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', padding: 12, textAlign: 'center' }}>
