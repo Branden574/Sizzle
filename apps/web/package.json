@@ -36,6 +36,7 @@
     "@capacitor/preferences": "^8.0.1",
     "@capacitor/status-bar": "^8.0.2",
     "@capawesome/capacitor-badge": "^8.0.2",
+    "@capawesome/capacitor-file-picker": "^8.0.3",
     "@capgo/camera-preview": "^8.11.1",
     "@capgo/capacitor-native-biometric": "^8.4.11",
     "@capgo/capacitor-updater": "^8.51.0",

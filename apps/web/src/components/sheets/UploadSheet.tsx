@@ -18,6 +18,16 @@ import { Capacitor } from '@capacitor/core';
 // If a JS-only OTA ever reaches an older build without it, fall back to the web
 // recorder cleanly instead of erroring.
 const useNativeCamera = isNative && Capacitor.isPluginAvailable('CameraPreview');
+// Native photo picker (build 24+): PHPicker with skipTranscoding returns the
+// ORIGINAL file instantly. The WebView <input> path makes iOS re-encode the clip
+// to a "compatible" H.264 export first — the 15-20s "preparing" wait before the
+// composer even sees the file. Cloudflare normalizes HEVC server-side, so the
+// original is exactly what we want. Same binary-guard pattern as the camera.
+const useNativePicker = isNative && Capacitor.isPluginAvailable('FilePicker');
+// fetch(convertFileSrc()).blob() is MEMORY-backed — fine for normal clips (the
+// camera path already does it) but a multi-GB pick could OOM the WebView; those
+// rare picks fall back to the transcoding input instead.
+const NATIVE_PICK_MAX_BYTES = 700 * 1024 * 1024;
 import { CameraIcon } from '../icons';
 
 const accent = theme.accent;
@@ -159,6 +169,26 @@ export function UploadSheet() {
     if (file) acceptFile(file);
   };
 
+  /** Open the library: native PHPicker (instant, original file) when the binary
+   *  has it; otherwise the WebView input (iOS transcodes first — slow). */
+  const pickFromLibrary = async () => {
+    if (!useNativePicker) { fileRef.current?.click(); return; }
+    try {
+      const { FilePicker } = await import('@capawesome/capacitor-file-picker');
+      const res = await FilePicker.pickVideos({ limit: 1, skipTranscoding: true });
+      const f = res.files[0];
+      if (!f?.path) return; // dismissed without picking
+      if ((f.size ?? 0) > NATIVE_PICK_MAX_BYTES) { fileRef.current?.click(); return; }
+      const blob = await (await fetch(Capacitor.convertFileSrc(f.path))).blob();
+      acceptFile(new File([blob], f.name || 'clip.mov', { type: f.mimeType || blob.type || 'video/quicktime' }));
+    } catch (e) {
+      const msg = String((e as Error)?.message ?? e);
+      if (/cancel/i.test(msg)) return; // user closed the picker — not an error
+      console.warn('[picker] native pick failed — falling back to input', e);
+      fileRef.current?.click();
+    }
+  };
+
   const close = () => {
     // Cancel = discard the picked media (a STARTED upload lives in the global
     // task and keeps going — its object URLs belong to the task, not this sheet).
@@ -296,7 +326,7 @@ export function UploadSheet() {
           <NativeCameraRecorder
             onClose={() => setRecording(false)}
             onCapture={(file) => { acceptFile(file); setRecording(false); }}
-            onLibrary={() => { setRecording(false); fileRef.current?.click(); }}
+            onLibrary={() => { setRecording(false); void pickFromLibrary(); }}
           />
         ) : (
           <CameraRecorder
@@ -433,7 +463,7 @@ export function UploadSheet() {
                 Re-record
               </GlassButton>
               <GlassButton
-                onClick={() => fileRef.current?.click()}
+                onClick={() => void pickFromLibrary()}
                 size="sm"
               >
                 Library
@@ -455,7 +485,7 @@ export function UploadSheet() {
               </div>
             </Button>
             <Button
-              onClick={() => fileRef.current?.click()}
+              onClick={() => void pickFromLibrary()}
               style={{ width: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 10, padding: '14px', borderRadius: 16, border: '1.5px solid rgba(255,255,255,.18)', background: 'rgba(255,255,255,.05)', cursor: 'pointer', color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15, fontWeight: 700 }}
             >
               Upload from library
