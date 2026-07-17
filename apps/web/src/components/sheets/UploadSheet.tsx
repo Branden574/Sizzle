@@ -24,6 +24,13 @@ import { CameraIcon } from '../icons';
 
 const accent = theme.accent;
 
+// tus direct-to-Cloudflare is DISABLED in production. It stalls at 99% from the
+// iOS WKWebView (the byte transfer completes but Cloudflare's tus completion is
+// never confirmed — under investigation with a device console). Until it's proven
+// on a real device, native uploads use the Supabase-relay path that shipped
+// working in 1.0.45. Do NOT flip this on except behind a beta build + device test.
+const TRY_TUS = false;
+
 const field: CSSProperties = {
   width: '100%',
   background: 'rgba(255,255,255,.06)',
@@ -188,50 +195,47 @@ export function UploadSheet() {
           .then((b) => (b ? uploadPoster(user.id, b).catch(() => undefined) : undefined))
           .catch(() => undefined);
 
-        // FAST PATH: resumable tus DIRECTLY to Cloudflare Stream. No Supabase relay,
-        // no 2 GiB cap, chunked + resumable, works from the WKWebView (PATCH-based).
+        // Experimental resumable tus path — OFF in production (see TRY_TUS above).
         let tusOk = false;
-        try {
-          const ticket = await apiSend<DirectUploadTicket>('POST', '/uploads/tus', {
-            uploadLength: videoFile.size,
-            durationSeconds: durationSeconds ?? undefined,
-            clientUploadId: clientUploadIdRef.current,
-          });
-          if (ticket.resumed && ticket.videoAssetId) {
-            // Idempotent retry (double-submit): the asset already exists — reuse it.
-            videoAssetId = ticket.videoAssetId; setProgress(99); tusOk = true;
-          } else if (ticket.provider === 'cloudflare-tus' && ticket.uploadUrl && ticket.videoAssetId) {
-            await uploadVideoTus(ticket.uploadUrl, videoFile, { onProgress: setProgress, signal: controller.signal });
-            videoAssetId = ticket.videoAssetId; setProgress(99); tusOk = true;
+        if (TRY_TUS) {
+          try {
+            const ticket = await apiSend<DirectUploadTicket>('POST', '/uploads/tus', {
+              uploadLength: videoFile.size,
+              durationSeconds: durationSeconds ?? undefined,
+              clientUploadId: clientUploadIdRef.current,
+            });
+            if (ticket.resumed && ticket.videoAssetId) {
+              videoAssetId = ticket.videoAssetId; setProgress(99); tusOk = true;
+            } else if (ticket.provider === 'cloudflare-tus' && ticket.uploadUrl && ticket.videoAssetId) {
+              await uploadVideoTus(ticket.uploadUrl, videoFile, { onProgress: setProgress, signal: controller.signal });
+              videoAssetId = ticket.videoAssetId; setProgress(99); tusOk = true;
+            }
+          } catch (e) {
+            if ((e as Error)?.name === 'AbortError') { bail(); return; }
+            console.warn('[upload] tus path failed, falling back', e);
           }
-        } catch (e) {
-          if ((e as Error)?.name === 'AbortError') { bail(); return; }
-          // Otherwise fall through to the legacy path (keeps uploads working if the
-          // tus provision or transfer fails on this device).
-          console.warn('[upload] tus path failed, falling back', e);
         }
 
         if (tusOk && videoAssetId) {
-          // Set the client poster now → INSTANT thumbnail (the poster ran in
-          // parallel and is almost always ready by the time the upload finishes).
           const posterUrl = await posterPromise;
           if (posterUrl) {
             try { await apiSend('POST', `/uploads/video/${videoAssetId}/poster`, { posterUrl }); }
             catch (e) { console.warn('[upload] set poster failed', e); }
           }
+        } else if (videoConfig?.provider === 'cloudflare' && !isNative) {
+          // WEB browser: Cloudflare basic direct upload (delivers the multipart body fine).
+          const ticket = await apiSend<DirectUploadTicket>('POST', '/uploads/video', {});
+          await uploadToCloudflare(ticket.uploadUrl, videoFile, setProgress);
+          setProgress(99);
+          videoAssetId = ticket.videoAssetId;
         } else {
-          // LEGACY FALLBACK: web → Cloudflare basic direct (multipart); native/other
-          // → Supabase storage + server /copy relay.
-          if (videoConfig?.provider === 'cloudflare' && !isNative) {
-            const ticket = await apiSend<DirectUploadTicket>('POST', '/uploads/video', {});
-            await uploadToCloudflare(ticket.uploadUrl, videoFile, setProgress);
-            setProgress(99);
-            videoAssetId = ticket.videoAssetId;
-          } else {
-            const posterUrl = await posterPromise;
-            const uploadedUrl = await uploadVideo(user.id, videoFile, setProgress);
-            video = { uploadedUrl, posterUrl, durationSeconds: durationSeconds ?? undefined };
-          }
+          // NATIVE — the PROVEN 1.0.45 path: upload to Supabase, server relays into
+          // Cloudflare. Start the transfer FIRST; the poster capture runs in parallel
+          // and is awaited after, so it NEVER delays the upload. Poster is passed
+          // inline so the post gets its instant thumbnail.
+          const uploadedUrl = await uploadVideo(user.id, videoFile, setProgress);
+          const posterUrl = await posterPromise;
+          video = { uploadedUrl, posterUrl, durationSeconds: durationSeconds ?? undefined };
         }
       } catch (e) {
         if ((e as Error)?.name === 'AbortError') { bail(); return; }
