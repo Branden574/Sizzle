@@ -8,6 +8,8 @@ Stack: **Node + TypeScript**, **Hono** API, **Supabase** (Postgres/Auth/Storage)
 
 ## 2026-07-17 — Build 26 SUBMITTED (TikTok pause/resume recording); replaces 25
 
+**FIELD-VERIFIED by Branden on device ("build 26 good")** — the exact binary in review. OTAs through 1.0.64 live (auto-resume uploads, instant viewer poster, drag-down dismiss, feed-first launch, instant Profile paint). Stack decision recorded: stay Capacitor; RN only as data-driven v2.
+
 - **Build 26** in review (submission f383f8f6): everything in 25 + segment recording. NEW app-local native plugin `VideoConcat` (AVMutableComposition; passthrough when orientations match, per-segment-transform re-encode when they differ) registered via MainViewController/storyboard/pbxproj. Recorder segment mode (gated on the plugin): stop=pause, swipe-out banks the segment + suspends the camera (serialized suspend/resume worker), ✓ stitches; 15-min in-app cap; torch button; footage never discard-only; segments cleaned on discard.
 - Adversarial review caught 4 HIGH pre-ship: app-lock bypass via the camera transparency class (PasscodeLock now exempted in index.css), suspend/resume interleave, stop-rejection wedge, mixed-orientation stitch. All fixed.
 - **OTA 1.0.62** live: flash on existing builds; path-based recorder finalize (no whole-clip memory copy).
