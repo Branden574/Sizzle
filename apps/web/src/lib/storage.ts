@@ -79,39 +79,58 @@ export function probeVideo(file: File): Promise<{ durationSeconds: number | null
     const video = document.createElement('video');
     video.muted = true;
     video.playsInline = true;
-    video.preload = 'metadata';
+    // 'auto' (not 'metadata'): iOS WKWebView needs the actual frame DATA loaded
+    // before drawImage(video) yields a real frame instead of a black one. The file
+    // is local (a picked/recorded clip), so this reads from disk, not the network.
+    video.preload = 'auto';
     video.src = url;
 
     let settled = false;
-    const done = (durationSeconds: number | null, poster: Blob | null) => {
+    let duration: number | null = null;
+    const done = (poster: Blob | null) => {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
       URL.revokeObjectURL(url);
-      resolve({ durationSeconds, poster });
+      try { video.pause(); video.removeAttribute('src'); video.load(); } catch { /* already detached */ }
+      resolve({ durationSeconds: duration, poster });
     };
-    // Safety net: some clips never fire loadedmetadata/seeked/error (e.g. a codec
-    // the browser can't decode), which would otherwise hang the upload forever.
-    const timer = setTimeout(() => done(null, null), 8000);
+    // Safety net: some clips never fire the events (e.g. an undecodable codec),
+    // which would otherwise hang the upload forever. The server-side Cloudflare
+    // thumbnail is the backstop when we resolve with a null poster here.
+    const timer = setTimeout(() => done(null), 10000);
 
-    video.onerror = () => done(null, null);
+    const capture = () => {
+      try {
+        const canvas = document.createElement('canvas');
+        canvas.width = video.videoWidth;
+        canvas.height = video.videoHeight;
+        const ctx = canvas.getContext('2d');
+        if (!ctx || !canvas.width) return done(null);
+        ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
+        canvas.toBlob((b) => done(b), 'image/jpeg', 0.7);
+      } catch {
+        done(null);
+      }
+    };
+
+    video.onerror = () => done(null);
     video.onloadedmetadata = () => {
-      const duration = Number.isFinite(video.duration) ? Math.round(video.duration) : null;
-      // Seek a touch in to grab a representative frame.
-      video.currentTime = Math.min(0.1, video.duration || 0);
-      video.onseeked = () => {
-        try {
-          const canvas = document.createElement('canvas');
-          canvas.width = video.videoWidth;
-          canvas.height = video.videoHeight;
-          const ctx = canvas.getContext('2d');
-          if (!ctx || !canvas.width) return done(duration, null);
-          ctx.drawImage(video, 0, 0, canvas.width, canvas.height);
-          canvas.toBlob((b) => done(duration, b), 'image/jpeg', 0.7);
-        } catch {
-          done(duration, null);
-        }
-      };
+      duration = Number.isFinite(video.duration) ? Math.round(video.duration) : null;
+    };
+    // Seek only once real frame data is available (readyState >= HAVE_CURRENT_DATA),
+    // so the seeked frame is actually decodable on iOS — seeking off loadedmetadata
+    // (readyState 1) captured a black frame in WKWebView.
+    video.onloadeddata = () => {
+      try { video.currentTime = Math.min(0.1, video.duration || 0); }
+      catch { capture(); }
+    };
+    video.onseeked = () => {
+      // requestVideoFrameCallback fires when a real frame is actually presented —
+      // the reliable "paintable now" signal on iOS. Fall back to an immediate draw.
+      const rvfc = (video as unknown as { requestVideoFrameCallback?: (cb: () => void) => void }).requestVideoFrameCallback;
+      if (typeof rvfc === 'function') rvfc.call(video, () => capture());
+      else capture();
     };
   });
 }

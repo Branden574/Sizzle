@@ -156,14 +156,24 @@ async function main() {
     );
     const enUS = locs?.data?.find((l) => l.attributes.locale === 'en-US') || locs?.data?.[0];
     if (!enUS) fail('No version localization found to write release notes into.');
-    await asc('PATCH', `/v1/appStoreVersionLocalizations/${enUS.id}`, {
-      data: {
-        type: 'appStoreVersionLocalizations',
-        id: enUS.id,
-        attributes: { whatsNew: RELEASE_NOTES },
-      },
-    });
-    console.log(`✔ Release notes set (${enUS.attributes.locale}).`);
+    try {
+      await asc('PATCH', `/v1/appStoreVersionLocalizations/${enUS.id}`, {
+        data: {
+          type: 'appStoreVersionLocalizations',
+          id: enUS.id,
+          attributes: { whatsNew: RELEASE_NOTES },
+        },
+      });
+      console.log(`✔ Release notes set (${enUS.attributes.locale}).`);
+    } catch (e) {
+      // A FIRST release has no editable "What's New" (that field only exists for
+      // updates), so a 409 here is expected and not fatal — the build is attached.
+      if (/whatsNew|409|cannot be edited/i.test(String(e.message))) {
+        console.warn('  (skipping What\'s New — not editable on a first release)');
+      } else {
+        throw e;
+      }
+    }
   }
 
   // 6. App Review Information (opt-in — only when --review-info is passed, so a
