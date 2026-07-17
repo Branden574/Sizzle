@@ -79,6 +79,13 @@ export function UploadSheet() {
   const [videoFile, setVideoFile] = useState<File | null>(null);
   const [videoUrl, setVideoUrl] = useState<string | null>(null);
   const [previewAspect, setPreviewAspect] = useState(0); // width / height of the picked clip
+  // Static cover frame captured ON PICK. We render THIS image in the composer — never
+  // a live-playing <video> — so the WKWebView isn't decoding the whole clip the entire
+  // time the form is open (that drains data/battery/memory and, worse, contends with
+  // the eventual byte transfer and stalls it). Reused as the post's poster at submit.
+  const [coverBlob, setCoverBlob] = useState<Blob | null>(null);
+  const [coverUrl, setCoverUrl] = useState<string | null>(null);
+  const [coverLoading, setCoverLoading] = useState(false);
   const [prepping, setPrepping] = useState(false);
   const [submitMode, setSubmitMode] = useState<'publish' | 'draft' | null>(null);
   const [progress, setProgress] = useState(0); // upload % (0–100)
@@ -120,12 +127,28 @@ export function UploadSheet() {
       return;
     }
     if (videoUrl) URL.revokeObjectURL(videoUrl);
+    if (coverUrl) URL.revokeObjectURL(coverUrl);
     setVideoErr(null);
     setPreviewAspect(0);
+    setCoverBlob(null);
+    setCoverUrl(null);
     setVideoFile(file);
     setVideoUrl(URL.createObjectURL(file));
     // Fresh idempotency key per picked clip (retries of THIS clip reuse it).
     clientUploadIdRef.current = crypto.randomUUID();
+    // Capture the static cover frame NOW (decode once, then release) so the composer
+    // shows an image instead of a looping <video>. Best-effort + time-boxed; if it
+    // can't grab a frame we fall back to a neutral placeholder and the poster is
+    // re-attempted at submit (Cloudflare's thumbnail is the final backstop).
+    setCoverLoading(true);
+    captureVideoPoster(file)
+      .then((b) => {
+        if (!b) return;
+        setCoverBlob(b);
+        setCoverUrl(URL.createObjectURL(b));
+      })
+      .catch(() => { /* placeholder handles the miss */ })
+      .finally(() => setCoverLoading(false));
   };
 
   const pickVideo = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -140,6 +163,7 @@ export function UploadSheet() {
     uploadAbortRef.current?.abort();
     uploadAbortRef.current = null;
     if (videoUrl) URL.revokeObjectURL(videoUrl);
+    if (coverUrl) URL.revokeObjectURL(coverUrl);
     setUploadPrefill(null);
     setShowUpload(false);
   };
@@ -154,7 +178,7 @@ export function UploadSheet() {
     return "Couldn't upload the video — check your connection and try again. Your draft is safe.";
   };
 
-  const busy = prepping || upload.isPending;
+  const busy = prepping || coverLoading || upload.isPending;
   // Video mode REQUIRES a picked clip — posting with just a title would publish a
   // permanently blank, unplayable card bound to an empty Cloudflare asset.
   const canPost = title.trim().length > 0 && !busy && (mediaKind === 'video' ? !!videoFile : photos.length > 0);
@@ -188,17 +212,15 @@ export function UploadSheet() {
           bail(`Videos can be up to ${Math.round(MAX_DURATION_SECONDS / 60)} minutes long.`);
           return;
         }
-        // Capture + upload the poster BEFORE the transfer — NOT in parallel. Grabbing
-        // a real iOS frame means decoding the clip (preload='auto' + play); doing that
-        // at the same time as the byte transfer makes the WKWebView decode and upload
-        // the same 150+ MB file simultaneously, and the memory/decode contention
-        // stalls the transfer's final flush (the "stuck at 99%" bug). Capture first
-        // (~1–3s, time-boxed), fully release the decoder, THEN transfer with memory
-        // freed. Best-effort — Cloudflare's generated thumbnail is the backstop.
+        // Upload the poster BEFORE the transfer, and reuse the cover we already
+        // captured on pick (no second decode). If the pick-time capture missed, try
+        // once more here — but never in parallel with the byte transfer: decoding and
+        // uploading the same 150+ MB file at once stalls the transfer's final flush
+        // (the "stuck at 99%" bug). Best-effort — Cloudflare's thumbnail is the backstop.
         let posterUrl: string | undefined;
         try {
-          const posterBlob = await captureVideoPoster(videoFile);
-          if (posterBlob) posterUrl = await uploadPoster(user.id, posterBlob).catch(() => undefined);
+          const blob = coverBlob ?? await captureVideoPoster(videoFile);
+          if (blob) posterUrl = await uploadPoster(user.id, blob).catch(() => undefined);
         } catch { /* best-effort; fall through without a poster */ }
 
         // Experimental resumable tus path — OFF in production (see TRY_TUS above).
@@ -417,15 +439,19 @@ export function UploadSheet() {
           </div>
         ) : videoUrl ? (
           <div style={{ position: 'relative', borderRadius: 20, overflow: 'hidden', marginBottom: 18, aspectRatio: previewAspect > 1.05 ? '16 / 9' : '9 / 12', background: '#000', transition: 'aspect-ratio .25s ease' }}>
-            <video
-              src={videoUrl}
-              muted
-              loop
-              autoPlay
-              playsInline
-              onLoadedMetadata={(e) => { const v = e.currentTarget; if (v.videoWidth && v.videoHeight) setPreviewAspect(v.videoWidth / v.videoHeight); }}
-              style={{ width: '100%', height: '100%', objectFit: previewAspect > 1.05 ? 'contain' : 'cover' }}
-            />
+            {/* Static cover — NOT a live <video>. See coverBlob note above. */}
+            {coverUrl ? (
+              <img
+                src={coverUrl}
+                alt="Video cover"
+                onLoad={(e) => { const im = e.currentTarget; if (im.naturalWidth && im.naturalHeight) setPreviewAspect(im.naturalWidth / im.naturalHeight); }}
+                style={{ width: '100%', height: '100%', objectFit: previewAspect > 1.05 ? 'contain' : 'cover', display: 'block' }}
+              />
+            ) : (
+              <div style={{ position: 'absolute', inset: 0, display: 'flex', alignItems: 'center', justifyContent: 'center', color: 'rgba(255,255,255,.55)', fontSize: 13, fontFamily: "'Hanken Grotesk'" }}>
+                {coverLoading ? 'Preparing preview…' : 'Video ready to post'}
+              </div>
+            )}
             <div style={{ position: 'absolute', bottom: 12, right: 12, display: 'flex', gap: 8 }}>
               {/* Trim relies on HTMLVideoElement.captureStream, which iOS WKWebView
                   doesn't support — so it's a silent no-op on the native app. Hide it
