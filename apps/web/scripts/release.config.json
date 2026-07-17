@@ -1,0 +1,15 @@
+{
+  "_comment": "The App Store 'text boxes' the release automation fills. Edit whatsNew every release. reviewInfo is written only when you pass --review-info to asc-prepare-version. The demo account PASSWORD is NEVER stored here — it is read from the ASC_DEMO_PASSWORD env var at run time. Everything in this file is non-secret and safe to commit.",
+
+  "whatsNew": "Bug fixes and performance improvements to make recipe videos load faster and play more smoothly.",
+
+  "reviewInfo": {
+    "contactFirstName": "Branden",
+    "contactLastName": "Vincent-Walker",
+    "contactPhone": "",
+    "contactEmail": "support@getsizzle.app",
+    "demoAccountName": "review@getsizzle.app",
+    "demoAccountRequired": true,
+    "notes": "Demo account: review@getsizzle.app (password provided in the App Review Information password field). Sign in with the email tab. The account follows 3 cooks, so both the Following and For You feeds are populated. It has no posts of its own; use the + tab to record or upload to see the creation flow.\n\nUser-generated content (Guideline 1.2): Sizzle has all four required mechanisms — (1) automated text + image moderation screens every submission before it can appear; (2) one-tap reporting via the ... menu on any post/comment/profile, five categories, into an internal moderation queue; (3) block/mute on any profile (mutual, total); (4) a published contact point at https://getsizzle.app/contact, also reachable in Settings. We act on reported content within 24 hours, a commitment published in our Terms and shown to every reporter.\n\nMonetization (Guideline 3.1.1): the iOS app contains no way for a viewer to spend money — no tipping, subscribing, premium unlock, or product purchase, and no price/link/CTA pointing to one. Premium posts appear as neutral locked cards with no price and no purchase path. Subscriptions and unlocks are acquired only on our website, outside the app. Creator-side earnings and payout setup are present (business onboarding, not a purchase — the same pattern TikTok/Instagram/YouTube ship); the demo account cannot reach payout setup (it requires 1,000 followers and 100,000 views, server-enforced)."
+  }
+}

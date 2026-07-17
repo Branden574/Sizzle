@@ -1,0 +1,29 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  App Store distribution export options for Sizzle.
+
+  The archive step is always DEV-signed (Apple Development / aps-environment:
+  development) — that is normal. THIS export re-signs with an Apple Distribution
+  cert + App Store provisioning profile (minted on the fly via -allowProvisioningUpdates
+  + the ASC API key) and flips aps-environment to production. Verify the exported
+  .ipa before upload: codesign authority must be "Apple Distribution", entitlements
+  aps-environment must be "production", and the embedded profile must have NO
+  ProvisionedDevices. A dev-signed upload silently breaks push in TestFlight.
+-->
+<plist version="1.0">
+<dict>
+    <key>method</key>
+    <string>app-store-connect</string>
+    <key>teamID</key>
+    <string>6R2T984G9S</string>
+    <key>signingStyle</key>
+    <string>automatic</string>
+    <key>destination</key>
+    <string>export</string>
+    <key>manageAppVersionAndBuildNumber</key>
+    <false/>
+    <key>uploadSymbols</key>
+    <true/>
+</dict>
+</plist>

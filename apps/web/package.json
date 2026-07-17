@@ -18,7 +18,12 @@
     "ios:lan": "npm run build:lan && cap run ios",
     "android:lan": "npm run build:lan && cap run android",
     "cap:open:ios": "cap open ios",
-    "cap:open:android": "cap open android"
+    "cap:open:android": "cap open android",
+    "release:ios": "bash scripts/release-ios.sh",
+    "asc:prepare": "node scripts/asc-prepare-version.mjs",
+    "asc:submit": "node scripts/asc-submit-for-review.mjs",
+    "asc:release": "node scripts/asc-prepare-version.mjs && node scripts/asc-submit-for-review.mjs",
+    "release:ios:full": "bash scripts/release-ios.sh && node scripts/asc-prepare-version.mjs && node scripts/asc-submit-for-review.mjs"
   },
   "dependencies": {
     "@capacitor-firebase/messaging": "^8.3.0",
