@@ -116,7 +116,7 @@ export const paymentsProvider: 'stripe' | 'mock' = stripeConfigured ? 'stripe' :
  * and transfers out, so creators receive funds but are never merchant of record.
  * (`merchant` would only be needed if we passed on_behalf_of.)
  */
-export async function createConnectAccount(email: string | null): Promise<string> {
+export async function createConnectAccount(email: string | null, profileUrl?: string | null): Promise<string> {
   // contact_email is MANDATORY whenever configuration.recipient is supplied —
   // verified against the live API, which rejects with "If configuration.recipient
   // is supplied, the Account must have a contact email". Fail with something the
@@ -164,10 +164,26 @@ export async function createConnectAccount(email: string | null): Promise<string
         type: 'express',
         email,
         'capabilities[transfers][requested]': 'true',
+        // Pass this creator's public profile page so Stripe can review their
+        // content (required for content-platform Connect accounts). Documented
+        // v1 field; safe on the Express create.
+        ...(profileUrl ? { 'business_profile[url]': profileUrl } : {}),
       });
     }
     throw err;
   });
+  // ALSO set the profile URL on the account after creation — covers the v2
+  // (/core/accounts) path uniformly via the documented v1 update, and is a
+  // no-op re-set on the v1 path. BEST-EFFORT: a creator must never be blocked
+  // from payout setup because this metadata update failed, so we swallow errors
+  // (the account already exists; the URL can be backfilled).
+  if (profileUrl) {
+    try {
+      await stripe(`/accounts/${acct.id}`, { 'business_profile[url]': profileUrl });
+    } catch (err) {
+      console.error('[payments] set business_profile.url failed (non-fatal)', { acct: acct.id, err: String(err) });
+    }
+  }
   return acct.id;
 }
 

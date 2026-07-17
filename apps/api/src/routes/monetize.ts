@@ -1046,7 +1046,7 @@ monetize.post('/onboard', requireAuth, requireNotBanned, rateLimit({ windowMs: 6
   const body = z.object({ acceptTerms: z.boolean().optional() }).safeParse(await c.req.json().catch(() => ({})));
   const { data: me } = await supabaseAdmin
     .from('profiles')
-    .select('monetization_status, stripe_account_id, creator_status, creator_terms_accepted_at')
+    .select('monetization_status, stripe_account_id, creator_status, creator_terms_accepted_at, handle')
     .eq('id', userId)
     .maybeSingle();
   if (!me) throw notFound('Profile not found');
@@ -1083,7 +1083,12 @@ monetize.post('/onboard', requireAuth, requireNotBanned, rateLimit({ windowMs: 6
     let accountId = me.stripe_account_id as string | null;
     if (!accountId) {
       const { data: auth } = await supabaseAdmin.auth.admin.getUserById(userId);
-      accountId = await createConnectAccount(auth?.user?.email ?? null);
+      // Pass this creator's public profile page (getsizzle.app/u/<handle>) so
+      // Stripe can review their content — required for content-platform Connect
+      // accounts (the "unique creator URLs via the API" diligence item).
+      const handle = (me.handle as string | null) ?? null;
+      const profileUrl = handle ? `${env.APP_ORIGIN.replace(/\/$/, '')}/u/${handle}` : null;
+      accountId = await createConnectAccount(auth?.user?.email ?? null, profileUrl);
       await supabaseAdmin.from('profiles').update({ stripe_account_id: accountId, monetization_status: 'pending' }).eq('id', userId);
     }
     const url = await createOnboardingLink(accountId);
