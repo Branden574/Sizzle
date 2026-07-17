@@ -6,6 +6,13 @@ Stack: **Node + TypeScript**, **Hono** API, **Supabase** (Postgres/Auth/Storage)
 
 ---
 
+## 2026-07-17 — BUILD 27 SUBMITTED (critical OTA-wedge fix); replaces 26
+
+- **CRITICAL caught pre-approval:** the 1.0.61 `setMultiDelay({kind:'kill'})` policy permanently wedged OTA installs — `installNext()` skips while ANY delay condition exists; the plugin clears the kill condition at native launch but our per-boot re-arm closed the only install window. Devices on JS >=1.0.61 (builds 25/26 builtins) could download but NEVER apply bundles (field-hit: Branden stuck on 1.0.62 with 1.0.64 pending). Verified in plugin Swift source.
+- **Fix:** `{kind:'background', value:'300000'}` — 5-min background threshold; self-evaluates per event (safe to re-arm each boot); quick app-switches still never reload mid-session. Shipped as OTA 1.0.65 + baked into **build 27** (submission 8a004a98, WAITING_FOR_REVIEW; build-26 submission canceled — it must never ship).
+- Branden's device unwedges by installing build 27 from TestFlight.
+- Also this session: RN migration study (docs/rn-migration-study.md, verdict: stay Capacitor, RN = data-driven v2 only) + OTA 1.0.63/64 polish (auto-resume uploads, instant viewer poster, drag-down dismiss, feed-first launch, instant Profile paint).
+
 ## 2026-07-17 — Build 26 SUBMITTED (TikTok pause/resume recording); replaces 25
 
 **FIELD-VERIFIED by Branden on device ("build 26 good")** — the exact binary in review. OTAs through 1.0.64 live (auto-resume uploads, instant viewer poster, drag-down dismiss, feed-first launch, instant Profile paint). Stack decision recorded: stay Capacitor; RN only as data-driven v2.
