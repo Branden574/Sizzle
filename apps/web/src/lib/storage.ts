@@ -211,9 +211,17 @@ export async function uploadVideo(userId: string, file: File, onProgress?: (pct:
  * FAST: read only the video's duration (metadata). Used to gate the length limit
  * before upload — never blocks (resolves within ~3s or null). No frame capture.
  */
-export function getVideoDuration(file: File): Promise<number | null> {
+/** Accept a File (wrapped in a temp object URL) or a direct media src (e.g. the
+ *  native picker's capacitor:// file URL — no bytes copied into JS memory). */
+function asVideoSrc(input: File | string): { src: string; cleanup: () => void } {
+  if (typeof input === 'string') return { src: input, cleanup: () => {} };
+  const url = URL.createObjectURL(input);
+  return { src: url, cleanup: () => URL.revokeObjectURL(url) };
+}
+
+export function getVideoDuration(file: File | string): Promise<number | null> {
   return new Promise((resolve) => {
-    const url = URL.createObjectURL(file);
+    const { src: url, cleanup } = asVideoSrc(file);
     const video = document.createElement('video');
     video.muted = true;
     video.playsInline = true;
@@ -224,7 +232,7 @@ export function getVideoDuration(file: File): Promise<number | null> {
       if (settled) return;
       settled = true;
       clearTimeout(timer);
-      URL.revokeObjectURL(url);
+      cleanup();
       try { video.removeAttribute('src'); video.load(); } catch { /* detached */ }
       resolve(d);
     };
@@ -246,9 +254,9 @@ export function getVideoDuration(file: File): Promise<number | null> {
  * shipped without its chosen thumbnail. Best-effort: resolves null if it genuinely
  * can't (the Cloudflare thumbnail is the backstop) so it never blocks the post.
  */
-export function captureVideoPoster(file: File): Promise<Blob | null> {
+export function captureVideoPoster(file: File | string): Promise<Blob | null> {
   return new Promise((resolve) => {
-    const url = URL.createObjectURL(file);
+    const { src: url, cleanup } = asVideoSrc(file);
     const video = document.createElement('video');
     video.muted = true;
     video.defaultMuted = true;
@@ -266,8 +274,8 @@ export function captureVideoPoster(file: File): Promise<Blob | null> {
       settled = true;
       clearTimeout(timer);
       try { video.pause(); video.removeAttribute('src'); video.load(); } catch { /* detached */ }
-      URL.revokeObjectURL(url);
-      if (!b) console.warn(`[poster] capture failed at stage=${stage} (${(file.size / 1048576).toFixed(1)}MB ${file.type || 'unknown'})`);
+      cleanup();
+      if (!b) console.warn(`[poster] capture failed at stage=${stage} (${typeof file === 'string' ? `src …${file.slice(-40)}` : `${(file.size / 1048576).toFixed(1)}MB ${file.type || 'unknown'}`})`);
       resolve(b);
     };
     const timer = setTimeout(() => done(null), 15000);

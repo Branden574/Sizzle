@@ -39,7 +39,7 @@ function fmt(ms: number): string {
  * and restores the WebView, so the camera can never be left running (green dot)
  * and the app can never be left transparent/invisible.
  */
-export function NativeCameraRecorder({ onCapture, onClose, onLibrary }: { onCapture: (file: File) => void; onClose: () => void; onLibrary?: () => void }) {
+export function NativeCameraRecorder({ onCapture, onClose, onLibrary }: { onCapture: (file: File, nativePath?: string) => void; onClose: () => void; onLibrary?: () => void }) {
   const [status, setStatus] = useState<Status>('starting');
   const [facing, setFacing] = useState<'rear' | 'front'>('rear');
   const [recording, setRecording] = useState(false);
@@ -114,7 +114,7 @@ export function NativeCameraRecorder({ onCapture, onClose, onLibrary }: { onCapt
       const file = new File([blob], `sizzle-${Date.now()}.${ext}`, { type: blob.type || 'video/mp4' });
       // Success → tear the camera down (the composer takes over) and hand off.
       await teardown();
-      onCapture(file);
+      onCapture(file, videoFilePath);
     } catch {
       // Read failed → keep the camera LIVE so they can simply record again,
       // instead of killing it and forcing a close/reopen. (Unmount still tears

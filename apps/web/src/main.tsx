@@ -24,6 +24,13 @@ if (Capacitor.isNativePlatform()) {
   // this (e.g. a hot-fix bundle white-screens on launch), Capgo auto-rolls back to
   // the last good bundle after appReadyTimeout — the safety net for OTA pushes.
   void CapacitorUpdater.notifyAppReady();
+
+  // Apply pending OTA updates ONLY after the app is KILLED — never on a mere
+  // backgrounding. The config's autoUpdate:'atBackground' reloaded the whole
+  // WebView the moment the user swiped out with an update pending, destroying
+  // whatever they were doing (an in-progress recording, a half-written post, an
+  // upload) and dumping them back on the feed. A quick app-switch must be safe.
+  void CapacitorUpdater.setMultiDelay({ delayConditions: [{ kind: 'kill' }] }).catch(() => {});
 }
 
 createRoot(document.getElementById('root')!).render(

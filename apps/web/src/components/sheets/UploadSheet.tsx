@@ -1,4 +1,4 @@
-import { useRef, useState, type CSSProperties } from 'react';
+import { useEffect, useRef, useState, type CSSProperties } from 'react';
 import { Button, GlassButton } from '../controls';
 import { MAX_DURATION_SECONDS, MAX_UPLOAD_BYTES, type PostType } from '@sizzle/shared';
 import { useAuth } from '../../auth/useAuth';
@@ -24,13 +24,24 @@ const useNativeCamera = isNative && Capacitor.isPluginAvailable('CameraPreview')
 // composer even sees the file. Cloudflare normalizes HEVC server-side, so the
 // original is exactly what we want. Same binary-guard pattern as the camera.
 const useNativePicker = isNative && Capacitor.isPluginAvailable('FilePicker');
-// fetch(convertFileSrc()).blob() is MEMORY-backed — fine for normal clips (the
-// camera path already does it) but a multi-GB pick could OOM the WebView; those
-// rare picks fall back to the transcoding input instead.
-const NATIVE_PICK_MAX_BYTES = 700 * 1024 * 1024;
+// Native picks/recordings are handled BY PATH — no bytes are copied into the
+// WebView at pick time (the old eager fetch().blob() froze the UI ~5s on a
+// 150MB clip with zero feedback). Preview/cover/duration read the capacitor://
+// file URL directly; upload PUTs from the path (build 25's background session);
+// the JS fallback reads the blob lazily only if it's actually needed.
 import { CameraIcon } from '../icons';
 
 const accent = theme.accent;
+
+// Draft-survival storage (see DRAFT SURVIVAL below).
+const COMPOSER_DRAFT_KEY = 'sizzle.composerDraft';
+type ComposerDraft = {
+  postType?: PostType; title?: string; cuisine?: string; time?: string; servings?: string;
+  caption?: string; ingredients?: string; steps?: string;
+  calories?: string; proteinG?: string; carbsG?: string; fatG?: string;
+  rating?: number; scheduleAt?: string;
+  nativePath?: string | null; fileName?: string; fileType?: string; fileSize?: number;
+};
 
 const field: CSSProperties = {
   width: '100%',
@@ -113,6 +124,62 @@ export function UploadSheet() {
   const [mediaKind, setMediaKind] = useState<'video' | 'photo'>('video');
   const [photos, setPhotos] = useState<{ file: File; url: string }[]>([]);
 
+  // ——— DRAFT SURVIVAL ————————————————————————————————————————————————
+  // A half-written post must survive the app reloading underneath the user
+  // (OTA apply, jetsam, accidental swipe-out + kill). Text fields + the picked
+  // clip's on-disk path persist as they type and restore on the next open.
+  // Cleared on Post (the task owns it from there) and on explicit Cancel.
+  const restoredRef = useRef(false);
+  useEffect(() => {
+    if (restoredRef.current) return;
+    restoredRef.current = true;
+    if (uploadPrefill) return; // an intentional "Cook this" prefill wins over an old draft
+    try {
+      const raw = localStorage.getItem(COMPOSER_DRAFT_KEY);
+      if (!raw) return;
+      const d = JSON.parse(raw) as ComposerDraft;
+      setPostType(d.postType ?? 'recipe');
+      setTitle(d.title ?? '');
+      setCuisine(d.cuisine ?? '');
+      setTime(d.time ?? '');
+      setServings(d.servings ?? '');
+      setCaption(d.caption ?? '');
+      setIngredients(d.ingredients ?? '');
+      setSteps(d.steps ?? '');
+      setCalories(d.calories ?? '');
+      setProteinG(d.proteinG ?? '');
+      setCarbsG(d.carbsG ?? '');
+      setFatG(d.fatG ?? '');
+      setRating(d.rating ?? 0);
+      setScheduleAt(d.scheduleAt ?? '');
+      if (d.nativePath) {
+        acceptFile(
+          new File([], d.fileName || 'clip.mov', { type: d.fileType || 'video/quicktime' }),
+          d.nativePath,
+          { mediaSrc: Capacitor.convertFileSrc(d.nativePath), size: d.fileSize ?? 0 },
+        );
+      }
+    } catch { /* corrupt draft — start clean */ }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+  useEffect(() => {
+    const t = setTimeout(() => {
+      try {
+        const meaningful = title.trim() || caption.trim() || ingredients.trim() || steps.trim() || nativePathRef.current;
+        if (!meaningful) { localStorage.removeItem(COMPOSER_DRAFT_KEY); return; }
+        const d: ComposerDraft = {
+          postType, title, cuisine, time, servings, caption, ingredients, steps,
+          calories, proteinG, carbsG, fatG, rating, scheduleAt,
+          nativePath: nativePathRef.current,
+          fileName: videoFile?.name, fileType: videoFile?.type,
+          fileSize: videoFile && videoFile.size > 0 ? videoFile.size : undefined,
+        };
+        localStorage.setItem(COMPOSER_DRAFT_KEY, JSON.stringify(d));
+      } catch { /* storage full/private — best effort */ }
+    }, 600);
+    return () => clearTimeout(t);
+  }, [postType, title, cuisine, time, servings, caption, ingredients, steps, calories, proteinG, carbsG, fatG, rating, scheduleAt, videoFile]);
+
   const pickPhotos = (e: React.ChangeEvent<HTMLInputElement>) => {
     const files = Array.from(e.target.files ?? []);
     e.target.value = '';
@@ -127,12 +194,13 @@ export function UploadSheet() {
       return prev.filter((_, j) => j !== i);
     });
 
-  const acceptFile = (file: File, nativePath?: string) => {
+  const acceptFile = (file: File, nativePath?: string, opts?: { mediaSrc?: string; size?: number }) => {
     nativePathRef.current = nativePath ?? null;
+    const size = opts?.size ?? file.size;
     // TRANSPARENT gates AT PICK — fail in 1 second with the real reason, not
     // after minutes of upload the server would reject anyway.
-    if (file.size > MAX_UPLOAD_BYTES) {
-      setVideoErr(`That video is too large (${(file.size / 1073741824).toFixed(1)} GB — the limit is ${Math.round(MAX_UPLOAD_BYTES / 1073741824)} GB). Trim it or export at a lower quality.`);
+    if (size > MAX_UPLOAD_BYTES) {
+      setVideoErr(`That video is too large (${(size / 1073741824).toFixed(1)} GB — the limit is ${Math.round(MAX_UPLOAD_BYTES / 1073741824)} GB). Trim it or export at a lower quality.`);
       return;
     }
     if (videoUrl) URL.revokeObjectURL(videoUrl);
@@ -143,12 +211,15 @@ export function UploadSheet() {
     setCoverUrl(null);
     setDurationSecs(null);
     setVideoFile(file);
-    setVideoUrl(URL.createObjectURL(file));
+    // Path-backed media plays/probes straight from disk (no bytes copied to JS).
+    const mediaSrc = opts?.mediaSrc ?? URL.createObjectURL(file);
+    setVideoUrl(mediaSrc);
     // Fresh idempotency key per picked clip (retries of THIS clip reuse it).
     clientUploadIdRef.current = crypto.randomUUID();
     // Duration gate too — read metadata now (fast) so an over-long clip is
     // rejected at pick, and submit doesn't have to probe anything.
-    void getVideoDuration(file).then((d) => {
+    const probeSrc: File | string = opts?.mediaSrc ?? file;
+    void getVideoDuration(probeSrc).then((d) => {
       setDurationSecs(d);
       if (d && d > MAX_DURATION_SECONDS) {
         setVideoErr(`Videos can be up to ${Math.round(MAX_DURATION_SECONDS / 60)} minutes long — this one is ${Math.round(d / 60)} minutes.`);
@@ -160,7 +231,7 @@ export function UploadSheet() {
     // can't grab a frame we fall back to a neutral placeholder and the poster is
     // re-attempted at submit (Cloudflare's thumbnail is the final backstop).
     setCoverLoading(true);
-    captureVideoPoster(file)
+    captureVideoPoster(probeSrc)
       .then((b) => {
         if (!b) return;
         setCoverBlob(b);
@@ -186,13 +257,14 @@ export function UploadSheet() {
       const res = await FilePicker.pickVideos({ limit: 1, skipTranscoding: true });
       const f = res.files[0];
       if (!f?.path) return; // dismissed without picking
-      if ((f.size ?? 0) > NATIVE_PICK_MAX_BYTES) {
-        setPickerNote('That video is very large — using the compatibility picker (iOS prepares it first, which can take a bit).');
-        fileRef.current?.click();
-        return;
-      }
-      const blob = await (await fetch(Capacitor.convertFileSrc(f.path))).blob();
-      acceptFile(new File([blob], f.name || 'clip.mov', { type: f.mimeType || blob.type || 'video/quicktime' }), f.path);
+      // INSTANT accept: no bytes are read — a zero-length placeholder File carries
+      // the name/type, the real media lives at the path, and every consumer
+      // (preview, cover, duration, upload) works from the path/src directly.
+      acceptFile(
+        new File([], f.name || 'clip.mov', { type: f.mimeType || 'video/quicktime' }),
+        f.path,
+        { mediaSrc: Capacitor.convertFileSrc(f.path), size: f.size ?? 0 },
+      );
     } catch (e) {
       const msg = String((e as Error)?.message ?? e);
       if (/cancel/i.test(msg)) return; // user closed the picker — not an error
@@ -205,8 +277,11 @@ export function UploadSheet() {
   };
 
   const close = () => {
-    // Cancel = discard the picked media (a STARTED upload lives in the global
-    // task and keeps going — its object URLs belong to the task, not this sheet).
+    // Cancel = discard the picked media AND the saved draft (explicit choice —
+    // accidental exits never come through here; they're covered by draft
+    // survival + the kill-only update policy). A STARTED upload lives in the
+    // global task and keeps going — its object URLs belong to the task.
+    try { localStorage.removeItem(COMPOSER_DRAFT_KEY); } catch { /* best effort */ }
     if (videoUrl) URL.revokeObjectURL(videoUrl);
     if (coverUrl) URL.revokeObjectURL(coverUrl);
     photos.forEach((p) => URL.revokeObjectURL(p.url));
@@ -270,6 +345,7 @@ export function UploadSheet() {
         bail('An upload is already in progress — let it finish first.');
         return;
       }
+      try { localStorage.removeItem(COMPOSER_DRAFT_KEY); } catch { /* best effort */ }
       photos.forEach((p) => URL.revokeObjectURL(p.url));
       setUploadPrefill(null);
       setShowUpload(false);
@@ -320,6 +396,7 @@ export function UploadSheet() {
       },
       {
         onSuccess: (detail) => {
+          try { localStorage.removeItem(COMPOSER_DRAFT_KEY); } catch { /* best effort */ }
           photos.forEach((p) => URL.revokeObjectURL(p.url));
           setUploadPrefill(null);
           setShowUpload(false);
@@ -341,7 +418,7 @@ export function UploadSheet() {
         useNativeCamera ? (
           <NativeCameraRecorder
             onClose={() => setRecording(false)}
-            onCapture={(file) => { acceptFile(file); setRecording(false); }}
+            onCapture={(file, path) => { acceptFile(file, path); setRecording(false); }}
             onLibrary={() => { setRecording(false); void pickFromLibrary(); }}
           />
         ) : (

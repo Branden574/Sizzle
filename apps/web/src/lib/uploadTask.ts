@@ -57,8 +57,17 @@ export interface UploadJob {
  * without the plugin (or blobs with no path) use the in-app XHR transfer.
  */
 async function uploadVideoNativeOrJs(job: UploadJob, onProgress: (p: number) => void): Promise<string> {
-  const canNative = isNative && Capacitor.isPluginAvailable('Uploader') && !!job.filePath && job.file.size > 0;
-  if (!canNative) return uploadVideo(job.userId, job.file, onProgress);
+  const canNative = isNative && Capacitor.isPluginAvailable('Uploader') && !!job.filePath;
+  if (!canNative) {
+    // JS transfer needs actual bytes. Path-backed jobs (native pick/recording on
+    // a pre-uploader build) read the blob LAZILY here — in the background task,
+    // never blocking the pick UI like the old eager read did.
+    if (job.file.size === 0 && job.filePath) {
+      const blob = await (await fetch(Capacitor.convertFileSrc(job.filePath))).blob();
+      job.file = new File([blob], job.file.name, { type: job.file.type || blob.type });
+    }
+    return uploadVideo(job.userId, job.file, onProgress);
+  }
 
   const ext = (job.file.name.split('.').pop() || 'mp4').toLowerCase().replace(/[^a-z0-9]/g, '');
   const path = `${job.userId}/clip-${Date.now()}.${ext}`;
@@ -271,10 +280,11 @@ async function run(job: UploadJob, set: (s: Partial<UploadTaskState>) => void, g
     //    If the pick-time capture missed (slow decode on a big clip), try ONCE
     //    more here — still before the byte transfer, so no decode contention.
     //    Best-effort, but LOUD on failure so it can't silently regress again.
-    //    (A resumed job may carry an empty placeholder File — nothing to decode.)
-    if (!job.coverBlob && job.file.size > 0) {
+    //    (Path-backed jobs decode from disk; a resumed job with neither path nor
+    //    bytes has nothing to decode.)
+    if (!job.coverBlob && (job.filePath || job.file.size > 0)) {
       try {
-        job.coverBlob = await captureVideoPoster(job.file);
+        job.coverBlob = await captureVideoPoster(job.filePath ? Capacitor.convertFileSrc(job.filePath) : job.file);
         if (job.coverBlob && !get().coverUrl) {
           const url = URL.createObjectURL(job.coverBlob);
           job.coverUrl = url;

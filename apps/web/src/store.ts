@@ -234,7 +234,14 @@ export const useSizzle = create<SizzleState>((set) => ({
   onbStep: 0,
   tastes: {},
   followed: {},
-  tab: 'feed',
+  // Restore the last tab synchronously at boot — an OTA reload, jetsam, or cold
+  // start puts the user back where they were instead of always on the feed.
+  tab: (() => {
+    try {
+      const t = localStorage.getItem('sizzle.lastTab');
+      return t === 'feed' || t === 'discover' || t === 'saved' || t === 'profile' ? t : 'feed';
+    } catch { return 'feed'; }
+  })(),
   feed: prefs0.defaultFeed,
   immersive: false,
   appUnlocked: false,
@@ -315,7 +322,11 @@ export const useSizzle = create<SizzleState>((set) => ({
   // inbox, DM thread, cook/recipe views, pickers, notification/settings
   // sheets) — otherwise the nav appears to do nothing under an open sheet.
   // Sheets holding unsaved work (upload, edit post, edit profile) stay open.
-  setTab: (tab) => set({
+  setTab: (tab) => {
+    // Remember the tab across reloads/relaunches (OTA applies, jetsam, cold
+    // start) — coming back to the app must not dump the user on the feed.
+    try { localStorage.setItem('sizzle.lastTab', tab); } catch { /* private mode */ }
+    return set({
     tab,
     immersive: false,
     commentsFor: null,
@@ -343,7 +354,8 @@ export const useSizzle = create<SizzleState>((set) => ({
     openRecipe: null,
     sendRecipeFor: null,
     openBoard: null,
-  }),
+  });
+  },
   setFeed: (feed) => set({ feed, immersive: false, commentsFor: null }),
   setImmersive: (on) => set({ immersive: on }),
   setAppUnlocked: (v) => set({ appUnlocked: v }),
