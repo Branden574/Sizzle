@@ -187,6 +187,14 @@ export function VideoPlayer({ src, poster, active, immersive = false }: { src: s
 
   return (
     <div ref={wrapRef} style={{ position: 'absolute', inset: 0, background: rotated ? '#000' : 'transparent' }}>
+      {/* Poster UNDERLAY: the <video>'s own poster attribute only paints after
+          the video element gets around to decoding it, which flashes the card's
+          gradient background for ~0.5s when the viewer opens. A plain <img>
+          (browser-cached from the grid thumbnail) paints on the FIRST frame, so
+          opening a video from a profile looks instant. The video draws over it. */}
+      {poster && (
+        <img src={poster} alt="" aria-hidden style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+      )}
       <video
         ref={ref}
         poster={poster ?? undefined}

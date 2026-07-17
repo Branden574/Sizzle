@@ -165,7 +165,15 @@ function clearPersistedJob(): void {
 }
 
 let resumeChecked = false;
-/** Called once post-auth: restore an upload the OS killed mid-flight. */
+/**
+ * Called once post-auth: restore an upload the OS killed mid-flight. The goal is
+ * ZERO user action whenever recovery is possible:
+ *  - bytes already uploaded → silently finish publishing;
+ *  - the native background transfer is still running → attach to it (live tile
+ *    progress) and publish when it completes;
+ *  - the file is still on disk → automatically restart the transfer;
+ *  - only when NOTHING is recoverable → an honest dismiss-only notice.
+ */
 export async function resumePendingUpload(currentUserId: string): Promise<void> {
   if (!isNative || resumeChecked) return;
   resumeChecked = true;
@@ -174,46 +182,8 @@ export async function resumePendingUpload(currentUserId: string): Promise<void> 
     if (!value) return;
     const p = JSON.parse(value) as PersistedJob;
     if (p.userId !== currentUserId) { clearPersistedJob(); return; }
-    // A native background transfer may have FINISHED while the app was dead —
-    // the plugin re-delivers its events on relaunch. Give it a short window to
-    // claim the completion so Retry skips straight to publishing.
-    if (p.ck?.nativeUploadId && p.ck.pendingUploadUrl && !p.ck.uploadedUrl && Capacitor.isPluginAvailable('Uploader')) {
-      try {
-        const { Uploader } = await import('@capgo/capacitor-uploader');
-        const completed = await new Promise<boolean>((resolve) => {
-          let h: { remove: () => Promise<void> } | null = null;
-          const t = setTimeout(() => { void h?.remove().catch(() => {}); resolve(false); }, 3000);
-          void Uploader.addListener('events', (ev) => {
-            if (ev.eventId) void Uploader.acknowledgeEvent({ eventId: ev.eventId }).catch(() => {});
-            if (ev.id === p.ck!.nativeUploadId && ev.name === 'completed') {
-              clearTimeout(t);
-              void h?.remove().catch(() => {});
-              resolve(true);
-            }
-          }).then((hh) => { h = hh; });
-        });
-        if (completed) p.ck.uploadedUrl = p.ck.pendingUploadUrl;
-      } catch { /* best effort — Retry re-uploads if unclaimed */ }
-    }
-    // Re-read the original file from the picker's path (survives most relaunches).
-    let file: File | null = null;
-    if (p.filePath) {
-      try {
-        const blob = await (await fetch(Capacitor.convertFileSrc(p.filePath))).blob();
-        if (blob.size > 0) file = new File([blob], p.fileName, { type: p.fileType });
-      } catch { /* tmp file purged — see below */ }
-    }
-    if (!file && !p.ck?.uploadedUrl) {
-      // Nothing to resume from: tell the user honestly instead of vanishing.
-      clearPersistedJob();
-      useUploadTask.setState({
-        status: 'error', title: p.input.title, job: null,
-        error: `"${p.input.title}" didn't finish uploading before the app closed — please post it again.`,
-      });
-      return;
-    }
-    // Bytes already uploaded (ck.uploadedUrl) can publish even without the file.
-    const job: UploadJob = {
+
+    const buildJob = (file?: File | null): UploadJob => ({
       userId: p.userId,
       file: file ?? new File([], p.fileName, { type: p.fileType }),
       coverBlob: null, coverUrl: null, videoUrl: null,
@@ -224,10 +194,75 @@ export async function resumePendingUpload(currentUserId: string): Promise<void> 
       clientUploadId: p.clientUploadId,
       filePath: p.filePath,
       ck: p.ck,
-    };
+    });
+    const setState = (s: Partial<UploadTaskState>) => useUploadTask.setState(s);
+    const autoResume = (job: UploadJob) => { void run(job, setState, useUploadTask.getState); };
+
+    // 1. Bytes already uploaded → nothing to transfer; just finish publishing.
+    if (p.ck?.uploadedUrl) { autoResume(buildJob()); return; }
+
+    // 2. A native background transfer may have FINISHED — or still be RUNNING —
+    //    while the app was dead (the plugin re-delivers events on relaunch).
+    if (p.ck?.nativeUploadId && p.ck.pendingUploadUrl && Capacitor.isPluginAvailable('Uploader')) {
+      try {
+        const { Uploader } = await import('@capgo/capacitor-uploader');
+        const outcome = await new Promise<'completed' | 'failed' | 'silent'>((resolve) => {
+          let h: { remove: () => Promise<void> } | null = null;
+          let sawProgress = false;
+          const finish = (o: 'completed' | 'failed' | 'silent') => { void h?.remove().catch(() => {}); resolve(o); };
+          // Quiet window: if the transfer is alive we'll hear from it; a transfer
+          // still mid-flight keeps extending its own deadline via progress events.
+          let quiet = setTimeout(() => finish('silent'), 4000);
+          void Uploader.addListener('events', (ev) => {
+            if (ev.eventId) void Uploader.acknowledgeEvent({ eventId: ev.eventId }).catch(() => {});
+            if (ev.id !== p.ck!.nativeUploadId) return;
+            if (ev.name === 'uploading') {
+              // Transfer is STILL RUNNING in the background session — attach:
+              // live progress in the tile, publish on completion. No user action.
+              sawProgress = true;
+              clearTimeout(quiet);
+              quiet = setTimeout(() => finish('silent'), 30_000); // stalled transfer → fall through
+              setState({ status: 'uploading', progress: Math.min(99, Math.round(ev.payload.percent ?? 0)), title: p.input.title, job: buildJob(), coverUrl: null, error: null });
+            } else if (ev.name === 'completed') {
+              clearTimeout(quiet);
+              finish('completed');
+            } else if (ev.name === 'failed') {
+              clearTimeout(quiet);
+              finish('failed');
+            }
+          }).then((hh) => { h = hh; if (sawProgress) { /* listener attached late — fine */ } });
+        });
+        if (outcome === 'completed') {
+          p.ck.uploadedUrl = p.ck.pendingUploadUrl;
+          autoResume(buildJob());
+          return;
+        }
+        // 'failed' / 'silent' (iOS cancels background tasks on a force-quit) →
+        // fall through to restarting from the file on disk.
+      } catch { /* fall through */ }
+    }
+
+    // 3. Restart from the original file on disk — automatically.
+    let file: File | null = null;
+    if (p.filePath) {
+      try {
+        const blob = await (await fetch(Capacitor.convertFileSrc(p.filePath))).blob();
+        if (blob.size > 0) file = new File([blob], p.fileName, { type: p.fileType });
+      } catch { /* fetch can fail where the native uploader still can read it */ }
+    }
+    if (file || p.filePath) {
+      // Even with an unreadable-via-fetch file, the NATIVE uploader reads from
+      // the path itself — let the normal task pipeline try (its failure surfaces
+      // an error tile WITH Retry, never a dead end).
+      autoResume(buildJob(file));
+      return;
+    }
+
+    // 4. Truly nothing to recover (no path, no bytes). Honest dismiss-only notice.
+    clearPersistedJob();
     useUploadTask.setState({
-      status: 'error', title: p.input.title, job,
-      error: `"${p.input.title}" was interrupted — tap Retry to finish posting.`,
+      status: 'error', title: p.input.title, job: null,
+      error: `"${p.input.title}" didn't finish uploading before the app closed — open the composer to post it again (your details were saved as a draft).`,
     });
   } catch {
     clearPersistedJob();
