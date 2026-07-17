@@ -21,7 +21,7 @@ export function VideoViewer() {
   // creator's name/avatar opens their profile above this viewer — the clip must
   // stop, not keep playing audio underneath). Mirrors the feed's suppression;
   // partial sheets (comments/share) intentionally let playback continue.
-  const suppressed = useSizzle((s) => !!(s.openRecipe || s.openCook || s.cookFor || s.showUpload));
+  const suppressed = useSizzle((s) => !!(s.openRecipe || s.openCook || s.cookFor || s.showUpload || s.sharing));
   const scrollRef = useRef<HTMLDivElement>(null);
   const positioned = useRef(false);
 

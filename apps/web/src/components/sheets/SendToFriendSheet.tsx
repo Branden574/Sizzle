@@ -3,7 +3,7 @@ import type { CookSummary } from '@sizzle/shared';
 import { Button, DismissBackdrop } from '../controls';
 import { useConversations, useFollowList, useMe, useSendRecipe, useShareRecipe } from '../../data/queries';
 import { useSwipeDismiss } from '../../lib/useSwipeDismiss';
-import { recipeShareUrl } from '../../lib/share';
+import { recipeShareUrl, nativeShare } from '../../lib/share';
 import { useSizzle } from '../../store';
 
 /**
@@ -63,8 +63,10 @@ export function SendToFriendSheet() {
     window.setTimeout(() => setCopied(false), 1600);
   };
   const shareElsewhere = () => {
-    if (navigator.share) void navigator.share({ title: target.title, url }).then(() => share.mutate(target.id)).catch(() => {});
-    else copyLink();
+    void nativeShare({ title: target.title, url }).then((r) => {
+      if (r === 'shared') share.mutate(target.id);
+      else if (r === 'unavailable') copyLink();
+    });
   };
 
   return (

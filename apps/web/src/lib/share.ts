@@ -1,3 +1,30 @@
+import { useSizzle } from '../store';
+
+/**
+ * Present the native OS share sheet, pausing feed/viewer video while it's up.
+ * The iOS share sheet presents OVER the WKWebView without firing a visibility
+ * change, so a playing <video> keeps blaring audio underneath. We flip the
+ * global `sharing` flag (folded into feed + viewer suppression) for the lifetime
+ * of the share promise, so the clip pauses and resumes when the sheet closes.
+ *
+ * Returns 'shared' on completion, 'dismissed' on cancel, 'unavailable' when the
+ * Web Share API isn't present (caller falls back to copy-link).
+ */
+export type ShareOutcome = 'shared' | 'dismissed' | 'unavailable';
+export async function nativeShare(data: ShareData): Promise<ShareOutcome> {
+  if (typeof navigator === 'undefined' || !navigator.share) return 'unavailable';
+  const setSharing = useSizzle.getState().setSharing;
+  setSharing(true);
+  try {
+    await navigator.share(data);
+    return 'shared';
+  } catch {
+    return 'dismissed';
+  } finally {
+    setSharing(false);
+  }
+}
+
 /**
  * Shareable deep links. On native, `location.origin` is `capacitor://localhost`,
  * so links must be built from the canonical public origin instead. Boot + native

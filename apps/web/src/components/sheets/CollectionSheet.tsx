@@ -1,5 +1,5 @@
 import { useCollections, useCollectionRecipes, useDeleteCollection, useRenameCollection, useSetCollectionPublic, useToggleCollectionRecipe } from '../../data/queries';
-import { boardShareUrl } from '../../lib/share';
+import { boardShareUrl, nativeShare } from '../../lib/share';
 import { Button } from '../controls';
 import { useSizzle } from '../../store';
 import { ChevronLeftIcon } from '../icons';
@@ -40,8 +40,9 @@ export function CollectionSheet() {
 
   const onShareBoard = () => {
     const url = boardShareUrl(openCollection.id);
-    if (navigator.share) void navigator.share({ title: `${openCollection.name} · Sizzle`, url }).catch(() => {});
-    else void navigator.clipboard?.writeText(url).catch(() => {});
+    void nativeShare({ title: `${openCollection.name} · Sizzle`, url }).then((r) => {
+      if (r === 'unavailable') void navigator.clipboard?.writeText(url).catch(() => {});
+    });
   };
 
   return (

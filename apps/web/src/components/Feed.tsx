@@ -106,7 +106,7 @@ function FeedList({ items, onRefresh, onEndReached }: { items: RecipeCard[]; onR
   // a recipe/cook/upload/viewer surface. Partial sheets (comments, share) are
   // intentionally excluded so under-sheet playback continues there.
   const suppressed = useSizzle(
-    (s) => !!(s.openRecipe || s.cookFor || s.showUpload || s.viewer || s.openCook),
+    (s) => !!(s.openRecipe || s.cookFor || s.showUpload || s.viewer || s.openCook || s.sharing),
   );
   const scrollRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);

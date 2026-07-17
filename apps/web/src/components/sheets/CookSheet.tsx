@@ -10,7 +10,7 @@ import { SocialLinks } from '../SocialLinks';
 import { VideoPlayer } from '../VideoPlayer';
 import { theme } from '../../theme';
 import { formatCount } from '../../lib/format';
-import { cookShareUrl } from '../../lib/share';
+import { cookShareUrl, nativeShare } from '../../lib/share';
 import { ChevronLeftIcon, DotsIcon, PlayIcon, ShareIcon } from '../icons';
 import { pressVars } from '../ui';
 import { PosterImg } from '../PosterImg';
@@ -52,8 +52,9 @@ export function CookSheet() {
   const onShare = () => {
     if (!ck) return;
     const url = cookShareUrl(ck.handle);
-    if (navigator.share) void navigator.share({ title: `${ck.name} on Sizzle`, url }).catch(() => {});
-    else void navigator.clipboard?.writeText(url).catch(() => {});
+    void nativeShare({ title: `${ck.name} on Sizzle`, url }).then((r) => {
+      if (r === 'unavailable') void navigator.clipboard?.writeText(url).catch(() => {});
+    });
   };
 
   const onBlock = () => {

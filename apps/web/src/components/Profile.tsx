@@ -6,7 +6,7 @@ import { useRequireAuth } from '../auth/useRequireAuth';
 import { useCook, useDeleteCookLog, useDeleteRecipe, useDrafts, useLikedFeed, useMe, useMyJournal, useNotifications, usePublishDraft, useRequestVerification, useSavedFeed } from '../data/queries';
 import { useSizzle } from '../store';
 import { formatCount } from '../lib/format';
-import { cookShareUrl } from '../lib/share';
+import { cookShareUrl, nativeShare } from '../lib/share';
 import { useShopping } from '../lib/shopping';
 import { VerifiedBadge } from './VerifiedBadge';
 import { SocialLinks } from './SocialLinks';
@@ -109,8 +109,9 @@ export function Profile() {
             onClick={() => {
               if (!me) return;
               const url = cookShareUrl(me.handle);
-              if (navigator.share) void navigator.share({ title: `${me.name} on Sizzle`, url }).catch(() => {});
-              else void navigator.clipboard?.writeText(url).catch(() => {});
+              void nativeShare({ title: `${me.name} on Sizzle`, url }).then((r) => {
+                if (r === 'unavailable') void navigator.clipboard?.writeText(url).catch(() => {});
+              });
             }}
             label="Share profile"
             variant="outline"

@@ -1,6 +1,6 @@
 import { Button } from '../controls';
 import { useBoard } from '../../data/queries';
-import { boardShareUrl } from '../../lib/share';
+import { boardShareUrl, nativeShare } from '../../lib/share';
 import { useSizzle } from '../../store';
 import { ChevronLeftIcon, ShareIcon } from '../icons';
 import { PosterImg } from '../PosterImg';
@@ -23,8 +23,9 @@ export function BoardSheet() {
   const onShare = () => {
     if (!board) return;
     const url = boardShareUrl(board.id);
-    if (navigator.share) void navigator.share({ title: `${board.name} · Sizzle`, url }).catch(() => {});
-    else void navigator.clipboard?.writeText(url).catch(() => {});
+    void nativeShare({ title: `${board.name} · Sizzle`, url }).then((r) => {
+      if (r === 'unavailable') void navigator.clipboard?.writeText(url).catch(() => {});
+    });
   };
 
   return (

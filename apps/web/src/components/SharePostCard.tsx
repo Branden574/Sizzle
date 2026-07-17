@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Button, DismissBackdrop } from './controls';
 import { useShareRecipe } from '../data/queries';
-import { recipeShareUrl } from '../lib/share';
+import { recipeShareUrl, nativeShare as osShare } from '../lib/share';
 import { useSizzle } from '../store';
 
 /**
@@ -28,8 +28,10 @@ export function SharePostCard() {
     window.setTimeout(() => setCopied(false), 1600);
   };
   const nativeShare = () => {
-    if (navigator.share) void navigator.share({ title: `${target.title} · Sizzle`, url }).then(() => share.mutate(target.id)).catch(() => {});
-    else copyLink();
+    void osShare({ title: `${target.title} · Sizzle`, url }).then((r) => {
+      if (r === 'shared') share.mutate(target.id);
+      else if (r === 'unavailable') copyLink();
+    });
   };
 
   return (

@@ -86,6 +86,9 @@ export interface SizzleState {
   viewer: { items: RecipeCard[]; index: number } | null;
   openCook: string | null;
   showUpload: boolean;
+  /** True while the native OS share sheet (navigator.share) is presented over the
+   *  WebView — folded into feed/viewer suppression so the clip's audio pauses. */
+  sharing: boolean;
   showCreate: boolean;
   showNotifications: boolean;
   showEditProfile: boolean;
@@ -194,6 +197,7 @@ export interface SizzleState {
   setOpenTag: (tag: string | null) => void;
   setFollowList: (v: { id: string; mode: 'followers' | 'following'; name: string } | null) => void;
   setShowUpload: (v: boolean) => void;
+  setSharing: (v: boolean) => void;
   setShowCreate: (v: boolean) => void;
   setShowNotifications: (v: boolean) => void;
   setShowEditProfile: (v: boolean) => void;
@@ -246,6 +250,7 @@ export const useSizzle = create<SizzleState>((set) => ({
   viewer: null,
   openCook: null,
   showUpload: false,
+  sharing: false,
   showCreate: false,
   showNotifications: false,
   showEditProfile: false,
@@ -380,6 +385,7 @@ export const useSizzle = create<SizzleState>((set) => ({
   setOpenTag: (tag) => set({ openTag: tag }),
   setFollowList: (v) => set({ followList: v }),
   setShowUpload: (v) => set({ showUpload: v }),
+  setSharing: (v) => set({ sharing: v }),
   setShowCreate: (v) => set({ showCreate: v }),
   setShowNotifications: (v) => set({ showNotifications: v }),
   setShowEditProfile: (v) => set({ showEditProfile: v }),
