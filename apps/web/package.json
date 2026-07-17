@@ -1,7 +1,7 @@
 {
   "name": "@sizzle/web",
   "private": true,
-  "version": "1.0.59",
+  "version": "1.0.60",
   "type": "module",
   "description": "Sizzle web client — watch it, then cook it.",
   "scripts": {
@@ -40,6 +40,7 @@
     "@capgo/camera-preview": "^8.11.1",
     "@capgo/capacitor-native-biometric": "^8.4.11",
     "@capgo/capacitor-updater": "^8.51.0",
+    "@capgo/capacitor-uploader": "^8.3.3",
     "@gsap/react": "^2.1.2",
     "@sizzle/shared": "*",
     "@supabase/supabase-js": "^2.45.4",

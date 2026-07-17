@@ -44,6 +44,7 @@ import { CreatorSheet } from './components/sheets/CreatorSheet';
 import { SettingsSheet } from './components/sheets/SettingsSheet';
 import { UploadSheet } from './components/sheets/UploadSheet';
 import { UploadProgressTile } from './components/UploadProgressTile';
+import { resumePendingUpload } from './lib/uploadTask';
 import { CreateSheet } from './components/sheets/CreateSheet';
 import { useAuth } from './auth/useAuth';
 import { queryClient } from './data/queries';
@@ -130,6 +131,14 @@ export default function App() {
   const needsUsername = useAuth((s) => !!s.profile?.needsUsername);
   const initAuth = useAuth((s) => s.init);
   const setMode = useAuth((s) => s.setMode);
+  // An upload the OS killed mid-flight (app swiped away) left a persisted job —
+  // restore it as the error tile with Retry (or claim its background-completed
+  // transfer). Runs once per launch, only when signed in.
+  useEffect(() => {
+    if (authStatus !== 'authed') return;
+    const uid = useAuth.getState().user?.id;
+    if (uid) void resumePendingUpload(uid);
+  }, [authStatus]);
   const setPhase = useSizzle((s) => s.setPhase);
   const setOnbStep = useSizzle((s) => s.setOnbStep);
   const resetToOnboarding = useSizzle((s) => s.resetToOnboarding);

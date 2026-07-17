@@ -21,7 +21,8 @@ let package = Package(
         .package(name: "CapawesomeCapacitorFilePicker", path: "../../../../../node_modules/@capawesome/capacitor-file-picker"),
         .package(name: "CapgoCameraPreview", path: "../../../../../node_modules/@capgo/camera-preview"),
         .package(name: "CapgoCapacitorNativeBiometric", path: "../../../../../node_modules/@capgo/capacitor-native-biometric"),
-        .package(name: "CapgoCapacitorUpdater", path: "../../../../../node_modules/@capgo/capacitor-updater")
+        .package(name: "CapgoCapacitorUpdater", path: "../../../../../node_modules/@capgo/capacitor-updater"),
+        .package(name: "CapgoCapacitorUploader", path: "../../../../../node_modules/@capgo/capacitor-uploader")
     ],
     targets: [
         .target(
@@ -38,7 +39,8 @@ let package = Package(
                 .product(name: "CapawesomeCapacitorFilePicker", package: "CapawesomeCapacitorFilePicker"),
                 .product(name: "CapgoCameraPreview", package: "CapgoCameraPreview"),
                 .product(name: "CapgoCapacitorNativeBiometric", package: "CapgoCapacitorNativeBiometric"),
-                .product(name: "CapgoCapacitorUpdater", package: "CapgoCapacitorUpdater")
+                .product(name: "CapgoCapacitorUpdater", package: "CapgoCapacitorUpdater"),
+                .product(name: "CapgoCapacitorUploader", package: "CapgoCapacitorUploader")
             ]
         )
     ]

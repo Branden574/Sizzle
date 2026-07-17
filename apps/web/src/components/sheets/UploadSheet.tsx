@@ -101,6 +101,12 @@ export function UploadSheet() {
   // lag a render, so two fast taps can both pass the canPost check).
   const clientUploadIdRef = useRef<string>('');
   const submittingRef = useRef(false);
+  // Native picker's on-disk path for the picked clip: enables the background
+  // URLSession transfer (build 25+) and resume-after-kill.
+  const nativePathRef = useRef<string | null>(null);
+  // Visible reason when the pick fell back to the slow transcoding input — the
+  // silent fallback made "sometimes instant, sometimes 20s" look random.
+  const [pickerNote, setPickerNote] = useState<string | null>(null);
 
   // Photo posts (carousel).
   const photoInputRef = useRef<HTMLInputElement>(null);
@@ -121,7 +127,8 @@ export function UploadSheet() {
       return prev.filter((_, j) => j !== i);
     });
 
-  const acceptFile = (file: File) => {
+  const acceptFile = (file: File, nativePath?: string) => {
+    nativePathRef.current = nativePath ?? null;
     // TRANSPARENT gates AT PICK — fail in 1 second with the real reason, not
     // after minutes of upload the server would reject anyway.
     if (file.size > MAX_UPLOAD_BYTES) {
@@ -173,18 +180,26 @@ export function UploadSheet() {
    *  has it; otherwise the WebView input (iOS transcodes first — slow). */
   const pickFromLibrary = async () => {
     if (!useNativePicker) { fileRef.current?.click(); return; }
+    setPickerNote(null);
     try {
       const { FilePicker } = await import('@capawesome/capacitor-file-picker');
       const res = await FilePicker.pickVideos({ limit: 1, skipTranscoding: true });
       const f = res.files[0];
       if (!f?.path) return; // dismissed without picking
-      if ((f.size ?? 0) > NATIVE_PICK_MAX_BYTES) { fileRef.current?.click(); return; }
+      if ((f.size ?? 0) > NATIVE_PICK_MAX_BYTES) {
+        setPickerNote('That video is very large — using the compatibility picker (iOS prepares it first, which can take a bit).');
+        fileRef.current?.click();
+        return;
+      }
       const blob = await (await fetch(Capacitor.convertFileSrc(f.path))).blob();
-      acceptFile(new File([blob], f.name || 'clip.mov', { type: f.mimeType || blob.type || 'video/quicktime' }));
+      acceptFile(new File([blob], f.name || 'clip.mov', { type: f.mimeType || blob.type || 'video/quicktime' }), f.path);
     } catch (e) {
       const msg = String((e as Error)?.message ?? e);
       if (/cancel/i.test(msg)) return; // user closed the picker — not an error
       console.warn('[picker] native pick failed — falling back to input', e);
+      // No more SILENT fallback: say why it's suddenly slow (usually an iCloud-
+      // offloaded video that couldn't be handed over as the original).
+      setPickerNote("Couldn't load the original from your library — using the compatibility picker (iOS re-encodes it first, which takes longer).");
       fileRef.current?.click();
     }
   };
@@ -249,6 +264,7 @@ export function UploadSheet() {
         webDirect: videoConfig?.provider === 'cloudflare' && !isNative,
         shareAfterPost: mode === 'publish' && !scheduleAt,
         clientUploadId: clientUploadIdRef.current,
+        filePath: nativePathRef.current ?? undefined,
       });
       if (!started) {
         bail('An upload is already in progress — let it finish first.');
@@ -559,6 +575,7 @@ export function UploadSheet() {
             </>
           )}
           {(videoErr || upload.isError) && <div style={{ color: '#ff8a6b', fontSize: 13.5, fontWeight: 600 }}>{videoErr ?? "Couldn't post — please try again."}</div>}
+          {pickerNote && !videoErr && <div style={{ color: 'rgba(255,255,255,.55)', fontSize: 12.5 }}>{pickerNote}</div>}
         </div>
       </div>
 

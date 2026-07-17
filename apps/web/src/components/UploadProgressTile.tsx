@@ -13,6 +13,7 @@ export function UploadProgressTile() {
   const progress = useUploadTask((s) => s.progress);
   const coverUrl = useUploadTask((s) => s.coverUrl);
   const error = useUploadTask((s) => s.error);
+  const canRetry = useUploadTask((s) => !!s.job);
   const retry = useUploadTask((s) => s.retry);
   const dismiss = useUploadTask((s) => s.dismiss);
 
@@ -72,9 +73,11 @@ export function UploadProgressTile() {
         <div style={{ flex: 1, minWidth: 0, borderRadius: 12, background: 'rgba(20,12,10,.96)', border: '1px solid rgba(248,113,113,.35)', boxShadow: '0 8px 24px -6px rgba(0,0,0,.55)', padding: '9px 11px', display: 'flex', flexDirection: 'column', gap: 7 }}>
           <div style={{ color: '#fecaca', fontSize: 12.5, fontWeight: 600, lineHeight: 1.35 }}>{error ?? 'Upload failed.'}</div>
           <div style={{ display: 'flex', gap: 8 }}>
-            <Button onClick={retry} style={{ flex: 'none', padding: '6px 14px', borderRadius: 9, border: 'none', cursor: 'pointer', background: `linear-gradient(135deg,${theme.accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 12.5, fontWeight: 800 }}>
-              Retry
-            </Button>
+            {canRetry && (
+              <Button onClick={retry} style={{ flex: 'none', padding: '6px 14px', borderRadius: 9, border: 'none', cursor: 'pointer', background: `linear-gradient(135deg,${theme.accent},#e23a18)`, color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 12.5, fontWeight: 800 }}>
+                Retry
+              </Button>
+            )}
             <Button onClick={dismiss} style={{ flex: 'none', padding: '6px 12px', borderRadius: 9, border: '1px solid rgba(255,255,255,.2)', cursor: 'pointer', background: 'transparent', color: 'rgba(255,255,255,.75)', fontFamily: "'Hanken Grotesk'", fontSize: 12.5, fontWeight: 700 }}>
               Dismiss
             </Button>

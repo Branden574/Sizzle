@@ -67,13 +67,20 @@ function xhrPut(url: string, body: Blob, contentType: string, onProgress?: (pct:
  * the same path instead of the SDK's direct POST, which was silently 400ing.
  * Returns the public URL.
  */
-async function putViaSignedUrl(path: string, body: Blob, contentType: string, onProgress?: (pct: number) => void): Promise<string> {
+/** Mint a signed PUT URL + the object's public URL (shared by the JS XHR path
+ *  and the native background-URLSession path, which PUTs from a file path). */
+export async function createSignedPutUrl(path: string): Promise<{ putUrl: string; publicUrl: string }> {
   const { data, error } = await supabase.storage.from('videos').createSignedUploadUrl(path);
   if (error || !data?.signedUrl) throw mapSdkError(error ?? new Error('no signed url'));
   const signed = data.signedUrl;
-  const url = signed.startsWith('http') ? signed : `${webEnv.supabaseUrl}/storage/v1${signed.startsWith('/storage/v1') ? signed.slice('/storage/v1'.length) : signed}`;
-  await xhrPut(url, body, contentType, onProgress);
-  return supabase.storage.from('videos').getPublicUrl(path).data.publicUrl;
+  const putUrl = signed.startsWith('http') ? signed : `${webEnv.supabaseUrl}/storage/v1${signed.startsWith('/storage/v1') ? signed.slice('/storage/v1'.length) : signed}`;
+  return { putUrl, publicUrl: supabase.storage.from('videos').getPublicUrl(path).data.publicUrl };
+}
+
+async function putViaSignedUrl(path: string, body: Blob, contentType: string, onProgress?: (pct: number) => void): Promise<string> {
+  const { putUrl, publicUrl } = await createSignedPutUrl(path);
+  await xhrPut(putUrl, body, contentType, onProgress);
+  return publicUrl;
 }
 
 /**
