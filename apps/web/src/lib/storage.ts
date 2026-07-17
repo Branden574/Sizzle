@@ -2,20 +2,78 @@ import { Upload } from 'tus-js-client';
 import { webEnv } from './env';
 import { supabase } from './supabase';
 
-/** PUT a file to a URL via XHR so we get real upload-progress events. */
-function xhrPut(url: string, file: File, onProgress?: (pct: number) => void): Promise<void> {
+/**
+ * A storage upload failure carrying the REAL server reason. `status` is the
+ * storage error code (Supabase tucks the true code — 413 too large, 403 RLS,
+ * 415 mime — inside the body even when the HTTP status is 400). `permanent`
+ * means retrying the identical bytes cannot succeed (size/permission/mime), so
+ * callers must NOT waste minutes re-uploading — surface the reason instead.
+ * This exists because uploads used to fail silently: the bar hit 99%, the server
+ * rejected the finished upload, and the user saw nothing.
+ */
+export class StorageUploadError extends Error {
+  status: number;
+  permanent: boolean;
+  constructor(status: number, message: string, permanent: boolean) {
+    super(message);
+    this.name = 'StorageUploadError';
+    this.status = status;
+    this.permanent = permanent;
+  }
+}
+
+/** Parse a storage error response into a StorageUploadError with the true code. */
+function parseStorageError(httpStatus: number, body: string): StorageUploadError {
+  let message = '';
+  let code = httpStatus;
+  try {
+    const j = JSON.parse(body) as { statusCode?: string | number; error?: string; message?: string };
+    message = j.message || j.error || '';
+    const sc = parseInt(String(j.statusCode), 10);
+    if (Number.isFinite(sc) && sc >= 100) code = sc;
+  } catch { /* non-JSON body */ }
+  // 4xx = the server examined and rejected this exact request — a retry with the
+  // same bytes fails the same way. 5xx / 0 (network) are worth retrying.
+  const permanent = code >= 400 && code < 500;
+  return new StorageUploadError(code, message || `upload failed (${httpStatus})`, permanent);
+}
+
+/** Map a supabase-js SDK storage error into a StorageUploadError. */
+function mapSdkError(error: unknown): StorageUploadError {
+  const e = error as { statusCode?: string | number; status?: number; message?: string } | null;
+  const code = Number(e?.statusCode ?? e?.status) || 0;
+  return new StorageUploadError(code, e?.message || 'upload failed', code >= 400 && code < 500);
+}
+
+/** PUT a blob to a URL via XHR so we get real upload-progress events. */
+function xhrPut(url: string, body: Blob, contentType: string, onProgress?: (pct: number) => void): Promise<void> {
   return new Promise((resolve, reject) => {
     const xhr = new XMLHttpRequest();
     xhr.open('PUT', url);
-    xhr.setRequestHeader('content-type', file.type || 'video/mp4');
+    xhr.setRequestHeader('content-type', contentType);
     xhr.setRequestHeader('x-upsert', 'true');
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) onProgress?.(Math.min(99, Math.round((e.loaded / e.total) * 100)));
     };
-    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(new Error(`upload failed (${xhr.status})`)));
-    xhr.onerror = () => reject(new Error('upload network error'));
-    xhr.send(file);
+    xhr.onload = () => (xhr.status >= 200 && xhr.status < 300 ? resolve() : reject(parseStorageError(xhr.status, xhr.responseText)));
+    xhr.onerror = () => reject(new StorageUploadError(0, 'upload network error', false));
+    xhr.send(body);
   });
+}
+
+/**
+ * Upload to the `videos` bucket via signed URL + XHR PUT — the path PROVEN to
+ * work in production (clips upload through it every day). Posters/photos ride
+ * the same path instead of the SDK's direct POST, which was silently 400ing.
+ * Returns the public URL.
+ */
+async function putViaSignedUrl(path: string, body: Blob, contentType: string, onProgress?: (pct: number) => void): Promise<string> {
+  const { data, error } = await supabase.storage.from('videos').createSignedUploadUrl(path);
+  if (error || !data?.signedUrl) throw mapSdkError(error ?? new Error('no signed url'));
+  const signed = data.signedUrl;
+  const url = signed.startsWith('http') ? signed : `${webEnv.supabaseUrl}/storage/v1${signed.startsWith('/storage/v1') ? signed.slice('/storage/v1'.length) : signed}`;
+  await xhrPut(url, body, contentType, onProgress);
+  return supabase.storage.from('videos').getPublicUrl(path).data.publicUrl;
 }
 
 /**
@@ -126,15 +184,15 @@ export async function uploadVideo(userId: string, file: File, onProgress?: (pct:
   const ext = (file.name.split('.').pop() || 'mp4').toLowerCase().replace(/[^a-z0-9]/g, '');
   const path = `${userId}/clip-${Date.now()}.${ext}`;
   try {
-    const { data, error } = await supabase.storage.from('videos').createSignedUploadUrl(path);
-    if (error || !data?.signedUrl) throw error ?? new Error('no signed url');
-    const signed = data.signedUrl;
-    const url = signed.startsWith('http') ? signed : `${webEnv.supabaseUrl}/storage/v1${signed.startsWith('/storage/v1') ? signed.slice('/storage/v1'.length) : signed}`;
-    await xhrPut(url, file, onProgress);
-  } catch {
-    // Reliable fallback (no granular progress).
+    await putViaSignedUrl(path, file, file.type || 'video/mp4', onProgress);
+  } catch (e) {
+    // A PERMANENT rejection (too large / permission / mime) fails identically on a
+    // retry — surface the real reason instead of silently re-uploading the whole
+    // file a second time (the old flow doubled the wait, then failed anyway).
+    if (e instanceof StorageUploadError && e.permanent) throw e;
+    // Transient (network/5xx): one reliable SDK fallback (no granular progress).
     const { error } = await supabase.storage.from('videos').upload(path, file, { upsert: true, contentType: file.type || 'video/mp4' });
-    if (error) throw error;
+    if (error) throw mapSdkError(error);
   }
   onProgress?.(100);
   return supabase.storage.from('videos').getPublicUrl(path).data.publicUrl;
@@ -255,15 +313,11 @@ async function stripImageMetadata(file: File): Promise<Blob> {
 export async function uploadRecipeImage(userId: string, file: File): Promise<string> {
   const clean = await stripImageMetadata(file);
   const path = `${userId}/photo-${Date.now()}-${Math.random().toString(36).slice(2, 8)}.jpg`;
-  const { error } = await supabase.storage.from('videos').upload(path, clean, { upsert: true, contentType: 'image/jpeg' });
-  if (error) throw error;
-  return supabase.storage.from('videos').getPublicUrl(path).data.publicUrl;
+  return putViaSignedUrl(path, clean, 'image/jpeg');
 }
 
 /** Upload a captured poster frame to the user-scoped `videos` bucket. */
 export async function uploadPoster(userId: string, blob: Blob): Promise<string> {
   const path = `${userId}/poster-${Date.now()}.jpg`;
-  const { error } = await supabase.storage.from('videos').upload(path, blob, { upsert: true, contentType: 'image/jpeg' });
-  if (error) throw error;
-  return supabase.storage.from('videos').getPublicUrl(path).data.publicUrl;
+  return putViaSignedUrl(path, blob, 'image/jpeg');
 }

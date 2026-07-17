@@ -1,15 +1,13 @@
 import { useRef, useState, type CSSProperties } from 'react';
 import { Button, GlassButton } from '../controls';
-import { MAX_DURATION_SECONDS, MAX_UPLOAD_BYTES, type DirectUploadTicket, type PostType } from '@sizzle/shared';
+import { MAX_DURATION_SECONDS, MAX_UPLOAD_BYTES, type PostType } from '@sizzle/shared';
 import { useAuth } from '../../auth/useAuth';
 import { useRequireAuth } from '../../auth/useRequireAuth';
-import { useUploadRecipe, useVideoConfig, type UploadRecipeInput } from '../../data/queries';
-import { apiSend } from '../../lib/api';
+import { useUploadRecipe, useVideoConfig } from '../../data/queries';
 import { useSizzle } from '../../store';
 import { theme } from '../../theme';
-import { getVideoDuration, captureVideoPoster, uploadPoster, uploadRecipeImage, uploadToCloudflare, uploadVideo, uploadVideoTus } from '../../lib/storage';
-import { ApiError } from '../../lib/api';
-import { rememberLocalClip } from '../../lib/localClips';
+import { getVideoDuration, captureVideoPoster, uploadRecipeImage } from '../../lib/storage';
+import { useUploadTask, uploadErrorMessage, type UploadJob } from '../../lib/uploadTask';
 import { CameraRecorder } from '../CameraRecorder';
 import { NativeCameraRecorder } from '../NativeCameraRecorder';
 import { VideoTrimmer } from '../VideoTrimmer';
@@ -23,13 +21,6 @@ const useNativeCamera = isNative && Capacitor.isPluginAvailable('CameraPreview')
 import { CameraIcon } from '../icons';
 
 const accent = theme.accent;
-
-// tus direct-to-Cloudflare is DISABLED in production. It stalls at 99% from the
-// iOS WKWebView (the byte transfer completes but Cloudflare's tus completion is
-// never confirmed — under investigation with a device console). Until it's proven
-// on a real device, native uploads use the Supabase-relay path that shipped
-// working in 1.0.45. Do NOT flip this on except behind a beta build + device test.
-const TRY_TUS = false;
 
 const field: CSSProperties = {
   width: '100%',
@@ -86,6 +77,7 @@ export function UploadSheet() {
   const [coverBlob, setCoverBlob] = useState<Blob | null>(null);
   const [coverUrl, setCoverUrl] = useState<string | null>(null);
   const [coverLoading, setCoverLoading] = useState(false);
+  const [durationSecs, setDurationSecs] = useState<number | null>(null);
   const [prepping, setPrepping] = useState(false);
   const [submitMode, setSubmitMode] = useState<'publish' | 'draft' | null>(null);
   const [progress, setProgress] = useState(0); // upload % (0–100)
@@ -93,12 +85,10 @@ export function UploadSheet() {
   const [recording, setRecording] = useState(false);
   const [trimming, setTrimming] = useState(false);
 
-  // Upload plumbing: abort the in-flight transfer on Cancel/close; a stable
-  // clientUploadId per picked clip makes a retried/double-tapped submit idempotent
-  // (server returns the same asset + recipe, never a duplicate); submittingRef is a
-  // SYNCHRONOUS double-tap guard (state updates lag a render, so two fast taps can
-  // both pass the canPost check).
-  const uploadAbortRef = useRef<AbortController | null>(null);
+  // Upload plumbing: a stable clientUploadId per picked clip makes a retried/
+  // double-tapped submit idempotent (server returns the same asset + recipe, never
+  // a duplicate); submittingRef is a SYNCHRONOUS double-tap guard (state updates
+  // lag a render, so two fast taps can both pass the canPost check).
   const clientUploadIdRef = useRef<string>('');
   const submittingRef = useRef(false);
 
@@ -122,8 +112,10 @@ export function UploadSheet() {
     });
 
   const acceptFile = (file: File) => {
+    // TRANSPARENT gates AT PICK — fail in 1 second with the real reason, not
+    // after minutes of upload the server would reject anyway.
     if (file.size > MAX_UPLOAD_BYTES) {
-      setVideoErr(`That file is too large (max ${Math.round(MAX_UPLOAD_BYTES / 1024 / 1024 / 1024)} GB).`);
+      setVideoErr(`That video is too large (${(file.size / 1073741824).toFixed(1)} GB — the limit is ${Math.round(MAX_UPLOAD_BYTES / 1073741824)} GB). Trim it or export at a lower quality.`);
       return;
     }
     if (videoUrl) URL.revokeObjectURL(videoUrl);
@@ -132,10 +124,20 @@ export function UploadSheet() {
     setPreviewAspect(0);
     setCoverBlob(null);
     setCoverUrl(null);
+    setDurationSecs(null);
     setVideoFile(file);
     setVideoUrl(URL.createObjectURL(file));
     // Fresh idempotency key per picked clip (retries of THIS clip reuse it).
     clientUploadIdRef.current = crypto.randomUUID();
+    // Duration gate too — read metadata now (fast) so an over-long clip is
+    // rejected at pick, and submit doesn't have to probe anything.
+    void getVideoDuration(file).then((d) => {
+      setDurationSecs(d);
+      if (d && d > MAX_DURATION_SECONDS) {
+        setVideoErr(`Videos can be up to ${Math.round(MAX_DURATION_SECONDS / 60)} minutes long — this one is ${Math.round(d / 60)} minutes.`);
+        setVideoFile(null);
+      }
+    });
     // Capture the static cover frame NOW (decode once, then release) so the composer
     // shows an image instead of a looping <video>. Best-effort + time-boxed; if it
     // can't grab a frame we fall back to a neutral placeholder and the poster is
@@ -158,24 +160,13 @@ export function UploadSheet() {
   };
 
   const close = () => {
-    // Abort any in-flight transfer so closing the sheet doesn't leave an upload
-    // running (and doesn't later surprise-publish it).
-    uploadAbortRef.current?.abort();
-    uploadAbortRef.current = null;
+    // Cancel = discard the picked media (a STARTED upload lives in the global
+    // task and keeps going — its object URLs belong to the task, not this sheet).
     if (videoUrl) URL.revokeObjectURL(videoUrl);
     if (coverUrl) URL.revokeObjectURL(coverUrl);
+    photos.forEach((p) => URL.revokeObjectURL(p.url));
     setUploadPrefill(null);
     setShowUpload(false);
-  };
-
-  /** Map an upload failure to a specific, honest user message (P0.4). */
-  const uploadErrorMessage = (e: unknown): string => {
-    if (e instanceof ApiError) {
-      if (e.status === 429) return "You've hit today's upload limit. Try again tomorrow.";
-      if (e.status === 401) return 'Your session expired — sign in again to post.';
-      if (e.status === 400 && e.message) return e.message;
-    }
-    return "Couldn't upload the video — check your connection and try again. Your draft is safe.";
   };
 
   const busy = prepping || coverLoading || upload.isPending;
@@ -196,82 +187,54 @@ export function UploadSheet() {
     const status = mode === 'draft' ? 'draft' : scheduleAt ? 'scheduled' : 'published';
     const scheduledAt = mode !== 'draft' && scheduleAt ? new Date(scheduleAt).toISOString() : undefined;
 
-    let video: UploadRecipeInput['video'];
-    let videoAssetId: string | undefined;
-    let images: string[] | undefined;
+    // TIKTOK-STYLE VIDEO POST: hand the whole upload+publish to the global
+    // background task, close the composer IMMEDIATELY, and land the user back on
+    // the feed — <UploadProgressTile> (top-left) shows live progress, then ✓, or
+    // the real failure reason with Retry. No more waiting on this screen.
     if (mediaKind === 'video' && videoFile && user) {
-      const controller = new AbortController();
-      uploadAbortRef.current = controller;
-      try {
-        setPrepping(true);
-        setProgress(0);
-        setVideoErr(null);
-        // Duration only (fast metadata) — gates the length limit. Never blocks.
-        const durationSeconds = await getVideoDuration(videoFile);
-        if (durationSeconds && durationSeconds > MAX_DURATION_SECONDS) {
-          bail(`Videos can be up to ${Math.round(MAX_DURATION_SECONDS / 60)} minutes long.`);
-          return;
-        }
-        // Upload the poster BEFORE the transfer, and reuse the cover we already
-        // captured on pick (no second decode). If the pick-time capture missed, try
-        // once more here — but never in parallel with the byte transfer: decoding and
-        // uploading the same 150+ MB file at once stalls the transfer's final flush
-        // (the "stuck at 99%" bug). Best-effort — Cloudflare's thumbnail is the backstop.
-        let posterUrl: string | undefined;
-        try {
-          const blob = coverBlob ?? await captureVideoPoster(videoFile);
-          if (blob) posterUrl = await uploadPoster(user.id, blob).catch(() => undefined);
-        } catch { /* best-effort; fall through without a poster */ }
-
-        // Experimental resumable tus path — OFF in production (see TRY_TUS above).
-        let tusOk = false;
-        if (TRY_TUS) {
-          try {
-            const ticket = await apiSend<DirectUploadTicket>('POST', '/uploads/tus', {
-              uploadLength: videoFile.size,
-              durationSeconds: durationSeconds ?? undefined,
-              clientUploadId: clientUploadIdRef.current,
-            });
-            if (ticket.resumed && ticket.videoAssetId) {
-              videoAssetId = ticket.videoAssetId; setProgress(99); tusOk = true;
-            } else if (ticket.provider === 'cloudflare-tus' && ticket.uploadUrl && ticket.videoAssetId) {
-              await uploadVideoTus(ticket.uploadUrl, videoFile, { onProgress: setProgress, signal: controller.signal });
-              videoAssetId = ticket.videoAssetId; setProgress(99); tusOk = true;
-            }
-          } catch (e) {
-            if ((e as Error)?.name === 'AbortError') { bail(); return; }
-            console.warn('[upload] tus path failed, falling back', e);
-          }
-        }
-
-        if (tusOk && videoAssetId) {
-          if (posterUrl) {
-            try { await apiSend('POST', `/uploads/video/${videoAssetId}/poster`, { posterUrl }); }
-            catch (e) { console.warn('[upload] set poster failed', e); }
-          }
-        } else if (videoConfig?.provider === 'cloudflare' && !isNative) {
-          // WEB browser: Cloudflare basic direct upload (delivers the multipart body fine).
-          const ticket = await apiSend<DirectUploadTicket>('POST', '/uploads/video', {});
-          await uploadToCloudflare(ticket.uploadUrl, videoFile, setProgress);
-          setProgress(99);
-          videoAssetId = ticket.videoAssetId;
-        } else {
-          // NATIVE — the PROVEN 1.0.45 path: upload to Supabase, server relays into
-          // Cloudflare. The poster was captured + uploaded above (sequentially), so the
-          // decoder is released and the transfer runs with the WebView's memory freed.
-          // Poster is passed inline so the post gets its instant thumbnail.
-          const uploadedUrl = await uploadVideo(user.id, videoFile, setProgress);
-          video = { uploadedUrl, posterUrl, durationSeconds: durationSeconds ?? undefined };
-        }
-      } catch (e) {
-        if ((e as Error)?.name === 'AbortError') { bail(); return; }
-        bail(uploadErrorMessage(e));
+      const recipeInput: UploadJob['input'] = {
+        title: title.trim(),
+        cuisine: cuisine.trim() || 'Home',
+        level: 'Easy',
+        timeMinutes: isReview ? 0 : parseInt(time, 10) || 15,
+        servings: isReview ? 1 : parseInt(servings, 10) || 2,
+        caption: caption.trim() || undefined,
+        ingredients: isReview ? [] : ingredients.split('\n').map((s) => s.trim()).filter(Boolean),
+        steps: isReview ? [] : steps.split('\n').map((s) => s.trim()).filter(Boolean),
+        macros: isReview ? undefined : buildMacros(calories, proteinG, carbsG, fatG),
+        postType,
+        rating: isReview && rating > 0 ? rating : undefined,
+        status,
+        scheduledAt,
+        originRecipeId: uploadPrefill?.originRecipeId,
+      };
+      const started = useUploadTask.getState().start({
+        userId: user.id,
+        file: videoFile,
+        coverBlob,
+        coverUrl,   // ownership moves to the task (tile art; it revokes on dismiss)
+        videoUrl,   // ownership moves to the task (instant self-playback)
+        durationSeconds: durationSecs ?? undefined,
+        input: recipeInput,
+        webDirect: videoConfig?.provider === 'cloudflare' && !isNative,
+        shareAfterPost: mode === 'publish' && !scheduleAt,
+      });
+      if (!started) {
+        bail('An upload is already in progress — let it finish first.');
         return;
-      } finally {
-        uploadAbortRef.current = null;
       }
-      setPrepping(false);
-    } else if (mediaKind === 'photo' && photos.length && user) {
+      photos.forEach((p) => URL.revokeObjectURL(p.url));
+      setUploadPrefill(null);
+      setShowUpload(false);
+      setTab('feed'); // back to the timeline, TikTok-style — the tile takes it from here
+      submittingRef.current = false;
+      setSubmitMode(null);
+      return;
+    }
+
+    // PHOTO POST (fast, stays inline): upload the carousel then create the recipe.
+    let images: string[] | undefined;
+    if (mediaKind === 'photo' && photos.length && user) {
       try {
         setPrepping(true);
         setProgress(0);
@@ -305,17 +268,11 @@ export function UploadSheet() {
         rating: isReview && rating > 0 ? rating : undefined,
         status,
         scheduledAt,
-        video,
-        videoAssetId,
         images,
         originRecipeId: uploadPrefill?.originRecipeId,
       },
       {
         onSuccess: (detail) => {
-          // Keep the local clip alive under its new recipe id — the feed/viewer
-          // play it INSTANTLY (TikTok-style) while Cloudflare transcodes.
-          if (videoUrl && detail?.id) rememberLocalClip(detail.id, videoUrl);
-          else if (videoUrl) URL.revokeObjectURL(videoUrl);
           photos.forEach((p) => URL.revokeObjectURL(p.url));
           setUploadPrefill(null);
           setShowUpload(false);
@@ -498,7 +455,7 @@ export function UploadSheet() {
             >
               Upload from library
             </Button>
-            <div style={{ color: 'rgba(255,255,255,.4)', fontSize: 12.5, textAlign: 'center', marginTop: 9 }}>Portrait or landscape · up to 30 min · 4K</div>
+            <div style={{ color: 'rgba(255,255,255,.4)', fontSize: 12.5, textAlign: 'center', marginTop: 9 }}>Portrait or landscape · up to 30 min · max 2 GB</div>
           </div>
         )}
 

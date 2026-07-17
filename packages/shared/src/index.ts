@@ -21,7 +21,11 @@ export type VideoStatus = 'pending' | 'uploading' | 'processing' | 'ready' | 'er
  * "too large". The server tus endpoint applies its own ceiling.
  */
 export const MAX_DURATION_SECONDS = 1800; // 30 minutes
-export const MAX_UPLOAD_BYTES = 15 * 1024 * 1024 * 1024; // 15 GiB sanity ceiling (duration is the real cap)
+// The REAL transport ceiling: uploads ride Supabase Storage (project global limit
+// and the videos bucket are both set to 2 GiB). Gate at pick time with an honest
+// message — letting a bigger file through means minutes of upload that the server
+// then rejects (the old silent "stuck at 99%" failure).
+export const MAX_UPLOAD_BYTES = 2 * 1024 * 1024 * 1024; // 2 GiB
 /** Longest supported side for a 4K upload (UHD 3840×2160 / DCI 4096). */
 export const MAX_VIDEO_LONG_SIDE = 4096;
 

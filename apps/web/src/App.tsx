@@ -43,6 +43,7 @@ import { ShoppingListSheet } from './components/sheets/ShoppingListSheet';
 import { CreatorSheet } from './components/sheets/CreatorSheet';
 import { SettingsSheet } from './components/sheets/SettingsSheet';
 import { UploadSheet } from './components/sheets/UploadSheet';
+import { UploadProgressTile } from './components/UploadProgressTile';
 import { CreateSheet } from './components/sheets/CreateSheet';
 import { useAuth } from './auth/useAuth';
 import { queryClient } from './data/queries';
@@ -489,6 +490,10 @@ export default function App() {
               {needsUsername ? <ChooseUsername /> : <Suspense fallback={<Splash />}><AppShell /></Suspense>}
             </ErrorBoundary>
           )}
+
+          {/* TikTok-style background-upload tile — top-left over the feed while a
+              post uploads; full-screen sheets (below) stack over it. */}
+          <UploadProgressTile />
 
           {viewer && <VideoViewer />}
           {showRecipe && <RecipeSheet />}
