@@ -6,6 +6,12 @@ Stack: **Node + TypeScript**, **Hono** API, **Supabase** (Postgres/Auth/Storage)
 
 ---
 
+## 2026-07-17 — Build 24 submitted for App Store review (replaces 23)
+
+- **Build 24** = build 23 + native PHPicker (`@capawesome/capacitor-file-picker`, `skipTranscoding`) — picking a library video is now instant (the WebView `<input>` made iOS re-encode the clip first: the 15-20s "preparing" wait). Binary-guarded; JS falls back to the input on build 23. Embeds web 1.0.59.
+- Canceled the build-23 submission (`asc-cancel-submission.mjs`, new tool), uploaded + validated build 24 (Apple Distribution, aps-environment production), attached to v1.0, **WAITING_FOR_REVIEW** (submission d6963947). Release type MANUAL — Branden presses Release on approval.
+- OTA **1.0.59**: cover capture via requestVideoFrameCallback (presented-frame signal) + seek fallback + retryable grab + stage diagnostics; 1.0.58 fixed the false "session expired" (fallback was the broken direct-POST path) and the tall-placeholder form push.
+
 ## 2026-07-17 (night) — The 5 architecture fixes, adversarially reviewed (1.0.57)
 
 All five audit criticals fixed, reviewed by a 3-lens adversarial workflow (11 unique findings — incl. a CRITICAL in my own first cut: the DELETE /me enqueue-before-deleteUser would have wiped a live user's storage if deleteUser failed; fixed with a transactional profiles trigger), then shipped:
