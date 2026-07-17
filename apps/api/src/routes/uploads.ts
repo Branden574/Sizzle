@@ -31,7 +31,14 @@ const registerSchema = z.object({
  *  - Otherwise it falls back to the stream provider (mock = instant sample HLS;
  *    Cloudflare = pending until the webhook fires) and returns a direct-upload ticket.
  */
-uploads.post('/video', requireAuth, rateLimit({ windowMs: 60_000, max: 20, name: 'upload' }), async (c) => {
+uploads.post(
+  '/video',
+  requireAuth,
+  rateLimit({ windowMs: 60_000, max: 20, name: 'upload' }),
+  // Daily quota: caps abandoned-slot / storage-abuse (one account could otherwise
+  // mint tens of thousands of Stream slots a day against the prepaid allotment).
+  rateLimit({ windowMs: 86_400_000, max: 50, name: 'upload-daily' }),
+  async (c) => {
   const userId = c.get('userId')!;
   const body = registerSchema.safeParse(await c.req.json().catch(() => ({})));
   // The no-arg provider path sends an empty body (all fields optional → parses ok).
@@ -62,27 +69,35 @@ uploads.post('/video', requireAuth, rateLimit({ windowMs: 60_000, max: 20, name:
     // the raw HEVC is never served to an incompatible client while transcoding.
     const streamProvider = getStreamProvider();
     if (cloudflareConfigured && streamProvider.ingestFromUrl) {
+      // Always keep the source URL so the finalize cron can RE-INGEST if the copy
+      // fails now (or fails to finish later) — instead of publishing raw HEVC that
+      // black-cards on Android/desktop AND skips thumbnail moderation entirely.
+      let providerUid: string | null = null;
       try {
-        const { providerUid } = await streamProvider.ingestFromUrl(provided.uploadedUrl);
-        const { data: asset, error } = await supabaseAdmin
-          .from('video_assets')
-          .insert({
-            owner_id: userId,
-            provider: 'cloudflare',
-            provider_uid: providerUid,
-            status: 'pending',
-            poster_url: provided.posterUrl ?? null,
-            duration_seconds: provided.durationSeconds ?? null,
-          })
-          .select('id')
-          .single();
-        if (!error && asset) {
-          return c.json<DirectUploadTicket>({ videoAssetId: asset.id, uploadUrl: '', provider: 'cloudflare' }, 201);
-        }
-        // Insert failed — fall through to the raw-storage asset below rather than lose the post.
-      } catch {
-        // Cloudflare copy failed — serve the raw upload rather than dead-end the post.
+        ({ providerUid } = await streamProvider.ingestFromUrl(provided.uploadedUrl));
+      } catch (err) {
+        console.error('[uploads] Cloudflare /copy failed — will re-ingest from source', {
+          userId, uploadedUrl: provided.uploadedUrl, err: String(err),
+        });
       }
+      const { data: asset, error } = await supabaseAdmin
+        .from('video_assets')
+        .insert({
+          owner_id: userId,
+          provider: 'cloudflare',
+          provider_uid: providerUid, // null when copy failed → cron re-ingests from source_url
+          status: 'pending',
+          poster_url: provided.posterUrl ?? null,
+          duration_seconds: provided.durationSeconds ?? null,
+          source_url: provided.uploadedUrl,
+        })
+        .select('id')
+        .single();
+      if (!error && asset) {
+        return c.json<DirectUploadTicket>({ videoAssetId: asset.id, uploadUrl: '', provider: 'cloudflare' }, 201);
+      }
+      console.error('[uploads] video_asset insert failed after copy', { userId, err: error?.message });
+      // Fall through to a raw-storage asset only if we couldn't even record the row.
     }
 
     const { data: asset, error } = await supabaseAdmin
@@ -94,6 +109,7 @@ uploads.post('/video', requireAuth, rateLimit({ windowMs: 60_000, max: 20, name:
         mp4_url: provided.uploadedUrl,
         poster_url: provided.posterUrl ?? null,
         duration_seconds: provided.durationSeconds ?? null,
+        source_url: provided.uploadedUrl,
       })
       .select('id')
       .single();
@@ -135,6 +151,12 @@ uploads.post('/webhook/cloudflare-stream', async (c) => {
   // Cloudflare signs with header "Webhook-Signature: time=<t>,sig1=<hmac>".
   const header = c.req.header('webhook-signature') ?? '';
   const parts = Object.fromEntries(header.split(',').map((p) => p.split('=') as [string, string]));
+  // Replay protection: reject a signature whose timestamp is stale (or absent).
+  // Without this, a single captured valid webhook can be replayed forever.
+  const ts = Number(parts.time);
+  if (!Number.isFinite(ts) || Math.abs(Date.now() / 1000 - ts) > 300) {
+    return c.json({ error: { code: 'unauthorized', message: 'Stale or missing signature timestamp' } }, 401);
+  }
   const expected = createHmac('sha256', secret).update(`${parts.time ?? ''}.${raw}`).digest('hex');
   const provided = parts.sig1 ?? '';
   const valid =

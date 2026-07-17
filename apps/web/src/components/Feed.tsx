@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { memo, useEffect, useRef, useState } from 'react';
 import { Button, GlassButton, IconButton, ReactionButton } from './controls';
 import { GlowButton } from './glow';
 import type { RecipeCard } from '@sizzle/shared';
@@ -101,6 +101,13 @@ export function Feed() {
  * whole scroller translates with the pull for a smooth, rubber-band settle.
  */
 function FeedList({ items, onRefresh, onEndReached }: { items: RecipeCard[]; onRefresh: () => Promise<unknown>; onEndReached?: () => void }) {
+  // Suppress feed video playback whenever a FULL-SCREEN overlay is up — otherwise
+  // the feed clip keeps streaming (Stream egress) and can double up audio behind
+  // a recipe/cook/upload/viewer surface. Partial sheets (comments, share) are
+  // intentionally excluded so under-sheet playback continues there.
+  const suppressed = useSizzle(
+    (s) => !!(s.openRecipe || s.cookFor || s.showUpload || s.viewer || s.openCook),
+  );
   const scrollRef = useRef<HTMLDivElement>(null);
   const sentinelRef = useRef<HTMLDivElement>(null);
   const onEndRef = useRef(onEndReached);
@@ -208,7 +215,7 @@ function FeedList({ items, onRefresh, onEndReached }: { items: RecipeCard[]; onR
       >
         {items.map((card) => (
           <ErrorBoundary key={card.id}>
-            <FeedCard card={card} />
+            <FeedCard card={card} suppressed={suppressed} />
           </ErrorBoundary>
         ))}
         <div ref={sentinelRef} style={{ height: 1 }} aria-hidden="true" />
@@ -264,7 +271,7 @@ function logView(recipeId: string, dwellMs: number) {
  * when `onClose` is provided it renders in "viewer" mode with a close control,
  * giving posted/saved videos the exact same TikTok-style player as the feed.
  */
-export function FeedCard({ card, onClose }: { card: RecipeCard; onClose?: () => void }) {
+export const FeedCard = memo(function FeedCard({ card, onClose, suppressed = false }: { card: RecipeCard; onClose?: () => void; suppressed?: boolean }) {
   const requireAuth = useRequireAuth();
   const authed = useAuth((s) => s.status === 'authed');
   const isReview = card.postType === 'review';
@@ -312,7 +319,10 @@ export function FeedCard({ card, onClose }: { card: RecipeCard; onClose?: () => 
     transition: 'opacity .28s ease',
   };
   const cardRef = useRef<HTMLDivElement>(null);
-  const [active, setActive] = useState(false);
+  const [visible, setVisible] = useState(false);
+  // Play only when on-screen AND not covered by a full-screen overlay (H): a
+  // recipe/cook/upload/viewer sheet suppresses the feed video underneath.
+  const active = visible && !suppressed;
   // `near` = within ~1 screen of the viewport. Only near cards mount a video
   // element (+ hls.js); far cards render just a poster. This keeps a handful of
   // decoders alive instead of one per feed item — the big Android perf win.
@@ -332,9 +342,9 @@ export function FeedCard({ card, onClose }: { card: RecipeCard; onClose?: () => 
     const obs = new IntersectionObserver(
       (entries) => {
         for (const e of entries) {
-          const visible = e.isIntersecting && e.intersectionRatio >= 0.6;
-          setActive(visible);
-          if (visible) {
+          const onScreen = e.isIntersecting && e.intersectionRatio >= 0.6;
+          setVisible(onScreen);
+          if (onScreen) {
             start = Date.now();
             // Swiping to a new video closes a comments sheet left open on the
             // previous one (it shouldn't hang over a different recipe).
@@ -414,7 +424,7 @@ export function FeedCard({ card, onClose }: { card: RecipeCard; onClose?: () => 
         <VideoPlayer src={videoSrc} poster={card.video?.posterUrl} active={active} immersive={immersive} />
       ) : (
         card.video?.posterUrl && (
-          <PosterImg src={card.video.posterUrl} alt="" decoding="async" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
+          <PosterImg src={card.video.posterUrl} alt="" decoding="async" loading="lazy" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />
         )
       )}
       {!videoSrc && !hasImages && (
@@ -572,4 +582,4 @@ export function FeedCard({ card, onClose }: { card: RecipeCard; onClose?: () => 
       </div>
     </div>
   );
-}
+});

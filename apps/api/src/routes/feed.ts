@@ -88,9 +88,13 @@ const CANDIDATES = 60;
 async function loadViewerSignals(userId: string): Promise<ViewerSignals> {
   const [profile, follows, reactions, saves, views, impressions, boosted] = await Promise.all([
     supabaseAdmin.from('profiles').select('tastes').eq('id', userId).maybeSingle(),
-    supabaseAdmin.from('follows').select('cook_id').eq('follower_id', userId),
-    supabaseAdmin.from('reactions').select('recipe_id, kind').eq('user_id', userId),
-    supabaseAdmin.from('saves').select('recipe_id').eq('user_id', userId),
+    supabaseAdmin.from('follows').select('cook_id').eq('follower_id', userId).limit(2000),
+    // Cap lifetime engagement to a recent window — the ranker only needs recent
+    // signals, and reading a heavy user's ENTIRE reaction/save history on every
+    // For You first page (then piping it into the .in() below) was both slow and a
+    // latent URL bomb. Ordered newest-first so the window is the most relevant.
+    supabaseAdmin.from('reactions').select('recipe_id, kind').eq('user_id', userId).order('created_at', { ascending: false }).limit(300),
+    supabaseAdmin.from('saves').select('recipe_id').eq('user_id', userId).order('created_at', { ascending: false }).limit(300),
     supabaseAdmin.from('recipe_views').select('recipe_id, skipped, completed').eq('user_id', userId).order('created_at', { ascending: false }).limit(200),
     supabaseAdmin.from('recipe_impressions').select('recipe_id').eq('user_id', userId).order('served_at', { ascending: false }).limit(200),
     // Admin-boosted creators (tiny set — only those an admin has lifted).
@@ -105,10 +109,19 @@ async function loadViewerSignals(userId: string): Promise<ViewerSignals> {
   const cookOf = new Map<string, string>();
   const tagsOf = new Map<string, string[]>();
   if (engaged.size) {
-    const { data: recs } = await supabaseAdmin.from('recipes').select('id, cook_id, tags').in('id', [...engaged]);
-    for (const r of recs ?? []) {
-      cookOf.set(r.id as string, r.cook_id as string);
-      tagsOf.set(r.id as string, (r.tags ?? []) as string[]);
+    // Chunk the id list — a single .in() with hundreds of UUIDs overruns the
+    // PostgREST URL limit and 400s. The previous code ignored that error, so a
+    // heavy user's personalization silently died. Chunk + surface failures.
+    const ids = [...engaged];
+    const CHUNK = 150;
+    for (let i = 0; i < ids.length; i += CHUNK) {
+      const batch = ids.slice(i, i + CHUNK);
+      const { data: recs, error: recErr } = await supabaseAdmin.from('recipes').select('id, cook_id, tags').in('id', batch);
+      if (recErr) { console.error('[feed] engaged-recipe lookup failed', { userId, err: recErr.message }); continue; }
+      for (const r of recs ?? []) {
+        cookOf.set(r.id as string, r.cook_id as string);
+        tagsOf.set(r.id as string, (r.tags ?? []) as string[]);
+      }
     }
   }
 
@@ -217,6 +230,10 @@ feed.get('/for-you', optionalAuth, async (c) => {
   const page = rows.slice(0, PAGE);
   const items = await buildCards(supabaseAdmin, userId, page);
   const res: FeedResponse = { items, nextCursor: hasMore ? page[page.length - 1]!.created_at : null };
+  // Guest feed is identical for everyone and was recomputed per request (no CDN
+  // cache). Edge-cache it briefly — NEVER for an authed viewer (personalized).
+  // Keyed by full URL, so cursor pages cache independently.
+  if (!userId) c.header('Cache-Control', 'public, s-maxage=30, stale-while-revalidate=120');
   return c.json(res);
 });
 
@@ -287,23 +304,14 @@ feed.get('/following', requireAuth, async (c) => {
   const userId = c.get('userId')!;
   const cursor = c.req.query('cursor');
 
-  const { data: follows, error: fErr } = await supabaseAdmin.from('follows').select('cook_id').eq('follower_id', userId);
-  if (fErr) throw dbFail(fErr.message);
-  // A muted (or blocked) followed cook drops out of the Following feed too.
-  const [muted, blocked] = await Promise.all([loadMutedIds(supabaseAdmin, userId), loadBlockedIds(supabaseAdmin, userId)]);
-  const cookIds = (follows ?? []).map((f) => f.cook_id as string).filter((id) => !muted.has(id) && !blocked.has(id));
-  if (cookIds.length === 0) return c.json<FeedResponse>({ items: [], nextCursor: null });
-
-  // Followed cooks' recipes (cursor-paginated).
-  let q = supabaseAdmin
-    .from('recipes')
-    .select('*')
-    .eq('status', 'published')
-    .in('cook_id', cookIds)
-    .order('created_at', { ascending: false })
-    .limit(PAGE + 1);
-  if (cursor) q = q.lt('created_at', cursor);
-  const { data, error } = await q;
+  // Followed cooks' published recipes via a server-side join RPC. NEVER fetch the
+  // follow list into JS and pipe it through a PostgREST .in() — that URL 400s at
+  // ~690 follows. Muted/blocked cooks (either direction) are excluded in the RPC.
+  const { data, error } = await supabaseAdmin.rpc('following_feed_recipes', {
+    p_user: userId,
+    p_cursor: cursor ?? null,
+    p_limit: PAGE + 1,
+  });
   if (error) throw dbFail(error.message);
   const rows = (data ?? []) as RecipeRow[];
   const hasMore = rows.length > PAGE;
@@ -314,12 +322,12 @@ feed.get('/following', requireAuth, async (c) => {
     .map((r) => ({ card: cardById.get(r.id), sortTime: r.created_at }))
     .filter((x): x is FeedItem => !!x.card);
 
-  // Reposts from mutual-follow friends (first page only).
+  // Reposts from mutual-follow friends (first page only) — mutual set via RPC so we
+  // don't fetch both the full follows and full followers lists into JS.
   let repostItems: FeedItem[] = [];
   if (!cursor) {
-    const { data: followers } = await supabaseAdmin.from('follows').select('follower_id').eq('cook_id', userId);
-    const followerSet = new Set((followers ?? []).map((f) => f.follower_id as string));
-    const mutual = cookIds.filter((id) => followerSet.has(id));
+    const { data: mutuals } = await supabaseAdmin.rpc('mutual_follow_ids', { p_user: userId });
+    const mutual = (mutuals ?? []).map((m: { cook_id: string }) => m.cook_id);
     repostItems = await buildRepostItems(userId, mutual);
   }
 

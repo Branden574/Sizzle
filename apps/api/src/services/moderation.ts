@@ -10,6 +10,15 @@ import { env } from '../env';
 export interface ModerationResult {
   ok: boolean;
   reason?: string;
+  /**
+   * True when a configured provider was consulted but could NOT return a verdict
+   * (non-2xx, timeout, network error). `ok` still defaults to true so existing
+   * fail-open callers (recipe photos, avatars) are unchanged — but a caller that
+   * must fail CLOSED (the video finalizer gating playability) can inspect this to
+   * defer instead of publishing unmoderated. Absent/false when no provider is
+   * configured (that's an intentional no-op, not an error).
+   */
+  providerError?: boolean;
 }
 
 // Minimal illustrative blocklist — the local safety net beneath the provider.
@@ -88,12 +97,16 @@ export async function moderateImages(urls: string[]): Promise<ModerationResult> 
       signal: ctrl.signal,
     });
     clearTimeout(timer);
-    if (!res.ok) return { ok: true }; // provider error → fail open
+    // Fail open by default (ok:true), but SIGNAL the error so a fail-closed caller
+    // (video finalizer) can defer instead of publishing an unmoderated frame. This
+    // is the common case right after Cloudflare marks a video ready: its thumbnail
+    // 404s for a few seconds, so the provider can't fetch it yet → non-2xx here.
+    if (!res.ok) return { ok: true, providerError: true };
     const data = (await res.json()) as { results?: Array<{ flagged?: boolean }> };
     if (data.results?.some((r) => r.flagged)) return { ok: false, reason: GUIDELINES };
     return { ok: true };
   } catch {
-    return { ok: true }; // network/timeout → fail open
+    return { ok: true, providerError: true }; // network/timeout → fail open, but flag it
   }
 }
 

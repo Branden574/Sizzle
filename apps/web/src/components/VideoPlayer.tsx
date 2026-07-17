@@ -77,6 +77,12 @@ export function VideoPlayer({ src, poster, active, immersive = false }: { src: s
     return () => {
       destroyed = true;
       hls?.destroy();
+      // Detach the native source on unmount so the decoder + buffer are released
+      // immediately (the iOS native-HLS path never used the hls.js buffer caps, so
+      // without this a fast scroll leaves media buffers piling up → WKWebView jetsam).
+      v.pause();
+      v.removeAttribute('src');
+      try { v.load(); } catch { /* element may already be detached */ }
     };
   }, [src]);
 

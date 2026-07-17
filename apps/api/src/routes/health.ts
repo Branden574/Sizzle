@@ -4,16 +4,38 @@ import { moderationConfigured } from '../services/moderation';
 import { emailConfigured } from '../services/email';
 import { sentryConfigured } from '../lib/sentry';
 import { pushStatus } from '../services/push';
+import { supabaseAdmin } from '../lib/supabase';
 import type { AppEnv } from '../types';
 
 export const health = new Hono<AppEnv>();
 
-health.get('/', (c) =>
+/** Count Cloudflare assets that should have finalized by now but haven't — a
+ *  non-zero, growing value means the finalize pipeline (cron/webhook) is stalled.
+ *  Best-effort: never fail the health check on a DB hiccup. */
+async function stuckVideoBacklog(): Promise<number | null> {
+  try {
+    const fifteenMinAgo = new Date(Date.now() - 15 * 60_000).toISOString();
+    const { count, error } = await supabaseAdmin
+      .from('video_assets')
+      .select('id', { count: 'exact', head: true })
+      .eq('provider', 'cloudflare')
+      .in('status', ['pending', 'uploading', 'processing'])
+      .lt('created_at', fifteenMinAgo);
+    return error ? null : count ?? 0;
+  } catch {
+    return null;
+  }
+}
+
+health.get('/', async (c) =>
   c.json({
     status: 'ok',
     service: 'sizzle-api',
     videoProvider: env.VIDEO_PROVIDER,
     cloudflareConfigured,
+    // Videos stuck in a non-ready state past the point they should have finalized.
+    // Growing = the finalize cron/webhook is failing; point uptime alerting here.
+    stuckVideoBacklog: await stuckVideoBacklog(),
     // UGC filtering (Guideline 1.2) must never silently degrade: when this is
     // false in production, only the tiny local blocklist is filtering content.
     moderationConfigured,

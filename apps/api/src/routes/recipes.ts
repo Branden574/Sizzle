@@ -10,6 +10,7 @@ import { buildCards, canViewCookContent, commentDTO, loadBlockedIds, type Commen
 import { initialsOf, relativeTime } from '../lib/format';
 import { rateLimit } from '../middleware/rateLimit';
 import { moderate, moderateImages } from '../services/moderation';
+import { deleteAssetMedia } from '../services/videoFinalize';
 import { fileReport } from '../services/reports';
 import { parseHashtags } from '../services/hashtags';
 import { notify } from '../services/notify';
@@ -937,9 +938,18 @@ recipes.delete('/:id', requireAuth, async (c) => {
   }
   const { error } = await supabaseAdmin.from('recipes').delete().eq('id', id);
   if (error) throw dbFail(error.message);
-  // Best-effort: drop the now-orphaned video asset (and its storage object stays
-  // harmlessly; the mock/Cloudflare cleanup is out of scope here).
-  if (rec.video_asset_id) await supabaseAdmin.from('video_assets').delete().eq('id', rec.video_asset_id as string);
+  // Tear down the orphaned video asset AND its provider/storage media so deleted
+  // content stops being playable (App Store 5.1.1(v) / GDPR) and storage cost
+  // stops compounding. Best-effort; failures are logged, not surfaced to the user.
+  if (rec.video_asset_id) {
+    const { data: asset } = await supabaseAdmin
+      .from('video_assets')
+      .select('provider, provider_uid, source_url, mp4_url, poster_url')
+      .eq('id', rec.video_asset_id as string)
+      .maybeSingle();
+    if (asset) await deleteAssetMedia(asset);
+    await supabaseAdmin.from('video_assets').delete().eq('id', rec.video_asset_id as string);
+  }
   return c.json({ ok: true });
 });
 

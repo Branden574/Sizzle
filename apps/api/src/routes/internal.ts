@@ -35,48 +35,68 @@ internal.get('/finalize-videos', async (c) => {
     const auth = c.req.header('authorization');
     if (auth !== `Bearer ${env.CRON_SECRET}`) return c.json({ error: 'unauthorized' }, 401);
   }
-  const twoHoursAgo = new Date(Date.now() - 2 * 3_600_000).toISOString();
-  // Recent, still-transcoding Cloudflare assets. Cap the batch; the next tick picks
-  // up the rest. Ordered oldest-first so nothing starves.
+  const now = Date.now();
+  const twoHoursAgo = new Date(now - 2 * 3_600_000).toISOString();
+  const sixHoursAgo = new Date(now - 6 * 3_600_000).toISOString();
+  // Still-in-flight Cloudflare assets, rechecked for up to 6h (a long 4K/30-min
+  // transcode legitimately outruns the old 2h window). No provider_uid filter — a
+  // /copy-failed row (provider_uid null, source_url set) is picked up here and the
+  // finalizer re-ingests it. Batch-capped, oldest-first so nothing starves.
   const { data: pending } = await supabaseAdmin
     .from('video_assets')
     .select('id, provider_uid')
     .eq('provider', 'cloudflare')
     .in('status', ['pending', 'uploading', 'processing'])
-    .not('provider_uid', 'is', null)
-    .gte('created_at', twoHoursAgo)
+    .gte('created_at', sixHoursAgo)
     .order('created_at', { ascending: true })
     .limit(40);
 
   let ready = 0;
   let errored = 0;
   let processing = 0;
+  let failed = 0;
   if (pending && pending.length) {
     const results = await Promise.all(
       pending.map((a) =>
-        finalizeProviderAsset(a.id as string, a.provider_uid as string).catch(() => null),
+        finalizeProviderAsset(a.id as string, (a.provider_uid as string) ?? '').catch((err) => {
+          // Was `.catch(() => null)` — a swallowed failure made a stuck video
+          // undebuggable. Surface it (Sentry once configured) and count it.
+          console.error('[finalize-cron] finalize failed', { assetId: a.id, err: String(err) });
+          return null;
+        }),
       ),
     );
     for (const r of results) {
-      if (!r) continue;
+      if (!r) { failed += 1; continue; }
       if (r.status === 'ready') ready += 1;
       else if (r.status === 'error') errored += 1;
       else processing += 1;
     }
   }
 
-  // Abandon anything still not transcoded after 2h — a real transcode never takes
-  // that long, so these are dead direct-upload slots (composer opened, no bytes
-  // sent). Mark 'error' so the sweep above stops re-polling them forever.
-  const { data: stale } = await supabaseAdmin
+  // Abandon ONLY dead upload slots: pending/uploading with no bytes after 2h
+  // (composer opened, upload never completed). Do NOT force-error 'processing'
+  // assets on the 2h timer — those ARE transcoding, and a CF backlog >2h would
+  // otherwise permanently brick healthy published posts. 'processing' gets a much
+  // longer 6h backstop (a real transcode never takes that long → genuinely stuck).
+  const { data: staleUploads } = await supabaseAdmin
     .from('video_assets')
     .update({ status: 'error' })
     .eq('provider', 'cloudflare')
-    .in('status', ['pending', 'uploading', 'processing'])
+    .in('status', ['pending', 'uploading'])
     .lt('created_at', twoHoursAgo)
     .select('id');
+  const { data: staleProcessing } = await supabaseAdmin
+    .from('video_assets')
+    .update({ status: 'error' })
+    .eq('provider', 'cloudflare')
+    .eq('status', 'processing')
+    .lt('created_at', sixHoursAgo)
+    .select('id');
+  const abandoned = (staleUploads?.length ?? 0) + (staleProcessing?.length ?? 0);
+  if (abandoned > 0) console.error('[finalize-cron] abandoned stale assets', { uploads: staleUploads?.length ?? 0, processing: staleProcessing?.length ?? 0 });
 
-  return c.json({ checked: pending?.length ?? 0, ready, errored, processing, abandoned: stale?.length ?? 0 });
+  return c.json({ checked: pending?.length ?? 0, ready, errored, processing, failed, abandoned });
 });
 
 /**
