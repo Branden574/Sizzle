@@ -143,6 +143,20 @@ export function ShareIcon({ size = 30, stroke = '#fff', strokeWidth = 1.8 }: Ico
   );
 }
 
+/** Distinct "share" glyph (three connected nodes) — used where a paper-plane
+ *  would collide visually with the Messages/DM send icon (e.g. the profile
+ *  Share button next to Messages). */
+export function ShareNodesIcon({ size = 30, stroke = '#fff', strokeWidth = 1.8 }: IconBase) {
+  return (
+    <svg width={size} height={size} viewBox="0 0 24 24" fill="none">
+      <circle cx="18" cy="5" r="3" stroke={stroke} strokeWidth={strokeWidth} />
+      <circle cx="6" cy="12" r="3" stroke={stroke} strokeWidth={strokeWidth} />
+      <circle cx="18" cy="19" r="3" stroke={stroke} strokeWidth={strokeWidth} />
+      <path d="M8.6 13.5l6.8 4M15.4 6.5l-6.8 4" stroke={stroke} strokeWidth={strokeWidth} strokeLinecap="round" />
+    </svg>
+  );
+}
+
 export function PlusIcon({ size = 14, stroke = '#fff', strokeWidth = 3 }: IconBase) {
   return (
     <svg width={size} height={size} viewBox="0 0 24 24" fill="none">

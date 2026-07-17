@@ -10,7 +10,7 @@ import { cookShareUrl } from '../lib/share';
 import { useShopping } from '../lib/shopping';
 import { VerifiedBadge } from './VerifiedBadge';
 import { SocialLinks } from './SocialLinks';
-import { BellIcon, BookmarkIcon, GearIcon, HeartIcon, ShareIcon } from './icons';
+import { BellIcon, BookmarkIcon, GearIcon, HeartIcon, ShareNodesIcon } from './icons';
 import { PosterImg } from './PosterImg';
 
 const BANNER = 'radial-gradient(120% 120% at 70% 0%, var(--saffron,#f4a52c), var(--accent,#ff5a36) 60%, #c23a1a)';
@@ -116,7 +116,7 @@ export function Profile() {
             variant="outline"
             shape="square"
           >
-            <ShareIcon size={19} stroke="var(--text-muted)" strokeWidth={2} />
+            <ShareNodesIcon size={19} stroke="var(--text-muted)" strokeWidth={2} />
           </IconButton>
           <IconButton
             onClick={() => setShowAppSettings(true)}
