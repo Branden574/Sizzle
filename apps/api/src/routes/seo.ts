@@ -76,7 +76,7 @@ seo.get('/:id', async (c) => {
 
   const html = `<!doctype html>
 <html lang="en"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="apple-touch-icon" sizes="180x180" href="${env.APP_ORIGIN}/apple-touch-icon.png"><link rel="icon" href="${env.APP_ORIGIN}/favicon.ico">
 <title>${esc(title)} · Sizzle</title>
 <meta name="description" content="${esc(desc)}">
 <link rel="canonical" href="${esc(url)}">
@@ -121,7 +121,7 @@ seo.get('/:id', async (c) => {
 });
 
 function page404(): string {
-  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><title>Recipe not found · Sizzle</title><meta name="robots" content="noindex"><style>body{margin:0;background:#0c0a09;color:#faf3ea;font-family:-apple-system,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center;text-align:center}a{color:#ff5a36}</style></head><body><div><h1>Recipe not found</h1><p>It may be private or removed. <a href="${env.APP_ORIGIN}">Explore Sizzle</a></p></div></body></html>`;
+  return `<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="apple-touch-icon" sizes="180x180" href="${env.APP_ORIGIN}/apple-touch-icon.png"><link rel="icon" href="${env.APP_ORIGIN}/favicon.ico"><title>Recipe not found · Sizzle</title><meta name="robots" content="noindex"><style>body{margin:0;background:#0c0a09;color:#faf3ea;font-family:-apple-system,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center;text-align:center}a{color:#ff5a36}</style></head><body><div><h1>Recipe not found</h1><p>It may be private or removed. <a href="${env.APP_ORIGIN}">Explore Sizzle</a></p></div></body></html>`;
 }
 
 /**
@@ -151,7 +151,7 @@ seoProfile.get('/:handle', async (c) => {
   if (p.private) {
     const html = `<!doctype html>
 <html lang="en"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="apple-touch-icon" sizes="180x180" href="${env.APP_ORIGIN}/apple-touch-icon.png"><link rel="icon" href="${env.APP_ORIGIN}/favicon.ico">
 <title>${esc(name)} (@${esc(p.handle as string)}) · Sizzle</title>
 <meta name="robots" content="noindex">
 <meta property="og:type" content="profile">
@@ -199,7 +199,7 @@ seoProfile.get('/:handle', async (c) => {
 
   const html = `<!doctype html>
 <html lang="en"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="apple-touch-icon" sizes="180x180" href="${env.APP_ORIGIN}/apple-touch-icon.png"><link rel="icon" href="${env.APP_ORIGIN}/favicon.ico">
 <title>${esc(name)} (@${esc(p.handle as string)}) · Sizzle</title>
 <meta name="description" content="${esc(desc)}">
 <link rel="canonical" href="${esc(url)}">
@@ -282,7 +282,7 @@ seoBoard.get('/:id', async (c) => {
 
   const html = `<!doctype html>
 <html lang="en"><head>
-<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1"><link rel="apple-touch-icon" sizes="180x180" href="${env.APP_ORIGIN}/apple-touch-icon.png"><link rel="icon" href="${env.APP_ORIGIN}/favicon.ico">
 <title>${esc(title)}</title>
 <meta name="description" content="${esc(desc)}">
 <meta property="og:type" content="website">
