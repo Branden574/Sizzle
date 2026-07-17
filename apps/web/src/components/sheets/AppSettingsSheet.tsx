@@ -30,7 +30,10 @@ async function resolveVersionLabel(): Promise<string> {
     const { CapacitorUpdater } = await import('@capgo/capacitor-updater');
     const cur = await CapacitorUpdater.current();
     const v = cur?.bundle?.version;
-    if (v && v !== 'builtin') ota = v;
+    // On the BUILTIN bundle the updater reports the native version ("1.0"), not
+    // a JS bundle version — only trust x.y.z-shaped values, else fall back to
+    // the build-time version baked into this JS.
+    if (v && v !== 'builtin' && v.split('.').length >= 3) ota = v;
   } catch { /* web or plugin absent */ }
   try {
     const { App } = await import('@capacitor/app');
