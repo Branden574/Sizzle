@@ -6,6 +6,18 @@ Stack: **Node + TypeScript**, **Hono** API, **Supabase** (Postgres/Auth/Storage)
 
 ---
 
+## 2026-07-17 (night) — The 5 architecture fixes, adversarially reviewed (1.0.57)
+
+All five audit criticals fixed, reviewed by a 3-lens adversarial workflow (11 unique findings — incl. a CRITICAL in my own first cut: the DELETE /me enqueue-before-deleteUser would have wiped a live user's storage if deleteUser failed; fixed with a transactional profiles trigger), then shipped:
+
+1. **Media teardown queue** — `pending_media_deletions` + BEFORE DELETE triggers on `video_assets` (CF refs) and `profiles` (whole-folder sweep, transactional with the account cascade). Finalize cron drains it: time-budgeted (12s), GDPR-priority (account/ban rows first), attempts++ only on REAL errors (pagination progress is free), parked rows surfaced every run. `deleteAssetMedia` now returns honest success (checks storage `.remove()` error; CF 404 = success).
+2. **Orphan GC** — `gc_orphan_video_assets(cutoff, max)` in the cron (6h, batch 50). Verified in prod BEFORE deploy: collected 6 (1 test fixture + **5 real leaked Cloudflare orphans**), trigger enqueued all 6. Recipe deletes also queue photo-carousel blobs (leaked forever before).
+3. **End-to-end idempotency** — `clientUploadId` on register (23505-race safe; the race loser's /copy asset is queued for teardown; resume backfills a retried poster); recipe-create 23505 → returns existing (no more 500); client retry resumes from checkpoints (never re-uploads finished bytes; checkpoints clear on 400 so a post-GC retry restarts cleanly).
+4. **Feed at scale** — far cards collapse to fixed-height poster shells (~7 full cards mounted max, zero scroll-geometry change — deliberately NOT maxPages: page-drop unmounts above the viewport and WKWebView has no scroll anchoring → visible jump); feeds staleTime 3 min; comment/follow/foreground invalidations stop replaying every cached page (`refetchType:'none'`), EXCEPT Following on follow/unfollow (membership changed → real refetch).
+5. **Memory leaks** — just-posted local clip blobs released when remote HLS takes over (viewer-guarded) + LRU cap 3 + release-on-delete; RecipeSheet header video detaches its native source on unmount (same WKWebView-jetsam fix as VideoPlayer).
+
+Still queued (documented, not launch-blocking): M7 storage-blob orphan sweep (blob uploaded, register never happened), native background uploader (build 24 + TestFlight), Sentry DSNs, immersive-toggle O(N) re-render, Marketing.tsx hero-film IO pause.
+
 ## 2026-07-16 (late) — Upload "stuck at 99%" ROOT CAUSE + TikTok background uploads (1.0.55)
 
 - **ROOT CAUSE of days of failed uploads:** Supabase's **project-global storage `fileSizeLimit` was 50 MB** (a default that silently overrides the videos bucket's 2 GiB limit). Every clip >50 MB transferred fully (→99%) then was rejected; the client showed nothing and blindly re-uploaded. Confirmed via storage logs + Management API; **raised to 2 GiB** via `PATCH /v1/projects/:ref/config/storage` (instant, no deploy). Branden's 154 MB clip posted immediately after.
