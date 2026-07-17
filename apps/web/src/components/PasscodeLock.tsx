@@ -121,6 +121,10 @@ function Pad({ onComplete, clearSignal, errorSignal }: { onComplete: (pin: strin
 function Shell({ children }: { children: ReactNode }) {
   return (
     <div
+      // Exempted from the sz-native-cam hiding rule (index.css) - the app-lock
+      // must stay visible and interactive OVER the camera recorder, or
+      // backgrounding mid-recording would silently bypass the lock.
+      className="sz-passcode-lock"
       style={{
         position: 'absolute',
         inset: 0,

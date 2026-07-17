@@ -418,7 +418,12 @@ export function UploadSheet() {
         useNativeCamera ? (
           <NativeCameraRecorder
             onClose={() => setRecording(false)}
-            onCapture={(file, path) => { acceptFile(file, path); setRecording(false); }}
+            onCapture={(file, path) => {
+              // Recordings are PATH-BASED (no bytes in JS) — same treatment as
+              // native picks: preview/probe from the file URL, upload from the path.
+              acceptFile(file, path, path ? { mediaSrc: Capacitor.convertFileSrc(path), size: file.size || 0 } : undefined);
+              setRecording(false);
+            }}
             onLibrary={() => { setRecording(false); void pickFromLibrary(); }}
           />
         ) : (

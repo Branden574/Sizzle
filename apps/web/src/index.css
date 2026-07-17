@@ -752,7 +752,7 @@ html.sz-native-cam .sz-upload-sheet {
 /* Hide EVERYTHING except the recorder's own overlay: the rest of the app behind
    the sheet, and the composer's header/body/footer — otherwise they bleed over the
    live preview. Only .sz-cam-overlay (the recorder) stays visible. */
-html.sz-native-cam .sz-app-layer > *:not(.sz-upload-sheet),
+html.sz-native-cam .sz-app-layer > *:not(.sz-upload-sheet):not(.sz-passcode-lock),
 html.sz-native-cam .sz-upload-sheet > *:not(.sz-cam-overlay) {
   visibility: hidden !important;
 }
