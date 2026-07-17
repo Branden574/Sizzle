@@ -62,17 +62,16 @@ export function VideoViewer() {
     if (!d.moved && dy > 8) { d.moved = true; setDragging(true); }
     if (d.moved) setDragY(Math.max(0, dy));
   };
-  const onStripUp = (e: React.PointerEvent) => {
+  const onStripUp = () => {
     const d = dragState.current;
     dragState.current = null;
     if (d?.moved) {
       setDragging(false);
       if (dragY > 110) { setDragY(0); close(); return; }
       setDragY(0);
-    } else if (d) {
-      // Clean tap: the strip covers the card's ✕ (top-left) — forward it.
-      if (e.clientX < 74 && e.clientY > 36 && e.clientY < 104) close();
     }
+    // A clean tap needs no forwarding: the strip now spans only the empty
+    // center, so the corner buttons (✕ / mute / ⋯) receive their own taps.
   };
 
   return (
@@ -93,13 +92,17 @@ export function VideoViewer() {
         ))}
       </div>
       {/* Top drag strip — swipe down here to dismiss (touchAction none so the
-          gesture doesn't fight the snap scroller underneath). */}
+          gesture doesn't fight the snap scroller underneath). Inset 76px on each
+          side so it clears the corner buttons (✕ / mute top-left, ⋯ top-right):
+          a full-width strip swallowed their taps — only ✕ was hand-forwarded, so
+          the ⋯ menu never opened. The center is empty, so drag-to-dismiss is
+          unaffected. */}
       <div
         onPointerDown={onStripDown}
         onPointerMove={onStripMove}
         onPointerUp={onStripUp}
         onPointerCancel={onStripUp}
-        style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 'calc(env(safe-area-inset-top, 0px) + 96px)', zIndex: 40, touchAction: 'none' }}
+        style={{ position: 'absolute', top: 0, left: 76, right: 76, height: 'calc(env(safe-area-inset-top, 0px) + 96px)', zIndex: 40, touchAction: 'none' }}
       />
     </div>
   );
