@@ -571,7 +571,19 @@ function RecipeHeaderVideo({ src, poster, onExpand }: { src: string; poster?: st
     } else {
       v.src = src;
     }
-    return () => { destroyed = true; hls?.destroy(); };
+    return () => {
+      destroyed = true;
+      hls?.destroy();
+      // Detach the native source too (same teardown as VideoPlayer): on iOS the
+      // .m3u8 plays natively (hls is null), and without pause + src removal the
+      // decoder/buffers survive unmount — opening recipe sheets repeatedly piles
+      // them up until the WKWebView is jetsammed.
+      try {
+        v.pause();
+        v.removeAttribute('src');
+        v.load();
+      } catch { /* already detached */ }
+    };
   }, [src]);
 
   const toggle = () => {

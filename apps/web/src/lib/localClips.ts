@@ -7,9 +7,19 @@
  */
 const clips = new Map<string, string>();
 
+// Each entry pins the FULL clip blob (up to 150+ MB) in WebView memory, so cap
+// the set: posting several clips in one session must not accumulate gigabytes.
+// Map iteration order = insertion order, so the first key is the oldest.
+const MAX_CLIPS = 3;
+
 /** Remember the just-posted clip's object URL under its new recipe id. */
 export function rememberLocalClip(recipeId: string, objectUrl: string): void {
+  releaseLocalClip(recipeId); // re-posting the same id must not leak the old URL
   clips.set(recipeId, objectUrl);
+  while (clips.size > MAX_CLIPS) {
+    const oldest = clips.keys().next().value as string;
+    releaseLocalClip(oldest);
+  }
 }
 
 /** The local object URL for a recipe's clip, if this session posted it. */

@@ -218,6 +218,7 @@ export function UploadSheet() {
         input: recipeInput,
         webDirect: videoConfig?.provider === 'cloudflare' && !isNative,
         shareAfterPost: mode === 'publish' && !scheduleAt,
+        clientUploadId: clientUploadIdRef.current,
       });
       if (!started) {
         bail('An upload is already in progress — let it finish first.');

@@ -34,6 +34,11 @@ export interface UploadJob {
   webDirect: boolean;
   /** Pop the share moment when the post goes live (publish only, not draft/scheduled). */
   shareAfterPost: boolean;
+  /** Idempotency key (one per picked clip) — server returns the same asset on a retry. */
+  clientUploadId: string;
+  /** Retry checkpoints: filled as steps complete so Retry RESUMES (a publish-step
+   *  failure must not re-upload 150 MB of already-transferred video). */
+  ck?: { posterUrl?: string; uploadedUrl?: string; videoAssetId?: string };
 }
 
 export type UploadTaskStatus = 'idle' | 'uploading' | 'publishing' | 'done' | 'error';
@@ -73,41 +78,57 @@ export function uploadErrorMessage(e: unknown): string {
 
 async function run(job: UploadJob, set: (s: Partial<UploadTaskState>) => void, get: () => UploadTaskState): Promise<void> {
   set({ status: 'uploading', progress: 0, error: null, coverUrl: job.coverUrl, title: job.input.title, job });
+  const ck = (job.ck ??= {});
   try {
     // 1. Poster first (small, sequential — never contends with the transfer).
     //    Best-effort, but LOUD on failure so it can't silently regress again.
-    let posterUrl: string | undefined;
-    if (job.coverBlob) {
+    if (job.coverBlob && !ck.posterUrl) {
       try {
-        posterUrl = await uploadPoster(job.userId, job.coverBlob);
+        ck.posterUrl = await uploadPoster(job.userId, job.coverBlob);
       } catch (e) {
         const se = e as StorageUploadError;
         console.error(`[upload] poster upload FAILED (${se.status ?? '?'}): ${se.message ?? e}`);
       }
     }
+    const posterUrl = ck.posterUrl;
 
-    // 2. The byte transfer.
+    // 2. The byte transfer (skipped on Retry when a checkpoint says it's done).
     let detail: RecipeDetail;
     if (job.webDirect) {
       // Web browser: straight to Cloudflare (multipart works outside the WKWebView).
-      const ticket = await apiSend<DirectUploadTicket>('POST', '/uploads/video', {});
-      await uploadToCloudflare(ticket.uploadUrl, job.file, (p) => set({ progress: p }));
+      // A basic direct-upload URL is one-shot, so this leg restarts on Retry unless
+      // the asset checkpoint proves the bytes already landed.
+      if (!ck.videoAssetId) {
+        const ticket = await apiSend<DirectUploadTicket>('POST', '/uploads/video', {});
+        await uploadToCloudflare(ticket.uploadUrl, job.file, (p) => set({ progress: p }));
+        ck.videoAssetId = ticket.videoAssetId;
+      }
       set({ status: 'publishing', progress: 99 });
       if (posterUrl) {
-        try { await apiSend('POST', `/uploads/video/${ticket.videoAssetId}/poster`, { posterUrl }); }
+        try { await apiSend('POST', `/uploads/video/${ck.videoAssetId}/poster`, { posterUrl }); }
         catch (e) { console.warn('[upload] set poster failed', e); }
       }
-      detail = await apiSend<RecipeDetail>('POST', '/recipes', { ...job.input, videoAssetId: ticket.videoAssetId });
-      finalizeVideoAsset(ticket.videoAssetId, queryClient, detail.id);
+      // POST /recipes dedupes on videoAssetId server-side — a retried create
+      // returns the existing recipe instead of publishing a duplicate.
+      detail = await apiSend<RecipeDetail>('POST', '/recipes', { ...job.input, videoAssetId: ck.videoAssetId });
+      finalizeVideoAsset(ck.videoAssetId, queryClient, detail.id);
     } else {
       // Native (and web fallback): the PROVEN path — Supabase, server relays to Cloudflare.
-      const uploadedUrl = await uploadVideo(job.userId, job.file, (p) => set({ progress: p }));
+      if (!ck.uploadedUrl) {
+        ck.uploadedUrl = await uploadVideo(job.userId, job.file, (p) => set({ progress: p }));
+      }
       set({ status: 'publishing', progress: 99 });
-      const ticket = await apiSend<DirectUploadTicket>('POST', '/uploads/video', {
-        uploadedUrl, posterUrl, durationSeconds: job.durationSeconds,
-      });
-      detail = await apiSend<RecipeDetail>('POST', '/recipes', { ...job.input, videoAssetId: ticket.videoAssetId });
-      if (ticket.provider === 'cloudflare') finalizeVideoAsset(ticket.videoAssetId, queryClient, detail.id);
+      if (!ck.videoAssetId) {
+        // clientUploadId makes the register idempotent: a retry after a lost
+        // response gets the SAME asset back (no duplicate row/transcode).
+        const ticket = await apiSend<DirectUploadTicket>('POST', '/uploads/video', {
+          uploadedUrl: ck.uploadedUrl, posterUrl, durationSeconds: job.durationSeconds,
+          clientUploadId: job.clientUploadId,
+        });
+        ck.videoAssetId = ticket.videoAssetId;
+      }
+      detail = await apiSend<RecipeDetail>('POST', '/recipes', { ...job.input, videoAssetId: ck.videoAssetId });
+      finalizeVideoAsset(ck.videoAssetId, queryClient, detail.id);
     }
 
     // 3. Post-publish: instant self-playback + refresh every surface that shows the post.
@@ -128,6 +149,14 @@ async function run(job: UploadJob, set: (s: Partial<UploadTaskState>) => void, g
     }, 3500);
   } catch (e) {
     console.error('[upload] task failed:', e);
+    // A 400 on publish/register means the checkpointed asset is gone or invalid
+    // (e.g. the user left the error tile overnight and the 6h orphan GC collected
+    // the asset + source blob). Clear the checkpoints so Retry restarts the
+    // transfer from the still-on-device file instead of failing forever.
+    if (e instanceof ApiError && e.status === 400) {
+      ck.videoAssetId = undefined;
+      ck.uploadedUrl = undefined;
+    }
     set({ status: 'error', error: uploadErrorMessage(e) });
   }
 }

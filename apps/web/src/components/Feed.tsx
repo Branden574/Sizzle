@@ -10,7 +10,7 @@ import { useSizzle } from '../store';
 import { theme } from '../theme';
 import { formatCount } from '../lib/format';
 import { VideoPlayer } from './VideoPlayer';
-import { getLocalClip } from '../lib/localClips';
+import { getLocalClip, releaseLocalClip } from '../lib/localClips';
 import { ImageCarousel } from './ImageCarousel';
 import { VerifiedBadge } from './VerifiedBadge';
 import { Hashtags } from './Hashtags';
@@ -327,6 +327,13 @@ export const FeedCard = memo(function FeedCard({ card, onClose, suppressed = fal
   // element (+ hls.js); far cards render just a poster. This keeps a handful of
   // decoders alive instead of one per feed item — the big Android perf win.
   const [near, setNear] = useState(false);
+  // `nearDom` = within ~4 screens. Cards outside it collapse to a fixed-height
+  // poster shell (1 node) instead of the full ~50-node card DOM — without this a
+  // deep scroll session keeps EVERY card's subtree + observers mounted forever
+  // and the WKWebView eventually jetsams the app. The shell keeps the exact card
+  // height, so scroll geometry (and snap) never shifts. Starts true so the first
+  // paint of a freshly-mounted card never flashes empty.
+  const [nearDom, setNearDom] = useState(true);
   const like = useToggleLike();
   const dislike = useToggleDislike();
   const save = useToggleSave();
@@ -366,10 +373,18 @@ export const FeedCard = memo(function FeedCard({ card, onClose, suppressed = fal
       { rootMargin: '120% 0px 120% 0px', threshold: 0 },
     );
     nearObs.observe(el);
+    // DOM window (see nearDom above) — generous margin so normal swiping never
+    // sees a card build itself; only far-away cards drop their subtree.
+    const domObs = new IntersectionObserver(
+      (entries) => { for (const e of entries) setNearDom(e.isIntersecting); },
+      { rootMargin: '400% 0px 400% 0px', threshold: 0 },
+    );
+    domObs.observe(el);
     return () => {
       if (start && authed) logView(card.id, Date.now() - start);
       obs.disconnect();
       nearObs.disconnect();
+      domObs.disconnect();
     };
   }, [authed, card.id]);
 
@@ -394,6 +409,19 @@ export const FeedCard = memo(function FeedCard({ card, onClose, suppressed = fal
   const showComments = controls.commentsEnabled;
   const hideCount = !controls.countsVisible;
 
+  // Once the remote HLS is what this card plays, the just-posted local clip's
+  // in-memory blob (up to 150+ MB) is dead weight — release it. Without this,
+  // every clip posted in a session stayed pinned in memory until app restart.
+  // EXCEPT while the full-screen viewer holds this recipe: it renders from a
+  // zustand snapshot that may still be playing the local blob — revoking it
+  // there would black the player mid-watch. (The LRU cap still bounds memory.)
+  useEffect(() => {
+    if (!remoteSrc) return;
+    const v = useSizzle.getState().viewer;
+    if (v?.items.some((i) => i.id === card.id)) return;
+    releaseLocalClip(card.id);
+  }, [remoteSrc, card.id]);
+
   const gated = (fn: () => void) => () => {
     if (!requireAuth()) return;
     fn();
@@ -406,6 +434,16 @@ export const FeedCard = memo(function FeedCard({ card, onClose, suppressed = fal
     if (!requireAuth()) return;
     setSendRecipeFor({ id: card.id, title: card.title });
   };
+
+  // Far-away card: fixed-height poster shell only (see nearDom above).
+  if (!nearDom) {
+    const shellPoster = hasImages ? card.images[0] : card.video?.posterUrl;
+    return (
+      <div ref={cardRef} style={{ position: 'relative', height: 'var(--app-h)', scrollSnapAlign: 'start', scrollSnapStop: 'always', overflow: 'hidden', background: card.bg }}>
+        {shellPoster && <img src={shellPoster} alt="" loading="lazy" style={{ position: 'absolute', inset: 0, width: '100%', height: '100%', objectFit: 'cover' }} />}
+      </div>
+    );
+  }
 
   return (
     <div

@@ -10,7 +10,6 @@ import { buildCards, canViewCookContent, commentDTO, loadBlockedIds, type Commen
 import { initialsOf, relativeTime } from '../lib/format';
 import { rateLimit } from '../middleware/rateLimit';
 import { moderate, moderateImages } from '../services/moderation';
-import { deleteAssetMedia } from '../services/videoFinalize';
 import { fileReport } from '../services/reports';
 import { parseHashtags } from '../services/hashtags';
 import { notify } from '../services/notify';
@@ -211,6 +210,17 @@ recipes.post('/', requireAuth, requireNotBanned, rateLimit({ windowMs: 60_000, m
     })
     .select('id')
     .single();
+  // Race-safe idempotency: two concurrent creates for the same video asset both
+  // pass the SELECT check above; the unique index recipes_video_asset_uidx makes
+  // the loser land here — return the winner's recipe (200) instead of a 500.
+  if (error?.code === '23505' && input.videoAssetId) {
+    const { data: winner } = await supabaseAdmin
+      .from('recipes').select('id').eq('video_asset_id', input.videoAssetId).maybeSingle();
+    if (winner) {
+      const detail = await getRecipeDetail(userId, winner.id as string);
+      if (detail) return c.json(detail, 200);
+    }
+  }
   if (error || !recipe) throw dbFail(error?.message ?? 'Failed to create recipe');
 
   if (input.ingredients.length) {
@@ -939,7 +949,7 @@ recipes.delete('/:id/repost', requireAuth, async (c) => {
 recipes.delete('/:id', requireAuth, async (c) => {
   const id = assertUuid(c.req.param('id'), 'recipe');
   const userId = c.get('userId')!;
-  const { data: rec } = await supabaseAdmin.from('recipes').select('cook_id, video_asset_id').eq('id', id).maybeSingle();
+  const { data: rec } = await supabaseAdmin.from('recipes').select('cook_id, video_asset_id, image_urls').eq('id', id).maybeSingle();
   if (!rec) throw notFound('Recipe not found');
   if (rec.cook_id !== userId) {
     const { data: viewer } = await supabaseAdmin.from('profiles').select('role').eq('id', userId).maybeSingle();
@@ -947,17 +957,21 @@ recipes.delete('/:id', requireAuth, async (c) => {
   }
   const { error } = await supabaseAdmin.from('recipes').delete().eq('id', id);
   if (error) throw dbFail(error.message);
-  // Tear down the orphaned video asset AND its provider/storage media so deleted
-  // content stops being playable (App Store 5.1.1(v) / GDPR) and storage cost
-  // stops compounding. Best-effort; failures are logged, not surfaced to the user.
+  // Media teardown so deleted content stops being playable (App Store 5.1.1(v) /
+  // GDPR) and storage cost stops compounding. Deleting the asset ROW is enough:
+  // the video_assets BEFORE DELETE trigger snapshots its media refs into
+  // pending_media_deletions, and the finalize cron removes the Cloudflare asset +
+  // storage blobs within a minute — one queue covers every deletion path.
   if (rec.video_asset_id) {
-    const { data: asset } = await supabaseAdmin
-      .from('video_assets')
-      .select('provider, provider_uid, source_url, mp4_url, poster_url')
-      .eq('id', rec.video_asset_id as string)
-      .maybeSingle();
-    if (asset) await deleteAssetMedia(asset);
     await supabaseAdmin.from('video_assets').delete().eq('id', rec.video_asset_id as string);
+  }
+  // Photo posts: the carousel blobs aren't tracked by any asset row — queue them
+  // directly (they leaked forever before this).
+  const images = (rec.image_urls as string[] | null) ?? [];
+  if (images.length) {
+    await supabaseAdmin.from('pending_media_deletions').insert(
+      images.map((u) => ({ source_url: u, reason: 'recipe_delete' })),
+    );
   }
   return c.json({ ok: true });
 });

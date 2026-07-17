@@ -709,6 +709,12 @@ me.delete('/', async (c) => {
   // counts, total_likes) for this account's rows BEFORE the cascade removes them —
   // otherwise those counters stay permanently inflated.
   await supabaseAdmin.rpc('cleanup_user_counters', { uid: userId });
+  // Media teardown is TRANSACTIONAL with the deletion: BEFORE DELETE triggers on
+  // profiles (whole storage-folder sweep) and video_assets (Cloudflare assets)
+  // enqueue into pending_media_deletions inside the cascade, and the finalize
+  // cron drains it. Nothing is enqueued here on purpose — an API-side enqueue
+  // before deleteUser would destroy a still-live user's media if deleteUser
+  // failed after the insert committed.
   const { error } = await supabaseAdmin.auth.admin.deleteUser(userId);
   if (error) {
     console.error('account delete:', error.message);

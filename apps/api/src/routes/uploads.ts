@@ -23,6 +23,10 @@ const registerSchema = z.object({
   uploadedUrl: z.string().url().max(1000).optional(),
   posterUrl: z.string().url().max(1000).optional(),
   durationSeconds: z.number().int().min(0).max(MAX_DURATION_SECONDS).optional(),
+  // Idempotency key: one per picked clip on the client. A retried register (lost
+  // response, app resume) returns the SAME asset instead of minting a duplicate
+  // (which would double-transcode and could publish a duplicate post).
+  clientUploadId: z.string().uuid().optional(),
 });
 
 /**
@@ -60,6 +64,32 @@ uploads.post(
       throw badRequest('Video/poster URL must be in your own Supabase Storage folder for this project');
     }
 
+    // IDEMPOTENT RESUME: a register retry for the same picked clip returns the
+    // asset the first call created — no duplicate row, no second /copy transcode.
+    if (provided.clientUploadId) {
+      const { data: existing } = await supabaseAdmin
+        .from('video_assets')
+        .select('id, provider, poster_url, duration_seconds')
+        .eq('owner_id', userId)
+        .eq('client_upload_id', provided.clientUploadId)
+        .maybeSingle();
+      if (existing) {
+        // Backfill fields the FIRST attempt was missing (e.g. its poster upload
+        // failed but the retry's succeeded) — otherwise the retried poster is
+        // silently dropped and the post ships without its chosen cover.
+        const patch: Record<string, unknown> = {};
+        if (provided.posterUrl && !existing.poster_url) patch.poster_url = provided.posterUrl;
+        if (provided.durationSeconds && !existing.duration_seconds) patch.duration_seconds = provided.durationSeconds;
+        if (Object.keys(patch).length) {
+          await supabaseAdmin.from('video_assets').update(patch).eq('id', existing.id as string);
+        }
+        return c.json<DirectUploadTicket>(
+          { videoAssetId: existing.id as string, uploadUrl: '', provider: existing.provider as string, resumed: true },
+          200,
+        );
+      }
+    }
+
     // When Cloudflare is configured, relay the uploaded clip into Stream for
     // transcoding — iOS records HEVC, which won't play on Android/older browsers,
     // and Cloudflare normalizes it to H.264/HLS that plays everywhere. The client
@@ -91,11 +121,35 @@ uploads.post(
           poster_url: provided.posterUrl ?? null,
           duration_seconds: provided.durationSeconds ?? null,
           source_url: provided.uploadedUrl,
+          client_upload_id: provided.clientUploadId ?? null,
         })
         .select('id')
         .single();
       if (!error && asset) {
         return c.json<DirectUploadTicket>({ videoAssetId: asset.id, uploadUrl: '', provider: 'cloudflare' }, 201);
+      }
+      // ANY failed insert abandons this request's just-/copy'd Cloudflare asset:
+      // no row references it, so orphan GC can never reach it. Queue it for
+      // teardown FIRST or the duplicate transcode is stored and billed forever.
+      if (providerUid) {
+        await supabaseAdmin.from('pending_media_deletions')
+          .insert({ provider: 'cloudflare', provider_uid: providerUid, reason: 'register_insert_failed' });
+      }
+      // Unique-violation = a concurrent retry won the insert race — return ITS asset
+      // (idempotent), don't fall through and mint a duplicate storage-provider row.
+      if (error?.code === '23505' && provided.clientUploadId) {
+        const { data: existing } = await supabaseAdmin
+          .from('video_assets')
+          .select('id, provider')
+          .eq('owner_id', userId)
+          .eq('client_upload_id', provided.clientUploadId)
+          .maybeSingle();
+        if (existing) {
+          return c.json<DirectUploadTicket>(
+            { videoAssetId: existing.id as string, uploadUrl: '', provider: existing.provider as string, resumed: true },
+            200,
+          );
+        }
       }
       console.error('[uploads] video_asset insert failed after copy', { userId, err: error?.message });
       // Fall through to a raw-storage asset only if we couldn't even record the row.
@@ -111,6 +165,7 @@ uploads.post(
         poster_url: provided.posterUrl ?? null,
         duration_seconds: provided.durationSeconds ?? null,
         source_url: provided.uploadedUrl,
+        client_upload_id: provided.clientUploadId ?? null,
       })
       .select('id')
       .single();

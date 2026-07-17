@@ -6,6 +6,7 @@ import { apiGet, apiSend, setAdminUnlockToken } from '../lib/api';
 import { syncBadge } from '../lib/badge';
 import { onExternalBrowserClosed } from '../lib/native';
 import { removeOffline, saveOffline } from '../lib/offline';
+import { releaseLocalClip } from '../lib/localClips';
 
 export const queryClient = new QueryClient({
   defaultOptions: { queries: { staleTime: 30_000, retry: 1, refetchOnWindowFocus: false } },
@@ -358,6 +359,16 @@ export function useUpdateNotifPref() {
 const feedPage = (path: string) => (cursor: string | null) =>
   apiGet<FeedResponse>(`${path}${cursor ? `?cursor=${encodeURIComponent(cursor)}` : ''}`);
 
+// Feed staleness (2026-07-16 audit): a refetch of an infinite query replays EVERY
+// cached page sequentially — after a deep scroll that's a dozen+ network calls ×
+// 2 feeds. So (a) feeds stay fresh for a few minutes (a quick tab bounce doesn't
+// replay the whole set), and (b) count-only mutations mark the feed stale WITHOUT
+// forcing an immediate replay (refetchType 'none' at the call sites). NOTE: no
+// maxPages here on purpose — dropping a page unmounts cards ABOVE the viewport
+// and WKWebView has no scroll anchoring, so the feed would visibly jump. DOM
+// growth is bounded in Feed.tsx instead (fixed-height shells, windowed content).
+const FEED_STALE_MS = 3 * 60_000;
+
 export function useForYouFeed() {
   const load = feedPage('/feed/for-you');
   return useInfiniteQuery({
@@ -365,6 +376,7 @@ export function useForYouFeed() {
     queryFn: ({ pageParam }) => load(pageParam),
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.nextCursor,
+    staleTime: FEED_STALE_MS,
   });
 }
 
@@ -377,6 +389,7 @@ export function useFollowingFeed() {
     initialPageParam: null as string | null,
     getNextPageParam: (last) => last.nextCursor,
     enabled: authed,
+    staleTime: FEED_STALE_MS,
   });
 }
 
@@ -519,7 +532,10 @@ export function useAddComment(recipeId: string) {
             : c,
         );
       });
-      void qc.invalidateQueries({ queryKey: ['feed'] }); // comment_count
+      // Count-only change: mark the feed stale WITHOUT replaying every cached page
+      // (a comment after a deep scroll used to fire a dozen+ refetches and re-rank
+      // the feed under the viewer). Fresh counts land on the next natural refetch.
+      void qc.invalidateQueries({ queryKey: ['feed'], refetchType: 'none' }); // comment_count
       void qc.invalidateQueries({ queryKey: keys.recipe(recipeId) });
     },
   });
@@ -576,7 +592,7 @@ export function useDeleteComment(recipeId: string) {
     // reconcile from the server rather than rolling back a shared snapshot.
     onError: () => void qc.invalidateQueries({ queryKey: key }),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['feed'] }); // comment_count
+      void qc.invalidateQueries({ queryKey: ['feed'], refetchType: 'none' }); // comment_count (no full replay)
       void qc.invalidateQueries({ queryKey: keys.recipe(recipeId) });
     },
   });
@@ -598,7 +614,7 @@ export function useHideComment(recipeId: string) {
     // reconcile from the server rather than rolling back a shared snapshot.
     onError: () => void qc.invalidateQueries({ queryKey: key }),
     onSuccess: () => {
-      void qc.invalidateQueries({ queryKey: ['feed'] });
+      void qc.invalidateQueries({ queryKey: ['feed'], refetchType: 'none' }); // count-only (no full replay)
       void qc.invalidateQueries({ queryKey: keys.recipe(recipeId) });
     },
   });
@@ -646,6 +662,7 @@ export function useDeleteRecipe() {
     onSuccess: (_d, recipeId) => {
       qc.removeQueries({ queryKey: keys.recipe(recipeId) });
       removeOffline(recipeId);
+      releaseLocalClip(recipeId); // free the pinned just-posted blob, if any
       // Prune the deleted card from the full-screen viewer's snapshot (it renders
       // from zustand, not the query cache) — otherwise the just-deleted video stays
       // on screen. Advance to the next clip, or close the viewer if it was the last.
@@ -1224,7 +1241,13 @@ export function useToggleFollow() {
     },
     onError: (_e, _v, ctx) => ctx && restore(qc, ctx.snap),
     onSettled: () => {
-      void qc.invalidateQueries({ queryKey: ['feed'] });
+      // For You: cards were already patched optimistically — mark stale without
+      // replaying every cached page (that also re-ranked the feed mid-watch).
+      // Following: follow/unfollow CHANGES ITS MEMBERSHIP (whose posts appear),
+      // so it must actually refetch or the new followee's posts never show up
+      // while the user stays on the feed tab.
+      void qc.invalidateQueries({ queryKey: keys.forYou, refetchType: 'none' });
+      void qc.invalidateQueries({ queryKey: keys.following });
       void qc.invalidateQueries({ queryKey: ['cook'] });
       void qc.invalidateQueries({ queryKey: keys.me });
     },

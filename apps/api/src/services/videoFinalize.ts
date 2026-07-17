@@ -11,11 +11,12 @@ function storagePathFromPublicUrl(url: string): string | null {
 }
 
 /**
- * Best-effort media teardown for a video asset — deletes the Cloudflare Stream
- * asset AND the raw Supabase Storage objects (source clip, mp4, poster). Called
- * on recipe deletion + account purge so deleted content stops being playable and
- * storage cost stops compounding. Never throws (deletion must not block the
- * user-facing delete); failures are logged for a reconciliation sweep.
+ * Media teardown for a video asset — deletes the Cloudflare Stream asset AND the
+ * raw Supabase Storage objects (source clip, mp4, poster). Never throws (a
+ * user-facing delete must not block on it), but RETURNS whether every target was
+ * actually removed — the deletion-queue drain relies on that to keep retrying
+ * instead of dropping a queue row whose Cloudflare delete quietly failed (which
+ * would leak a deleted user's video forever).
  */
 export async function deleteAssetMedia(asset: {
   provider?: string | null;
@@ -23,12 +24,19 @@ export async function deleteAssetMedia(asset: {
   source_url?: string | null;
   mp4_url?: string | null;
   poster_url?: string | null;
-}): Promise<void> {
+}): Promise<boolean> {
+  let ok = true;
   if (asset.provider === 'cloudflare' && asset.provider_uid) {
     try {
       await getStreamProvider().deleteAsset?.(asset.provider_uid);
     } catch (err) {
-      console.error('[delete] Cloudflare asset delete failed', { uid: asset.provider_uid, err: String(err) });
+      // A 404 means the asset is already gone — that IS success for teardown.
+      if (err instanceof AssetNotFoundError) {
+        /* already deleted */
+      } else {
+        console.error('[delete] Cloudflare asset delete failed', { uid: asset.provider_uid, err: String(err) });
+        ok = false;
+      }
     }
   }
   const paths = [asset.source_url, asset.mp4_url, asset.poster_url]
@@ -37,11 +45,18 @@ export async function deleteAssetMedia(asset: {
     .filter((p): p is string => !!p);
   if (paths.length) {
     try {
-      await supabaseAdmin.storage.from('videos').remove([...new Set(paths)]);
+      // supabase-js returns {error} without throwing — check it, don't assume.
+      const { error } = await supabaseAdmin.storage.from('videos').remove([...new Set(paths)]);
+      if (error) {
+        console.error('[delete] storage object remove failed', { paths, err: error.message });
+        ok = false;
+      }
     } catch (err) {
       console.error('[delete] storage object remove failed', { paths, err: String(err) });
+      ok = false;
     }
   }
+  return ok;
 }
 
 /**

@@ -265,7 +265,11 @@ export default function App() {
       if (isActive) {
         void queryClient.invalidateQueries({ queryKey: ['cook'] });
         void queryClient.invalidateQueries({ queryKey: ['me'] });
-        void queryClient.invalidateQueries({ queryKey: ['feed'] });
+        // Feed: mark stale only — refetching here replays EVERY cached page of
+        // BOTH feeds on every single foreground (a dozen+ calls after a deep
+        // scroll) and re-ranks For You under the user. Marked-stale pages
+        // refresh on the next natural mount/staleTime expiry instead.
+        void queryClient.invalidateQueries({ queryKey: ['feed'], refetchType: 'none' });
       }
     });
     return () => { void handle.then((l) => l.remove()); };
