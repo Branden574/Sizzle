@@ -17,6 +17,11 @@ import { FeedCard } from './Feed';
 export function VideoViewer() {
   const viewer = useSizzle((s) => s.viewer);
   const setViewer = useSizzle((s) => s.setViewer);
+  // Pause the viewer's video when a full-screen sheet opens OVER it (tapping a
+  // creator's name/avatar opens their profile above this viewer — the clip must
+  // stop, not keep playing audio underneath). Mirrors the feed's suppression;
+  // partial sheets (comments/share) intentionally let playback continue.
+  const suppressed = useSizzle((s) => !!(s.openRecipe || s.openCook || s.cookFor || s.showUpload));
   const scrollRef = useRef<HTMLDivElement>(null);
   const positioned = useRef(false);
 
@@ -83,7 +88,7 @@ export function VideoViewer() {
       <div ref={scrollRef} style={{ position: 'absolute', inset: 0, overflowY: 'scroll', scrollSnapType: 'y mandatory', overscrollBehaviorY: 'contain' }}>
         {viewer.items.map((card) => (
           <ErrorBoundary key={card.id}>
-            <FeedCard card={card} onClose={close} />
+            <FeedCard card={card} onClose={close} suppressed={suppressed} />
           </ErrorBoundary>
         ))}
       </div>
