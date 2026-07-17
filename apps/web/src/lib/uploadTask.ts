@@ -2,7 +2,7 @@ import { create } from 'zustand';
 import type { DirectUploadTicket, RecipeDetail } from '@sizzle/shared';
 import { queryClient, finalizeVideoAsset, type UploadRecipeInput } from '../data/queries';
 import { apiSend, ApiError } from './api';
-import { uploadPoster, uploadToCloudflare, uploadVideo, StorageUploadError } from './storage';
+import { uploadPoster, uploadToCloudflare, uploadVideo, captureVideoPoster, StorageUploadError } from './storage';
 import { rememberLocalClip } from './localClips';
 import { useSizzle } from '../store';
 
@@ -63,10 +63,12 @@ export function uploadErrorMessage(e: unknown): string {
       return 'That video is too large — the limit is 2 GB. Trim it or export at a lower quality and try again.';
     if (e.status === 415 || /mime|content.?type/i.test(e.message))
       return "That file type isn't supported — export it as MP4 or MOV and try again.";
-    if (e.status === 401 || e.status === 403 || /security|unauthorized|jwt|token/i.test(e.message))
+    // 401 only — a storage-side permission/RLS message is NOT proof the session
+    // expired (a signed-in user hit exactly this and got told to sign in again).
+    if (e.status === 401 || /jwt expired/i.test(e.message))
       return 'Your session expired — sign in again to post.';
     if (e.status === 0) return 'Lost connection during the upload — check your signal and retry.';
-    return `Upload failed: ${e.message}`;
+    return `Upload failed: ${e.message} — tap Retry.`;
   }
   if (e instanceof ApiError) {
     if (e.status === 429) return "You've hit today's upload limit. Try again tomorrow.";
@@ -81,7 +83,19 @@ async function run(job: UploadJob, set: (s: Partial<UploadTaskState>) => void, g
   const ck = (job.ck ??= {});
   try {
     // 1. Poster first (small, sequential — never contends with the transfer).
+    //    If the pick-time capture missed (slow decode on a big clip), try ONCE
+    //    more here — still before the byte transfer, so no decode contention.
     //    Best-effort, but LOUD on failure so it can't silently regress again.
+    if (!job.coverBlob) {
+      try {
+        job.coverBlob = await captureVideoPoster(job.file);
+        if (job.coverBlob && !get().coverUrl) {
+          const url = URL.createObjectURL(job.coverBlob);
+          job.coverUrl = url;
+          set({ coverUrl: url }); // late cover: the tile picks it up too
+        }
+      } catch { /* placeholder tile; Cloudflare thumbnail is the backstop */ }
+    }
     if (job.coverBlob && !ck.posterUrl) {
       try {
         ck.posterUrl = await uploadPoster(job.userId, job.coverBlob);

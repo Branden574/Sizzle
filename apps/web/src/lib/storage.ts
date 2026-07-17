@@ -190,9 +190,11 @@ export async function uploadVideo(userId: string, file: File, onProgress?: (pct:
     // retry — surface the real reason instead of silently re-uploading the whole
     // file a second time (the old flow doubled the wait, then failed anyway).
     if (e instanceof StorageUploadError && e.permanent) throw e;
-    // Transient (network/5xx): one reliable SDK fallback (no granular progress).
-    const { error } = await supabase.storage.from('videos').upload(path, file, { upsert: true, contentType: file.type || 'video/mp4' });
-    if (error) throw mapSdkError(error);
+    // Transient (network blip / 5xx): retry ONCE via a FRESH signed URL. Never the
+    // SDK's direct storage POST — that path 400s from the native app (it's what
+    // silently killed posters for weeks, and its RLS-shaped error mislabeled a
+    // mid-transfer network blip as "session expired").
+    await putViaSignedUrl(path, file, file.type || 'video/mp4', onProgress);
   }
   onProgress?.(100);
   return supabase.storage.from('videos').getPublicUrl(path).data.publicUrl;
@@ -231,9 +233,11 @@ export function getVideoDuration(file: File): Promise<number | null> {
  * frame data, briefly PLAY the muted clip (allowed: muted+playsInline), and grab
  * the first frame that's actually presented (timeupdate past 0). Runs BEFORE the
  * transfer (not in parallel — decoding + uploading the same large file at once
- * stalls the upload on iOS), so it's time-boxed tight (6s) to bound the delay it
- * adds. Best-effort: resolves null if it genuinely can't (the Cloudflare thumbnail
- * is the backstop) so it never blocks the post.
+ * stalls the upload on iOS). Time-boxed at 15s: capture happens at PICK (off the
+ * posting critical path), and 6s proved too tight for big clips on-device — the
+ * cover came back null, the composer showed a bare placeholder, and the post
+ * shipped without its chosen thumbnail. Best-effort: resolves null if it genuinely
+ * can't (the Cloudflare thumbnail is the backstop) so it never blocks the post.
  */
 export function captureVideoPoster(file: File): Promise<Blob | null> {
   return new Promise((resolve) => {
@@ -255,7 +259,7 @@ export function captureVideoPoster(file: File): Promise<Blob | null> {
       URL.revokeObjectURL(url);
       resolve(b);
     };
-    const timer = setTimeout(() => done(null), 6000);
+    const timer = setTimeout(() => done(null), 15000);
 
     const grab = () => {
       if (capturing) return;

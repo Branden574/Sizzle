@@ -396,7 +396,9 @@ export function UploadSheet() {
             )}
           </div>
         ) : videoUrl ? (
-          <div style={{ position: 'relative', borderRadius: 20, overflow: 'hidden', marginBottom: 18, aspectRatio: previewAspect > 1.05 ? '16 / 9' : '9 / 12', background: '#000', transition: 'aspect-ratio .25s ease' }}>
+          {/* No cover yet → keep the box SHORT (16/9) so the title/caption fields
+              stay above the fold; a captured portrait cover grows it to 9/12. */}
+          <div style={{ position: 'relative', borderRadius: 20, overflow: 'hidden', marginBottom: 18, aspectRatio: !coverUrl || previewAspect > 1.05 ? '16 / 9' : '9 / 12', background: '#000', transition: 'aspect-ratio .25s ease' }}>
             {/* Static cover — NOT a live <video>. See coverBlob note above. */}
             {coverUrl ? (
               <img
