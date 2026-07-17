@@ -1,4 +1,4 @@
-import { useRef, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { Button, DismissBackdrop } from './controls';
 import { useAuth } from '../auth/useAuth';
 import { useCreateCookLog } from '../data/queries';
@@ -21,6 +21,11 @@ export function MadeItPrompt({ recipeId, recipeTitle, onClose }: { recipeId: str
   const [uploading, setUploading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
+  // Free the picked-photo object URL on unmount (skip/close without saving would
+  // otherwise leak it). Ref-tracked so the cleanup sees the latest url.
+  const photoUrlRef = useRef<string | null>(null);
+  photoUrlRef.current = photo?.url ?? null;
+  useEffect(() => () => { if (photoUrlRef.current) URL.revokeObjectURL(photoUrlRef.current); }, []);
 
   const pickPhoto = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];

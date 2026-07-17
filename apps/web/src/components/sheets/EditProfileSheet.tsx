@@ -55,6 +55,11 @@ export function EditProfileSheet() {
 
   const avatarInput = useRef<HTMLInputElement>(null);
   const bannerInput = useRef<HTMLInputElement>(null);
+  // Free the crop preview's object URL if the sheet closes mid-crop (cancel/save
+  // already revoke it on their own paths; this covers the close-while-cropping leak).
+  const cropSrcRef = useRef<string | null>(null);
+  cropSrcRef.current = cropping?.src ?? null;
+  useEffect(() => () => { if (cropSrcRef.current) URL.revokeObjectURL(cropSrcRef.current); }, []);
 
   // If the sheet mounted before `me` loaded (cold cache), the fields seeded to
   // '' — re-seed them once `me` arrives so Save can't PATCH empty values that

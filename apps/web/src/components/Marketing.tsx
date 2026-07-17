@@ -247,12 +247,18 @@ export function Marketing({ onGetStarted, onLogin }: { onGetStarted: () => void;
   // don't eagerly download or keep a decoder running off-screen all session.
   useEffect(() => {
     if (window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
-    const vids = Array.from(root.current?.querySelectorAll<HTMLVideoElement>('.feat-film, .trust-film') ?? []);
+    // Also pause the story-bg hero films when off-screen. On desktop these are
+    // scroll-SCRUBBED (buildFilm removes autoplay/loop and marks the stage
+    // .is-scrub) — the callback skips those so it never fights the scrub. On
+    // mobile they keep the autoplay-loop fallback, and without this all three
+    // decoded/looped at once off-screen (battery/data/heat on the landing page).
+    const vids = Array.from(root.current?.querySelectorAll<HTMLVideoElement>('.feat-film, .trust-film, .story-bg') ?? []);
     if (!vids.length || typeof IntersectionObserver === 'undefined') return;
     const io = new IntersectionObserver(
       (entries) => {
         for (const e of entries) {
           const v = e.target as HTMLVideoElement;
+          if (v.closest('.is-scrub')) continue; // scroll-scrubbed hero film — leave its currentTime alone
           if (e.isIntersecting) void v.play().catch(() => {});
           else v.pause();
         }
