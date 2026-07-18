@@ -57,14 +57,18 @@ export async function syncContentHashtags(db: SupabaseClient, recipeId: string, 
     const idOf = new Map(
       (rows ?? []).filter((r) => !r.is_blocked && r.status !== 'blocked').map((r) => [r.normalized_name as string, r.id as string]),
     );
+    // Capture the recipe's PRIOR hashtags so tags REMOVED by a caption edit also get their
+    // counts refreshed (else a removed tag keeps a stale, inflated post_count forever).
+    const { data: prior } = await db.from('content_hashtags').select('hashtag_id').eq('recipe_id', recipeId);
+    const priorIds = (prior ?? []).map((r) => r.hashtag_id as string);
     // Replace this recipe's associations wholesale (handles edits: added + removed tags).
     await db.from('content_hashtags').delete().eq('recipe_id', recipeId);
     const links = tags
       .map((t, i) => ({ recipe_id: recipeId, hashtag_id: idOf.get(t), cook_id: cookId, position: i, source: 'caption' }))
       .filter((l): l is { recipe_id: string; hashtag_id: string; cook_id: string; position: number; source: string } => !!l.hashtag_id);
     if (links.length) await db.from('content_hashtags').insert(links);
-    // Refresh denormalized counts for every hashtag we touched (added or removed).
-    const ids = [...new Set([...idOf.values()])];
+    // Refresh denormalized counts for every hashtag we touched (added AND removed).
+    const ids = [...new Set([...priorIds, ...idOf.values()])];
     if (ids.length) await db.rpc('refresh_hashtag_counts', { p_ids: ids });
   } catch (err) {
     console.error('[hashtags] syncContentHashtags failed', { recipeId, err: String(err) });

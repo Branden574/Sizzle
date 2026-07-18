@@ -21,7 +21,9 @@ export function activeHashtagToken(text: string, caret: number): { prefix: strin
   while (start > 0 && /[\p{L}0-9_]/u.test(text[start - 1]!)) start--;
   if (start === 0 || text[start - 1] !== '#') return null;
   const hashPos = start - 1;
-  if (hashPos > 0 && /[\p{L}0-9_#]/u.test(text[hashPos - 1]!)) return null; // not mid-word / no ##
+  // A hashtag must follow whitespace or the start of the text — never punctuation/word chars, so
+  // URLs (example.com/#frag), anchors, and mid-word #s don't trigger the composer autocomplete.
+  if (hashPos > 0 && !/\s/.test(text[hashPos - 1]!)) return null;
   let end = caret;
   while (end < text.length && /[\p{L}0-9_]/u.test(text[end]!)) end++;
   return { prefix: text.slice(hashPos, caret), start: hashPos, end };
@@ -63,8 +65,10 @@ export function useHashtagAutocomplete(text: string, ref: RefObject<HTMLTextArea
   /** Replace the active token with `#tag ` and return the new text + caret to place after it. */
   const apply = (tag: string): { next: string; caret: number } | null => {
     if (!token) return null;
-    const insert = `#${tag} `;
-    const next = text.slice(0, token.start) + insert + text.slice(token.end);
+    const after = text.slice(token.end);
+    // Add a trailing space only if the next char isn't already whitespace (no double space).
+    const insert = `#${tag}` + (/^\s/.test(after) ? '' : ' ');
+    const next = text.slice(0, token.start) + insert + after;
     return { next, caret: token.start + insert.length };
   };
 

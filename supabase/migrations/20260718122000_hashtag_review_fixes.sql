@@ -1,10 +1,15 @@
--- Hashtag trend engine v1. Computes rolling hashtag_metrics (24h + 7d) and a trend_score, then
--- snapshots the 24h leaderboard for rank-movement history. Called by /internal/rollup-hashtag-trends.
---
--- trend_score = recent activity (engagement + posts) × unique-participation (capped) × growth-vs-
--- 7d-baseline ÷ concentration-penalty. This is momentum, NOT lifetime popularity: a large-but-flat
--- hashtag scores ~0; one creator spamming N posts is penalized by (posts − creators). fraud_adjusted
--- carries the unique-participant confidence. Ranking version 'v1' is stored on each snapshot.
+-- Adversarial-review fixes for the hashtag system (idempotent):
+--  1. Public read policy also excludes is_sensitive, so the RLS boundary matches the API filters
+--     and doesn't depend on app code always pairing is_sensitive with a non-active status.
+--  2. The trend engine excludes premium (priced) + subscribers-only posts — revenue must not drive
+--     public trends.
+-- (The originating migration files are also corrected for fresh applies; this re-applies the same
+--  changes to already-migrated databases. Both statements are safe to run repeatedly.)
+
+drop policy if exists hashtags_public_read on public.hashtags;
+create policy hashtags_public_read on public.hashtags for select
+  to anon, authenticated using (status = 'active' and not is_blocked and not is_sensitive);
+
 create or replace function public.refresh_hashtag_trends()
 returns integer language plpgsql security definer set search_path = public as $$
 declare n integer;
@@ -15,7 +20,6 @@ begin
     from content_hashtags ch
     join recipes r on r.id = ch.recipe_id
     where r.status = 'published' and coalesce(r.auto_hidden, false) = false
-      -- Premium / subscribers-only content must not drive public trends (revenue ≠ momentum).
       and r.price_cents is null and (r.visibility is null or r.visibility <> 'subscribers')
   ),
   agg as (
@@ -35,10 +39,8 @@ begin
                                qualified_views, likes, trend_score, fraud_adjusted_score, updated_at)
   select a.hashtag_id, '24h', a.posts_24h, a.creators_24h, a.views_24h, a.eng_24h,
     round(
-      (a.eng_24h + a.posts_24h * 3.0)
-      * least(a.creators_24h, 20) / 20.0
-      * (case when a.posts_prev7d > 0
-              then least(3.0, a.posts_24h::numeric / (a.posts_prev7d / 7.0 + 0.5)) else 1.0 end)
+      (a.eng_24h + a.posts_24h * 3.0) * least(a.creators_24h, 20) / 20.0
+      * (case when a.posts_prev7d > 0 then least(3.0, a.posts_24h::numeric / (a.posts_prev7d / 7.0 + 0.5)) else 1.0 end)
       / (1 + greatest(0, a.posts_24h - a.creators_24h) * 0.5)
     , 3),
     round(least(a.creators_24h, 20) / 20.0, 3), now()
@@ -58,7 +60,6 @@ begin
          row_number() over (order by trend_score desc), 'v1'
   from hashtag_metrics where time_window = '24h' and trend_score > 0
   order by trend_score desc limit 50;
-
   return n;
 end $$;
 revoke all on function public.refresh_hashtag_trends() from public, anon, authenticated;

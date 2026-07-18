@@ -27,7 +27,8 @@ hashtags.get('/suggest', optionalAuth, async (c) => {
     .eq('status', 'active').eq('is_blocked', false).eq('is_sensitive', false)
     .order('is_featured', { ascending: false }).order('post_count', { ascending: false })
     .limit(8);
-  if (q.length >= 1) query = query.like('normalized_name', `${q}%`);
+  // Escape LIKE wildcards — normalized tags can contain '_', which would otherwise match any char.
+  if (q.length >= 1) query = query.like('normalized_name', `${q.replace(/[\\_%]/g, '\\$&')}%`);
   const { data } = await query;
   const out: Suggestion[] = (data ?? []).map((r) => ({ tag: r.normalized_name as string, displayName: r.display_name as string, postCount: r.post_count as number, featured: r.is_featured as boolean, isNew: false }));
   if (q.length >= 2 && !out.some((s) => s.tag === q)) out.push({ tag: q, displayName: q, postCount: 0, featured: false, isNew: true });
@@ -134,6 +135,9 @@ hashtags.get('/:tag/content', optionalAuth, async (c) => {
   const userId = c.get('userId');
   const tag = normalizeTag(c.req.param('tag'));
   if (!tag) return c.json<FeedResponse>({ items: [], nextCursor: null });
+  // A blocked hashtag's content must not stay browsable even though its detail page 404s.
+  const h = await loadHashtag(tag);
+  if (h && (h.is_blocked || h.status === 'blocked')) return c.json<FeedResponse>({ items: [], nextCursor: null });
   const sort = c.req.query('sort') === 'top' ? 'top' : 'recent';
   const cursor = c.req.query('cursor');
 
@@ -152,8 +156,14 @@ hashtags.get('/:tag/content', optionalAuth, async (c) => {
   } else {
     q = q.order('like_count', { ascending: false }).order('id', { ascending: false });
     if (cursor) {
-      const [likes, id] = cursor.split(':');
-      q = q.or(`like_count.lt.${Number(likes) || 0},and(like_count.eq.${Number(likes) || 0},id.lt.${id})`);
+      // VALIDATE before interpolating into the PostgREST .or() filter — an unvalidated id/likes
+      // is a filter-injection vector. Ignore a malformed cursor rather than trust it.
+      const [likesRaw, idRaw] = cursor.split(':');
+      const likes = Number.parseInt(likesRaw ?? '', 10);
+      const id = idRaw ?? '';
+      if (Number.isFinite(likes) && likes >= 0 && /^[0-9a-fA-F-]{36}$/.test(id)) {
+        q = q.or(`like_count.lt.${likes},and(like_count.eq.${likes},id.lt.${id})`);
+      }
     }
   }
   const { data, error } = await q;

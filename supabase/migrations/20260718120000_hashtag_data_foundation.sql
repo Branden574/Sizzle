@@ -93,7 +93,7 @@ create table if not exists public.hashtag_trend_snapshots (
   metrics jsonb,
   computed_at timestamptz not null default now()
 );
-create index if not exists idx_trend_snapshots_lookup on public.hashtag_trend_snapshots (scope, window, computed_at desc);
+create index if not exists idx_trend_snapshots_lookup on public.hashtag_trend_snapshots (scope, time_window, computed_at desc);
 
 -- RLS: deny-by-default everywhere; the only client-readable surface is safe hashtag metadata.
 alter table public.hashtags enable row level security;
@@ -104,7 +104,7 @@ alter table public.hashtag_trend_snapshots enable row level security;
 
 drop policy if exists hashtags_public_read on public.hashtags;
 create policy hashtags_public_read on public.hashtags for select
-  to anon, authenticated using (status = 'active' and not is_blocked);
+  to anon, authenticated using (status = 'active' and not is_blocked and not is_sensitive);
 -- No other client policies: content_hashtags, hashtag_metrics, user_hashtag_preferences, and
 -- hashtag_trend_snapshots are API/service-role only (client reads them through the Hono API).
 
