@@ -14,6 +14,10 @@ export interface ViewerSignals {
   affinity: Map<string, number>;
   /** hashtag -> positive engagement count (the X-style topic/hashtag signal). */
   tagAffinity: Map<string, number>;
+  /** hashtags the viewer explicitly FOLLOWS — a strong candidate boost. */
+  followedTags: Set<string>;
+  /** hashtags the viewer MUTED / marked not-interested — strongly suppressed. */
+  mutedTags: Set<string>;
   /** exact recipes the viewer disliked — full penalty, that recipe only. */
   dislikedRecipes: Set<string>;
   /** cook id -> how many of their recipes the viewer disliked. A *soft* per-cook
@@ -36,6 +40,10 @@ export const RANK_WEIGHTS = {
   follow: 5.0,
   affinity: 2.0,
   hashtag: 4.0,
+  // Explicit hashtag controls — deliberate, so weighted strongly. A followed tag lifts;
+  // a muted / not-interested tag suppresses hard (the viewer asked not to see it).
+  followedTag: 5.0,
+  mutedTagPenalty: 10.0,
   popular: 1.5,
   // Qualified cooks: someone actually finished cooking it. The strongest
   // quality signal on the platform — weighted above raw popularity, and
@@ -104,8 +112,17 @@ export function scoreRecipe(r: RecipeRow, s: ViewerSignals, now: number): number
   score += W.affinity * Math.min(1, (s.affinity.get(r.cook_id) ?? 0) / 5);
   // Hashtag affinity: sum the viewer's engagement with this recipe's tags.
   let tagPull = 0;
-  for (const t of r.tags ?? []) tagPull += s.tagAffinity.get(t) ?? 0;
+  let followedTagHit = false;
+  let mutedTagHit = false;
+  for (const t of r.tags ?? []) {
+    tagPull += s.tagAffinity.get(t) ?? 0;
+    if (s.followedTags.has(t)) followedTagHit = true;
+    if (s.mutedTags.has(t)) mutedTagHit = true;
+  }
   if (tagPull > 0) score += W.hashtag * Math.min(1, tagPull / 5);
+  // Explicit follow/mute of a hashtag on this post.
+  if (followedTagHit) score += W.followedTag;
+  if (mutedTagHit) score -= W.mutedTagPenalty;
   score += W.popular * popularityScore(r.like_count);
   score += W.cooked * cookedScore(r.cook_count ?? 0);
   score += W.sends * sendsScore(r.send_count ?? 0);

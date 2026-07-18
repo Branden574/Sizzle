@@ -17,6 +17,10 @@
     {
       "path": "/internal/rollup-watch-ratios",
       "schedule": "17,47 * * * *"
+    },
+    {
+      "path": "/internal/rollup-hashtag-trends",
+      "schedule": "*/15 * * * *"
     }
   ]
 }

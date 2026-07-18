@@ -313,3 +313,17 @@ internal.get('/rollup-watch-ratios', async (c) => {
   }
   return c.json({ ok: true, updated: (data as number | null) ?? 0 });
 });
+
+/**
+ * GET /internal/rollup-hashtag-trends — Vercel Cron target. Recomputes hashtag_metrics (24h + 7d)
+ * and the velocity-based trend_score, then snapshots the leaderboard. Auth via the CRON_SECRET
+ * middleware above. Trend scores are momentum, not lifetime totals (see refresh_hashtag_trends).
+ */
+internal.get('/rollup-hashtag-trends', async (c) => {
+  const { data, error } = await supabaseAdmin.rpc('refresh_hashtag_trends');
+  if (error) {
+    console.error('[internal] rollup-hashtag-trends failed', { err: error.message });
+    return c.json({ ok: false, error: error.message }, 500);
+  }
+  return c.json({ ok: true, updated: (data as number | null) ?? 0 });
+});

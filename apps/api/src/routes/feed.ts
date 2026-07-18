@@ -86,7 +86,7 @@ const CANDIDATES = 60;
 
 /** Load the viewer's engagement signals for ranking. */
 async function loadViewerSignals(userId: string): Promise<ViewerSignals> {
-  const [profile, follows, reactions, saves, views, impressions, boosted] = await Promise.all([
+  const [profile, follows, reactions, saves, views, impressions, boosted, tagPrefs] = await Promise.all([
     supabaseAdmin.from('profiles').select('tastes').eq('id', userId).maybeSingle(),
     supabaseAdmin.from('follows').select('cook_id').eq('follower_id', userId).limit(2000),
     // Cap lifetime engagement to a recent window — the ranker only needs recent
@@ -99,6 +99,9 @@ async function loadViewerSignals(userId: string): Promise<ViewerSignals> {
     supabaseAdmin.from('recipe_impressions').select('recipe_id').eq('user_id', userId).order('served_at', { ascending: false }).limit(200),
     // Admin-boosted creators (tiny set — only those an admin has lifted).
     supabaseAdmin.from('profiles').select('id, boost').gt('boost', 0),
+    // Explicit hashtag preferences — followed tags become a candidate boost, muted /
+    // not-interested tags suppress. The user's DELIBERATE topic controls.
+    supabaseAdmin.from('user_hashtag_preferences').select('state, hashtags!inner(normalized_name)').eq('user_id', userId).in('state', ['following', 'muted', 'not_interested']).limit(500),
   ]);
 
   // Resolve cook + tags for each engaged recipe.
@@ -160,11 +163,23 @@ async function loadViewerSignals(userId: string): Promise<ViewerSignals> {
     if (v.skipped && cook && cook !== userId) skips.set(cook, (skips.get(cook) ?? 0) + 1);
   }
 
+  // Explicit hashtag controls → boost (followed) / suppress (muted, not-interested).
+  const followedTags = new Set<string>();
+  const mutedTags = new Set<string>();
+  for (const p of (tagPrefs.data ?? []) as unknown as Array<{ state: string; hashtags: { normalized_name: string } | null }>) {
+    const name = p.hashtags?.normalized_name;
+    if (!name) continue;
+    if (p.state === 'following') followedTags.add(name);
+    else mutedTags.add(name);
+  }
+
   return {
     tastes: ((profile.data?.tastes ?? []) as string[]).filter(Boolean),
     followedCooks: new Set((follows.data ?? []).map((f) => f.cook_id as string)),
     affinity,
     tagAffinity,
+    followedTags,
+    mutedTags,
     dislikedRecipes,
     dislikedCooks,
     impressed: new Set((impressions.data ?? []).map((i) => i.recipe_id as string)),
