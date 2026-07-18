@@ -382,7 +382,9 @@ export const useSizzle = create<SizzleState>((set) => ({
   setShowCreator: (v) => set({ showCreator: v }),
   setCollectionPickerFor: (id) => set({ collectionPickerFor: id }),
   setOpenCollection: (v) => set({ openCollection: v }),
-  setOpenTag: (tag) => set({ openTag: tag }),
+  // Opening a hashtag page closes the recipe sheet (which sits above it, z-index 97 > 91), so
+  // tapping a #tag inside a post lands you straight on the hashtag page instead of behind the recipe.
+  setOpenTag: (tag) => set((s) => ({ openTag: tag, openRecipe: tag ? null : s.openRecipe })),
   setFollowList: (v) => set({ followList: v }),
   setShowUpload: (v) => set({ showUpload: v }),
   setSharing: (v) => set({ sharing: v }),

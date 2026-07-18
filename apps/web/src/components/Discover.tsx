@@ -17,6 +17,8 @@ export function Discover() {
 
   const [q, setQ] = useState('');
   const query = q.trim();
+  // Searching a "#tag" surfaces a tappable row to the hashtag PAGE (Follow/Mute/Top/Recent).
+  const searchTag = query.startsWith('#') ? query.slice(1).toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 30) : '';
   // Recent searches (client-only, last 8). Recorded on submit-ish signals:
   // picking a result would be ideal; recording on 1.2s settled input is enough.
   const [recents, setRecents] = useState<string[]>(() => {
@@ -144,6 +146,19 @@ export function Discover() {
           </>
         )}
       </div>
+
+      {/* hashtag page shortcut — searching "#tag" lets you open the tag's page (Follow/Mute/Top/Recent) */}
+      {searchTag.length >= 2 && (
+        <div style={{ padding: '4px 22px 8px' }}>
+          <Button onClick={() => setOpenTag(searchTag)} style={{ display: 'flex', alignItems: 'center', gap: 12, width: '100%', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 18, padding: 14, cursor: 'pointer', textAlign: 'left' }}>
+            <div style={{ width: 46, height: 46, flex: 'none', borderRadius: 14, background: 'linear-gradient(135deg,#f4a52c,#ff5a36)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 24, color: '#fff', fontWeight: 800 }}>#</div>
+            <div style={{ minWidth: 0 }}>
+              <div style={{ fontSize: 15.5, fontWeight: 800, color: 'var(--text)' }}>#{searchTag}</div>
+              <div style={{ fontSize: 13, color: 'var(--text-faint)' }}>View hashtag · Follow, mute &amp; Top/Recent</div>
+            </div>
+          </Button>
+        </div>
+      )}
 
       {/* people results */}
       {query && cooks.length > 0 && (
