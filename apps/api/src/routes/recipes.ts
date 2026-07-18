@@ -12,7 +12,7 @@ import { initialsOf, relativeTime } from '../lib/format';
 import { rateLimit } from '../middleware/rateLimit';
 import { moderate, moderateImages } from '../services/moderation';
 import { fileReport } from '../services/reports';
-import { parseHashtags } from '../services/hashtags';
+import { parseHashtags, syncContentHashtags } from '../services/hashtags';
 import { notify } from '../services/notify';
 import { syncVideoProtection } from '../services/videoFinalize';
 import { getStreamProvider } from '../services/stream';
@@ -271,6 +271,10 @@ recipes.post('/', requireAuth, requireNotBanned, rateLimit({ windowMs: 60_000, m
   if (input.videoAssetId && (priceCents != null || visibility === 'subscribers')) {
     await syncVideoProtection(input.videoAssetId, true);
   }
+
+  // Dual-write the relational hashtag model (canonical hashtags + associations) alongside the
+  // legacy tags[] column — this is what powers autocomplete, trends, and follow/mute.
+  await syncContentHashtags(supabaseAdmin, recipe.id, userId, tags);
 
   const detail = await getRecipeDetail(userId, recipe.id);
   return c.json(detail, 201);
@@ -1250,6 +1254,9 @@ recipes.patch('/:id', requireAuth, requireNotBanned, rateLimit({ windowMs: 60_00
       await supabaseAdmin.from('recipe_steps').insert(input.steps.map((text, i) => ({ recipe_id: id, position: i, text })));
     }
   }
+
+  // Re-sync the relational hashtag model to the edited caption (adds/removes associations).
+  await syncContentHashtags(supabaseAdmin, id, userId, tags);
 
   const detail = await getRecipeDetail(userId, id);
   return c.json(detail);

@@ -10,6 +10,7 @@ import type { AppEnv } from './types';
 import { health } from './routes/health';
 import { me } from './routes/me';
 import { feed } from './routes/feed';
+import { hashtags } from './routes/hashtags';
 import { recipes } from './routes/recipes';
 import { cooks } from './routes/cooks';
 import { search } from './routes/search';
@@ -66,6 +67,7 @@ export function createApp() {
   app.route('/health', health);
   app.route('/me', me);
   app.route('/feed', feed);
+  app.route('/hashtags', hashtags);
   app.route('/recipes', recipes);
   app.route('/cooks', cooks);
   app.route('/search', search);

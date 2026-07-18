@@ -3,6 +3,8 @@
  * write path (parsing a caption) and the read path (search / ranking), or tags
  * won't match. Rules: lowercase, allow [a-z0-9_], 2–30 chars, max 10 per post.
  */
+import type { SupabaseClient } from '@supabase/supabase-js';
+
 const MAX_TAGS = 10;
 const MAX_LEN = 30;
 const MIN_LEN = 2;
@@ -29,4 +31,42 @@ export function parseHashtags(...sources: (string | null | undefined)[]): string
     }
   }
   return out;
+}
+
+/**
+ * Dual-write a recipe's hashtags into the relational model (canonical `hashtags` +
+ * `content_hashtags`), alongside the legacy `recipes.tags` array the live app still reads.
+ * Upserts each canonical hashtag, replaces this recipe's associations, and refreshes the
+ * denormalized post/creator counts. Blocked hashtags are skipped (never re-created/associated).
+ * Best-effort: it logs and swallows errors so a hashtag hiccup never fails a post.
+ */
+export async function syncContentHashtags(db: SupabaseClient, recipeId: string, cookId: string, tags: string[]): Promise<void> {
+  try {
+    const now = new Date().toISOString();
+    if (tags.length) {
+      // Upsert canonical rows (idempotent on normalized_name; refreshes last_used_at).
+      await db.from('hashtags').upsert(
+        tags.map((t) => ({ normalized_name: t, display_name: t, slug: t, last_used_at: now })),
+        { onConflict: 'normalized_name' },
+      );
+    }
+    // Resolve ids, EXCLUDING blocked hashtags (they must not gain associations).
+    const { data: rows } = tags.length
+      ? await db.from('hashtags').select('id, normalized_name, is_blocked, status').in('normalized_name', tags)
+      : { data: [] as Array<{ id: string; normalized_name: string; is_blocked: boolean; status: string }> };
+    const idOf = new Map(
+      (rows ?? []).filter((r) => !r.is_blocked && r.status !== 'blocked').map((r) => [r.normalized_name as string, r.id as string]),
+    );
+    // Replace this recipe's associations wholesale (handles edits: added + removed tags).
+    await db.from('content_hashtags').delete().eq('recipe_id', recipeId);
+    const links = tags
+      .map((t, i) => ({ recipe_id: recipeId, hashtag_id: idOf.get(t), cook_id: cookId, position: i, source: 'caption' }))
+      .filter((l): l is { recipe_id: string; hashtag_id: string; cook_id: string; position: number; source: string } => !!l.hashtag_id);
+    if (links.length) await db.from('content_hashtags').insert(links);
+    // Refresh denormalized counts for every hashtag we touched (added or removed).
+    const ids = [...new Set([...idOf.values()])];
+    if (ids.length) await db.rpc('refresh_hashtag_counts', { p_ids: ids });
+  } catch (err) {
+    console.error('[hashtags] syncContentHashtags failed', { recipeId, err: String(err) });
+  }
 }
