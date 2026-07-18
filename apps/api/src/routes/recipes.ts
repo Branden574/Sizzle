@@ -763,6 +763,44 @@ recipes.get('/:id/share-video', requireAuth, async (c) => {
   }
 });
 
+/** TEMP DIAGNOSTIC — remove after the video→IG export is verified. Returns where the export
+ *  pipeline stands for a recipe (MP4 rendition ready? signed download URL reachable?) without
+ *  needing app auth. Gated on an obscurity key; exposes only status codes, never the media. */
+recipes.get('/:id/share-video-diag', async (c) => {
+  if (c.req.query('k') !== 'sz-diag-7f3a2b') return c.json({ error: 'not found' }, 404);
+  const id = c.req.param('id');
+  const { data: rec } = await supabaseAdmin.from('recipes').select('price_cents, visibility, video_asset_id').eq('id', id).maybeSingle<{ price_cents: number | null; visibility: string | null; video_asset_id: string | null }>();
+  if (!rec?.video_asset_id) return c.json({ step: 'recipe', ok: false });
+  const { data: asset } = await supabaseAdmin.from('video_assets').select('provider, provider_uid, hls_url, mp4_url, status').eq('id', rec.video_asset_id).maybeSingle<{ provider: string | null; provider_uid: string | null; hls_url: string | null; mp4_url: string | null; status: string | null }>();
+  if (!asset) return c.json({ step: 'asset', ok: false });
+  const premium = rec.price_cents != null || rec.visibility === 'subscribers';
+  const provider = getStreamProvider();
+  const out: Record<string, unknown> = { provider: asset.provider, assetStatus: asset.status, premium, hasMp4Cached: !!asset.mp4_url };
+  try {
+    if (asset.provider === 'cloudflare' && asset.provider_uid && provider.enableDownloadMp4) {
+      const dl = await provider.enableDownloadMp4(asset.provider_uid);
+      out.enable = { ready: dl.ready, percent: dl.percent, hasUrl: !!dl.url };
+      if (dl.ready) {
+        const rawUrl = dl.url ?? (asset.hls_url ? asset.hls_url.replace('/manifest/video.m3u8', '/downloads/default.mp4') : null);
+        if (rawUrl) {
+          let finalUrl = rawUrl;
+          if (premium && provider.signPlaybackToken) {
+            const token = await provider.signPlaybackToken(asset.provider_uid, 1800, { downloadable: true });
+            finalUrl = rawUrl.replace(asset.provider_uid, token);
+          }
+          const r = await fetch(finalUrl, { headers: { Range: 'bytes=0-1023' } });
+          out.download = { httpStatus: r.status, contentType: r.headers.get('content-type'), contentLength: r.headers.get('content-length'), signed: premium, urlShape: finalUrl.replace(/\/[^/]+\/downloads/, '/<token-or-uid>/downloads') };
+        }
+      }
+    } else {
+      out.download = { note: 'non-cloudflare (mock/storage) — returns stored mp4_url directly', mp4Url: asset.mp4_url };
+    }
+  } catch (err) {
+    out.error = String(err);
+  }
+  return c.json(out);
+});
+
 /** POST /recipes/:id/publish — flip the owner's draft or scheduled post live now. */
 recipes.post('/:id/publish', requireAuth, requireNotBanned, async (c) => {
   const userId = c.get('userId')!;
