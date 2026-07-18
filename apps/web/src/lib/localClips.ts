@@ -33,3 +33,13 @@ export function releaseLocalClip(recipeId: string): void {
   if (url) URL.revokeObjectURL(url);
   clips.delete(recipeId);
 }
+
+/**
+ * Drop EVERY remembered clip. Called on an account switch: a just-posted clip is the
+ * poster's own on-device file, so on a shared device (SPA, no reload) the next account
+ * must not be able to play a premium clip the previous account posted this session.
+ */
+export function clearLocalClips(): void {
+  for (const url of clips.values()) URL.revokeObjectURL(url);
+  clips.clear();
+}

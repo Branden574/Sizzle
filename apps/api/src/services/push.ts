@@ -116,6 +116,8 @@ function copyFor(type: NotificationKind, who: string, amount?: string | null): {
       return { title: 'You got a tip! 🎉', body: amount ? `${who} sent you ${amount}` : `${who} sent you a tip` };
     case 'follow_request':
       return { title: 'Follow request', body: `${who} requested to follow you` };
+    case 'follow_accepted':
+      return { title: 'Follow request accepted', body: `${who} accepted your follow request` };
     case 'creator_progress':
       return { title: "You're growing! 📈", body: "You're getting close to Creator eligibility" };
     case 'creator_eligible':
@@ -184,7 +186,7 @@ export async function sendPushForNotification(opts: {
       .eq('id', opts.userId)
       .single();
     if (profile && profile.push_enabled === false) return;
-    const prefKey = ({ like: 'likes', comment_like: 'likes', comment: 'comments', follow: 'follows', follow_request: 'follows', repost: 'reposts', message: 'messages', tip: 'tips' } as const)[opts.type as 'like' | 'comment_like' | 'comment' | 'follow' | 'follow_request' | 'repost' | 'message' | 'tip'];
+    const prefKey = ({ like: 'likes', comment_like: 'likes', comment: 'comments', follow: 'follows', follow_request: 'follows', follow_accepted: 'follows', repost: 'reposts', message: 'messages', tip: 'tips' } as const)[opts.type as 'like' | 'comment_like' | 'comment' | 'follow' | 'follow_request' | 'follow_accepted' | 'repost' | 'message' | 'tip'];
     if (prefKey && (profile?.notif_prefs as Record<string, boolean> | undefined)?.[prefKey] === false) return;
 
     const { data: tokens } = await supabaseAdmin.from('push_tokens').select('token').eq('user_id', opts.userId);

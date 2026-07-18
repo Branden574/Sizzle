@@ -5,7 +5,8 @@ import type { RecipeCard } from '@sizzle/shared';
 import { useAuth } from '../auth/useAuth';
 import { useRequireAuth } from '../auth/useRequireAuth';
 import { useForYouFeed, useFollowingFeed, useMe, useToggleDislike, useToggleFollow, useToggleLike, useToggleRepost, useToggleSave } from '../data/queries';
-import { apiGet, apiSend } from '../lib/api';
+import { apiSend } from '../lib/api';
+import { getCachedPlaybackUrl, prefetchPlaybackUrl } from '../lib/signedPlayback';
 import { useSizzle } from '../store';
 import { theme } from '../theme';
 import { formatCount } from '../lib/format';
@@ -413,17 +414,20 @@ export const FeedCard = memo(function FeedCard({ card, onClose, suppressed = fal
   // overlay shows instead of a player. The owner's just-posted clip still plays
   // instantly from the on-device file until the signed URL arrives.
   const isSigned = !hasImages && !!card.video?.signed && !card.locked && card.video?.status === 'ready';
-  const [signedSrc, setSignedSrc] = useState<string | null>(null);
+  // Seed from the shared cache (warmed while browsing the grid/feed) so an entitled
+  // premium clip plays instantly instead of waiting on the /playback round-trip.
+  // `!card.locked` is load-bearing: a locked card must NEVER surface a cached signed
+  // URL (the server nulls the payload URL + only mints a signed one for the entitled;
+  // gating here stops a stale/cross-account cache entry from playing behind the lock).
+  const [signedSrc, setSignedSrc] = useState<string | null>(() => (card.video?.signed && !card.locked ? getCachedPlaybackUrl(card.id) : null));
   useEffect(() => {
     if (!isSigned || !near) return;
     let cancelled = false;
-    void apiGet<{ hlsUrl: string }>(`/recipes/${card.id}/playback`)
-      .then((r) => { if (!cancelled) setSignedSrc(r.hlsUrl); })
-      .catch(() => {});
+    void prefetchPlaybackUrl(card.id).then((u) => { if (!cancelled && u) setSignedSrc(u); });
     return () => { cancelled = true; };
   }, [isSigned, near, card.id]);
   const remoteSrc = !hasImages
-    ? (card.video?.signed ? signedSrc : (card.video?.hlsUrl || card.video?.mp4Url || null))
+    ? (card.video?.signed ? (card.locked ? null : signedSrc) : (card.video?.hlsUrl || card.video?.mp4Url || null))
     : null;
   const videoSrc = remoteSrc ?? (!hasImages ? getLocalClip(card.id) : null);
   // Controls are now persisted server-side + enforced for every viewer.

@@ -20,6 +20,15 @@ export const platform = Capacitor.getPlatform();
 export const canBuyInApp = !isNative;
 
 /**
+ * True only where Apple IAP is actually usable: native AND the RevenueCat
+ * ('Purchases') plugin is compiled into THIS binary. An OTA JS bundle can land on
+ * an OLDER native build that predates the plugin — there the native purchase bridge
+ * doesn't exist, so any in-app Unlock button must hide (falling back to no in-app
+ * buy) rather than crash on tap. Build 29+ ships the plugin; earlier builds don't.
+ */
+export const iapAvailable = isNative && Capacitor.isPluginAvailable('Purchases');
+
+/**
  * CREATOR-SIDE MONEY TOOLING — your own earnings, payout setup, subscription
  * price, tiers, products, goals. Money flowing TO the creator is not a purchase,
  * so the stores don't require IAP here — the same reason TikTok, Instagram and

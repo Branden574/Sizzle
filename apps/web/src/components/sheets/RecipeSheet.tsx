@@ -5,10 +5,10 @@ import { useRequireAuth } from '../../auth/useRequireAuth';
 import { useAuth } from '../../auth/useAuth';
 import { useAppealRecipe, useCookEvent, useCookLog, useDeleteRecipe, useDerivatives, useMe, useRecipe, useToggleDownload, useToggleSave, useUnlockRecipe, useIapUnlock } from '../../data/queries';
 import { getOffline } from '../../lib/offline';
-import { canBuyInApp, isNative } from '../../lib/native';
+import { canBuyInApp, iapAvailable } from '../../lib/native';
 import { formatCount } from '../../lib/format';
 import { getLocalClip } from '../../lib/localClips';
-import { apiGet } from '../../lib/api';
+import { getCachedPlaybackUrl, prefetchPlaybackUrl } from '../../lib/signedPlayback';
 import { scaleIngredient } from '../../lib/ingredients';
 import { useShopping } from '../../lib/shopping';
 import { useSizzle } from '../../store';
@@ -81,19 +81,22 @@ export function RecipeSheet() {
   // Premium (signed) videos never carry their URL in the payload — an entitled viewer
   // fetches a short-lived signed playback URL on demand (mirrors the feed). Without
   // this, a buyer who just paid would see no video in the sheet.
-  const [signedSrc, setSignedSrc] = useState<string | null>(null);
+  // Seed from the shared cache (warmed while browsing) so an entitled premium clip
+  // opens instantly. `!r?.locked` is load-bearing: a locked recipe must never surface
+  // a cached signed URL behind the paywall.
+  const [signedSrc, setSignedSrc] = useState<string | null>(() => (r?.video?.signed && !r?.locked ? getCachedPlaybackUrl(r.id) : null));
   const signedVideo = !!r?.video?.signed && !r?.locked && r?.video?.status === 'ready';
   useEffect(() => {
-    setSignedSrc(null);
+    setSignedSrc(r?.video?.signed && !r?.locked ? getCachedPlaybackUrl(r.id) : null);
     if (!signedVideo || !r) return;
     let cancelled = false;
-    void apiGet<{ hlsUrl: string }>(`/recipes/${r.id}/playback`).then((res) => { if (!cancelled) setSignedSrc(res.hlsUrl); }).catch(() => {});
+    void prefetchPlaybackUrl(r.id).then((u) => { if (!cancelled && u) setSignedSrc(u); });
     return () => { cancelled = true; };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [signedVideo, r?.id]);
   // Prefer HLS (Cloudflare adaptive stream) over raw MP4 — same order as the feed.
   // A clip you JUST posted plays instantly from the local file while it transcodes.
-  const headerVideo = (r?.video?.signed ? signedSrc : (r?.video?.hlsUrl || r?.video?.mp4Url)) || (r ? getLocalClip(r.id) : null);
+  const headerVideo = (r?.video?.signed ? (r.locked ? null : signedSrc) : (r?.video?.hlsUrl || r?.video?.mp4Url)) || (r ? getLocalClip(r.id) : null);
   const headerImages = r?.images ?? [];
   // A freshly-posted clip has no playable URL until Cloudflare finishes — surface
   // an honest "Processing…" state instead of a bare gradient that reads as broken.
@@ -148,7 +151,7 @@ export function RecipeSheet() {
           }}
           style={{ position: 'relative', height: hasMedia ? 300 : 230, flex: 'none', touchAction: 'none', background: hasVideoSlot && !headerVideo ? '#0d0b0a' : (r?.bg ?? 'linear-gradient(165deg,#2a160e,#b5471f)') }}>
           {headerVideo ? (
-            <RecipeHeaderVideo src={headerVideo} poster={r?.video?.posterUrl} onExpand={() => { if (r) { setViewer({ items: [r], index: 0 }); setOpenRecipe(null); } }} />
+            <RecipeHeaderVideo key={r?.id} src={headerVideo} poster={r?.video?.posterUrl} onExpand={() => { if (r) { setViewer({ items: [r], index: 0 }); setOpenRecipe(null); } }} />
           ) : headerImages.length > 0 ? (
             <ImageCarousel images={headerImages} />
           ) : videoProcessing ? (
@@ -365,12 +368,15 @@ export function RecipeSheet() {
                     // processing). Subscriptions aren't wired for IAP, so the
                     // "subscribe instead" nudge stays web-only.
                     const price = r.price!;
-                    const canUnlock = canBuyInApp || isNative;
+                    // canBuyInApp = web (Stripe); iapAvailable = native WITH the IAP
+                    // plugin (build 29+). On an older native build reached via OTA,
+                    // both are false → the Unlock button hides rather than erroring.
+                    const canUnlock = canBuyInApp || iapAvailable;
                     const buying = unlock.isPending || iapUnlock.isPending;
-                    const share = isNative ? creatorShareCentsIAP(price) : creatorShareCents(price);
+                    const share = iapAvailable ? creatorShareCentsIAP(price) : creatorShareCents(price);
                     const onUnlock = () => {
                       if (!requireAuth()) return;
-                      if (isNative) iapUnlock.mutate({ recipeId: r.id, productId: premiumProductId(price) });
+                      if (iapAvailable) iapUnlock.mutate({ recipeId: r.id, productId: premiumProductId(price) });
                       else unlock.mutate(r.id);
                     };
                     return (

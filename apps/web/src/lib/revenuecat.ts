@@ -1,4 +1,4 @@
-import { isNative } from './native';
+import { iapAvailable } from './native';
 
 /**
  * RevenueCat (Apple In-App Purchase) wrapper for premium recipe unlocks.
@@ -17,7 +17,7 @@ let configuredFor: string | null = null;
  *  No-op on web. Tying the RevenueCat app-user-id to our user id is what lets the
  *  server map a purchase back to the buyer. */
 export async function initRevenueCat(userId: string): Promise<void> {
-  if (!isNative || !userId || configuredFor === userId) return;
+  if (!iapAvailable || !userId || configuredFor === userId) return;
   try {
     const { Purchases } = await import('@revenuecat/purchases-capacitor');
     if (configuredFor === null) {
@@ -33,7 +33,7 @@ export async function initRevenueCat(userId: string): Promise<void> {
 
 /** Detach the RevenueCat user on logout so the next account's purchases don't merge. */
 export async function logoutRevenueCat(): Promise<void> {
-  if (!isNative || configuredFor === null) return;
+  if (!iapAvailable || configuredFor === null) return;
   try {
     const { Purchases } = await import('@revenuecat/purchases-capacitor');
     await Purchases.logOut();
@@ -52,7 +52,7 @@ export type PurchaseOutcome = 'purchased' | 'cancelled';
  * purchase and grants the unlock (never trust this client result alone).
  */
 export async function purchaseUnlock(productId: string): Promise<PurchaseOutcome> {
-  if (!isNative) throw new Error('In-app purchases are only available in the app.');
+  if (!iapAvailable) throw new Error('In-app purchases aren’t available in this version of the app.');
   const { Purchases } = await import('@revenuecat/purchases-capacitor');
   const { products } = await Purchases.getProducts({ productIdentifiers: [productId] });
   const product = products[0];

@@ -10,6 +10,7 @@ function text(n: NotificationDTO): string {
   const who = n.actor.name;
   if (n.type === 'follow') return `${who} started following you`;
   if (n.type === 'follow_request') return `${who} requested to follow you`;
+  if (n.type === 'follow_accepted') return `${who} accepted your follow request`;
   if (n.type === 'like') return n.recipeTitle ? `${who} liked “${n.recipeTitle}”` : `${who} liked your recipe`;
   if (n.type === 'comment_like') return `${who} liked your comment`;
   if (n.type === 'verified') return `${who} reached a verification milestone`;

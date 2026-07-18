@@ -9,6 +9,8 @@ import { disablePush } from '../lib/push';
 import { clearBadge } from '../lib/badge';
 import { clearPasscode } from '../lib/applock';
 import { initRevenueCat, logoutRevenueCat } from '../lib/revenuecat';
+import { clearPlaybackCache } from '../lib/signedPlayback';
+import { clearLocalClips } from '../lib/localClips';
 import { useSizzle } from '../store';
 
 /**
@@ -93,6 +95,11 @@ export const useAuth = create<AuthState>((set, get) => ({
     });
 
     supabase.auth.onAuthStateChange((event, session) => {
+      // A premium signed-playback URL is entitlement-scoped to ONE account. This is
+      // an SPA (no reload on a native account switch), so wipe the shared cache
+      // whenever the signed-in identity changes — else account B could read a URL
+      // minted for account A on the same device.
+      if ((session?.user?.id ?? null) !== (get().user?.id ?? null)) { clearPlaybackCache(); clearLocalClips(); }
       set({
         session,
         user: session?.user ?? null,

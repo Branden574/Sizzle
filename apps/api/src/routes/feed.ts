@@ -185,6 +185,11 @@ feed.get('/for-you', optionalAuth, async (c) => {
       .from('recipes')
       .select('*')
       .eq('status', 'published')
+      // Premium recipes (priced unlocks + subscribers-only) are non-playable for a
+      // non-entitled viewer, so they never enter the algorithmic feed — they live
+      // only on the creator's profile for followers to find and unlock.
+      .is('price_cents', null)
+      .or('visibility.is.null,visibility.neq.subscribers')
       .order('created_at', { ascending: false })
       .limit(CANDIDATES);
     if (error) throw dbFail(error.message);
@@ -213,6 +218,10 @@ feed.get('/for-you', optionalAuth, async (c) => {
     .from('recipes')
     .select('*')
     .eq('status', 'published')
+    // Premium (priced + subscribers-only) never appears in the algorithmic feed —
+    // see the ranked branch above.
+    .is('price_cents', null)
+    .or('visibility.is.null,visibility.neq.subscribers')
     .order('created_at', { ascending: false })
     .limit(PAGE + 1);
   if (cursor) q = q.lt('created_at', cursor);
@@ -282,6 +291,9 @@ feed.get('/tag/:tag', optionalAuth, async (c) => {
     .select('*')
     .eq('status', 'published')
     .contains('tags', [tag])
+    // Premium (priced + subscribers-only) is profile-only, never in tag discovery.
+    .is('price_cents', null)
+    .or('visibility.is.null,visibility.neq.subscribers')
     .order('created_at', { ascending: false })
     .limit(PAGE + 1);
   if (cursor) q = q.lt('created_at', cursor);
@@ -313,7 +325,9 @@ feed.get('/following', requireAuth, async (c) => {
     p_limit: PAGE + 1,
   });
   if (error) throw dbFail(error.message);
-  const rows = (data ?? []) as RecipeRow[];
+  // Premium (priced + subscribers-only) is profile-only — drop it from the following
+  // feed too, so a follower who hasn't unlocked/subscribed never gets a dead card.
+  const rows = ((data ?? []) as RecipeRow[]).filter((r) => r.price_cents == null && r.visibility !== 'subscribers');
   const hasMore = rows.length > PAGE;
   const pageRows = rows.slice(0, PAGE);
   const recipeCards = await buildCards(supabaseAdmin, userId, pageRows);

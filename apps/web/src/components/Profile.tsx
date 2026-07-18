@@ -1,4 +1,5 @@
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Button, IconButton } from './controls';
 import type { RecipeCard } from '@sizzle/shared';
 import { useAuth } from '../auth/useAuth';
@@ -6,6 +7,7 @@ import { useRequireAuth } from '../auth/useRequireAuth';
 import { useCook, useDeleteCookLog, useDeleteRecipe, useDrafts, useLikedFeed, useMe, useMyJournal, useNotifications, usePublishDraft, useRequestVerification, useSavedFeed } from '../data/queries';
 import { useSizzle } from '../store';
 import { formatCount } from '../lib/format';
+import { prefetchPlaybackUrl } from '../lib/signedPlayback';
 import { cookShareUrl, nativeShare } from '../lib/share';
 import { useShopping } from '../lib/shopping';
 import { VerifiedBadge } from './VerifiedBadge';
@@ -13,6 +15,7 @@ import { SocialLinks } from './SocialLinks';
 import { BellIcon, BookmarkIcon, GearIcon, HeartIcon, PlayIcon, ShareNodesIcon } from './icons';
 import { PosterImg } from './PosterImg';
 import { PremiumOverlay } from './PremiumOverlay';
+import { PullToRefreshSpinner, usePullToRefresh } from './PullToRefresh';
 
 const BANNER = 'radial-gradient(120% 120% at 70% 0%, var(--saffron,#f4a52c), var(--accent,#ff5a36) 60%, #c23a1a)';
 
@@ -53,6 +56,13 @@ export function Profile() {
   const [tab, setTab] = useState<'posts' | 'liked' | 'saved' | 'journal'>('posts');
   const gridItems = tab === 'posts' ? postItems : tab === 'liked' ? likedItems : savedItems;
 
+  const qc = useQueryClient();
+  const scrollRef = useRef<HTMLDivElement>(null);
+  // Pull down from the top to refresh everything on screen (profile info, counts,
+  // and the active tab's grid). refetchQueries({type:'active'}) resolves once the
+  // on-screen queries have refetched, so the spinner holds until fresh data lands.
+  const ptr = usePullToRefresh(scrollRef, () => qc.refetchQueries({ type: 'active' }));
+
   if (!authed) {
     return (
       <div style={{ position: 'absolute', inset: 0, background: 'var(--bg)', animation: 'sz-fadeIn .35s' }}>
@@ -71,7 +81,12 @@ export function Profile() {
   }
 
   return (
-    <div style={{ position: 'absolute', inset: 0, background: 'var(--bg)', overflowY: 'auto', animation: 'sz-fadeIn .35s' }}>
+    <>
+      <PullToRefreshSpinner show={ptr.showIndicator} progress={ptr.progress} refreshing={ptr.refreshing} />
+      <div
+        ref={scrollRef}
+        style={{ position: 'absolute', inset: 0, background: 'var(--bg)', overflowY: 'auto', overscrollBehaviorY: 'contain', WebkitOverflowScrolling: 'touch', animation: 'sz-fadeIn .35s', transform: ptr.offset ? `translateY(${ptr.offset}px)` : undefined, transition: ptr.dragging ? 'none' : 'transform .34s cubic-bezier(.16,1,.3,1)' }}
+      >
       <div style={{ height: 150, background: me?.bannerUrl ? `url(${me.bannerUrl}) center/cover no-repeat` : BANNER, position: 'relative' }}>
         {!me?.bannerUrl && <div style={{ position: 'absolute', inset: 0, opacity: 0.12, background: 'repeating-linear-gradient(115deg,#000 0 2px, transparent 2px 7px)' }} />}
       </div>
@@ -193,12 +208,20 @@ export function Profile() {
           />
         )}
       </div>
-    </div>
+      </div>
+    </>
   );
 }
 
 /** A 3-column thumbnail grid of recipes; tap a tile to open the swipeable viewer. */
 function RecipeGrid({ items, empty, onOpenAt, myId }: { items: RecipeCard[]; empty: string; onOpenAt: (index: number) => void; myId?: string }) {
+  // Warm signed playback URLs for premium clips this viewer can actually watch, so
+  // opening one from the grid is instant instead of a ~1s /playback round-trip.
+  useEffect(() => {
+    for (const r of items) {
+      if (r.video?.signed && !r.locked && r.video?.status === 'ready') void prefetchPlaybackUrl(r.id);
+    }
+  }, [items]);
   if (items.length === 0) {
     return <div style={{ padding: 30, textAlign: 'center', background: 'var(--surface)', border: '1px dashed var(--line-2)', borderRadius: 20, color: 'var(--text-faint-2)', fontSize: 14 }}>{empty}</div>;
   }

@@ -354,8 +354,10 @@ cooks.post('/requests/:followerId/respond', requireAuth, requireNotBanned, async
     const { error } = await supabaseAdmin.from('follows').insert({ follower_id: followerId, cook_id: userId });
     if (!error) {
       await supabaseAdmin.rpc('adjust_follow_counters', { p_follower: followerId, p_cook: userId, delta: 1 });
-      // The requester learns they're in; the owner's request row becomes a follow.
-      await notify({ userId: followerId, type: 'follow', actorId: userId });
+      // The requester now follows the owner — tell them their request was ACCEPTED
+      // (not "owner started following you", which is backwards). Separately, the
+      // owner's own "X requested to follow you" row becomes "X started following you".
+      await notify({ userId: followerId, type: 'follow_accepted', actorId: userId });
       await supabaseAdmin.from('notifications').update({ type: 'follow' }).eq('user_id', userId).eq('actor_id', followerId).eq('type', 'follow_request');
     }
   } else {

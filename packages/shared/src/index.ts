@@ -556,7 +556,7 @@ export interface JournalEntryDTO extends CookLogDTO {
 }
 
 export type NotificationKind =
-  | 'follow' | 'like' | 'comment' | 'comment_like' | 'verified' | 'repost' | 'removed' | 'restored' | 'banned' | 'message' | 'tip' | 'follow_request'
+  | 'follow' | 'like' | 'comment' | 'comment_like' | 'verified' | 'repost' | 'removed' | 'restored' | 'banned' | 'message' | 'tip' | 'follow_request' | 'follow_accepted'
   // Creator-account lifecycle (system notifications; actor is the recipient).
   | 'creator_progress' | 'creator_eligible' | 'creator_activated' | 'creator_payout_incomplete' | 'payout_first' | 'payout_paid' | 'creator_monthly_summary';
 
