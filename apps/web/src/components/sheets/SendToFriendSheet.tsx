@@ -1,9 +1,10 @@
-import { useMemo, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { CookSummary } from '@sizzle/shared';
 import { Button, DismissBackdrop } from '../controls';
-import { useConversations, useFollowList, useMe, useSendRecipe, useShareRecipe } from '../../data/queries';
+import { useConversations, useFollowList, useMe, useRecipe, useSendRecipe, useShareRecipe } from '../../data/queries';
 import { useSwipeDismiss } from '../../lib/useSwipeDismiss';
 import { recipeShareUrl, nativeShare } from '../../lib/share';
+import { canShareToInstagramStories, shareRecipeVideoToInstagramStories } from '../../lib/instagramStory';
 import { useSizzle } from '../../store';
 
 /**
@@ -26,6 +27,23 @@ export function SendToFriendSheet() {
   const [sentTo, setSentTo] = useState<Set<string>>(new Set());
   const [q, setQ] = useState('');
   const [copied, setCopied] = useState(false);
+  const [igStories, setIgStories] = useState(false);
+  const [igBusy, setIgBusy] = useState(false);
+  const [igPct, setIgPct] = useState(0);
+  // The IG video prep polls the backend for up to ~90s. If the sheet is dismissed
+  // mid-poll, cancel it so it neither launches Instagram after the user moved on nor
+  // calls setState on the unmounted sheet.
+  const igCancelled = useRef(false);
+  useEffect(() => () => { igCancelled.current = true; }, []);
+  // Recipe detail supplies the cover + creator handle for the Story card.
+  const { data: detail } = useRecipe(target?.id ?? null);
+  // Only show the Instagram tile where the native plugin is actually compiled + IG installed
+  // (build 31+). On the launch build (30) the plugin call rejects → false → tile hidden.
+  useEffect(() => {
+    let cancelled = false;
+    void canShareToInstagramStories().then((ok) => { if (!cancelled) setIgStories(ok); });
+    return () => { cancelled = true; };
+  }, []);
 
   // Recent chats first, then everyone you follow (deduped), filtered by search.
   const people = useMemo(() => {
@@ -66,6 +84,25 @@ export function SendToFriendSheet() {
     void nativeShare({ title: target.title, url }).then((r) => {
       if (r === 'shared') share.mutate(target.id);
       else if (r === 'unavailable') copyLink();
+    });
+  };
+  const shareToIgStories = () => {
+    if (igBusy) return;
+    igCancelled.current = false;
+    setIgBusy(true);
+    setIgPct(0);
+    void shareRecipeVideoToInstagramStories({
+      recipeId: target.id,
+      posterUrl: detail?.video?.posterUrl ?? null,
+      title: target.title,
+      handle: detail?.cook?.handle ?? '',
+      recipeUrl: url,
+      onProgress: (pct) => { if (!igCancelled.current) setIgPct(pct); },
+      isCancelled: () => igCancelled.current,
+    }).then((res) => {
+      if (igCancelled.current) return; // sheet dismissed mid-prep — don't touch state or count
+      if (res) share.mutate(target.id);
+      setIgBusy(false);
     });
   };
 
@@ -116,6 +153,13 @@ export function SendToFriendSheet() {
           })}
         </div>
 
+        {igStories && (
+          <div style={{ flex: 'none', padding: '10px 18px 0' }}>
+            <Button onClick={shareToIgStories} disabled={igBusy} aria-label="Share to Instagram Stories" style={{ width: '100%', height: 46, borderRadius: 14, fontSize: 14, fontWeight: 800, border: 'none', color: '#fff', background: 'linear-gradient(90deg,#f9a825,#ff5a36,#d6249f,#8a3ab9)', opacity: igBusy ? 0.85 : 1 }}>
+              {igBusy ? (igPct > 0 ? `Preparing video… ${igPct}%` : 'Preparing video…') : '📸 Share to Instagram Stories'}
+            </Button>
+          </div>
+        )}
         <div style={{ flex: 'none', display: 'flex', gap: 10, padding: '10px 18px calc(16px + var(--sab, 0px))', borderTop: '1px solid var(--line)' }}>
           <Button onClick={copyLink} variant="tonal" style={{ flex: 1, height: 46, borderRadius: 14, fontSize: 14 }}>
             {copied ? '✓ Copied' : '🔗 Copy link'}

@@ -13,7 +13,7 @@ import { scaleIngredient } from '../../lib/ingredients';
 import { useShopping } from '../../lib/shopping';
 import { useSizzle } from '../../store';
 import { theme } from '../../theme';
-import { BookmarkIcon, CloseIcon, CommentIcon, DownloadIcon, PencilIcon, PlayIcon, SpeakerIcon, SpeakerOffIcon, TrashIcon } from '../icons';
+import { BookmarkIcon, CloseIcon, CommentIcon, DownloadIcon, PencilIcon, PlayIcon, ShareIcon, SpeakerIcon, SpeakerOffIcon, TrashIcon } from '../icons';
 import { Hashtags } from '../Hashtags';
 import { ImageCarousel } from '../ImageCarousel';
 import { VerifiedBadge } from '../VerifiedBadge';
@@ -29,6 +29,7 @@ export function RecipeSheet() {
   const setOpenRecipe = useSizzle((s) => s.setOpenRecipe);
   const setViewer = useSizzle((s) => s.setViewer);
   const setEditPostFor = useSizzle((s) => s.setEditPostFor);
+  const setSendRecipeFor = useSizzle((s) => s.setSendRecipeFor);
   const setOpenCook = useSizzle((s) => s.setOpenCook);
   const setCommentsFor = useSizzle((s) => s.setCommentsFor);
   const setCookFor = useSizzle((s) => s.setCookFor);
@@ -172,6 +173,11 @@ export function RecipeSheet() {
           <Button onClick={close} style={{ position: 'absolute', top: 'calc(var(--sat, 0px) + 16px)', right: 16, zIndex: 6, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.35)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
             <CloseIcon size={20} stroke="#fff" strokeWidth={2.2} />
           </Button>
+          {r && (
+            <Button onClick={() => setSendRecipeFor({ id: r.id, title: r.title })} title="Share recipe" aria-label="Share recipe" style={{ position: 'absolute', top: 'calc(var(--sat, 0px) + 16px)', right: 62, zIndex: 6, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.35)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
+              <ShareIcon size={18} stroke="#fff" strokeWidth={1.9} />
+            </Button>
+          )}
           {isOwner && (
             <Button onClick={() => setConfirmDel(true)} title="Delete post" aria-label="Delete post" style={{ position: 'absolute', top: 'calc(var(--sat, 0px) + 16px)', left: 16, zIndex: 6, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.4)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
               <TrashIcon size={19} stroke="#fff" strokeWidth={2} />

@@ -2,6 +2,7 @@ import { QueryClient, useInfiniteQuery, useMutation, useQuery, useQueryClient, t
 import type { AdminAppealDTO, AdminContentReportDTO, AdminLogDTO, AdminReportGroupDTO, AdminStats, AdminUserDTO, CollectionDTO, CommentDTO, ConversationDTO, CookProfile, CookSummary, CreateRecipeInput, CreatorAnalytics, DirectUploadTicket, DraftCard, EarningsSummary, FeedResponse, MeProfile, MessageDTO, MonetizationStatus, NotificationDTO, NotifPrefKey, PostControls, ProductDTO, RecipeCard, RecipeDetail, ReportInput, SearchResults, SuggestedCook, SupportRequestDTO, ThreadDTO, TierDTO, TipConfig, TrendingTag, VerificationTier, VideoAssetStatus, VideoUploadConfig, CookLogDTO, JournalEntryDTO, BoardDTO } from '@sizzle/shared';
 import { useAuth } from '../auth/useAuth';
 import { useSizzle } from '../store';
+import { forgetPlaybackUrl } from '../lib/signedPlayback';
 import { apiGet, apiSend, setAdminUnlockToken } from '../lib/api';
 import { syncBadge } from '../lib/badge';
 import { onExternalBrowserClosed } from '../lib/native';
@@ -364,16 +365,33 @@ export function useSetWelcomeDm() {
 }
 
 /** Set (or clear) a premium price on the creator's own recipe. */
+/**
+ * After a premium⇄free (price/visibility) toggle, the server flips the video's Cloudflare
+ * signed-URL protection. Two bits of client state must catch up or the video won't play
+ * until an app restart: (1) the module-level signed-URL cache still holds a token that now
+ * 401s on the newly-public video, and (2) the full-screen viewer renders a FROZEN snapshot
+ * (not a live query), so its card keeps video.signed=true. Evict the cache and patch the
+ * snapshot from the freshly-refetched detail so playback re-derives to the raw HLS.
+ */
+async function syncPremiumStateClient(qc: QueryClient, recipeId: string) {
+  forgetPlaybackUrl(recipeId);
+  await qc.invalidateQueries({ queryKey: keys.recipe(recipeId) });
+  const fresh = qc.getQueryData<RecipeDetail>(keys.recipe(recipeId));
+  if (fresh) {
+    useSizzle.getState().patchViewer((c) =>
+      c.id === recipeId ? { ...c, video: fresh.video, locked: fresh.locked, price: fresh.price, visibility: fresh.visibility } : c,
+    );
+  }
+  void qc.invalidateQueries({ queryKey: ['feed'] });
+  void qc.invalidateQueries({ queryKey: ['cook'] });
+}
+
 export function useSetRecipePrice() {
   const qc = useQueryClient();
   return useMutation({
     mutationFn: ({ recipeId, priceCents }: { recipeId: string; priceCents: number | null }) =>
       apiSend('PATCH', `/recipes/${recipeId}/controls`, { priceCents }),
-    onSuccess: (_d, { recipeId }) => {
-      void qc.invalidateQueries({ queryKey: keys.recipe(recipeId) });
-      void qc.invalidateQueries({ queryKey: ['feed'] });
-      void qc.invalidateQueries({ queryKey: ['cook'] });
-    },
+    onSuccess: (_d, { recipeId }) => syncPremiumStateClient(qc, recipeId),
   });
 }
 
@@ -397,11 +415,7 @@ export function useSetRecipeVisibility() {
   return useMutation({
     mutationFn: ({ recipeId, visibility }: { recipeId: string; visibility: 'public' | 'subscribers' }) =>
       apiSend('PATCH', `/recipes/${recipeId}/controls`, { visibility }),
-    onSuccess: (_d, { recipeId }) => {
-      void qc.invalidateQueries({ queryKey: keys.recipe(recipeId) });
-      void qc.invalidateQueries({ queryKey: ['feed'] });
-      void qc.invalidateQueries({ queryKey: ['cook'] });
-    },
+    onSuccess: (_d, { recipeId }) => syncPremiumStateClient(qc, recipeId),
   });
 }
 

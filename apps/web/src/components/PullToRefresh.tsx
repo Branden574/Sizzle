@@ -3,6 +3,17 @@ import { hapticArm, hapticError, hapticSuccess } from '../lib/haptics';
 
 export type RefreshPhase = 'idle' | 'pulling' | 'armed' | 'refreshing' | 'success' | 'failed';
 
+/** The status-bar / notch / Dynamic Island inset (px), read from the global `--sat` CSS var. */
+export function readSafeTop(): number {
+  if (typeof window === 'undefined') return 0;
+  try {
+    const v = parseFloat(getComputedStyle(document.documentElement).getPropertyValue('--sat'));
+    return Number.isFinite(v) ? Math.round(v) : 0;
+  } catch {
+    return 0;
+  }
+}
+
 /**
  * TikTok-style pull-to-refresh for any vertically-scrolling container. Pass the scroll
  * element's ref; when it's at the top, dragging DOWN past a threshold arms the gesture
@@ -29,16 +40,18 @@ export function usePullToRefresh<T extends HTMLElement>(
   const [reducedMotion] = useState(
     () => typeof window !== 'undefined' && !!window.matchMedia?.('(prefers-reduced-motion: reduce)').matches,
   );
+  const [safeTop] = useState(readSafeTop);
   const refreshingRef = useRef(false);
   const armedRef = useRef(false);
   const onRefreshRef = useRef(onRefresh);
   onRefreshRef.current = onRefresh;
   const resetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const THRESH = 64;
-  const DISARM = 52; // hysteresis floor: once armed, stay armed until the pull drops below this
-  const MAX = 92;
-  const REST = 52;
+  // Offsets include the safe-area top (notch / Dynamic Island) so the flame clears it.
+  const THRESH = 64 + safeTop;
+  const DISARM = 52 + safeTop; // hysteresis floor: once armed, stay armed until the pull drops below this
+  const MAX = 92 + safeTop;
+  const REST = 52 + safeTop;
 
   // The actual refresh run — shared by the release gesture AND the accessible non-gesture
   // trigger. Stored in a ref so the touch handler (bound once) always calls the latest onRefresh.
@@ -80,7 +93,7 @@ export function usePullToRefresh<T extends HTMLElement>(
       if (dy <= 0) { setDragging(false); setPull(0); armedRef.current = false; setPhase('idle'); return; }
       e.preventDefault(); // hold native scroll while we rubber-band
       setDragging(true);
-      const next = Math.min(MAX, dy * 0.5); // damped
+      const next = Math.min(MAX, dy <= safeTop ? dy : safeTop + (dy - safeTop) * 0.5); // 1:1 past the island, then damped
       setPull(next);
       // Hysteresis: arm at THRESH, but once armed only disarm below DISARM — so a finger
       // hovering at the exact threshold can't machine-gun the arm haptic.
@@ -239,7 +252,8 @@ export function PullToRefreshSpinner({
       )}
       <div
         style={{
-          position: 'absolute', top: 0, left: 0, right: 0, height: 74,
+          // Offset below the notch / Dynamic Island so the flame isn't hidden behind it.
+          position: 'absolute', top: 'var(--sat, 0px)', left: 0, right: 0, height: 74,
           display: 'flex', flexDirection: 'column', alignItems: 'center', justifyContent: 'center', gap: 3,
           zIndex: 5, pointerEvents: 'none',
           opacity: show ? 1 : 0, transition: 'opacity .2s ease',
