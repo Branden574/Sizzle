@@ -42,7 +42,7 @@ export interface VideoStreamProvider {
   /** Mint a short-lived signed playback token for a signed asset. The API hands this
    *  ONLY to entitled viewers (owner / unlocked / active subscriber); the client
    *  appends it as `?token=` to the manifest (and poster) URL. Optional — Cloudflare. */
-  signPlaybackToken?(providerUid: string, ttlSeconds: number): Promise<string>;
+  signPlaybackToken?(providerUid: string, ttlSeconds: number, opts?: { downloadable?: boolean }): Promise<string>;
   /** Enable (idempotent) + report the on-demand downloadable MP4 rendition. MP4 downloads
    *  are a separate Cloudflare rendition (billed as extra stored minutes), so we enable them
    *  LAZILY on first share request and cache the URL. Returns readiness + percent so callers
@@ -77,7 +77,7 @@ class MockStream implements VideoStreamProvider {
   // Signed-URL protection is a no-op on the mock (its sample stream is public);
   // returning a throwaway token keeps the local premium flow exercisable.
   async setRequireSignedURLs(): Promise<void> {}
-  async signPlaybackToken(): Promise<string> {
+  async signPlaybackToken(_uid?: string, _ttl?: number, _opts?: { downloadable?: boolean }): Promise<string> {
     return 'mock-playback-token';
   }
   async enableDownloadMp4(): Promise<{ ready: boolean; url: string | null; percent: number }> {
@@ -214,12 +214,16 @@ class CloudflareStream implements VideoStreamProvider {
   /** Mint a signed token via Cloudflare's per-video /token endpoint (uses the Stream
    *  API token — no separate signing key to provision). `exp` bounds its lifetime so
    *  a leaked token dies quickly; the caller only issues one to an entitled viewer. */
-  async signPlaybackToken(uid: string, ttlSeconds: number): Promise<string> {
+  async signPlaybackToken(uid: string, ttlSeconds: number, opts?: { downloadable?: boolean }): Promise<string> {
     const exp = Math.floor(Date.now() / 1000) + Math.max(60, ttlSeconds);
+    // `downloadable: true` is REQUIRED for a signed token to authorize the MP4 download path
+    // (/{token}/downloads/default.mp4). A plain playback token 403s on downloads — which silently
+    // broke premium video → IG Stories export (the client fell back to the still card).
+    const body = opts?.downloadable ? { exp, downloadable: true } : { exp };
     const res = await fetchWithTimeout(`${this.base}/${uid}/token`, {
       method: 'POST',
       headers: this.headers,
-      body: JSON.stringify({ exp }),
+      body: JSON.stringify(body),
     }, 8_000);
     if (res.status === 404) throw new AssetNotFoundError(`Cloudflare asset ${uid} not found`);
     if (!res.ok) throw new Error(`Cloudflare signPlaybackToken ${uid} → HTTP ${res.status}`);

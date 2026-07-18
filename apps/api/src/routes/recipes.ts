@@ -737,10 +737,12 @@ recipes.get('/:id/share-video', requireAuth, async (c) => {
   }
   const uid = asset.provider_uid;
 
-  // Sign the download path for a premium owner-export; free videos are public.
+  // Sign the download path for a premium owner-export; free videos are public. The token MUST
+  // be minted `downloadable` or Cloudflare 403s the /downloads/*.mp4 path (a plain playback
+  // token only authorizes streaming) — which is what silently forced the still-card fallback.
   const signPath = async (rawUrl: string): Promise<string> => {
     if (!premium || !provider.signPlaybackToken) return rawUrl;
-    const token = await provider.signPlaybackToken(uid, 60 * 30); // 30-min export window
+    const token = await provider.signPlaybackToken(uid, 60 * 30, { downloadable: true }); // 30-min export window
     return rawUrl.replace(uid, token);
   };
 
