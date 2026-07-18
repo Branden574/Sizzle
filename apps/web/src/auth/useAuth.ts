@@ -99,7 +99,12 @@ export const useAuth = create<AuthState>((set, get) => ({
       // an SPA (no reload on a native account switch), so wipe the shared cache
       // whenever the signed-in identity changes — else account B could read a URL
       // minted for account A on the same device.
-      if ((session?.user?.id ?? null) !== (get().user?.id ?? null)) { clearPlaybackCache(); clearLocalClips(); }
+      if ((session?.user?.id ?? null) !== (get().user?.id ?? null)) {
+        clearPlaybackCache(); clearLocalClips();
+        // Cached profile snapshots are account-scoped paint data — never let account A's
+        // profile/grid flash for account B on a same-device switch (no reload in this SPA).
+        try { localStorage.removeItem('sizzle.cache.me'); localStorage.removeItem('sizzle.cache.cook'); } catch { /* private mode */ }
+      }
       set({
         session,
         user: session?.user ?? null,
@@ -195,8 +200,8 @@ export const useAuth = create<AuthState>((set, get) => ({
     // without this the next account inherits the previous user's count.
     await clearBadge();
     await supabase.auth.signOut();
-    // Cached profile snapshot must not flash for the NEXT account.
-    try { localStorage.removeItem('sizzle.cache.me'); } catch { /* private mode */ }
+    // Cached profile snapshots must not flash for the NEXT account.
+    try { localStorage.removeItem('sizzle.cache.me'); localStorage.removeItem('sizzle.cache.cook'); } catch { /* private mode */ }
     // Drop the app-lock passcode so it can't carry over to the next account.
     await clearPasscode();
     useSizzle.getState().setAppLockEnabled(false);

@@ -565,8 +565,44 @@ export function useDeleteCookLog() {
   });
 }
 
+const COOK_CACHE_KEY = 'sizzle.cache.cook';
+/**
+ * Last-seen snapshot of the SIGNED-IN user's OWN cook profile — including their post grid —
+ * for an instant cached paint on the next launch (mirrors the useMe snapshot). Scoped by id
+ * so it can NEVER surface another account's profile, and cleared on logout + account switch
+ * (auth/useAuth.ts). Only the owner's own profile is persisted.
+ */
+function readCookSnapshot(id: string | null): CookProfile | undefined {
+  if (!id) return undefined;
+  try {
+    const raw = localStorage.getItem(COOK_CACHE_KEY);
+    if (!raw) return undefined;
+    const snap = JSON.parse(raw) as { id: string; profile: CookProfile };
+    return snap.id === id ? snap.profile : undefined;
+  } catch { return undefined; }
+}
+export function clearCookSnapshot(): void {
+  try { localStorage.removeItem(COOK_CACHE_KEY); } catch { /* private mode */ }
+}
+
 export function useCook(id: string | null) {
-  return useQuery({ queryKey: keys.cook(id ?? ''), queryFn: () => apiGet<CookProfile>(`/cooks/${id}`), enabled: !!id });
+  const myId = useAuth((s) => s.user?.id ?? null);
+  const isSelf = !!id && id === myId;
+  return useQuery({
+    queryKey: keys.cook(id ?? ''),
+    queryFn: async () => {
+      const cook = await apiGet<CookProfile>(`/cooks/${id}`);
+      // Persist only YOUR OWN profile so the post grid paints instantly next launch instead of
+      // flashing an empty "Videos you post will show up here" for ~1s while /cooks/:id loads.
+      if (isSelf) { try { localStorage.setItem(COOK_CACHE_KEY, JSON.stringify({ id, profile: cook })); } catch { /* quota/private */ } }
+      return cook;
+    },
+    enabled: !!id,
+    // Own profile paints from the last snapshot immediately, then refetches in the background
+    // (initialDataUpdatedAt 0 = treat as stale so fresh data always loads). Other creators'
+    // profiles get no snapshot — they're never cached across launches.
+    ...(isSelf ? { initialData: () => readCookSnapshot(id), initialDataUpdatedAt: 0 } : {}),
+  });
 }
 
 export function useFollowList(id: string | null, mode: 'followers' | 'following') {

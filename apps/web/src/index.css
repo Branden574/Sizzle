@@ -698,6 +698,15 @@ input {
   80% { transform: translateX(4px); }
 }
 
+/* Skeleton shimmer — a highlight bar sweeping across a loading placeholder tile. */
+@keyframes sz-shimmer {
+  0% { transform: translateX(-100%); }
+  100% { transform: translateX(100%); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .sz-shimmer { animation: none !important; }
+}
+
 /* Staggered rise-in for the first-launch demo-content notice. */
 @keyframes sz-riseIn {
   from { opacity: 0; transform: translateY(14px); }

@@ -1,7 +1,7 @@
 {
   "name": "@sizzle/web",
   "private": true,
-  "version": "1.0.88",
+  "version": "1.0.89",
   "type": "module",
   "description": "Sizzle web client — watch it, then cook it.",
   "scripts": {

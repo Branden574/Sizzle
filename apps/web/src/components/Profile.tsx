@@ -45,16 +45,20 @@ export function Profile() {
   const shoppingCount = useShopping((s) => s.items.length);
 
   const { data: me } = useMe();
-  const { data: saved } = useSavedFeed();
-  const { data: liked } = useLikedFeed();
-  const { data: myCook } = useCook(me?.id ?? null);
+  const savedQ = useSavedFeed();
+  const likedQ = useLikedFeed();
+  const myCookQ = useCook(me?.id ?? null);
   const { data: notifications } = useNotifications();
-  const savedItems = saved?.items ?? [];
-  const likedItems = liked?.items ?? [];
-  const postItems = myCook?.recipes ?? [];
+  const savedItems = savedQ.data?.items ?? [];
+  const likedItems = likedQ.data?.items ?? [];
+  const postItems = myCookQ.data?.recipes ?? [];
   const unread = (notifications ?? []).filter((n) => !n.read).length;
   const [tab, setTab] = useState<'posts' | 'liked' | 'saved' | 'journal'>('posts');
   const gridItems = tab === 'posts' ? postItems : tab === 'liked' ? likedItems : savedItems;
+  // Skeleton (not the empty message) while the active tab's first page is loading with nothing
+  // cached. With the own-profile snapshot this is already false on a warm launch, so the grid
+  // paints instantly; only a genuine loaded-empty result shows "…will show up here".
+  const gridLoading = tab === 'posts' ? myCookQ.isPending : tab === 'liked' ? likedQ.isPending : savedQ.isPending;
 
   const qc = useQueryClient();
   const scrollRef = useRef<HTMLDivElement>(null);
@@ -203,6 +207,7 @@ export function Profile() {
           <RecipeGrid
             items={gridItems}
             myId={me?.id}
+            loading={gridLoading}
             empty={tab === 'posts' ? 'Videos you post will show up here.' : tab === 'liked' ? 'Videos you like will show up here.' : 'Recipes you save will collect here.'}
             onOpenAt={(i) => setViewer({ items: gridItems, index: i })}
           />
@@ -213,8 +218,22 @@ export function Profile() {
   );
 }
 
+/** A 3-column shaped skeleton shown ONLY while the first page is loading with nothing cached —
+ *  so the grid never flashes an empty "no videos" message before the request resolves. */
+function GridSkeleton() {
+  return (
+    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 8 }} aria-hidden>
+      {Array.from({ length: 6 }, (_, i) => (
+        <div key={i} style={{ aspectRatio: '3 / 4', borderRadius: 14, background: 'var(--surface)', overflow: 'hidden', position: 'relative' }}>
+          <div className="sz-shimmer" style={{ position: 'absolute', inset: 0, background: 'linear-gradient(90deg, transparent, rgba(255,255,255,.06), transparent)', animation: 'sz-shimmer 1.25s ease-in-out infinite' }} />
+        </div>
+      ))}
+    </div>
+  );
+}
+
 /** A 3-column thumbnail grid of recipes; tap a tile to open the swipeable viewer. */
-function RecipeGrid({ items, empty, onOpenAt, myId }: { items: RecipeCard[]; empty: string; onOpenAt: (index: number) => void; myId?: string }) {
+function RecipeGrid({ items, empty, onOpenAt, myId, loading }: { items: RecipeCard[]; empty: string; onOpenAt: (index: number) => void; myId?: string; loading?: boolean }) {
   // Warm signed playback URLs for premium clips this viewer can actually watch, so
   // opening one from the grid is instant instead of a ~1s /playback round-trip.
   useEffect(() => {
@@ -223,6 +242,9 @@ function RecipeGrid({ items, empty, onOpenAt, myId }: { items: RecipeCard[]; emp
     }
   }, [items]);
   if (items.length === 0) {
+    // Loading with nothing cached → a shaped skeleton, NEVER the "no videos" message. The empty
+    // state must appear only after the request confirms the tab is genuinely empty.
+    if (loading) return <GridSkeleton />;
     return <div style={{ padding: 30, textAlign: 'center', background: 'var(--surface)', border: '1px dashed var(--line-2)', borderRadius: 20, color: 'var(--text-faint-2)', fontSize: 14 }}>{empty}</div>;
   }
   return (
