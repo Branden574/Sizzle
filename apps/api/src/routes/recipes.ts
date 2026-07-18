@@ -780,6 +780,17 @@ recipes.get('/:id/share-video-diag', async (c) => {
     if (asset.provider === 'cloudflare' && asset.provider_uid && provider.enableDownloadMp4) {
       const dl = await provider.enableDownloadMp4(asset.provider_uid);
       out.enable = { ready: dl.ready, percent: dl.percent, hasUrl: !!dl.url };
+      // Raw Cloudflare responses so we see the ACTUAL status/errors, not our parse.
+      const acct = process.env.CLOUDFLARE_ACCOUNT_ID;
+      const tok = process.env.CLOUDFLARE_STREAM_TOKEN;
+      const cfHdr = { Authorization: `Bearer ${tok}`, 'Content-Type': 'application/json' };
+      const dlRes = await fetch(`https://api.cloudflare.com/client/v4/accounts/${acct}/stream/${asset.provider_uid}/downloads`, { method: 'POST', headers: cfHdr, body: '{}' });
+      const dlJson = (await dlRes.json()) as { result?: unknown; errors?: unknown };
+      out.cfDownloadsRaw = dlJson.result ?? null;
+      out.cfDownloadsErrors = dlJson.errors ?? null;
+      const vidRes = await fetch(`https://api.cloudflare.com/client/v4/accounts/${acct}/stream/${asset.provider_uid}`, { headers: cfHdr });
+      const v = ((await vidRes.json()) as { result?: Record<string, any> }).result ?? {};
+      out.cfVideo = { state: v?.status?.state, pctComplete: v?.status?.pctComplete, requireSignedURLs: v?.requireSignedURLs, duration: v?.duration, input: v?.input, errorReasonText: v?.status?.errorReasonText };
       if (dl.ready) {
         const rawUrl = dl.url ?? (asset.hls_url ? asset.hls_url.replace('/manifest/video.m3u8', '/downloads/default.mp4') : null);
         if (rawUrl) {
