@@ -195,11 +195,62 @@ async function prepareShareVideoUrl(
   return null;
 }
 
+function roundRectPath(ctx: CanvasRenderingContext2D, x: number, y: number, w: number, h: number, r: number): void {
+  ctx.beginPath();
+  ctx.moveTo(x + r, y);
+  ctx.arcTo(x + w, y, x + w, y + h, r);
+  ctx.arcTo(x + w, y + h, x, y + h, r);
+  ctx.arcTo(x, y + h, x, y, r);
+  ctx.arcTo(x, y, x + w, y, r);
+  ctx.closePath();
+}
+
 /**
- * Share the recipe's ACTUAL video (with sound) to Instagram Stories. Prepares a downloadable MP4
- * server-side, hands the URL to the native plugin (which downloads it and sets IG's
- * backgroundVideo pasteboard), and falls back to the branded card image if the video can't be
- * prepared (not exportable, still transcoding, or IG errors). Returns which path succeeded.
+ * A compact branded "watermark" sticker (transparent PNG) overlaid on a shared video story —
+ * a Sizzle gradient pill with the wordmark, the creator's @handle, and a "find it on Sizzle"
+ * tagline. IG shows it as a draggable sticker the user can reposition. This is our attribution
+ * on video shares (IG only renders tappable LINK stickers for approved partners, so we brand
+ * visually instead). Returns a base64 PNG.
+ */
+export async function composeStoryBadge(opts: { handle: string }): Promise<string> {
+  const W = 840, H = 300, pad = 12;
+  const canvas = document.createElement('canvas');
+  canvas.width = W;
+  canvas.height = H;
+  const ctx = canvas.getContext('2d');
+  if (!ctx) throw new Error('no 2d canvas context');
+
+  const g = ctx.createLinearGradient(pad, 0, W - pad, 0);
+  g.addColorStop(0, '#f9a825');
+  g.addColorStop(0.5, '#ff5a36');
+  g.addColorStop(1, '#d6249f');
+  ctx.shadowColor = 'rgba(0,0,0,0.35)';
+  ctx.shadowBlur = 26;
+  ctx.shadowOffsetY = 8;
+  ctx.fillStyle = g;
+  roundRectPath(ctx, pad, pad, W - pad * 2, H - pad * 2, 52);
+  ctx.fill();
+  ctx.shadowColor = 'transparent';
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = '#fff';
+  ctx.font = "800 74px -apple-system, 'Hanken Grotesk', system-ui, sans-serif";
+  ctx.fillText('🔥 Sizzle', W / 2, 116);
+  ctx.font = "700 50px -apple-system, 'Hanken Grotesk', system-ui, sans-serif";
+  ctx.fillText(`@${opts.handle}`, W / 2, 184);
+  ctx.fillStyle = 'rgba(255,255,255,0.92)';
+  ctx.font = "600 34px -apple-system, 'Hanken Grotesk', system-ui, sans-serif";
+  ctx.fillText('Get the full recipe on Sizzle', W / 2, 240);
+
+  return canvas.toDataURL('image/png');
+}
+
+/**
+ * Share the recipe's ACTUAL video (with sound) to Instagram Stories, with a branded Sizzle
+ * watermark sticker overlaid. Prepares a downloadable MP4 server-side, hands the URL + sticker
+ * to the native plugin (which downloads the video and sets IG's backgroundVideo + stickerImage
+ * pasteboard), and falls back to the branded card image if the video can't be prepared (not
+ * exportable, still transcoding, or IG errors). Returns which path succeeded.
  */
 export async function shareRecipeVideoToInstagramStories(opts: {
   recipeId: string;
@@ -213,7 +264,11 @@ export async function shareRecipeVideoToInstagramStories(opts: {
   const mp4Url = await prepareShareVideoUrl(opts.recipeId, opts.onProgress, opts.isCancelled);
   if (mp4Url && !opts.isCancelled?.()) {
     try {
-      const { shared } = await InstagramShare.shareToStories({ backgroundVideoUrl: mp4Url, appId: FACEBOOK_APP_ID });
+      // A branded watermark sticker so the story is visibly "from Sizzle". Best-effort — if the
+      // canvas fails for any reason, still share the video (unbranded beats not sharing).
+      let stickerImage: string | undefined;
+      try { stickerImage = await composeStoryBadge({ handle: opts.handle }); } catch { /* no badge */ }
+      const { shared } = await InstagramShare.shareToStories({ backgroundVideoUrl: mp4Url, stickerImage, appId: FACEBOOK_APP_ID });
       if (shared) return 'shared-video';
     } catch {
       /* fall through to the branded card */
