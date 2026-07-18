@@ -14,8 +14,12 @@ export interface ViewerSignals {
   affinity: Map<string, number>;
   /** hashtag -> positive engagement count (the X-style topic/hashtag signal). */
   tagAffinity: Map<string, number>;
-  /** cooks whose recipes the viewer disliked. */
-  dislikedCooks: Set<string>;
+  /** exact recipes the viewer disliked — full penalty, that recipe only. */
+  dislikedRecipes: Set<string>;
+  /** cook id -> how many of their recipes the viewer disliked. A *soft* per-cook
+   *  penalty kicks in only at 2+ (repeatedly disliking a cook is a real signal);
+   *  a single dislike no longer downranks the cook's whole catalog. */
+  dislikedCooks: Map<string, number>;
   /** recipes already served recently (served history). */
   impressed: Set<string>;
   /** cook id -> number of fast-skips. */
@@ -40,13 +44,30 @@ export const RANK_WEIGHTS = {
   // Sends-per-reach: DM'ing a recipe to a friend is a personal endorsement —
   // Instagram ranks it #1. Log-scaled like cooks.
   sends: 2.0,
+  // Engagement-rate quality: (likes + 2·saves + 3·cooks) per view. Rewards recipes
+  // that convert the reach they get, independent of raw popularity (which rewards
+  // absolute reach). The two are complementary signals.
+  quality: 2.5,
+  // Watch-ratio: the aggregate fraction of the video viewers actually watch (rolled
+  // up nightly-ish from dwell_ms / duration). The single strongest content-quality
+  // signal — a recipe people watch to the end is genuinely good, regardless of reach.
+  watchRatio: 3.0,
   // Admin boost: factor 1 ≈ the pull of a follow. Bounded to [0,3] in the DB.
   boost: 5.0,
   seenPenalty: 4.0,
+  // Full penalty applied to the EXACT recipe the viewer disliked.
   dislikePenalty: 8.0,
+  // Soft per-cook penalty, applied only once the viewer has disliked 2+ of a cook's
+  // recipes (scaled by that count, capped). Replaces the old sledgehammer where a
+  // single dislike subtracted 8 from every recipe the cook had ever posted.
+  cookDislikePenalty: 1.5,
   skipPenalty: 1.0,
   diversityPenalty: 3.0,
 };
+
+/** Smoothing prior for the engagement-rate quality signal: a recipe needs ~this many
+ *  views before its like/save/cook rate is trusted, so a 1-view fluke can't score 1.0. */
+const QUALITY_K = 20;
 
 function recencyScore(createdAt: string, now: number): number {
   const ageDays = (now - new Date(createdAt).getTime()) / 86_400_000;
@@ -65,6 +86,14 @@ function sendsScore(sendCount: number): number {
   return Math.min(1, Math.log10(sendCount + 1) / 3); // ~1.0 around 1K sends
 }
 
+/** Engagement per reach: (likes + 2·saves + 3·cooks) / (views + K), clamped to [0,1].
+ *  Saves and especially cooks weigh heavier than likes — they're stronger intent. */
+function qualityScore(r: RecipeRow): number {
+  const positive = (r.like_count ?? 0) + 2 * (r.save_count ?? 0) + 3 * (r.cook_count ?? 0);
+  const views = r.view_count ?? 0;
+  return Math.min(1, positive / (views + QUALITY_K));
+}
+
 export function scoreRecipe(r: RecipeRow, s: ViewerSignals, now: number): number {
   const W = RANK_WEIGHTS;
   let score = W.recency * recencyScore(r.created_at, now);
@@ -80,12 +109,18 @@ export function scoreRecipe(r: RecipeRow, s: ViewerSignals, now: number): number
   score += W.popular * popularityScore(r.like_count);
   score += W.cooked * cookedScore(r.cook_count ?? 0);
   score += W.sends * sendsScore(r.send_count ?? 0);
+  score += W.quality * qualityScore(r);
+  if (r.avg_watch_ratio != null) score += W.watchRatio * Math.min(1, Number(r.avg_watch_ratio));
   // Admin boost — one more positive signal, so a boosted creator still competes
   // with taste/follow/recency (and the diversity cap) instead of pinning to #1.
   const boost = s.boosts.get(r.cook_id) ?? 0;
   if (boost > 0) score += W.boost * boost;
   if (s.impressed.has(r.id)) score -= W.seenPenalty;
-  if (s.dislikedCooks.has(r.cook_id)) score -= W.dislikePenalty;
+  // Dislike: full penalty on the exact recipe; a soft, capped penalty on the cook
+  // only after 2+ dislikes (never the old one-dislike-nukes-the-catalog behavior).
+  if (s.dislikedRecipes.has(r.id)) score -= W.dislikePenalty;
+  const cookDislikes = s.dislikedCooks.get(r.cook_id) ?? 0;
+  if (cookDislikes >= 2) score -= W.cookDislikePenalty * Math.min(cookDislikes, 4);
   score -= W.skipPenalty * Math.min(3, s.skips.get(r.cook_id) ?? 0);
   return score;
 }

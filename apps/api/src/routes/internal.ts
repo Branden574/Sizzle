@@ -297,3 +297,19 @@ internal.get('/save-nudges', async (c) => {
   }
   return c.json({ nudged: sent, considered: saves.length });
 });
+
+/**
+ * GET /internal/rollup-watch-ratios — Vercel Cron target. Recomputes each recipe's
+ * aggregate watch-ratio (avg fraction of the video viewers actually watch) from the
+ * last 30 days of views, a content-quality signal the For You ranker reads. Bounded
+ * by the recipe_views(created_at) index; only recipes with >= 3 qualifying views are
+ * updated. Auth is enforced by the fail-closed CRON_SECRET middleware above.
+ */
+internal.get('/rollup-watch-ratios', async (c) => {
+  const { data, error } = await supabaseAdmin.rpc('refresh_watch_ratios');
+  if (error) {
+    console.error('[internal] rollup-watch-ratios failed', { err: error.message });
+    return c.json({ ok: false, error: error.message }, 500);
+  }
+  return c.json({ ok: true, updated: (data as number | null) ?? 0 });
+});

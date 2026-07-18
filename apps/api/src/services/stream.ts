@@ -43,6 +43,12 @@ export interface VideoStreamProvider {
    *  ONLY to entitled viewers (owner / unlocked / active subscriber); the client
    *  appends it as `?token=` to the manifest (and poster) URL. Optional — Cloudflare. */
   signPlaybackToken?(providerUid: string, ttlSeconds: number): Promise<string>;
+  /** Enable (idempotent) + report the on-demand downloadable MP4 rendition. MP4 downloads
+   *  are a separate Cloudflare rendition (billed as extra stored minutes), so we enable them
+   *  LAZILY on first share request and cache the URL. Returns readiness + percent so callers
+   *  can poll. The URL carries the raw provider_uid; signed videos still need a token appended
+   *  to the download path (same token as signPlaybackToken). Optional — only Cloudflare. */
+  enableDownloadMp4?(providerUid: string): Promise<{ ready: boolean; url: string | null; percent: number }>;
 }
 
 /**
@@ -73,6 +79,9 @@ class MockStream implements VideoStreamProvider {
   async setRequireSignedURLs(): Promise<void> {}
   async signPlaybackToken(): Promise<string> {
     return 'mock-playback-token';
+  }
+  async enableDownloadMp4(): Promise<{ ready: boolean; url: string | null; percent: number }> {
+    return { ready: true, url: null, percent: 100 };
   }
 }
 
@@ -217,6 +226,24 @@ class CloudflareStream implements VideoStreamProvider {
     const json = (await res.json()) as { success: boolean; result?: { token?: string } };
     if (!json.success || !json.result?.token) throw new Error(`Cloudflare token mint ${uid} failed`);
     return json.result.token;
+  }
+
+  /** POST /stream/{uid}/downloads is idempotent — it enables the MP4 the first time and
+   *  otherwise just returns the current render status. We poll this from the share endpoint. */
+  async enableDownloadMp4(uid: string): Promise<{ ready: boolean; url: string | null; percent: number }> {
+    const res = await fetchWithTimeout(`${this.base}/${uid}/downloads`, {
+      method: 'POST',
+      headers: this.headers,
+      body: '{}',
+    }, 15_000);
+    if (res.status === 404) throw new AssetNotFoundError(`Cloudflare asset ${uid} not found`);
+    if (!res.ok) throw new Error(`Cloudflare enableDownloadMp4 ${uid} → HTTP ${res.status}`);
+    const json = (await res.json()) as {
+      success: boolean;
+      result?: { default?: { status?: string; url?: string; percentComplete?: number } };
+    };
+    const d = json.result?.default;
+    return { ready: d?.status === 'ready', url: d?.url ?? null, percent: Math.round(d?.percentComplete ?? 0) };
   }
 }
 

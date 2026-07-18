@@ -551,8 +551,11 @@ recipes.delete('/:id/download', requireAuth, async (c) => {
 recipes.post('/:id/share', requireAuth, rateLimit({ windowMs: 60_000, max: 60, name: 'share' }), async (c) => {
   const id = c.req.param('id');
   const userId = c.get('userId')!;
-  await recipeCookId(id, userId); // validates id + 404s a draft/removed/hidden post for non-owners
-  await supabaseAdmin.rpc('increment_share', { rid: id });
+  const cookId = await recipeCookId(id, userId); // validates id + 404s a draft/removed/hidden post for non-owners
+  // A creator sharing their OWN post must not inflate its share count — only others' shares count.
+  if (cookId !== userId) {
+    await supabaseAdmin.rpc('increment_share', { rid: id });
+  }
   return c.json({ ok: true });
 });
 
@@ -677,6 +680,84 @@ recipes.get('/:id/playback', optionalAuth, async (c) => {
   } catch (err) {
     console.error('[playback] signing failed', { id, err: String(err) });
     throw dbFail('Could not prepare playback');
+  }
+});
+
+/**
+ * GET /recipes/:id/share-video — authorize + prepare a downloadable MP4 for sharing the
+ * actual video (e.g. to Instagram Stories). Watching ≠ exporting: a FREE public video can be
+ * exported by anyone who can see it, but content that isn't freely public — PRICED,
+ * subscribers-only, OR posted by a PRIVATE (follower-only) account — may be exported ONLY by
+ * its creator. An entitled buyer or accepted follower can watch it in-app; they can't take a
+ * redistributable copy off-platform. Enables the Cloudflare downloadable-MP4 rendition lazily
+ * (billed extra), caches the public URL, and signs the download path for a premium
+ * owner-export. Returns { status:'ready', mp4Url } or { status:'generating', percent }.
+ */
+recipes.get('/:id/share-video', requireAuth, async (c) => {
+  const userId = c.get('userId')!;
+  const id = assertUuid(c.req.param('id'), 'recipe');
+  // Same visibility gate every other interaction path uses: status + auto_hidden +
+  // private-account-follower + block. Throws notFound if the viewer may not even see this
+  // recipe (the owner always passes). This is what stops a non-follower or a blocked user
+  // from exporting a private creator's video by hitting the endpoint with its UUID.
+  const cookId = await recipeCookIdUnblocked(id, userId);
+  const isOwner = cookId === userId;
+
+  const { data: rec } = await supabaseAdmin
+    .from('recipes')
+    .select('price_cents, visibility, video_asset_id')
+    .eq('id', id)
+    .maybeSingle<{ price_cents: number | null; visibility: string | null; video_asset_id: string | null }>();
+  if (!rec || !rec.video_asset_id) throw notFound('Recipe not found');
+
+  const premium = rec.price_cents != null || rec.visibility === 'subscribers';
+  // Export policy: only the creator may export content that isn't freely public. A private
+  // account's posts are follower-only by definition — even a follower can't re-broadcast them.
+  if (!isOwner) {
+    let ownerOnly = premium;
+    if (!ownerOnly) {
+      const { data: prof } = await supabaseAdmin.from('profiles').select('private').eq('id', cookId).maybeSingle<{ private: boolean | null }>();
+      ownerOnly = !!prof?.private;
+    }
+    if (ownerOnly) throw forbidden('This recipe cannot be shared as a video');
+  }
+
+  const { data: asset } = await supabaseAdmin
+    .from('video_assets')
+    .select('provider, provider_uid, hls_url, mp4_url, status')
+    .eq('id', rec.video_asset_id)
+    .maybeSingle<{ provider: string | null; provider_uid: string | null; hls_url: string | null; mp4_url: string | null; status: string | null }>();
+  if (!asset || asset.status !== 'ready') throw notFound('Video not ready');
+
+  const provider = getStreamProvider();
+  // Non-Cloudflare asset (storage/mock): the stored mp4_url IS the file, if present.
+  if (asset.provider !== 'cloudflare' || !asset.provider_uid || !provider.enableDownloadMp4) {
+    if (asset.mp4_url) return c.json({ status: 'ready', mp4Url: asset.mp4_url });
+    throw dbFail('Video not shareable');
+  }
+  const uid = asset.provider_uid;
+
+  // Sign the download path for a premium owner-export; free videos are public.
+  const signPath = async (rawUrl: string): Promise<string> => {
+    if (!premium || !provider.signPlaybackToken) return rawUrl;
+    const token = await provider.signPlaybackToken(uid, 60 * 30); // 30-min export window
+    return rawUrl.replace(uid, token);
+  };
+
+  // Fast path: a public MP4 we already enabled + cached (premium URLs are signed per-request,
+  // never stored, so we don't cache them).
+  if (!premium && asset.mp4_url) return c.json({ status: 'ready', mp4Url: asset.mp4_url });
+
+  try {
+    const dl = await provider.enableDownloadMp4(uid);
+    if (!dl.ready) return c.json({ status: 'generating', percent: dl.percent });
+    const rawUrl = dl.url ?? (asset.hls_url ? asset.hls_url.replace('/manifest/video.m3u8', '/downloads/default.mp4') : null);
+    if (!rawUrl) throw new Error('no mp4 url from Cloudflare');
+    if (!premium) await supabaseAdmin.from('video_assets').update({ mp4_url: rawUrl }).eq('id', rec.video_asset_id);
+    return c.json({ status: 'ready', mp4Url: await signPath(rawUrl) });
+  } catch (err) {
+    console.error('[share-video] prepare failed', { id, err: String(err) });
+    throw dbFail('Could not prepare the video for sharing');
   }
 });
 

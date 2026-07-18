@@ -127,27 +127,37 @@ async function loadViewerSignals(userId: string): Promise<ViewerSignals> {
 
   const affinity = new Map<string, number>();
   const tagAffinity = new Map<string, number>();
-  const dislikedCooks = new Set<string>();
+  const dislikedRecipes = new Set<string>();
+  const dislikedCooks = new Map<string, number>();
   const skips = new Map<string, number>();
+  // Self-engagement (liking/saving/finishing your OWN post) must never build affinity
+  // or topic signal — that's a self-boost vector, and your own posts are excluded from
+  // For You anyway. Guard every positive bump on "not my own recipe".
+  const isSelf = (recipeId: string) => cookOf.get(recipeId) === userId;
   const bump = (cook: string | undefined, n = 1) => {
-    if (cook) affinity.set(cook, (affinity.get(cook) ?? 0) + n);
+    if (cook && cook !== userId) affinity.set(cook, (affinity.get(cook) ?? 0) + n);
   };
   // A positive engagement also boosts that recipe's hashtags.
   const bumpTags = (recipeId: string, n = 1) => {
+    if (isSelf(recipeId)) return;
     for (const t of tagsOf.get(recipeId) ?? []) tagAffinity.set(t, (tagAffinity.get(t) ?? 0) + n);
   };
   for (const r of reactions.data ?? []) {
     const id = r.recipe_id as string;
     const cook = cookOf.get(id);
     if (r.kind === 'like') { bump(cook); bumpTags(id); }
-    else if (cook) dislikedCooks.add(cook);
+    else if (!isSelf(id)) {
+      // Dislike: mark the exact recipe, and tally per-cook (a soft cook penalty needs 2+).
+      dislikedRecipes.add(id);
+      if (cook) dislikedCooks.set(cook, (dislikedCooks.get(cook) ?? 0) + 1);
+    }
   }
   for (const s of saves.data ?? []) { bump(cookOf.get(s.recipe_id as string)); bumpTags(s.recipe_id as string); }
   for (const v of views.data ?? []) {
     const id = v.recipe_id as string;
     const cook = cookOf.get(id);
     if (v.completed) { bump(cook); bumpTags(id); }
-    if (v.skipped && cook) skips.set(cook, (skips.get(cook) ?? 0) + 1);
+    if (v.skipped && cook && cook !== userId) skips.set(cook, (skips.get(cook) ?? 0) + 1);
   }
 
   return {
@@ -155,6 +165,7 @@ async function loadViewerSignals(userId: string): Promise<ViewerSignals> {
     followedCooks: new Set((follows.data ?? []).map((f) => f.cook_id as string)),
     affinity,
     tagAffinity,
+    dislikedRecipes,
     dislikedCooks,
     impressed: new Set((impressions.data ?? []).map((i) => i.recipe_id as string)),
     skips,
@@ -185,6 +196,11 @@ feed.get('/for-you', optionalAuth, async (c) => {
       .from('recipes')
       .select('*')
       .eq('status', 'published')
+      // Moderation-hidden posts still carry status 'published', so exclude them here
+      // (matches false OR null) rather than letting them consume ranked slots.
+      .not('auto_hidden', 'is', true)
+      // A creator's own posts don't belong in their For You — they've seen them.
+      .neq('cook_id', userId)
       // Premium recipes (priced unlocks + subscribers-only) are non-playable for a
       // non-entitled viewer, so they never enter the algorithmic feed — they live
       // only on the creator's profile for followers to find and unlock.
@@ -218,6 +234,7 @@ feed.get('/for-you', optionalAuth, async (c) => {
     .from('recipes')
     .select('*')
     .eq('status', 'published')
+    .not('auto_hidden', 'is', true)
     // Premium (priced + subscribers-only) never appears in the algorithmic feed —
     // see the ranked branch above.
     .is('price_cents', null)
@@ -225,6 +242,8 @@ feed.get('/for-you', optionalAuth, async (c) => {
     .order('created_at', { ascending: false })
     .limit(PAGE + 1);
   if (cursor) q = q.lt('created_at', cursor);
+  // Authed viewers (page 2+) never see their own posts in For You either.
+  if (userId) q = q.neq('cook_id', userId);
 
   const { data, error } = await q;
   if (error) throw dbFail(error.message);

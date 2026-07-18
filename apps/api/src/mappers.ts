@@ -121,6 +121,9 @@ export interface RecipeRow {
   send_count: number | null;
   /** Public view count (self-views excluded — bump_view_count skips the creator). */
   view_count: number | null;
+  /** Aggregate watch-ratio (0–1): avg fraction of the video viewers actually watch,
+   *  rolled up by the refresh_watch_ratios cron. Null until it has >= 3 sample views. */
+  avg_watch_ratio: number | null;
   /** Lineage: the recipe this post was cooked from ("Cook this"). */
   origin_recipe_id: string | null;
   created_at: string;

@@ -18,6 +18,109 @@ const esc = (s: string) =>
 const jsonLdScript = (obj: unknown): string =>
   JSON.stringify(obj).replace(/</g, '\\u003c').replace(/>/g, '\\u003e').replace(/&/g, '\\u0026');
 
+/** The site's default share image — a real, hosted 1200×630 card. Used whenever a
+ *  recipe/profile/board has no poster of its own. (Must exist: getsizzle.app/og-image.png.) */
+const OG_FALLBACK = () => `${env.APP_ORIGIN}/og-image.png`;
+
+/**
+ * Read an image's pixel dimensions + mime straight from its header bytes.
+ * Supports the formats posters/avatars actually use (JPEG, PNG, WebP, GIF).
+ * Returns null if the bytes aren't a recognized header.
+ */
+function readImageDims(b: Buffer): { width: number; height: number; type: string } | null {
+  // PNG
+  if (b.length >= 24 && b[0] === 0x89 && b[1] === 0x50 && b[2] === 0x4e && b[3] === 0x47) {
+    return { width: b.readUInt32BE(16), height: b.readUInt32BE(20), type: 'image/png' };
+  }
+  // GIF
+  if (b.length >= 10 && b[0] === 0x47 && b[1] === 0x49 && b[2] === 0x46) {
+    return { width: b.readUInt16LE(6), height: b.readUInt16LE(8), type: 'image/gif' };
+  }
+  // WebP (RIFF....WEBP)
+  if (b.length >= 30 && b.toString('ascii', 0, 4) === 'RIFF' && b.toString('ascii', 8, 12) === 'WEBP') {
+    const fmt = b.toString('ascii', 12, 16);
+    if (fmt === 'VP8X') {
+      const w = 1 + ((b[24]! | (b[25]! << 8) | (b[26]! << 16)) & 0xffffff);
+      const h = 1 + ((b[27]! | (b[28]! << 8) | (b[29]! << 16)) & 0xffffff);
+      return { width: w, height: h, type: 'image/webp' };
+    }
+    if (fmt === 'VP8 ') {
+      return { width: b.readUInt16LE(26) & 0x3fff, height: b.readUInt16LE(28) & 0x3fff, type: 'image/webp' };
+    }
+    if (fmt === 'VP8L') {
+      const bits = b[21]! | (b[22]! << 8) | (b[23]! << 16) | (b[24]! << 24);
+      return { width: (bits & 0x3fff) + 1, height: ((bits >> 14) & 0x3fff) + 1, type: 'image/webp' };
+    }
+    return null;
+  }
+  // JPEG — walk the segment markers to the Start-Of-Frame that carries the dimensions.
+  if (b.length >= 4 && b[0] === 0xff && b[1] === 0xd8) {
+    let i = 2;
+    while (i < b.length - 9) {
+      if (b[i] !== 0xff) { i++; continue; }
+      const marker = b[i + 1]!;
+      if (marker >= 0xc0 && marker <= 0xcf && marker !== 0xc4 && marker !== 0xc8 && marker !== 0xcc) {
+        return { height: b.readUInt16BE(i + 5), width: b.readUInt16BE(i + 7), type: 'image/jpeg' };
+      }
+      if (marker === 0xd8 || marker === 0xd9 || marker === 0x01 || (marker >= 0xd0 && marker <= 0xd7)) { i += 2; continue; }
+      const len = b.readUInt16BE(i + 2);
+      if (len < 2) break;
+      i += 2 + len;
+    }
+  }
+  return null;
+}
+
+/**
+ * Best-effort probe of an image's dimensions. Crawlers (Facebook, iMessage's
+ * LinkPresentation, WhatsApp) can't render the preview card on the FIRST scrape
+ * without og:image:width/height — they queue the image for an async re-fetch and
+ * meanwhile show only the site icon/title, no thumbnail. Supplying the dimensions
+ * up front is what makes the thumbnail appear immediately. Times out fast and
+ * returns null on any failure, so a slow/broken image never blocks the page.
+ */
+async function probeImageSize(url: string): Promise<{ width: number; height: number; type: string } | null> {
+  if (url === OG_FALLBACK()) return { width: 1200, height: 630, type: 'image/png' }; // known, skip the fetch
+  const ctrl = new AbortController();
+  const timer = setTimeout(() => ctrl.abort(), 2500);
+  try {
+    // redirect:'error' — our storage/CDN serves the image with a 200 directly, so refusing to
+    // follow redirects costs nothing and blocks a stored URL that 3xx-bounces to an internal
+    // address. The abort timer below stays armed through the BODY read (not just the headers),
+    // and we stop after ~192KB, so a slow/trickling or Range-ignoring host can neither hang the
+    // crawler-facing page nor balloon memory.
+    const res = await fetch(url, { signal: ctrl.signal, redirect: 'error', headers: { Range: 'bytes=0-131071' } });
+    if ((!res.ok && res.status !== 206) || !res.body) return null;
+    const reader = res.body.getReader();
+    const chunks: Uint8Array[] = [];
+    let total = 0;
+    const CAP = 192 * 1024;
+    while (total < CAP) {
+      const { done, value } = await reader.read();
+      if (done || !value) break;
+      chunks.push(value);
+      total += value.length;
+    }
+    void reader.cancel().catch(() => {});
+    return readImageDims(Buffer.concat(chunks));
+  } catch {
+    return null;
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+/** The full og:image tag block (image + secure_url + width/height/type when known),
+ *  so the preview renders on the first crawl instead of after an async re-scrape. */
+async function ogImageTags(imageUrl: string): Promise<string> {
+  const dims = await probeImageSize(imageUrl);
+  const secure = imageUrl.startsWith('https:') ? `\n<meta property="og:image:secure_url" content="${esc(imageUrl)}">` : '';
+  const size = dims
+    ? `\n<meta property="og:image:width" content="${dims.width}">\n<meta property="og:image:height" content="${dims.height}">\n<meta property="og:image:type" content="${dims.type}">`
+    : '';
+  return `<meta property="og:image" content="${esc(imageUrl)}">${secure}${size}`;
+}
+
 /**
  * GET /r/:id — a crawlable, server-rendered recipe page. Turns every post into an
  * evergreen Google / Pinterest funnel: Open Graph + Twitter cards so links unfurl
@@ -51,12 +154,13 @@ seo.get('/:id', async (c) => {
   const gated = r.price_cents != null || r.visibility === 'subscribers';
   const title = (r.title as string) || 'A recipe on Sizzle';
   const cookName = (cook?.display_name as string) || 'a Sizzle cook';
-  const poster = (video?.poster_url as string) || (Array.isArray(r.image_urls) && r.image_urls[0]) || `${env.APP_ORIGIN}/og-default.jpg`;
+  const poster = (video?.poster_url as string) || (Array.isArray(r.image_urls) && r.image_urls[0]) || OG_FALLBACK();
   const desc = (r.caption as string) || `${title} by ${cookName} — watch it, then actually cook it on Sizzle.`;
   const ingredients = (ings ?? []).map((i) => i.text as string);
   const stepList = gated ? [] : (steps ?? []).map((s) => s.text as string);
   const url = `${env.APP_ORIGIN}/r/${id}`;
   const appLink = `${env.APP_ORIGIN}/?r=${id}`; // marketing/app deep link into this recipe
+  const ogImage = await ogImageTags(poster);
 
   // schema.org/Recipe — free recipes expose full ingredients + steps for rich results;
   // gated recipes only advertise the dish (name/image/author) and tease ingredients.
@@ -83,7 +187,8 @@ seo.get('/:id', async (c) => {
 <meta property="og:type" content="article">
 <meta property="og:title" content="${esc(title)}">
 <meta property="og:description" content="${esc(desc)}">
-<meta property="og:image" content="${esc(poster)}">
+${ogImage}
+<meta property="og:image:alt" content="${esc(title)}">
 <meta property="og:url" content="${esc(url)}">
 <meta property="og:site_name" content="Sizzle">
 <meta name="twitter:card" content="summary_large_image">
@@ -146,7 +251,8 @@ seoProfile.get('/:handle', async (c) => {
   const name = (p.display_name as string) || `@${p.handle}`;
   const url = `${env.APP_ORIGIN}/u/${p.handle}`;
   const appLink = `${env.APP_ORIGIN}/?u=${p.handle}`;
-  const avatar = (p.avatar_url as string) || `${env.APP_ORIGIN}/og-default.jpg`;
+  const avatar = (p.avatar_url as string) || OG_FALLBACK();
+  const ogImage = await ogImageTags(avatar);
 
   if (p.private) {
     const html = `<!doctype html>
@@ -157,7 +263,7 @@ seoProfile.get('/:handle', async (c) => {
 <meta property="og:type" content="profile">
 <meta property="og:title" content="${esc(name)} on Sizzle">
 <meta property="og:description" content="This account is private — follow ${esc(name)} on Sizzle to see their recipes.">
-<meta property="og:image" content="${esc(avatar)}">
+${ogImage}
 <meta property="og:url" content="${esc(url)}">
 <style>body{margin:0;background:#0c0a09;color:#faf3ea;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;display:flex;min-height:100vh;align-items:center;justify-content:center;text-align:center;padding:20px}img{width:96px;height:96px;border-radius:28px;object-fit:cover}a{display:inline-block;background:linear-gradient(135deg,#ff5a36,#e23a18);color:#fff;text-decoration:none;font-weight:800;padding:14px 26px;border-radius:16px;margin-top:18px}</style>
 </head><body><div>
@@ -206,7 +312,8 @@ seoProfile.get('/:handle', async (c) => {
 <meta property="og:type" content="profile">
 <meta property="og:title" content="${esc(name)} on Sizzle">
 <meta property="og:description" content="${esc(desc)}">
-<meta property="og:image" content="${esc(avatar)}">
+${ogImage}
+<meta property="og:image:alt" content="${esc(name)} on Sizzle">
 <meta property="og:url" content="${esc(url)}">
 <meta property="og:site_name" content="Sizzle">
 <meta name="twitter:card" content="summary">
@@ -278,7 +385,8 @@ seoBoard.get('/:id', async (c) => {
   const appLink = `${env.APP_ORIGIN}/?b=${col.id}`;
   const title = `${col.name} — a board by ${ownerName} · Sizzle`;
   const desc = `${dishes.length} recipe${dishes.length === 1 ? '' : 's'} curated by ${ownerName} on Sizzle.`;
-  const hero = dishes.find((d) => d.img)?.img || `${env.APP_ORIGIN}/og-default.jpg`;
+  const hero = dishes.find((d) => d.img)?.img || OG_FALLBACK();
+  const ogImage = await ogImageTags(hero);
 
   const html = `<!doctype html>
 <html lang="en"><head>
@@ -288,7 +396,8 @@ seoBoard.get('/:id', async (c) => {
 <meta property="og:type" content="website">
 <meta property="og:title" content="${esc(col.name as string)}">
 <meta property="og:description" content="${esc(desc)}">
-<meta property="og:image" content="${esc(hero)}">
+${ogImage}
+<meta property="og:image:alt" content="${esc(col.name as string)}">
 <meta property="og:url" content="${esc(url)}">
 <link rel="canonical" href="${esc(url)}">
 <style>body{margin:0;background:#0c0a09;color:#faf3ea;font-family:-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,sans-serif;padding:28px 20px 60px;max-width:760px;margin-inline:auto}h1{font-size:30px;margin:0}a.cta{display:inline-block;background:linear-gradient(135deg,#ff5a36,#e23a18);color:#fff;text-decoration:none;font-weight:800;padding:13px 24px;border-radius:14px;margin:18px 0 26px}.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(160px,1fr));gap:12px}.card{position:relative;border-radius:14px;overflow:hidden;aspect-ratio:3/4;background:#241c17}.card img{width:100%;height:100%;object-fit:cover}.card span{position:absolute;left:10px;right:10px;bottom:9px;font-size:14px;font-weight:700;text-shadow:0 1px 4px rgba(0,0,0,.8)}</style>

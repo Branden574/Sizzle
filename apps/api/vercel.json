@@ -13,6 +13,10 @@
     {
       "path": "/internal/save-nudges",
       "schedule": "0 21 * * *"
+    },
+    {
+      "path": "/internal/rollup-watch-ratios",
+      "schedule": "17,47 * * * *"
     }
   ]
 }
