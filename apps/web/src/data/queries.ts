@@ -976,6 +976,41 @@ export function useTrendingTags() {
   return useQuery({ queryKey: ['trending-tags'], queryFn: () => apiGet<TrendingTag[]>('/feed/trending-tags') });
 }
 
+export interface HashtagDetail {
+  tag: string; displayName: string; description: string | null; category: string | null;
+  posts: number; creators: number; featured: boolean; verified: boolean; sensitive: boolean;
+  following: boolean; muted: boolean; trending: boolean; related: string[];
+}
+export interface TrendingHashtag {
+  rank: number; tag: string; displayName: string; posts: number; recentPosts: number;
+  creators: number; views: number; trendScore: number; featured: boolean; verified: boolean; category: string | null;
+}
+export type HashtagPrefState = 'following' | 'muted' | 'not_interested' | 'neutral';
+
+/** Canonical hashtag detail (counts, follow/mute state, trend status, related). */
+export function useHashtag(tag: string | null) {
+  return useQuery({ queryKey: ['hashtag', tag], queryFn: () => apiGet<HashtagDetail>(`/hashtags/${encodeURIComponent(tag ?? '')}`), enabled: !!tag });
+}
+/** A hashtag's content, sorted Top (engagement) or Recent (newest). */
+export function useHashtagContent(tag: string | null, sort: 'top' | 'recent') {
+  return useQuery({ queryKey: ['hashtag-content', tag, sort], queryFn: () => apiGet<FeedResponse>(`/hashtags/${encodeURIComponent(tag ?? '')}/content?sort=${sort}`), enabled: !!tag });
+}
+/** The momentum-based trending leaderboard. */
+export function useTrendingHashtags(window: '24h' | '7d' = '24h') {
+  return useQuery({ queryKey: ['trending-hashtags', window], queryFn: () => apiGet<{ window: string; items: TrendingHashtag[] }>(`/hashtags/trending?window=${window}`) });
+}
+/** Follow / mute / mark-not-interested a hashtag (optimistic on the detail cache). */
+export function useSetHashtagPref() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: ({ tag, state }: { tag: string; state: HashtagPrefState }) => apiSend('POST', `/hashtags/${encodeURIComponent(tag)}/preference`, { state }),
+    onMutate: ({ tag, state }) => {
+      qc.setQueryData<HashtagDetail>(['hashtag', tag], (d) => d ? { ...d, following: state === 'following', muted: state === 'muted' || state === 'not_interested' } : d);
+    },
+    onSettled: (_d, _e, v) => { void qc.invalidateQueries({ queryKey: ['hashtag', v.tag] }); },
+  });
+}
+
 export function useNotifications() {
   const authed = useAuth((s) => s.status === 'authed');
   return useQuery({

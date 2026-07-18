@@ -31,6 +31,7 @@ const useNativePicker = isNative && Capacitor.isPluginAvailable('FilePicker');
 // file URL directly; upload PUTs from the path (build 25's background session);
 // the JS fallback reads the blob lazily only if it's actually needed.
 import { CameraIcon } from '../icons';
+import { HashtagCaptionField } from '../HashtagCaptionField';
 
 const accent = theme.accent;
 
@@ -630,12 +631,12 @@ export function UploadSheet() {
 
           <div>
             <label style={labelStyle}>{isReview ? 'Your review · add #hashtags' : 'Caption · add #hashtags'}</label>
-            <textarea
+            <HashtagCaptionField
               value={caption}
-              onChange={(e) => setCaption(e.target.value)}
+              onChange={setCaption}
               rows={isReview ? 4 : 2}
               placeholder={isReview ? 'Rich, garlicky broth — worth the wait. #ramen #foodie #review' : 'Smoky, sweet, 20 min. #weeknight #vegetarian #japanese'}
-              style={{ ...field, resize: 'vertical', lineHeight: 1.5 }}
+              style={field}
             />
           </div>
 

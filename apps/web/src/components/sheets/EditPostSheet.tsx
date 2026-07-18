@@ -8,6 +8,7 @@ import { showCreatorMoney } from '../../lib/native';
 import { buildMacros, MacroInput } from './UploadSheet';
 import { useSizzle } from '../../store';
 import { theme } from '../../theme';
+import { HashtagCaptionField } from '../HashtagCaptionField';
 
 const accent = theme.accent;
 
@@ -155,7 +156,7 @@ export function EditPostSheet() {
 
             <div>
               <label style={labelStyle}>{isReview ? 'Your review · add #hashtags' : 'Caption · add #hashtags'}</label>
-              <textarea value={caption} onChange={(e) => setCaption(e.target.value)} rows={isReview ? 4 : 2} style={{ ...field, resize: 'vertical', lineHeight: 1.5 }} />
+              <HashtagCaptionField value={caption} onChange={setCaption} rows={isReview ? 4 : 2} placeholder="" style={field} />
             </div>
 
             <div style={{ display: 'flex', gap: 12 }}>
