@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { creatorShareCents } from '@sizzle/shared';
 import { Button, DismissBackdrop } from '../controls';
 import { useBuyProduct, useCancelSubscription, useCook, useCookProducts, useCookLive, useCookTiers, useMe, useSubscribe, useToggleBlock, useToggleFollow, useToggleMute } from '../../data/queries';
@@ -15,6 +16,7 @@ import { cookShareUrl, nativeShare } from '../../lib/share';
 import { ChevronLeftIcon, DotsIcon, PlayIcon, ShareIcon } from '../icons';
 import { pressVars } from '../ui';
 import { PosterImg } from '../PosterImg';
+import { PullToRefreshView } from '../PullToRefresh';
 
 const accent = theme.accent;
 
@@ -40,6 +42,7 @@ export function CookSheet() {
   const [menuOpen, setMenuOpen] = useState(false);
 
   const { data: ck, isLoading } = useCook(openCook);
+  const qc = useQueryClient();
 
   if (!openCook) return null;
   const close = () => setOpenCook(null);
@@ -71,7 +74,8 @@ export function CookSheet() {
   };
 
   return (
-    <div style={{ position: 'absolute', inset: 0, zIndex: 85, background: 'var(--bg)', overflowY: 'auto', animation: 'sz-slideUp .42s cubic-bezier(.16,1,.3,1)' }}>
+    <div style={{ position: 'absolute', inset: 0, zIndex: 85, background: 'var(--bg)', animation: 'sz-slideUp .42s cubic-bezier(.16,1,.3,1)' }}>
+      <PullToRefreshView onRefresh={() => qc.refetchQueries({ queryKey: ['cook', openCook] }, { throwOnError: true })} label="profile" style={{ position: 'absolute', inset: 0, background: 'var(--bg)', overflowY: 'auto' }}>
       <div style={{ height: 170, background: ck?.bannerUrl ? `url(${ck.bannerUrl}) center/cover no-repeat` : ck?.avatarColor ?? 'linear-gradient(135deg,#3a2a22,#1b1512)', position: 'relative' }}>
         {!ck?.bannerUrl && <div style={{ position: 'absolute', inset: 0, opacity: 0.12, background: 'repeating-linear-gradient(115deg,#000 0 2px, transparent 2px 7px)' }} />}
         <Button onClick={close} aria-label="Back" style={{ position: 'absolute', top: 54, left: 18, width: 38, height: 38, borderRadius: '50%', border: 'none', background: 'rgba(0,0,0,.3)', backdropFilter: 'blur(6px)', display: 'flex', alignItems: 'center', justifyContent: 'center', cursor: 'pointer' }}>
@@ -258,6 +262,7 @@ export function CookSheet() {
           )}
         </div>
       )}
+    </PullToRefreshView>
     </div>
   );
 }

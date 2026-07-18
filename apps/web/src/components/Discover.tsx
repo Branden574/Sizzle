@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Button, FilterChip, IconButton } from './controls';
 import type { RecipeCard } from '@sizzle/shared';
 import { discoverHeights } from '../data';
@@ -7,6 +8,7 @@ import { useSizzle } from '../store';
 import { formatCount } from '../lib/format';
 import { HeartIcon, SearchIcon } from './icons';
 import { PosterImg } from './PosterImg';
+import { PullToRefreshView } from './PullToRefresh';
 
 export function Discover() {
   const setOpenRecipe = useSizzle((s) => s.setOpenRecipe);
@@ -60,6 +62,7 @@ export function Discover() {
   // Infinite scroll for the default (non-search) grid — load the next page when
   // the sentinel nears the viewport, mirroring the Feed. Search results aren't paged.
   const sentinelRef = useRef<HTMLDivElement>(null);
+  const qc = useQueryClient();
   useEffect(() => {
     if (query || pantryActive) return;
     const el = sentinelRef.current;
@@ -73,7 +76,7 @@ export function Discover() {
   }, [query, hasNextPage, isFetchingNextPage, fetchNextPage]);
 
   return (
-    <div style={{ position: 'absolute', inset: 0, background: 'var(--bg)', overflowY: 'auto', animation: 'sz-fadeIn .35s' }}>
+    <PullToRefreshView onRefresh={() => qc.refetchQueries({ type: 'active' }, { throwOnError: true })} label="discover" style={{ position: 'absolute', inset: 0, background: 'var(--bg)', overflowY: 'auto', animation: 'sz-fadeIn .35s' }}>
       <div style={{ padding: '62px 22px 14px' }}>
         <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 38, color: 'var(--text)' }}>Discover</div>
         <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginTop: 14, background: 'var(--surface)', border: '1.5px solid var(--line)', borderRadius: 16, padding: '12px 16px' }}>
@@ -205,6 +208,6 @@ export function Discover() {
       </div>
       {/* Infinite-scroll sentinel for the default grid. */}
       {!query && !pantryActive && <div ref={sentinelRef} aria-hidden="true" style={{ height: 1 }} />}
-    </div>
+    </PullToRefreshView>
   );
 }

@@ -672,6 +672,17 @@ input {
   }
 }
 
+/* Branded pull-to-refresh flame: a live flicker while the feed/profile refreshes. */
+@keyframes sz-flame-flicker {
+  0%, 100% { transform: scale(1) translateY(0); opacity: 1; }
+  45% { transform: scale(1.1) translateY(-1px); opacity: 0.9; }
+  72% { transform: scale(0.97) translateY(0); opacity: 1; }
+}
+.sz-flame-flicker { animation: sz-flame-flicker 0.9s ease-in-out infinite; transform-origin: center bottom; }
+@media (prefers-reduced-motion: reduce) {
+  .sz-flame-flicker { animation: none; }
+}
+
 /* Gentle breathe for the branded loading splash (wordmark). */
 @keyframes sz-breathe {
   0%, 100% { opacity: 0.55; transform: scale(0.985); }

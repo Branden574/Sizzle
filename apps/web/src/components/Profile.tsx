@@ -61,7 +61,7 @@ export function Profile() {
   // Pull down from the top to refresh everything on screen (profile info, counts,
   // and the active tab's grid). refetchQueries({type:'active'}) resolves once the
   // on-screen queries have refetched, so the spinner holds until fresh data lands.
-  const ptr = usePullToRefresh(scrollRef, () => qc.refetchQueries({ type: 'active' }));
+  const ptr = usePullToRefresh(scrollRef, () => qc.refetchQueries({ type: 'active' }, { throwOnError: true }));
 
   if (!authed) {
     return (
@@ -82,10 +82,10 @@ export function Profile() {
 
   return (
     <>
-      <PullToRefreshSpinner show={ptr.showIndicator} progress={ptr.progress} refreshing={ptr.refreshing} />
+      <PullToRefreshSpinner show={ptr.showIndicator} progress={ptr.progress} refreshing={ptr.refreshing} armed={ptr.armed} phase={ptr.phase} label="profile" onManualRefresh={ptr.refresh} />
       <div
         ref={scrollRef}
-        style={{ position: 'absolute', inset: 0, background: 'var(--bg)', overflowY: 'auto', overscrollBehaviorY: 'contain', WebkitOverflowScrolling: 'touch', animation: 'sz-fadeIn .35s', transform: ptr.offset ? `translateY(${ptr.offset}px)` : undefined, transition: ptr.dragging ? 'none' : 'transform .34s cubic-bezier(.16,1,.3,1)' }}
+        style={{ position: 'absolute', inset: 0, background: 'var(--bg)', overflowY: 'auto', overscrollBehaviorY: 'contain', WebkitOverflowScrolling: 'touch', animation: 'sz-fadeIn .35s', transform: ptr.offset ? `translateY(${ptr.offset}px)` : undefined, transition: ptr.settleTransition }}
       >
       <div style={{ height: 150, background: me?.bannerUrl ? `url(${me.bannerUrl}) center/cover no-repeat` : BANNER, position: 'relative' }}>
         {!me?.bannerUrl && <div style={{ position: 'absolute', inset: 0, opacity: 0.12, background: 'repeating-linear-gradient(115deg,#000 0 2px, transparent 2px 7px)' }} />}

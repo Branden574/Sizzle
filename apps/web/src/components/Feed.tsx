@@ -7,6 +7,7 @@ import { useRequireAuth } from '../auth/useRequireAuth';
 import { useForYouFeed, useFollowingFeed, useMe, useToggleDislike, useToggleFollow, useToggleLike, useToggleRepost, useToggleSave } from '../data/queries';
 import { apiSend } from '../lib/api';
 import { getCachedPlaybackUrl, prefetchPlaybackUrl } from '../lib/signedPlayback';
+import { PullToRefreshSpinner, usePullToRefresh } from './PullToRefresh';
 import { useSizzle } from '../store';
 import { theme } from '../theme';
 import { formatCount } from '../lib/format';
@@ -88,7 +89,7 @@ export function Feed() {
       ) : followingEmpty ? (
         <FollowingEmpty onExplore={() => setFeed('foryou')} />
       ) : (
-        <FeedList items={items} onRefresh={() => active.refetch()} onEndReached={loadMore} />
+        <FeedList items={items} onRefresh={() => active.refetch({ throwOnError: true })} onEndReached={loadMore} />
       )}
     </div>
   );
@@ -113,66 +114,9 @@ function FeedList({ items, onRefresh, onEndReached }: { items: RecipeCard[]; onR
   const sentinelRef = useRef<HTMLDivElement>(null);
   const onEndRef = useRef(onEndReached);
   onEndRef.current = onEndReached;
-  const [pull, setPull] = useState(0);
-  const [refreshing, setRefreshing] = useState(false);
-  const [dragging, setDragging] = useState(false);
-  const refreshingRef = useRef(false);
-  const onRefreshRef = useRef(onRefresh);
-  onRefreshRef.current = onRefresh;
-
-  const THRESH = 64;
-  const MAX = 92;
-  const REST = 52;
-
-  useEffect(() => {
-    const el = scrollRef.current;
-    if (!el) return;
-    const drag = { startY: 0, active: false };
-    const onStart = (e: TouchEvent) => {
-      if (refreshingRef.current) return;
-      drag.active = el.scrollTop <= 0;
-      drag.startY = e.touches[0]?.clientY ?? 0;
-    };
-    const onMove = (e: TouchEvent) => {
-      if (!drag.active || refreshingRef.current) return;
-      if (el.scrollTop > 0) { drag.active = false; setDragging(false); setPull(0); return; }
-      const dy = (e.touches[0]?.clientY ?? 0) - drag.startY;
-      if (dy <= 0) { setDragging(false); setPull(0); return; }
-      e.preventDefault(); // hold the native scroll while we rubber-band
-      setDragging(true);
-      setPull(Math.min(MAX, dy * 0.5)); // damped
-    };
-    const onEnd = () => {
-      if (!drag.active) return;
-      drag.active = false;
-      setDragging(false);
-      setPull((p) => {
-        if (p >= THRESH && !refreshingRef.current) {
-          refreshingRef.current = true;
-          setRefreshing(true);
-          Promise.resolve(onRefreshRef.current())
-            .catch(() => {})
-            .finally(() => {
-              refreshingRef.current = false;
-              setRefreshing(false);
-              setPull(0);
-            });
-          return REST; // hold while the spinner runs
-        }
-        return 0;
-      });
-    };
-    el.addEventListener('touchstart', onStart, { passive: true });
-    el.addEventListener('touchmove', onMove, { passive: false });
-    el.addEventListener('touchend', onEnd, { passive: true });
-    el.addEventListener('touchcancel', onEnd, { passive: true });
-    return () => {
-      el.removeEventListener('touchstart', onStart);
-      el.removeEventListener('touchmove', onMove);
-      el.removeEventListener('touchend', onEnd);
-      el.removeEventListener('touchcancel', onEnd);
-    };
-  }, []);
+  // Shared pull-to-refresh (branded flame + haptics + a11y), same system as every
+  // other surface. onRefresh refetches the ACTIVE feed (For You or Following).
+  const ptr = usePullToRefresh(scrollRef, onRefresh);
 
   // Infinite scroll: load the next page when the sentinel nears the viewport.
   useEffect(() => {
@@ -186,33 +130,16 @@ function FeedList({ items, onRefresh, onEndReached }: { items: RecipeCard[]; onR
     return () => io.disconnect();
   }, [items.length]);
 
-  const offset = refreshing ? REST : pull;
-  const showInd = pull > 0 || refreshing;
-  const progress = Math.min(1, pull / THRESH);
-
   return (
     <>
-      <div style={{ position: 'absolute', top: 0, left: 0, right: 0, height: 70, display: 'flex', alignItems: 'center', justifyContent: 'center', zIndex: 5, pointerEvents: 'none', opacity: showInd ? 1 : 0, transition: 'opacity .2s ease' }}>
-        <div
-          style={{
-            width: 30,
-            height: 30,
-            borderRadius: '50%',
-            border: '2.5px solid rgba(255,255,255,.25)',
-            borderTopColor: '#fff',
-            transform: refreshing ? undefined : `rotate(${progress * 300}deg)`,
-            animation: refreshing ? 'sz-spin .7s linear infinite' : undefined,
-            opacity: refreshing ? 1 : 0.35 + progress * 0.65,
-          }}
-        />
-      </div>
+      <PullToRefreshSpinner show={ptr.showIndicator} progress={ptr.progress} refreshing={ptr.refreshing} armed={ptr.armed} phase={ptr.phase} label="feed" onManualRefresh={ptr.refresh} />
       <div
         ref={scrollRef}
         // overscrollBehaviorY:contain stops iOS from rubber-band-locking at the
         // last video (WebKit can get stuck at the scroll boundary with mandatory
         // snap and refuse to scroll back up). WebkitOverflowScrolling keeps
         // momentum. See scrollSnapStop on the cards below.
-        style={{ position: 'absolute', inset: 0, overflowY: 'scroll', scrollSnapType: 'y mandatory', overscrollBehaviorY: 'contain', WebkitOverflowScrolling: 'touch', transform: offset ? `translateY(${offset}px)` : undefined, transition: dragging ? 'none' : 'transform .34s cubic-bezier(.16,1,.3,1)' }}
+        style={{ position: 'absolute', inset: 0, overflowY: 'scroll', scrollSnapType: 'y mandatory', overscrollBehaviorY: 'contain', WebkitOverflowScrolling: 'touch', transform: ptr.offset ? `translateY(${ptr.offset}px)` : undefined, transition: ptr.settleTransition }}
       >
         {items.map((card) => (
           <ErrorBoundary key={card.id}>

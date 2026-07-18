@@ -1,10 +1,11 @@
-import { useEffect } from 'react';
+import { useEffect, useRef } from 'react';
 import { Button, DismissBackdrop } from '../controls';
 import { useSwipeDismiss } from '../../lib/useSwipeDismiss';
 import type { NotificationDTO } from '@sizzle/shared';
 import { useMarkNotificationsRead, useNotifications, useRespondFollowRequest } from '../../data/queries';
 import { useSizzle } from '../../store';
 import { CloseIcon } from '../icons';
+import { PullToRefreshSpinner, usePullToRefresh } from '../PullToRefresh';
 
 function text(n: NotificationDTO): string {
   const who = n.actor.name;
@@ -41,7 +42,7 @@ export function NotificationsSheet() {
   const setOpenCook = useSizzle((s) => s.setOpenCook);
   const setShowAnalytics = useSizzle((s) => s.setShowAnalytics);
 
-  const { data: notifications, isLoading } = useNotifications();
+  const { data: notifications, isLoading, refetch: refetchNotifs } = useNotifications();
   const markRead = useMarkNotificationsRead();
   const respond = useRespondFollowRequest();
 
@@ -56,6 +57,8 @@ export function NotificationsSheet() {
   const list = notifications ?? [];
   const close = () => setShowNotifications(false);
   const swipe = useSwipeDismiss(() => setShowNotifications(false));
+  const notifScrollRef = useRef<HTMLDivElement>(null);
+  const notifPtr = usePullToRefresh(notifScrollRef, () => refetchNotifs({ throwOnError: true }));
 
   const open = (n: NotificationDTO) => {
     close();
@@ -81,7 +84,12 @@ export function NotificationsSheet() {
 
         {/* overflowX hidden is a backstop: nothing in this list should ever be able
             to scroll it sideways, whatever a user names themselves or their recipe. */}
-        <div style={{ flex: 1, overflowY: 'auto', overflowX: 'hidden', padding: '8px 16px 24px' }}>
+        <div style={{ flex: 1, position: 'relative', overflow: 'hidden' }}>
+          <PullToRefreshSpinner show={notifPtr.showIndicator} progress={notifPtr.progress} refreshing={notifPtr.refreshing} armed={notifPtr.armed} phase={notifPtr.phase} label="notifications" onManualRefresh={notifPtr.refresh} />
+          <div
+            ref={notifScrollRef}
+            style={{ position: 'absolute', inset: 0, overflowY: 'auto', overflowX: 'hidden', overscrollBehaviorY: 'contain', WebkitOverflowScrolling: 'touch', padding: '8px 16px 24px', transform: notifPtr.offset ? `translateY(${notifPtr.offset}px)` : undefined, transition: notifPtr.settleTransition }}
+          >
           {isLoading && <div style={{ color: 'var(--text-faint-2)', fontSize: 14, padding: 16 }}>Loading…</div>}
           {!isLoading && list.length === 0 && (
             <div style={{ textAlign: 'center', color: 'var(--text-faint-2)', fontSize: 15, padding: '50px 30px' }}>No activity yet. Likes, comments and new followers show up here.</div>
@@ -121,6 +129,7 @@ export function NotificationsSheet() {
               )}
             </div>
           ))}
+          </div>
         </div>
       </div>
     </div>

@@ -1,7 +1,7 @@
 {
   "_comment": "The App Store 'text boxes' the release automation fills. Edit whatsNew every release. reviewInfo is written only when you pass --review-info to asc-prepare-version. The demo account PASSWORD is NEVER stored here — it is read from the ASC_DEMO_PASSWORD env var at run time. Everything in this file is non-secret and safe to commit.",
 
-  "whatsNew": "Premium recipes are here — unlock a creator's full recipe: video, ingredients, and steps. We also made recipe videos load faster and play more smoothly, and added pull-to-refresh on your profile.",
+  "whatsNew": "Premium recipes are here — unlock a creator's full recipe: video, ingredients & steps. Pull down to refresh anywhere — For You, Following, profiles, and Saved — now with a Sizzle flame and a satisfying tap of haptics. Plus faster, smoother video playback.",
 
   "reviewInfo": {
     "contactFirstName": "Branden",

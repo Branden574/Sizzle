@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useQueryClient } from '@tanstack/react-query';
 import { Button, FilterChip } from './controls';
 import { useCollections, useSavedFeed } from '../data/queries';
 import { listOffline } from '../lib/offline';
@@ -7,6 +8,7 @@ import { useOnlineStatus } from '../lib/useOnlineStatus';
 import { useSizzle } from '../store';
 import { CheckIcon, DownloadIcon } from './icons';
 import { PosterImg } from './PosterImg';
+import { PullToRefreshView } from './PullToRefresh';
 
 export function Saved() {
   const setOpenRecipe = useSizzle((s) => s.setOpenRecipe);
@@ -15,6 +17,7 @@ export function Saved() {
   const shoppingCount = useShopping((s) => s.items.length);
   const { data: collections } = useCollections();
   const { data } = useSavedFeed();
+  const qc = useQueryClient();
   const online = useOnlineStatus();
   const [filter, setFilter] = useState<'all' | 'offline'>('all');
 
@@ -26,7 +29,7 @@ export function Saved() {
   const savedEmpty = savedCount === 0;
 
   return (
-    <div style={{ position: 'absolute', inset: 0, background: 'var(--bg)', overflowY: 'auto', animation: 'sz-fadeIn .35s' }}>
+    <PullToRefreshView onRefresh={() => qc.refetchQueries({ type: 'active' }, { throwOnError: true })} label="saved" style={{ position: 'absolute', inset: 0, background: 'var(--bg)', overflowY: 'auto', animation: 'sz-fadeIn .35s' }}>
       <div style={{ padding: '62px 22px 8px' }}>
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between' }}>
           <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 38, color: 'var(--text)' }}>Saved</div>
@@ -110,6 +113,6 @@ export function Saved() {
           </Button>
         ))}
       </div>
-    </div>
+    </PullToRefreshView>
   );
 }
