@@ -81,7 +81,7 @@ export function MessagesSheet() {
                     {p.avatarUrl ? <AvatarImg src={p.avatarUrl} px={48} /> : p.init}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
+                    <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', lineHeight: 1.35, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
                     <div style={{ fontSize: 13, color: 'var(--text-faint)', marginTop: 1 }}>@{p.handle}</div>
                   </div>
                 </Button>
@@ -106,8 +106,8 @@ export function MessagesSheet() {
                     {c.otherUser.avatarUrl ? <AvatarImg src={c.otherUser.avatarUrl} px={48} /> : c.otherUser.init}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
-                    <div style={{ fontSize: 15, fontWeight: c.unread ? 800 : 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.otherUser.name}</div>
-                    <div style={{ fontSize: 13.5, color: c.unread ? 'var(--text)' : 'var(--text-faint)', fontWeight: c.unread ? 600 : 400, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                    <div style={{ fontSize: 15, fontWeight: c.unread ? 800 : 700, color: 'var(--text)', overflow: 'hidden', lineHeight: 1.35, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.otherUser.name}</div>
+                    <div style={{ fontSize: 13.5, color: c.unread ? 'var(--text)' : 'var(--text-faint)', fontWeight: c.unread ? 600 : 400, marginTop: 2, overflow: 'hidden', lineHeight: 1.35, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                       {c.lastFromMe ? 'You: ' : ''}{c.lastText ?? 'Say hi 👋'}
                     </div>
                   </div>

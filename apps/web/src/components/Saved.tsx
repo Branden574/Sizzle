@@ -73,7 +73,7 @@ export function Saved() {
                 <div style={{ width: 124, height: 92, borderRadius: 16, background: col.coverBg ?? 'var(--surface-2)', border: '1px solid var(--line)', position: 'relative', overflow: 'hidden' }}>
                   <div style={{ position: 'absolute', inset: 0, background: col.coverBg ? 'linear-gradient(180deg, transparent 50%, rgba(0,0,0,.4))' : 'none' }} />
                 </div>
-                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', marginTop: 6, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{col.name}</div>
+                <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)', marginTop: 6, overflow: 'hidden', lineHeight: 1.35, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{col.name}</div>
                 <div style={{ fontSize: 12, color: 'var(--text-faint)' }}>{col.count} recipe{col.count === 1 ? '' : 's'}</div>
               </Button>
             ))}

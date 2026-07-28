@@ -473,7 +473,7 @@ export function UploadSheet() {
       <div className="sz-upload-body" style={{ flex: 1, overflowY: 'auto', padding: '0 20px 16px' }}>
         {uploadPrefill && (
           <div style={{ display: 'flex', alignItems: 'center', gap: 8, margin: '10px 0 2px', padding: '9px 13px', background: 'var(--surface, rgba(255,255,255,.06))', border: '1px solid var(--line-2, rgba(255,255,255,.14))', borderRadius: 12 }}>
-            <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-muted, rgba(255,255,255,.75))', flex: 1, minWidth: 0, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+            <span style={{ fontSize: 12.5, fontWeight: 700, color: 'var(--text-muted, rgba(255,255,255,.75))', flex: 1, minWidth: 0, overflow: 'hidden', lineHeight: 1.35, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
               🍳 Cooking @{uploadPrefill.originHandle}'s “{uploadPrefill.originTitle}” — your post will credit the original
             </span>
             <Button onClick={() => setUploadPrefill(null)} aria-label="Remove recipe credit" style={{ flex: 'none', border: 'none', background: 'none', color: 'var(--text-faint, rgba(255,255,255,.5))', fontSize: 16, cursor: 'pointer', padding: 2 }}>✕</Button>

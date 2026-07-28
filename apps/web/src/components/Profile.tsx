@@ -296,7 +296,7 @@ function JournalGrid() {
           </Button>
           <div style={{ flex: 1, minWidth: 0, paddingTop: 2 }}>
             <div style={{ display: 'flex', alignItems: 'baseline', gap: 8 }}>
-              <Button onClick={() => setOpenRecipe(e.recipe.id)} style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer', flex: 1, minWidth: 0, textAlign: 'left', fontFamily: "'Hanken Grotesk'", fontSize: 14.5, fontWeight: 800, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.recipe.title}</Button>
+              <Button onClick={() => setOpenRecipe(e.recipe.id)} style={{ border: 'none', background: 'none', padding: 0, cursor: 'pointer', flex: 1, minWidth: 0, textAlign: 'left', fontFamily: "'Hanken Grotesk'", fontSize: 14.5, fontWeight: 800, color: 'var(--text)', overflow: 'hidden', lineHeight: 1.35, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.recipe.title}</Button>
               <span style={{ flex: 'none', fontSize: 11.5, color: 'var(--text-faint-2)', fontWeight: 600 }}>{e.time}</span>
             </div>
             <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 3 }}>
@@ -347,7 +347,7 @@ function DraftsStrip() {
           return (
             <div key={d.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 14, padding: '10px 12px' }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.title}</div>
+                <div style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', lineHeight: 1.35, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{d.title}</div>
                 <div style={{ fontSize: 12, color: 'var(--text-faint)', marginTop: 2 }}>
                   {d.draftStatus === 'scheduled' && when ? `⏰ Goes live ${when.toLocaleDateString()} ${when.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })}` : '📝 Draft'}
                 </div>

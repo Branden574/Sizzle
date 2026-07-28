@@ -218,7 +218,7 @@ function StepCooks({ followed, toggle }: { followed: Record<string, boolean>; to
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
                 <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>{c.name}</div>
-                <div style={{ fontSize: 13, color: c.matched.length ? '#c0531f' : 'var(--text-faint)', fontWeight: c.matched.length ? 600 : 400, marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{subtitle}</div>
+                <div style={{ fontSize: 13, color: c.matched.length ? '#c0531f' : 'var(--text-faint)', fontWeight: c.matched.length ? 600 : 400, marginTop: 2, overflow: 'hidden', lineHeight: 1.35, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{subtitle}</div>
               </div>
               <FollowButton
                 name={c.name}

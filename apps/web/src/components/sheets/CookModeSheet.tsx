@@ -125,7 +125,7 @@ export function CookModeSheet() {
         </div>
         <div style={{ textAlign: 'center', color: '#fff', overflow: 'hidden' }}>
           <div style={{ fontSize: 12, fontWeight: 700, letterSpacing: '.5px', textTransform: 'uppercase', color: 'rgba(255,255,255,.5)' }}>Cook mode</div>
-          <div style={{ fontSize: 14.5, fontWeight: 700, maxWidth: 200, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</div>
+          <div style={{ fontSize: 14.5, fontWeight: 700, maxWidth: 200, overflow: 'hidden', lineHeight: 1.35, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{r.title}</div>
         </div>
         <Button onClick={() => setShowIngredients((v) => !v)} style={{ minWidth: 40, height: 38, padding: '0 12px', borderRadius: 19, border: 'none', background: showIngredients ? 'var(--accent)' : 'rgba(255,255,255,.12)', color: '#fff', fontSize: 13, fontWeight: 700, cursor: 'pointer' }}>
           {showIngredients ? 'Steps' : 'Items'}

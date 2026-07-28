@@ -87,8 +87,8 @@ function ToggleRow({ title, sub, icon, on, onToggle, dim }: { title: string; sub
     >
       <IconChip dim={dim}>{icon}</IconChip>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</div>
-        <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 1, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sub}</div>
+        <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', lineHeight: 1.35, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</div>
+        <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 1, overflow: 'hidden', lineHeight: 1.35, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{sub}</div>
       </div>
       <div style={{ width: 48, height: 29, flex: 'none', borderRadius: 15, background: on ? 'var(--accent)' : 'var(--track)', position: 'relative', transition: 'background .25s' }}>
         <div style={{ position: 'absolute', top: 3, width: 23, height: 23, borderRadius: '50%', background: '#fff', boxShadow: '0 1px 3px rgba(0,0,0,.25)', transition: 'left .25s cubic-bezier(.34,1.56,.64,1)', left: on ? 22 : 3 }} />
@@ -105,8 +105,8 @@ function LinkRow({ icon, label, hint, danger, onClick }: { icon: ReactNode; labe
       style={{ display: 'flex', alignItems: 'center', gap: 13, padding: '12px 16px', width: '100%', background: 'transparent', border: 'none', borderRadius: 0, textAlign: 'left' }}
     >
       <IconChip>{icon}</IconChip>
-      <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 700, color: danger ? 'var(--button-danger-fg)' : 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
-      {hint && <span style={{ fontSize: 12.5, color: 'var(--text-faint)', flex: 'none', maxWidth: '42%', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{hint}</span>}
+      <span style={{ flex: 1, minWidth: 0, fontSize: 15, fontWeight: 700, color: danger ? 'var(--button-danger-fg)' : 'var(--text)', overflow: 'hidden', lineHeight: 1.35, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{label}</span>
+      {hint && <span style={{ fontSize: 12.5, color: 'var(--text-faint)', flex: 'none', maxWidth: '42%', overflow: 'hidden', lineHeight: 1.35, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{hint}</span>}
       <Chevron />
     </Button>
   );
@@ -120,7 +120,7 @@ function AccountHeader({ me }: { me: MeProfile }) {
         {me.avatarUrl ? <AvatarImg src={me.avatarUrl} px={56} /> : me.init}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 17, fontWeight: 800, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{me.name}</div>
+        <div style={{ fontSize: 17, fontWeight: 800, color: 'var(--text)', overflow: 'hidden', lineHeight: 1.35, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{me.name}</div>
         <div style={{ fontSize: 13.5, color: 'var(--text-faint)' }}>@{me.handle}</div>
       </div>
     </div>
@@ -161,7 +161,7 @@ function MenuRow({ icon, title, sub, onClick }: { icon: ReactNode; title: string
     >
       <IconChip>{icon}</IconChip>
       <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</div>
+        <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', lineHeight: 1.35, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{title}</div>
         {/* whiteSpace:'normal' undoes `.sz-button`'s nowrap, which inherits down here
             and otherwise stops this two-line sub from ever wrapping. */}
         <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 2, lineHeight: 1.35, whiteSpace: 'normal' }}>{sub}</div>
@@ -706,7 +706,7 @@ function BlockedAccounts({ onBack }: { onBack: () => void }) {
               {u.avatarUrl ? <AvatarImg src={u.avatarUrl} px={42} /> : u.init}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.name}</div>
+              <div style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', lineHeight: 1.35, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.name}</div>
               <div style={{ fontSize: 13, color: 'var(--text-faint)' }}>@{u.handle}</div>
             </div>
             <Button

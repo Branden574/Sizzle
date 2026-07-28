@@ -180,7 +180,7 @@ export function Discover() {
                   {ck.avatarUrl ? <AvatarImg src={ck.avatarUrl} px={48} /> : ck.init}
                 </div>
                 <div style={{ minWidth: 0 }}>
-                  <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ck.name}</div>
+                  <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', lineHeight: 1.35, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ck.name}</div>
                   <div style={{ fontSize: 13, color: 'var(--text-faint)' }}>@{ck.handle}</div>
                 </div>
               </Button>

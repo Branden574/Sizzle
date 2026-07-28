@@ -296,8 +296,8 @@ function ProductShelf({ cookId, name }: { cookId: string; name: string }) {
         {products.map((p) => (
           <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 10, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 14, padding: '11px 14px' }}>
             <div style={{ flex: 1, minWidth: 0 }}>
-              <div style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</div>
-              {p.description && <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 2, overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.description}</div>}
+              <div style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', lineHeight: 1.35, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</div>
+              {p.description && <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 2, overflow: 'hidden', lineHeight: 1.35, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.description}</div>}
               {!p.owned && <div style={{ fontSize: 11.5, color: 'var(--text-faint-2)', marginTop: 2 }}>{name} receives ${(creatorShareCents(p.priceCents) / 100).toFixed(2)}</div>}
             </div>
             {p.owned ? (

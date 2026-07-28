@@ -378,7 +378,7 @@ function ReportsTab() {
                 {Object.entries(f.categories).map(([cat, n]) => <span key={cat} style={chip('var(--surface-3)', 'var(--text-soft)')}>{CATEGORY_LABEL[cat] ?? cat}: {n}</span>)}
                 <span style={{ marginLeft: 'auto', fontSize: 12, color: 'var(--text-faint-2)' }}>{f.time}</span>
               </div>
-              <div style={{ fontSize: 14.5, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' }}>{f.preview}</div>
+              <div style={{ fontSize: 14.5, color: 'var(--text)', overflow: 'hidden', lineHeight: 1.35, textOverflow: 'ellipsis', display: '-webkit-box', WebkitLineClamp: 3, WebkitBoxOrient: 'vertical' }}>{f.preview}</div>
               {f.subLabel && <div style={{ fontSize: 13, color: 'var(--text-faint)', marginTop: 2 }}>{f.subLabel}</div>}
               <div style={{ display: 'flex', gap: 8, marginTop: 12 }}>
                 {f.targetType === 'profile' && <Button onClick={() => setOpenCook(f.targetId)} style={pill('var(--invert-bg)', 'var(--invert-fg)')}>View profile</Button>}

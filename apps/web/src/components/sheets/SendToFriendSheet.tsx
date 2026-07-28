@@ -139,7 +139,7 @@ export function SendToFriendSheet() {
                   {p.avatarUrl ? <AvatarImg src={p.avatarUrl} px={42} /> : p.init}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
-                  <div style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
+                  <div style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', lineHeight: 1.35, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
                   <div style={{ fontSize: 12.5, color: 'var(--text-faint)' }}>@{p.handle}</div>
                 </div>
                 <Button

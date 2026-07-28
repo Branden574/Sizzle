@@ -44,7 +44,7 @@ export function SharePostCard() {
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginTop: 14, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 13, padding: '10px 13px' }}>
-          <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: 'var(--text-muted)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{url}</span>
+          <span style={{ flex: 1, minWidth: 0, fontSize: 13, color: 'var(--text-muted)', overflow: 'hidden', lineHeight: 1.35, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{url}</span>
           <Button onClick={copyLink} style={{ flex: 'none', border: 'none', background: 'none', cursor: 'pointer', fontSize: 12.5, fontWeight: 800, color: 'var(--accent,#ff5a36)' }}>
             {copied ? '✓ Copied' : 'Copy'}
           </Button>

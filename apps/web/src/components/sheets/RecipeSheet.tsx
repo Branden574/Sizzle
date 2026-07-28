@@ -339,7 +339,7 @@ export function RecipeSheet() {
                               <div style={{ width: 20, height: 20, flex: 'none', borderRadius: '50%', background: e.author.avatarColor, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 9, color: '#fff', fontFamily: "'Instrument Serif',serif" }}>
                                 {e.author.avatarUrl ? <AvatarImg src={e.author.avatarUrl} px={40} /> : e.author.init}
                               </div>
-                              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.author.name}</span>
+                              <span style={{ fontSize: 12, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', lineHeight: 1.35, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{e.author.name}</span>
                               {e.rating != null && <span style={{ flex: 'none', fontSize: 11, color: '#f4a52c', fontWeight: 800 }}>{'★'.repeat(e.rating)}</span>}
                             </div>
                             {e.note && <div style={{ fontSize: 12, color: 'var(--text-muted)', marginTop: 4, lineHeight: 1.35, display: '-webkit-box', WebkitLineClamp: 2, WebkitBoxOrient: 'vertical', overflow: 'hidden' }}>{e.note}</div>}

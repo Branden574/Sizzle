@@ -96,7 +96,7 @@ export function AnalyticsSheet() {
                 posts.map((p) => (
                   <div key={p.id} style={{ padding: '11px 4px', borderBottom: '1px solid var(--line)' }}>
                     <div style={{ display: 'flex', alignItems: 'baseline', gap: 8, marginBottom: 6 }}>
-                      <div style={{ flex: 1, minWidth: 0, fontSize: 14.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</div>
+                      <div style={{ flex: 1, minWidth: 0, fontSize: 14.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', lineHeight: 1.35, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</div>
                       <div style={{ flex: 'none', fontSize: 13.5, fontWeight: 800, color: 'var(--text)' }}>👁 {formatCount(p.views)}</div>
                     </div>
                     <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px 12px', fontSize: 12.5, color: 'var(--text-faint)' }}>
@@ -221,7 +221,7 @@ function Earnings() {
               {data!.topSupporters.slice(0, 8).map((s, i) => (
                 <div key={i} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '8px 4px', borderBottom: '1px solid var(--line)' }}>
                   <div style={{ width: 22, textAlign: 'center', fontSize: 14, fontWeight: 800, color: i === 0 ? '#e0a92e' : 'var(--text-faint)' }}>{i === 0 ? '🏆' : i + 1}</div>
-                  <div style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.user?.name ?? 'Someone'}</div>
+                  <div style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', lineHeight: 1.35, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{s.user?.name ?? 'Someone'}</div>
                   <div style={{ fontSize: 12, color: 'var(--text-faint-2)' }}>{s.count}×</div>
                   <div style={{ fontSize: 14.5, fontWeight: 800, color: '#1f9d55', minWidth: 60, textAlign: 'right' }}>{usd(s.netCents)}</div>
                 </div>
@@ -234,7 +234,7 @@ function Earnings() {
               <div style={{ fontSize: 12, color: 'var(--text-faint-2)', margin: '2px 2px 8px', textTransform: 'uppercase', letterSpacing: '.06em' }}>Top earning recipes</div>
               {data!.byPost.slice(0, 8).map((p) => (
                 <div key={p.recipeId} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '8px 4px', borderBottom: '1px solid var(--line)' }}>
-                  <div style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</div>
+                  <div style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', lineHeight: 1.35, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</div>
                   <div style={{ fontSize: 12, color: 'var(--text-faint-2)' }}>{p.count}×</div>
                   <div style={{ fontSize: 14.5, fontWeight: 800, color: '#1f9d55', minWidth: 60, textAlign: 'right' }}>{usd(p.netCents)}</div>
                 </div>
@@ -245,7 +245,7 @@ function Earnings() {
           {(data?.tips ?? []).slice(0, 20).map((t) => (
             <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 10, padding: '9px 4px', borderBottom: '1px solid var(--line)' }}>
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                <div style={{ fontSize: 14, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', lineHeight: 1.35, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
                   {t.from?.name ?? 'Someone'}{t.recipeTitle ? ` · ${t.recipeTitle}` : ''}
                 </div>
                 <div style={{ fontSize: 12, color: 'var(--text-faint-2)' }}>{KIND_LABEL[t.kind]} · {t.time} · {usd(t.amountCents)} − {usd(t.feeCents)} fee</div>
@@ -421,7 +421,7 @@ function TiersManager() {
         <div key={t.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 0', borderBottom: '1px solid var(--line)' }}>
           <div style={{ flex: 1, minWidth: 0 }}>
             <div style={{ fontSize: 14, fontWeight: 700, color: 'var(--text)' }}>{t.name}</div>
-            {t.perks && <div style={{ fontSize: 12, color: 'var(--text-faint)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.perks}</div>}
+            {t.perks && <div style={{ fontSize: 12, color: 'var(--text-faint)', overflow: 'hidden', lineHeight: 1.35, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{t.perks}</div>}
           </div>
           <div style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--text)' }}>{usd(t.priceCents)}/mo</div>
           <Button onClick={() => { if (window.confirm(`Remove "${t.name}"?`)) del.mutate(t.id); }} aria-label="Remove" style={{ background: 'none', border: 'none', color: 'var(--danger-fg)', cursor: 'pointer', fontSize: 15, fontWeight: 800 }}>✕</Button>
@@ -476,7 +476,7 @@ function ProductsManager() {
       {products.length === 0 && !adding && <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginTop: 4 }}>Sell a cookbook, meal plan, or guide — you keep {100 - PLATFORM_FEE_PCT}% of what&rsquo;s left after card processing.</div>}
       {products.map((p) => (
         <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '9px 0', borderBottom: '1px solid var(--line)' }}>
-          <div style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</div>
+          <div style={{ flex: 1, minWidth: 0, fontSize: 14, fontWeight: 600, color: 'var(--text)', overflow: 'hidden', lineHeight: 1.35, textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.title}</div>
           <div style={{ fontSize: 13.5, fontWeight: 800, color: 'var(--text)' }}>{usd(p.priceCents)}</div>
           <Button onClick={() => { if (window.confirm(`Remove "${p.title}"?`)) del.mutate(p.id); }} aria-label="Remove" style={{ background: 'none', border: 'none', color: 'var(--danger-fg)', cursor: 'pointer', fontSize: 15, fontWeight: 800 }}>✕</Button>
         </div>
