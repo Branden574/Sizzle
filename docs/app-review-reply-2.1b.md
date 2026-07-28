@@ -43,9 +43,9 @@ Alternate path (finding it from the creator's profile):
 
 **3. What we changed**
 
-Previously, premium recipes were shown only on a creator's own profile page and were excluded from the main feed and search results. A new account that did not yet follow anyone would therefore not encounter a purchasable item. We have changed this: premium recipes now appear in the main **Home** feed and in hashtag/topic results as locked preview cards with a visible **"Unlock · $X.XX"** button, so the In-App Purchase is reachable from the first screen after sign-in.
+Previously, premium recipes were shown only on a creator's own profile page and were excluded from the main feed and search results. A new account that did not yet follow anyone would therefore not encounter a purchasable item — which is exactly what your reviewer experienced. We have changed this: premium recipes now appear in the main **Home** feed and in hashtag/topic results as locked preview cards with a visible **"Unlock · $X.XX"** button, so the In-App Purchase is reachable from the first screen after signing in, without needing to search for a specific creator.
 
-This change is server-side and is already live, so it applies to the build currently under review — no new binary is required.
+We have uploaded **build 34**, which includes this change, and we would appreciate it being reviewed in place of build 33.
 
 **4. Sandbox and configuration**
 
