@@ -52,6 +52,11 @@ function xhrPut(url: string, body: Blob, contentType: string, onProgress?: (pct:
     xhr.open('PUT', url);
     xhr.setRequestHeader('content-type', contentType);
     xhr.setRequestHeader('x-upsert', 'true');
+    // Supabase persists this as the object's cacheControl and serves it on every GET.
+    // Without it objects default to `no-cache`, so every poster/photo <img> revalidates
+    // over the network before painting on each remount (the feed/profile blink).
+    // Paths are Date.now()-versioned → immutable → a year is safe.
+    xhr.setRequestHeader('cache-control', 'max-age=31536000');
     xhr.upload.onprogress = (e) => {
       if (e.lengthComputable) onProgress?.(Math.min(99, Math.round((e.loaded / e.total) * 100)));
     };
@@ -177,7 +182,9 @@ export function uploadToCloudflare(uploadUrl: string, file: File, onProgress?: (
 export async function uploadProfileImage(bucket: 'avatars' | 'banners', userId: string, file: File): Promise<string> {
   const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '');
   const path = `${userId}/${bucket}-${Date.now()}.${ext}`;
-  const { error } = await supabase.storage.from(bucket).upload(path, file, { upsert: true, contentType: file.type });
+  // cacheControl: the path embeds Date.now() (immutable URL — a new avatar is a new URL),
+  // so cache for a year instead of the SDK's 1h default; kills the hourly avatar re-pop.
+  const { error } = await supabase.storage.from(bucket).upload(path, file, { upsert: true, contentType: file.type, cacheControl: '31536000' });
   if (error) throw error;
   return supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
 }

@@ -8,6 +8,7 @@ import { theme } from '../../theme';
 import { formatCount } from '../../lib/format';
 import { useSwipeDismiss } from '../../lib/useSwipeDismiss';
 import { CloseIcon, HeartIcon, ShareIcon } from '../icons';
+import { AvatarImg } from '../AvatarImg';
 
 const accent = theme.accent;
 
@@ -112,7 +113,7 @@ export function CommentsSheet() {
           )}
           <div style={{ padding: '12px 18px 28px', display: 'flex', alignItems: 'center', gap: 10 }}>
             <div style={{ width: 34, height: 34, flex: 'none', borderRadius: '50%', background: 'linear-gradient(135deg,#3a2a22,#1b1512)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Instrument Serif',serif", fontSize: 15, color: '#fff', overflow: 'hidden' }}>
-              {me?.avatarUrl ? <img src={me.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : (me?.init ?? 'A')}
+              {me?.avatarUrl ? <AvatarImg src={me.avatarUrl} px={36} /> : (me?.init ?? 'A')}
             </div>
             <input
               value={draft}

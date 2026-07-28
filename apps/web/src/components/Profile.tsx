@@ -16,6 +16,7 @@ import { BellIcon, BookmarkIcon, GearIcon, HeartIcon, PlayIcon, ShareNodesIcon }
 import { PosterImg } from './PosterImg';
 import { PremiumOverlay } from './PremiumOverlay';
 import { PullToRefreshSpinner, usePullToRefresh } from './PullToRefresh';
+import { avatarThumb } from './AvatarImg';
 
 const BANNER = 'radial-gradient(120% 120% at 70% 0%, var(--saffron,#f4a52c), var(--accent,#ff5a36) 60%, #c23a1a)';
 
@@ -96,7 +97,7 @@ export function Profile() {
       </div>
       {/* position:relative + zIndex keeps the avatar painted above the (positioned) banner */}
       <div style={{ padding: '0 22px 110px', marginTop: -44, position: 'relative', zIndex: 1 }}>
-        <div style={{ width: 88, height: 88, borderRadius: 28, background: me?.avatarUrl ? `url(${me.avatarUrl}) center/cover` : 'linear-gradient(135deg,#3a2a22,#1b1512)', border: '4px solid var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Instrument Serif',serif", fontSize: 34, color: '#fff', overflow: 'hidden' }}>{me?.avatarUrl ? '' : me?.init ?? '·'}</div>
+        <div style={{ width: 88, height: 88, borderRadius: 28, background: me?.avatarUrl ? `url(${avatarThumb(me.avatarUrl, 88)}) center/cover` : 'linear-gradient(135deg,#3a2a22,#1b1512)', border: '4px solid var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Instrument Serif',serif", fontSize: 34, color: '#fff', overflow: 'hidden' }}>{me?.avatarUrl ? '' : me?.init ?? '·'}</div>
         <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 30, lineHeight: 1.1, color: 'var(--text)', marginTop: 12 }}>
           {me?.name ?? 'Loading…'}
           <span style={{ display: 'inline-block', verticalAlign: 'middle', marginLeft: 6, position: 'relative', top: -2 }}>

@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useLayoutEffect, useRef, useState } from 'react';
 import { Button } from '../controls';
 import { useQueryClient } from '@tanstack/react-query';
 import { useRequireAuth } from '../../auth/useRequireAuth';
@@ -7,6 +7,7 @@ import { syncBadge } from '../../lib/badge';
 import { useSizzle } from '../../store';
 import { theme } from '../../theme';
 import { ChevronLeftIcon, ShareIcon, TrashIcon } from '../icons';
+import { AvatarImg } from '../AvatarImg';
 
 const accent = theme.accent;
 
@@ -18,7 +19,7 @@ export function ThreadSheet() {
   const setOpenCook = useSizzle((s) => s.setOpenCook);
   const requireAuth = useRequireAuth();
 
-  const { data: thread, isLoading, isFetchedAfterMount } = useThread(threadWith);
+  const { data: thread, isLoading, isPlaceholderData, isFetchedAfterMount } = useThread(threadWith);
   const send = useSendMessage(threadWith ?? '');
   const deleteConv = useDeleteConversation();
   const [draft, setDraft] = useState('');
@@ -31,8 +32,10 @@ export function ThreadSheet() {
   const lastMine = [...msgs].reverse().find((m) => m.fromMe);
   const readByOther =
     !!lastMine && !!thread?.otherLastReadAt && new Date(thread.otherLastReadAt).getTime() >= new Date(lastMine.createdAt).getTime();
-  // Keep the newest message in view as the thread grows / loads.
-  useEffect(() => {
+  // Keep the newest message in view as the thread grows / loads. useLAYOUTEffect on
+  // purpose: useEffect runs after paint, so the list flashed ONE FRAME at the top
+  // (oldest messages) before snapping to the bottom — this scrolls before paint.
+  useLayoutEffect(() => {
     const el = scrollRef.current;
     if (el) el.scrollTop = el.scrollHeight;
   }, [msgs.length, threadWith]);
@@ -86,7 +89,7 @@ export function ThreadSheet() {
         </Button>
         <Button onClick={openProfile} style={{ flex: 1, display: 'flex', alignItems: 'center', gap: 10, background: 'none', border: 'none', cursor: 'pointer', textAlign: 'left', padding: 0 }}>
           <div style={{ width: 38, height: 38, flex: 'none', borderRadius: '50%', background: other?.avatarColor ?? 'var(--surface-2)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Instrument Serif',serif", fontSize: 16, color: '#fff', overflow: 'hidden' }}>
-            {other?.avatarUrl ? <img src={other.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : other?.init ?? ''}
+            {other?.avatarUrl ? <AvatarImg src={other.avatarUrl} px={38} /> : other?.init ?? ''}
           </div>
           <div style={{ fontSize: 16, fontWeight: 700, color: 'var(--text)' }}>{other?.name ?? 'Loading…'}</div>
         </Button>
@@ -96,8 +99,10 @@ export function ThreadSheet() {
       </div>
 
       <div ref={scrollRef} style={{ flex: 1, overflowY: 'auto', padding: '16px 16px 10px', display: 'flex', flexDirection: 'column', gap: 8 }}>
-        {isLoading && msgs.length === 0 && <div style={{ color: 'var(--text-faint-2)', fontSize: 14, textAlign: 'center', marginTop: 20 }}>Loading…</div>}
-        {!isLoading && msgs.length === 0 && (
+        {/* Placeholder data (header seeded from the inbox) still means the MESSAGES are
+            loading — never flash "No messages yet" over a thread that just hasn't landed. */}
+        {(isLoading || isPlaceholderData) && msgs.length === 0 && <div style={{ color: 'var(--text-faint-2)', fontSize: 14, textAlign: 'center', marginTop: 20 }}>Loading…</div>}
+        {!isLoading && !isPlaceholderData && msgs.length === 0 && (
           <div style={{ textAlign: 'center', color: 'var(--text-faint-2)', fontSize: 14.5, margin: 'auto', padding: '0 30px' }}>
             No messages yet. Say hi to {other?.name ?? 'them'} 👋
           </div>

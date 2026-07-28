@@ -22,6 +22,7 @@ import { ErrorBoundary } from './ErrorBoundary';
 import { LoadingScreen } from './Splash';
 import { markBootReady } from '../lib/bootProgress';
 import { PosterImg } from './PosterImg';
+import { AvatarImg } from './AvatarImg';
 import {
   CheckIcon,
   ChevronUpIcon,
@@ -525,7 +526,7 @@ export const FeedCard = memo(function FeedCard({ card, onClose, suppressed = fal
             aria-label={`View ${cook.name}'s profile`}
             style={{ width: 50, height: 50, borderRadius: '50%', border: '2px solid #fff', background: cook.avatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Instrument Serif',serif", fontSize: 20, color: '#fff', cursor: 'pointer', padding: 0, overflow: 'hidden' }}
           >
-            {cook.avatarUrl ? <img src={cook.avatarUrl} alt="" decoding="async" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : cook.init}
+            {cook.avatarUrl ? <AvatarImg src={cook.avatarUrl} px={48} /> : cook.init}
           </Button>
           <IconButton
             onClick={gated(() => follow.mutate({ cookId: cook.id, following: viewer.following }))}

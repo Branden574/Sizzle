@@ -4,6 +4,7 @@ import { boardShareUrl, nativeShare } from '../../lib/share';
 import { useSizzle } from '../../store';
 import { ChevronLeftIcon, ShareIcon } from '../icons';
 import { PosterImg } from '../PosterImg';
+import { AvatarImg } from '../AvatarImg';
 
 /**
  * A shared PUBLIC board — someone's curated collection, opened from a /b/:id
@@ -51,7 +52,7 @@ export function BoardSheet() {
           <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 34, lineHeight: 1.05, color: 'var(--text)', marginTop: 4 }}>{board.name}</div>
           <Button onClick={() => setOpenCook(board.owner.id)} style={{ display: 'flex', alignItems: 'center', gap: 9, marginTop: 12, background: 'none', border: 'none', padding: 0, cursor: 'pointer' }}>
             <div style={{ width: 30, height: 30, borderRadius: '50%', background: board.owner.avatarColor, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Instrument Serif',serif", fontSize: 13, color: '#fff' }}>
-              {board.owner.avatarUrl ? <img src={board.owner.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : board.owner.init}
+              {board.owner.avatarUrl ? <AvatarImg src={board.owner.avatarUrl} px={40} /> : board.owner.init}
             </div>
             <span style={{ fontSize: 13.5, fontWeight: 700, color: 'var(--text-muted)' }}>by @{board.owner.handle} · {board.recipes.length} recipe{board.recipes.length === 1 ? '' : 's'}</span>
           </Button>

@@ -25,6 +25,9 @@
     <meta name="twitter:image" content="https://getsizzle.app/og-image.png" />
     <link rel="preconnect" href="https://fonts.googleapis.com" />
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <!-- Every avatar/poster loads from Supabase storage — warm DNS+TCP+TLS at boot so the
+         first image of the session doesn't pay ~150-500ms of connection setup on LTE. -->
+    <link rel="preconnect" href="https://gsxoaurmsgqascxukony.supabase.co" />
     <link
       href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,400;0,9..144,600;0,9..144,700;1,9..144,400;1,9..144,500&family=Instrument+Serif:ital@0;1&family=Hanken+Grotesk:wght@400;500;600;700;800&family=Spline+Sans+Mono:wght@400;500;600&display=swap"
       rel="stylesheet"

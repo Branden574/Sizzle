@@ -17,6 +17,7 @@ import { ChevronLeftIcon, DotsIcon, PlayIcon, ShareIcon } from '../icons';
 import { pressVars } from '../ui';
 import { PosterImg } from '../PosterImg';
 import { PullToRefreshView } from '../PullToRefresh';
+import { avatarThumb } from '../AvatarImg';
 
 const accent = theme.accent;
 
@@ -121,7 +122,7 @@ export function CookSheet() {
         </div>
       ) : (
         <div style={{ padding: '0 22px 60px', marginTop: -44, position: 'relative', zIndex: 1 }}>
-          <div style={{ width: 88, height: 88, borderRadius: 28, background: ck.avatarUrl ? `url(${ck.avatarUrl}) center/cover` : ck.avatarColor, border: '4px solid var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Instrument Serif',serif", fontSize: 36, color: '#fff', overflow: 'hidden' }}>{ck.avatarUrl ? '' : ck.init}</div>
+          <div style={{ width: 88, height: 88, borderRadius: 28, background: ck.avatarUrl ? `url(${avatarThumb(ck.avatarUrl, 88)}) center/cover` : ck.avatarColor, border: '4px solid var(--bg)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Instrument Serif',serif", fontSize: 36, color: '#fff', overflow: 'hidden' }}>{ck.avatarUrl ? '' : ck.init}</div>
           <div style={{ display: 'flex', alignItems: 'flex-end', justifyContent: 'space-between', gap: 12, marginTop: 12 }}>
             <div style={{ flex: 1, minWidth: 0 }}>
               {/* Badge flows inline with the name so it hugs the last word even when

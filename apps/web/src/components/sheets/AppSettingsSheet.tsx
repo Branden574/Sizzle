@@ -13,6 +13,7 @@ import { PasscodeSetup } from '../PasscodeLock';
 import { showCreatorMoney } from '../../lib/native';
 import { PlayIcon, SpeakerIcon } from '../icons';
 import type { MeProfile } from '@sizzle/shared';
+import { AvatarImg } from '../AvatarImg';
 
 const APP_VERSION = __APP_VERSION__; // build-time (web / fallback)
 const SUPPORT_EMAIL = 'support@getsizzle.app';
@@ -116,7 +117,7 @@ function AccountHeader({ me }: { me: MeProfile }) {
   return (
     <div style={{ display: 'flex', alignItems: 'center', gap: 13, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 18, padding: 14, marginBottom: 4 }}>
       <div style={{ width: 52, height: 52, flex: 'none', borderRadius: '50%', background: me.avatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Instrument Serif',serif", fontSize: 22, color: '#fff', overflow: 'hidden' }}>
-        {me.avatarUrl ? <img src={me.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : me.init}
+        {me.avatarUrl ? <AvatarImg src={me.avatarUrl} px={56} /> : me.init}
       </div>
       <div style={{ flex: 1, minWidth: 0 }}>
         <div style={{ fontSize: 17, fontWeight: 800, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{me.name}</div>
@@ -702,7 +703,7 @@ function BlockedAccounts({ onBack }: { onBack: () => void }) {
         blocked.map((u) => (
           <div key={u.id} style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 16, padding: 12, marginBottom: 10 }}>
             <div style={{ width: 44, height: 44, flex: 'none', borderRadius: 13, background: u.avatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Instrument Serif',serif", fontSize: 17, color: '#fff', overflow: 'hidden' }}>
-              {u.avatarUrl ? <img src={u.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : u.init}
+              {u.avatarUrl ? <AvatarImg src={u.avatarUrl} px={42} /> : u.init}
             </div>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{u.name}</div>

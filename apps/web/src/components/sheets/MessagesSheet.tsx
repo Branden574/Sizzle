@@ -4,6 +4,7 @@ import { useSwipeDismiss } from '../../lib/useSwipeDismiss';
 import { useConversations, useFollowList, useMe } from '../../data/queries';
 import { useSizzle } from '../../store';
 import { CloseIcon, SearchIcon } from '../icons';
+import { AvatarImg } from '../AvatarImg';
 
 /** The DM inbox: search people you follow to start a chat, plus the list of
  *  conversations (newest activity first). */
@@ -62,7 +63,10 @@ export function MessagesSheet() {
         <div style={{ flex: 1, overflowY: 'auto', padding: '4px 12px 24px' }}>
           {/* SEARCH MODE — people you follow */}
           {query ? (
-            people.length === 0 ? (
+            follows === undefined ? (
+              /* Follow list still loading — never flash a false "no one matches". */
+              <div style={{ textAlign: 'center', color: 'var(--text-faint-2)', fontSize: 14.5, padding: '40px 30px' }}>Searching…</div>
+            ) : people.length === 0 ? (
               <div style={{ textAlign: 'center', color: 'var(--text-faint-2)', fontSize: 14.5, padding: '40px 30px' }}>
                 No one you follow matches “{q.trim()}”.
               </div>
@@ -74,7 +78,7 @@ export function MessagesSheet() {
                   style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, background: 'none', border: 'none', borderRadius: 14, padding: '10px', cursor: 'pointer', textAlign: 'left' }}
                 >
                   <div style={{ width: 46, height: 46, flex: 'none', borderRadius: '50%', background: p.avatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Instrument Serif',serif", fontSize: 18, color: '#fff', overflow: 'hidden' }}>
-                    {p.avatarUrl ? <img src={p.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : p.init}
+                    {p.avatarUrl ? <AvatarImg src={p.avatarUrl} px={48} /> : p.init}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>
@@ -99,7 +103,7 @@ export function MessagesSheet() {
                   style={{ width: '100%', display: 'flex', alignItems: 'center', gap: 12, background: 'none', border: 'none', borderRadius: 14, padding: '11px 10px', cursor: 'pointer', textAlign: 'left' }}
                 >
                   <div style={{ width: 52, height: 52, flex: 'none', borderRadius: '50%', background: c.otherUser.avatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Instrument Serif',serif", fontSize: 20, color: '#fff', overflow: 'hidden' }}>
-                    {c.otherUser.avatarUrl ? <img src={c.otherUser.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : c.otherUser.init}
+                    {c.otherUser.avatarUrl ? <AvatarImg src={c.otherUser.avatarUrl} px={48} /> : c.otherUser.init}
                   </div>
                   <div style={{ flex: 1, minWidth: 0 }}>
                     <div style={{ fontSize: 15, fontWeight: c.unread ? 800 : 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{c.otherUser.name}</div>

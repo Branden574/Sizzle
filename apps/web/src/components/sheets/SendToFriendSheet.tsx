@@ -6,6 +6,7 @@ import { useSwipeDismiss } from '../../lib/useSwipeDismiss';
 import { recipeShareUrl, nativeShare } from '../../lib/share';
 import { canShareToInstagramStories, shareRecipeVideoToInstagramStories } from '../../lib/instagramStory';
 import { useSizzle } from '../../store';
+import { AvatarImg } from '../AvatarImg';
 
 /**
  * Send-to-friend — the share action, upgraded. A DM'd recipe card is the
@@ -135,7 +136,7 @@ export function SendToFriendSheet() {
             return (
               <div key={p.id} style={{ display: 'flex', alignItems: 'center', gap: 12, padding: '9px 2px' }}>
                 <div style={{ width: 42, height: 42, flex: 'none', borderRadius: '50%', background: p.avatarColor, overflow: 'hidden', display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Instrument Serif',serif", fontSize: 16, color: '#fff' }}>
-                  {p.avatarUrl ? <img src={p.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : p.init}
+                  {p.avatarUrl ? <AvatarImg src={p.avatarUrl} px={42} /> : p.init}
                 </div>
                 <div style={{ flex: 1, minWidth: 0 }}>
                   <div style={{ fontSize: 14.5, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{p.name}</div>

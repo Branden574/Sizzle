@@ -9,6 +9,7 @@ import { formatCount } from '../lib/format';
 import { HeartIcon, SearchIcon } from './icons';
 import { PosterImg } from './PosterImg';
 import { PullToRefreshView } from './PullToRefresh';
+import { AvatarImg } from './AvatarImg';
 
 export function Discover() {
   const setOpenRecipe = useSizzle((s) => s.setOpenRecipe);
@@ -17,6 +18,14 @@ export function Discover() {
 
   const [q, setQ] = useState('');
   const query = q.trim();
+  // Debounce the SEARCH KEY (not the input): one request per settled input instead of
+  // one per keystroke. keepPreviousData on useSearch holds the current results grid
+  // painted while the new key fetches, so nothing blanks between characters.
+  const [debouncedQ, setDebouncedQ] = useState('');
+  useEffect(() => {
+    const t = window.setTimeout(() => setDebouncedQ(q), 250);
+    return () => window.clearTimeout(t);
+  }, [q]);
   // Searching a "#tag" surfaces a tappable row to the hashtag PAGE (Follow/Mute/Top/Recent).
   const searchTag = query.startsWith('#') ? query.slice(1).toLowerCase().replace(/[^a-z0-9_]/g, '').slice(0, 30) : '';
   // Recent searches (client-only, last 8). Recorded on submit-ish signals:
@@ -37,7 +46,7 @@ export function Discover() {
   }, [query]);
   const clearRecents = () => { setRecents([]); try { localStorage.removeItem('sz-recent-searches'); } catch { /* ignore */ } };
   const { data: feed, hasNextPage, isFetchingNextPage, fetchNextPage } = useForYouFeed();
-  const { data: results, isFetching } = useSearch(q);
+  const { data: results, isFetching } = useSearch(debouncedQ);
   const { data: trending } = useTrendingTags();
 
   // Pantry search: "what can I make with what I have" — ingredient chips +
@@ -168,7 +177,7 @@ export function Discover() {
             {cooks.map((ck) => (
               <Button key={ck.id} onClick={() => setOpenCook(ck.id)} style={{ display: 'flex', alignItems: 'center', justifyContent: 'flex-start', gap: 12, width: '100%', background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 18, padding: 12, cursor: 'pointer', textAlign: 'left' }}>
                 <div style={{ width: 46, height: 46, flex: 'none', borderRadius: 14, background: ck.avatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Instrument Serif',serif", fontSize: 18, color: '#fff', overflow: 'hidden' }}>
-                  {ck.avatarUrl ? <img src={ck.avatarUrl} alt="" style={{ width: '100%', height: '100%', objectFit: 'cover' }} /> : ck.init}
+                  {ck.avatarUrl ? <AvatarImg src={ck.avatarUrl} px={48} /> : ck.init}
                 </div>
                 <div style={{ minWidth: 0 }}>
                   <div style={{ fontSize: 15, fontWeight: 700, color: 'var(--text)', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{ck.name}</div>

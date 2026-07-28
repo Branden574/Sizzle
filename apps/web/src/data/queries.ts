@@ -1,4 +1,4 @@
-import { QueryClient, useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query';
+import { QueryClient, keepPreviousData, useInfiniteQuery, useMutation, useQuery, useQueryClient, type InfiniteData } from '@tanstack/react-query';
 import type { AdminAppealDTO, AdminContentReportDTO, AdminLogDTO, AdminReportGroupDTO, AdminStats, AdminUserDTO, CollectionDTO, CommentDTO, ConversationDTO, CookProfile, CookSummary, CreateRecipeInput, CreatorAnalytics, DirectUploadTicket, DraftCard, EarningsSummary, FeedResponse, MeProfile, MessageDTO, MonetizationStatus, NotificationDTO, NotifPrefKey, PostControls, ProductDTO, RecipeCard, RecipeDetail, ReportInput, SearchResults, SuggestedCook, SupportRequestDTO, ThreadDTO, TierDTO, TipConfig, TrendingTag, VerificationTier, VideoAssetStatus, VideoUploadConfig, CookLogDTO, JournalEntryDTO, BoardDTO } from '@sizzle/shared';
 import { useAuth } from '../auth/useAuth';
 import { useSizzle } from '../store';
@@ -610,6 +610,9 @@ export function useFollowList(id: string | null, mode: 'followers' | 'following'
     queryKey: ['follow-list', id, mode],
     queryFn: () => apiGet<CookSummary[]>(`/cooks/${id}/${mode}`),
     enabled: !!id,
+    // Followers↔following is a key switch — keep the current list painted (instead of
+    // unmounting every avatar row) while the other mode loads.
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -961,6 +964,9 @@ export function useSearch(q: string) {
     queryKey: ['search', q.trim()],
     queryFn: () => apiGet<SearchResults>(`/search?q=${encodeURIComponent(q.trim())}`),
     enabled: q.trim().length > 0,
+    // Each keystroke is a new cache key — without this the results grid blanks and
+    // every poster/avatar <img> remounts (and re-fetches) on every character typed.
+    placeholderData: keepPreviousData,
   });
 }
 
@@ -991,13 +997,14 @@ export type HashtagPrefState = 'following' | 'muted' | 'not_interested' | 'neutr
 export function useHashtag(tag: string | null) {
   return useQuery({ queryKey: ['hashtag', tag], queryFn: () => apiGet<HashtagDetail>(`/hashtags/${encodeURIComponent(tag ?? '')}`), enabled: !!tag });
 }
-/** A hashtag's content, sorted Top (engagement) or Recent (newest). */
+/** A hashtag's content, sorted Top (engagement) or Recent (newest). keepPreviousData:
+ *  the Top↔Recent toggle is a key switch — hold the current grid instead of blanking. */
 export function useHashtagContent(tag: string | null, sort: 'top' | 'recent') {
-  return useQuery({ queryKey: ['hashtag-content', tag, sort], queryFn: () => apiGet<FeedResponse>(`/hashtags/${encodeURIComponent(tag ?? '')}/content?sort=${sort}`), enabled: !!tag });
+  return useQuery({ queryKey: ['hashtag-content', tag, sort], queryFn: () => apiGet<FeedResponse>(`/hashtags/${encodeURIComponent(tag ?? '')}/content?sort=${sort}`), enabled: !!tag, placeholderData: keepPreviousData });
 }
-/** The momentum-based trending leaderboard. */
+/** The momentum-based trending leaderboard (24h↔7d toggle holds the previous list). */
 export function useTrendingHashtags(window: '24h' | '7d' = '24h') {
-  return useQuery({ queryKey: ['trending-hashtags', window], queryFn: () => apiGet<{ window: string; items: TrendingHashtag[] }>(`/hashtags/trending?window=${window}`) });
+  return useQuery({ queryKey: ['trending-hashtags', window], queryFn: () => apiGet<{ window: string; items: TrendingHashtag[] }>(`/hashtags/trending?window=${window}`), placeholderData: keepPreviousData });
 }
 /** Follow / mute / mark-not-interested a hashtag (optimistic on the detail cache). */
 export function useSetHashtagPref() {
@@ -1501,6 +1508,7 @@ export function useConversations(enabled: boolean) {
 
 /** One thread (other user + messages). Marks read server-side on each load; polls while open. */
 export function useThread(otherId: string | null) {
+  const qc = useQueryClient();
   return useQuery({
     queryKey: ['thread', otherId],
     queryFn: () => apiGet<ThreadDTO>(`/messages/with/${otherId}`),
@@ -1508,19 +1516,56 @@ export function useThread(otherId: string | null) {
     refetchOnMount: 'always',
     refetchInterval: otherId ? 4000 : false,
     staleTime: 0,
+    // Seed the header from the inbox row the user just tapped: the other user's name +
+    // avatar are already in the ['conversations'] cache, so the thread header paints
+    // instantly instead of a gray circle + "Loading…" for a network round trip.
+    // The sheet keeps its Loading row for the MESSAGE area via isPlaceholderData.
+    placeholderData: () => {
+      if (!otherId) return undefined;
+      const other = qc.getQueryData<ConversationDTO[]>(['conversations'])?.find((c) => c.otherUser.id === otherId)?.otherUser;
+      return other ? { conversationId: '', otherUser: other, messages: [], otherLastReadAt: null } : undefined;
+    },
   });
 }
 
-/** Send a DM (optimistic append to the open thread). */
+/**
+ * Send a DM — TRUE optimistic append (the bubble renders the moment you hit send), made
+ * race-safe against the thread's 4s poll: without cancelQueries an in-flight poll whose
+ * server snapshot predates the insert could resolve AFTER onSuccess and overwrite the
+ * cache, making the just-sent bubble vanish for up to 4 seconds.
+ */
 export function useSendMessage(otherId: string) {
   const qc = useQueryClient();
   const key = ['thread', otherId] as const;
   return useMutation({
     mutationFn: (text: string) => apiSend<MessageDTO>('POST', `/messages/with/${otherId}`, { text }),
-    onSuccess: (msg) => {
-      qc.setQueryData<ThreadDTO>(key, (old) => (old ? { ...old, messages: [...old.messages, msg] } : old));
+    onMutate: async (text) => {
+      await qc.cancelQueries({ queryKey: key });
+      const prev = qc.getQueryData<ThreadDTO>(key);
+      const tmpId = `tmp-${Date.now()}`;
+      qc.setQueryData<ThreadDTO>(key, (old) =>
+        old
+          ? { ...old, messages: [...old.messages, { id: tmpId, fromMe: true, text, createdAt: new Date().toISOString(), time: 'now' }] }
+          : old,
+      );
+      return { prev, tmpId };
+    },
+    onSuccess: (msg, _text, ctx) => {
+      qc.setQueryData<ThreadDTO>(key, (old) => {
+        if (!old) return old;
+        // Swap the optimistic bubble for the server copy; dedupe in case the poll
+        // already delivered it (both branches keep exactly one instance of msg.id).
+        const rest = old.messages.filter((m) => m.id !== ctx?.tmpId && m.id !== msg.id);
+        return { ...old, messages: [...rest, msg] };
+      });
+      // Refetch the thread too: replaces any stale poll snapshot with one that
+      // includes the new message, shrinking the overwrite race to ~nothing.
+      void qc.invalidateQueries({ queryKey: key });
       void qc.invalidateQueries({ queryKey: ['conversations'] });
       void qc.invalidateQueries({ queryKey: ['messages-unread'] });
+    },
+    onError: (_e, _text, ctx) => {
+      if (ctx?.prev) qc.setQueryData(key, ctx.prev);
     },
   });
 }

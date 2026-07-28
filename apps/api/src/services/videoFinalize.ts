@@ -24,9 +24,12 @@ async function rehostPosterPublic(assetId: string, cfThumbUrl: string, fallback:
     if (!res.ok) throw new Error(`fetch thumb HTTP ${res.status}`);
     const bytes = new Uint8Array(await res.arrayBuffer());
     const path = `premium-posters/${assetId}.jpg`;
+    // cacheControl: a week, not a year — this path is keyed by assetId (not timestamped),
+    // so a re-finalize CAN overwrite it; weekly revalidation bounds staleness while still
+    // killing the hourly teaser-poster blink.
     const { error } = await supabaseAdmin.storage
       .from('videos')
-      .upload(path, bytes, { contentType: 'image/jpeg', upsert: true });
+      .upload(path, bytes, { contentType: 'image/jpeg', upsert: true, cacheControl: '604800' });
     if (error) throw new Error(error.message);
     return supabaseAdmin.storage.from('videos').getPublicUrl(path).data.publicUrl;
   } catch (err) {

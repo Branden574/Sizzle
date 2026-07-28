@@ -4,6 +4,7 @@ import { useSwipeDismiss } from '../../lib/useSwipeDismiss';
 import { useSizzle } from '../../store';
 import { CloseIcon } from '../icons';
 import { VerifiedBadge } from '../VerifiedBadge';
+import { avatarThumb } from '../AvatarImg';
 
 /** Bottom sheet listing a user's followers or the people they follow. */
 export function FollowListSheet() {
@@ -44,7 +45,7 @@ export function FollowListSheet() {
               onClick={() => { setOpenCook(u.id); close(); }}
               style={{ display: 'flex', alignItems: 'center', gap: 12, background: 'var(--surface)', border: '1px solid var(--line)', borderRadius: 16, padding: 12, cursor: 'pointer', textAlign: 'left', width: '100%', marginBottom: 10 }}
             >
-              <div style={{ width: 46, height: 46, flex: 'none', borderRadius: '50%', background: u.avatarUrl ? `url(${u.avatarUrl}) center/cover` : u.avatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Instrument Serif',serif", fontSize: 18, color: '#fff', overflow: 'hidden' }}>
+              <div style={{ width: 46, height: 46, flex: 'none', borderRadius: '50%', background: u.avatarUrl ? `url(${avatarThumb(u.avatarUrl, 46)}) center/cover` : u.avatarColor, display: 'flex', alignItems: 'center', justifyContent: 'center', fontFamily: "'Instrument Serif',serif", fontSize: 18, color: '#fff', overflow: 'hidden' }}>
                 {u.avatarUrl ? '' : u.init}
               </div>
               <div style={{ flex: 1, minWidth: 0 }}>
