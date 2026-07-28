@@ -34,12 +34,21 @@ admin.use('*', requireAdminUnlock);
 
 const now = () => new Date().toISOString();
 
-/** open report rows → { recipeId → {count, categories, last} }. */
+/** open POST reports → { recipeId → {count, categories, last} }.
+ *  Comment/profile reports live in the same table with a NULL recipe_id and are surfaced by
+ *  /admin/content-reports instead. Without the null guard they collapsed into a single
+ *  null-keyed group that rendered as a phantom "(deleted recipe)" card whose action buttons
+ *  all posted to /admin/reports/null/... and silently 400'd. */
 async function openReportsByRecipe() {
-  const { data } = await supabaseAdmin.from('reports').select('recipe_id, category, created_at').eq('status', 'open');
+  const { data } = await supabaseAdmin
+    .from('reports')
+    .select('recipe_id, category, created_at')
+    .eq('status', 'open')
+    .not('recipe_id', 'is', null);
   const map = new Map<string, { count: number; categories: Record<string, number>; last: string }>();
   for (const r of data ?? []) {
     const rid = r.recipe_id as string;
+    if (!rid) continue;
     const e = map.get(rid) ?? { count: 0, categories: {}, last: r.created_at as string };
     e.count += 1;
     e.categories[r.category as string] = (e.categories[r.category as string] ?? 0) + 1;
@@ -49,9 +58,9 @@ async function openReportsByRecipe() {
   return map;
 }
 
-/** all report rows → { cookId → total reports against their posts }. */
+/** all POST report rows → { cookId → total reports against their posts }. */
 async function reportsByCook() {
-  const { data: reps } = await supabaseAdmin.from('reports').select('recipe_id');
+  const { data: reps } = await supabaseAdmin.from('reports').select('recipe_id').not('recipe_id', 'is', null);
   const ids = [...new Set((reps ?? []).map((r) => r.recipe_id as string))];
   const byCook = new Map<string, number>();
   if (ids.length) {

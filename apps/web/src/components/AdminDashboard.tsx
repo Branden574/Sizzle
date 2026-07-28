@@ -46,7 +46,11 @@ export function AdminDashboard() {
   const lock = () => { setAdminUnlockToken(null); setUnlocked(false); };
 
   return (
-    <div style={{ position: 'absolute', inset: 0, zIndex: 96, background: 'var(--bg)', display: 'flex', flexDirection: 'column', animation: 'sz-fadeIn .3s' }}>
+    /* z84: the dashboard is a full-screen PAGE, and every sheet it opens (CookSheet z85 via
+       "View profile", RecipeSheet z97 via "View video", MoreSheet/ReportSheet…) must stack
+       ABOVE it. At z96 the cook sheet opened underneath and looked like a dead button.
+       Still well above the bottom nav (z55), so the dashboard covers the app chrome. */
+    <div style={{ position: 'absolute', inset: 0, zIndex: 84, background: 'var(--bg)', display: 'flex', flexDirection: 'column', animation: 'sz-fadeIn .3s' }}>
       <div style={{ display: 'flex', alignItems: 'center', gap: 8, padding: '52px 16px 12px', borderBottom: '1px solid var(--line)', flex: 'none' }}>
         <Button onClick={() => setShowAdmin(false)} style={{ width: 38, height: 38, border: 'none', background: 'var(--surface)', borderRadius: 12, cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
           <ChevronLeftIcon size={22} stroke="var(--text)" />
