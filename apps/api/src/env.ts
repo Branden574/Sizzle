@@ -8,7 +8,7 @@ const schema = z.object({
   // Supabase keys are required (no embedded defaults — we never commit keys, even
   // the public local-dev ones). For local dev, `supabase start` prints them; copy
   // them into apps/api/.env (see .env.example).
-  SUPABASE_URL: z.string().url().default('http://127.0.0.1:54321'),
+  SUPABASE_URL: z.string().url().default('http://127.0.0.1:54341'),
   SUPABASE_ANON_KEY: z.string().min(1),
   SUPABASE_SERVICE_ROLE_KEY: z.string().min(1),
 
