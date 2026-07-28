@@ -14,19 +14,25 @@ const accent = theme.accent;
  */
 export function ChooseUsername() {
   const loadProfile = useAuth((s) => s.loadProfile);
+  const profile = useAuth((s) => s.profile);
   const [handle, setHandle] = useState('');
+  // Social sign-up also leaves a junk DISPLAY name: the trigger derives it from the email
+  // local-part, which for Apple's Hide My Email is random ("Hchmktb56w"). Collect a real
+  // name here too, seeded with whatever we have so the field is never empty-looking.
+  const [name, setName] = useState(() => profile?.name ?? '');
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const clean = handle.replace(/^@/, '').replace(/[^A-Za-z0-9_]/g, '');
-  const valid = clean.length >= 3;
+  const cleanName = name.trim();
+  const valid = clean.length >= 3 && cleanName.length >= 2;
 
   const submit = async () => {
     if (!valid || busy) return;
     setBusy(true);
     setError(null);
     try {
-      await apiSend('PATCH', '/me', { handle: clean });
+      await apiSend('PATCH', '/me', { handle: clean, displayName: cleanName });
       await loadProfile(); // needsUsername flips false → app shell renders
     } catch (e) {
       setError(e instanceof ApiError ? e.message : 'Could not save that username — try again.');
@@ -36,10 +42,23 @@ export function ChooseUsername() {
 
   return (
     <div style={{ position: 'absolute', inset: 0, background: 'var(--bg)', display: 'flex', flexDirection: 'column', padding: '76px 28px 32px', animation: 'sz-fadeIn .35s' }}>
-      <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 40, lineHeight: 1.05, color: 'var(--text)' }}>Pick your username.</div>
-      <p style={{ color: 'var(--text-faint)', fontSize: 16, lineHeight: 1.4, margin: '14px 0 30px' }}>
-        This is how cooks find and @mention you on Sizzle. You can change it later in your profile.
+      <div style={{ fontFamily: "'Instrument Serif',serif", fontSize: 40, lineHeight: 1.05, color: 'var(--text)' }}>Set up your profile.</div>
+      <p style={{ color: 'var(--text-faint)', fontSize: 16, lineHeight: 1.4, margin: '14px 0 26px' }}>
+        Your name and username are how cooks find and @mention you on Sizzle. You can change both later in your profile.
       </p>
+
+      <div style={{ display: 'flex', alignItems: 'center', height: 58, border: `1.5px solid var(--line)`, borderRadius: 16, padding: '0 16px', background: 'var(--bg-soft)', marginBottom: 12 }}>
+        <input
+          value={name}
+          onChange={(e) => { setName(e.target.value); setError(null); }}
+          onKeyDown={(e) => { if (e.key === 'Enter') void submit(); }}
+          autoFocus
+          maxLength={40}
+          placeholder="Your name"
+          aria-label="Your name"
+          style={{ flex: 1, border: 'none', outline: 'none', background: 'none', fontFamily: "'Hanken Grotesk'", fontSize: 19, fontWeight: 600, color: 'var(--text)' }}
+        />
+      </div>
 
       <div style={{ display: 'flex', alignItems: 'center', gap: 4, height: 58, border: `1.5px solid ${error ? '#e0573a' : 'var(--line)'}`, borderRadius: 16, padding: '0 16px', background: 'var(--bg-soft)' }}>
         <span style={{ fontSize: 19, color: 'var(--text-faint-2)', fontWeight: 600 }}>@</span>
@@ -47,7 +66,6 @@ export function ChooseUsername() {
           value={clean}
           onChange={(e) => { setHandle(e.target.value); setError(null); }}
           onKeyDown={(e) => { if (e.key === 'Enter') void submit(); }}
-          autoFocus
           autoCapitalize="none"
           autoCorrect="off"
           spellCheck={false}

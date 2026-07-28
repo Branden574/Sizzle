@@ -147,7 +147,8 @@ hashtags.get('/:tag/content', optionalAuth, async (c) => {
     .eq('status', 'published')
     .not('auto_hidden', 'is', true)
     .contains('tags', [tag])
-    .is('price_cents', null)
+    // Priced recipes appear as locked teasers (buildCards strips the playable URL);
+    // subscribers-only stays out — no in-app subscription path on iOS.
     .or('visibility.is.null,visibility.neq.subscribers')
     .limit(PAGE + 1);
   if (sort === 'recent') {

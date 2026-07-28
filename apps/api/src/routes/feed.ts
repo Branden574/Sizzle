@@ -216,10 +216,12 @@ feed.get('/for-you', optionalAuth, async (c) => {
       .not('auto_hidden', 'is', true)
       // A creator's own posts don't belong in their For You — they've seen them.
       .neq('cook_id', userId)
-      // Premium recipes (priced unlocks + subscribers-only) are non-playable for a
-      // non-entitled viewer, so they never enter the algorithmic feed — they live
-      // only on the creator's profile for followers to find and unlock.
-      .is('price_cents', null)
+      // PRICED recipes DO enter the feed, as locked teasers (poster + 🔒 + "Unlock $X").
+      // buildCards marks them locked, strips photos, and never embeds a playable URL, so
+      // nothing leaks — and a viewer can actually discover and buy them (App Review 2.1(b)
+      // rejected build 33 because premium was unreachable outside a creator's profile).
+      // Subscribers-only stays OUT: subscriptions aren't sold in-app on iOS (3.1.1), so a
+      // locked card with no in-app purchase path would be a dead end.
       .or('visibility.is.null,visibility.neq.subscribers')
       .order('created_at', { ascending: false })
       .limit(CANDIDATES);
@@ -250,9 +252,8 @@ feed.get('/for-you', optionalAuth, async (c) => {
     .select('*')
     .eq('status', 'published')
     .not('auto_hidden', 'is', true)
-    // Premium (priced + subscribers-only) never appears in the algorithmic feed —
-    // see the ranked branch above.
-    .is('price_cents', null)
+    // Priced recipes appear as locked teasers; subscribers-only stays out — see the
+    // ranked branch above for the reasoning.
     .or('visibility.is.null,visibility.neq.subscribers')
     .order('created_at', { ascending: false })
     .limit(PAGE + 1);
@@ -325,8 +326,8 @@ feed.get('/tag/:tag', optionalAuth, async (c) => {
     .select('*')
     .eq('status', 'published')
     .contains('tags', [tag])
-    // Premium (priced + subscribers-only) is profile-only, never in tag discovery.
-    .is('price_cents', null)
+    // Priced recipes surface as locked teasers (discoverable + buyable via IAP);
+    // subscribers-only stays out (no in-app subscription path on iOS).
     .or('visibility.is.null,visibility.neq.subscribers')
     .order('created_at', { ascending: false })
     .limit(PAGE + 1);
@@ -353,16 +354,24 @@ feed.get('/following', requireAuth, async (c) => {
   // Followed cooks' published recipes via a server-side join RPC. NEVER fetch the
   // follow list into JS and pipe it through a PostgREST .in() — that URL 400s at
   // ~690 follows. Muted/blocked cooks (either direction) are excluded in the RPC.
+  // Over-fetch: the subscribers-only filter below runs in JS, AFTER the RPC's LIMIT.
+  // Asking for exactly PAGE+1 meant a single subscribers-only row in the window shrank
+  // the result to PAGE, which read as "no more pages" and permanently ended infinite
+  // scroll. Fetch a wider window and derive hasMore from the RAW stream instead.
+  const RAW_LIMIT = PAGE * 2 + 1;
   const { data, error } = await supabaseAdmin.rpc('following_feed_recipes', {
     p_user: userId,
     p_cursor: cursor ?? null,
-    p_limit: PAGE + 1,
+    p_limit: RAW_LIMIT,
   });
   if (error) throw dbFail(error.message);
-  // Premium (priced + subscribers-only) is profile-only — drop it from the following
-  // feed too, so a follower who hasn't unlocked/subscribed never gets a dead card.
-  const rows = ((data ?? []) as RecipeRow[]).filter((r) => r.price_cents == null && r.visibility !== 'subscribers');
-  const hasMore = rows.length > PAGE;
+  const raw = (data ?? []) as RecipeRow[];
+  // A follower SHOULD see a creator's priced posts (as locked teasers they can unlock);
+  // subscribers-only stays out, since subscriptions aren't purchasable in-app on iOS.
+  const rows = raw.filter((r) => r.visibility !== 'subscribers');
+  // More pages exist if the RAW stream was saturated (the DB had more to give) OR the
+  // filtered set alone overflows this page — never inferred from the filtered count alone.
+  const hasMore = raw.length >= RAW_LIMIT || rows.length > PAGE;
   const pageRows = rows.slice(0, PAGE);
   const recipeCards = await buildCards(supabaseAdmin, userId, pageRows);
   const cardById = new Map(recipeCards.map((card) => [card.id, card]));

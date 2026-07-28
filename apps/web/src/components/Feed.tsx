@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef, useState } from 'react';
 import { Button, GlassButton, IconButton, ReactionButton } from './controls';
 import { GlowButton } from './glow';
+import { canPurchaseUnlock } from '../lib/native';
 import type { RecipeCard } from '@sizzle/shared';
 import { useAuth } from '../auth/useAuth';
 import { useRequireAuth } from '../auth/useRequireAuth';
@@ -427,6 +428,37 @@ export const FeedCard = memo(function FeedCard({ card, onClose, suppressed = fal
       <div style={{ position: 'absolute', inset: 0, pointerEvents: 'none', background: 'linear-gradient(180deg, rgba(0,0,0,.35) 0%, transparent 22%, transparent 50%, rgba(0,0,0,.85) 100%)', opacity: immersive ? 0 : 1, transition: 'opacity .28s ease' }} />
 
       {!videoSrc && !hasImages && (() => {
+        // PREMIUM LOCKED — a priced recipe the viewer hasn't unlocked. It has no playable
+        // URL by design, so show the paywall CTA instead of the generic (dead) play button.
+        // This is the in-app entry point to the consumable IAP: tapping opens the recipe
+        // sheet where "Unlock · $X" runs the Apple purchase sheet.
+        if (card.locked && card.price != null) {
+          const canUnlockHere = canPurchaseUnlock;
+          return (
+            <div style={{ position: 'absolute', top: '50%', left: '50%', transform: 'translate(-50%,-50%)', display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 12, padding: '0 32px', textAlign: 'center' }}>
+              <div style={{ width: 62, height: 62, borderRadius: '50%', background: 'rgba(0,0,0,.45)', backdropFilter: 'blur(8px)', border: '1.5px solid rgba(255,255,255,.28)', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: 27 }}>🔒</div>
+              <div style={{ color: '#fff', fontSize: 16, fontWeight: 800 }}>Premium recipe</div>
+              <div style={{ color: 'rgba(255,255,255,.72)', fontSize: 13, lineHeight: 1.45, maxWidth: 260 }}>
+                {canUnlockHere
+                  ? `Unlock ${card.cook.name}'s full video, ingredients & steps.`
+                  : `This is one of ${card.cook.name}'s premium recipes.`}
+              </div>
+              {/* Only advertise a price where a purchase can actually be completed — the same
+                  gate RecipeSheet uses for its Unlock button. An OTA bundle can land on an older
+                  binary with no IAP plugin; showing "Unlock · $X" there would be a dead end that
+                  quotes a price the app cannot charge (exactly the 2.1(b) trap). */}
+              {canUnlockHere && (
+                <Button
+                  onClick={(e) => { e.stopPropagation(); setOpenRecipe(card.id); }}
+                  aria-label={`Unlock this recipe for $${(card.price / 100).toFixed(2)}`}
+                  style={{ marginTop: 2, height: 46, padding: '0 26px', border: 'none', borderRadius: 999, background: 'linear-gradient(135deg,#f4a52c,#ff5a36)', color: '#fff', fontFamily: "'Hanken Grotesk'", fontSize: 15.5, fontWeight: 800, cursor: 'pointer', boxShadow: '0 6px 20px rgba(0,0,0,.35)' }}
+                >
+                  Unlock · ${(card.price / 100).toFixed(2)}
+                </Button>
+              )}
+            </div>
+          );
+        }
         const st = card.video?.status;
         // A clip whose asset isn't ready yet (Cloudflare still transcoding) has no
         // playable URL — show an honest "Processing…" state instead of a dead play

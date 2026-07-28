@@ -29,6 +29,15 @@ export const canBuyInApp = !isNative;
 export const iapAvailable = isNative && Capacitor.isPluginAvailable('Purchases');
 
 /**
+ * Can a one-off premium recipe unlock actually be COMPLETED on this surface?
+ * web → Stripe checkout; native → Apple IAP (only where the plugin is compiled in).
+ * Every place that advertises a price ("Unlock · $X") must gate on THIS, so we never
+ * quote a price the app can't charge — a dead-end purchase path is what Guideline
+ * 2.1(b) rejects. Shared so the feed overlay and the recipe sheet can't drift apart.
+ */
+export const canPurchaseUnlock = canBuyInApp || iapAvailable;
+
+/**
  * CREATOR-SIDE MONEY TOOLING — your own earnings, payout setup, subscription
  * price, tiers, products, goals. Money flowing TO the creator is not a purchase,
  * so the stores don't require IAP here — the same reason TikTok, Instagram and

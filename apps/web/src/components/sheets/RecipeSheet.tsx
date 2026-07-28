@@ -5,7 +5,7 @@ import { useRequireAuth } from '../../auth/useRequireAuth';
 import { useAuth } from '../../auth/useAuth';
 import { useAppealRecipe, useCookEvent, useCookLog, useDeleteRecipe, useDerivatives, useMe, useRecipe, useToggleDownload, useToggleSave, useUnlockRecipe, useIapUnlock } from '../../data/queries';
 import { getOffline } from '../../lib/offline';
-import { canBuyInApp, iapAvailable } from '../../lib/native';
+import { canBuyInApp, iapAvailable, canPurchaseUnlock } from '../../lib/native';
 import { formatCount } from '../../lib/format';
 import { getLocalClip } from '../../lib/localClips';
 import { getCachedPlaybackUrl, prefetchPlaybackUrl } from '../../lib/signedPlayback';
@@ -377,7 +377,7 @@ export function RecipeSheet() {
                     // canBuyInApp = web (Stripe); iapAvailable = native WITH the IAP
                     // plugin (build 29+). On an older native build reached via OTA,
                     // both are false → the Unlock button hides rather than erroring.
-                    const canUnlock = canBuyInApp || iapAvailable;
+                    const canUnlock = canPurchaseUnlock;
                     const buying = unlock.isPending || iapUnlock.isPending;
                     const share = iapAvailable ? creatorShareCentsIAP(price) : creatorShareCents(price);
                     const onUnlock = () => {
