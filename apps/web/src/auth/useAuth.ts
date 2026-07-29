@@ -11,6 +11,7 @@ import { clearPasscode } from '../lib/applock';
 import { initRevenueCat, logoutRevenueCat } from '../lib/revenuecat';
 import { clearPlaybackCache } from '../lib/signedPlayback';
 import { clearLocalClips } from '../lib/localClips';
+import { clearOffline } from '../lib/offline';
 import { useSizzle } from '../store';
 
 /**
@@ -101,9 +102,20 @@ export const useAuth = create<AuthState>((set, get) => ({
       // minted for account A on the same device.
       if ((session?.user?.id ?? null) !== (get().user?.id ?? null)) {
         clearPlaybackCache(); clearLocalClips();
+        // The offline recipe cache holds whole RecipeDetail bodies — ingredients, steps,
+        // media URLs, including for PREMIUM posts the account paid to unlock. Its keys are
+        // global (sz_offline_<id>), so without this the next account on a shared device can
+        // read the previous account's downloaded content.
+        clearOffline();
         // Cached profile snapshots are account-scoped paint data — never let account A's
         // profile/grid flash for account B on a same-device switch (no reload in this SPA).
-        try { localStorage.removeItem('sizzle.cache.me'); localStorage.removeItem('sizzle.cache.cook'); } catch { /* private mode */ }
+        // sz-recent-searches is the same class of leak: the previous user's typed search
+        // history would otherwise show up in the next account's Discover recents.
+        try {
+          localStorage.removeItem('sizzle.cache.me');
+          localStorage.removeItem('sizzle.cache.cook');
+          localStorage.removeItem('sz-recent-searches');
+        } catch { /* private mode */ }
         // The React Query cache is account-scoped paint data too, but clearing it lives in
         // App.tsx (which owns queryClient) — importing it here would be a real import cycle,
         // since data/queries.ts imports this module.
@@ -203,8 +215,16 @@ export const useAuth = create<AuthState>((set, get) => ({
     // without this the next account inherits the previous user's count.
     await clearBadge();
     await supabase.auth.signOut();
-    // Cached profile snapshots must not flash for the NEXT account.
-    try { localStorage.removeItem('sizzle.cache.me'); localStorage.removeItem('sizzle.cache.cook'); } catch { /* private mode */ }
+    // Cached profile snapshots must not flash for the NEXT account, and the downloaded-recipe
+    // bodies + typed search history must not be readable by them. The identity-change branch
+    // in init() clears these too (signOut triggers it); repeated here so an explicit sign-out
+    // is self-contained and does not depend on that listener having fired.
+    clearOffline();
+    try {
+      localStorage.removeItem('sizzle.cache.me');
+      localStorage.removeItem('sizzle.cache.cook');
+      localStorage.removeItem('sz-recent-searches');
+    } catch { /* private mode */ }
     // Drop the app-lock passcode so it can't carry over to the next account.
     await clearPasscode();
     useSizzle.getState().setAppLockEnabled(false);
