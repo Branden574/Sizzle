@@ -186,8 +186,15 @@ export default function App() {
 
   // On first auth, replay onboarding choices: persist taste picks and follow
   // the cooks selected during onboarding (real cook ids from /cooks/suggested).
+  //
+  // Waits for needsUsername to clear. A follow sends the target a push whose text is built
+  // from the FOLLOWER's display_name at send time, and until the username step is done that
+  // name is still the placeholder the signup trigger derived from the email local part. For
+  // an Apple "Hide My Email" signup that local part is a random string, so the target got
+  // "Tbdbcdctmc started following you" from someone whose name is Haley. Replaying after the
+  // username step means the first thing anyone sees of a new user is the name they chose.
   useEffect(() => {
-    if (authStatus !== 'authed') return;
+    if (authStatus !== 'authed' || needsUsername) return;
     const { tastes, followed } = useSizzle.getState();
     const picked = Object.entries(tastes).filter(([, v]) => v).map(([k]) => k);
     const cookIds = Object.entries(followed).filter(([, v]) => v).map(([k]) => k);
@@ -199,7 +206,7 @@ export default function App() {
       void queryClient.invalidateQueries({ queryKey: ['feed'] });
       void queryClient.invalidateQueries({ queryKey: ['me'] });
     })();
-  }, [authStatus]);
+  }, [authStatus, needsUsername]);
 
   // Native push. On the FIRST authed session on this device we proactively ask
   // for notification permission (enablePush shows the iOS dialog once, then
