@@ -13,7 +13,10 @@ import type { AppEnv } from '../types';
 
 // Reachable with a valid admin session but no unlock token (still admin-gated by
 // the requireAdmin ahead of this): set the passphrase, unlock, or read whether
-// one is set. `security-status` returns only a boolean, never any secret.
+// one is set — the client needs that last one to pick the "set" vs "unlock"
+// screen, i.e. before any unlock token can exist. `security-status` reports only
+// booleans/enums about config state (never a key, hash, or token), so an admin
+// session alone is a sufficient boundary for it.
 const EXEMPT = new Set(['/admin/unlock', '/admin/passphrase', '/admin/security-status']);
 
 export const requireAdminUnlock: MiddlewareHandler<AppEnv> = async (c, next) => {

@@ -51,12 +51,12 @@ health.get('/', async (c) =>
     // card would be charged — and card 4242 unlocking paid content looks exactly
     // like a working checkout.
     paymentsKeyMode: !env.STRIPE_SECRET_KEY ? 'none' : env.STRIPE_SECRET_KEY.startsWith('sk_live') ? 'live' : 'test',
-    // MUST be false in production. When true the IAP verifier accepts SANDBOX receipts
-    // (monetize.ts) — those are never charged, so anyone on a sandbox Apple ID could
-    // unlock premium recipes for $0 while creators see phantom sales. It's needed only
-    // while App Review tests purchases, and a leftover `true` after launch is invisible
-    // from the outside — which is exactly why it's surfaced here.
-    sandboxIapAllowed: env.ALLOW_SANDBOX_IAP === 'true',
+    // NOTE: the ALLOW_SANDBOX_IAP state is deliberately NOT reported here. /health is
+    // unauthenticated, and `true` would advertise to any scanner that a sandbox Apple ID
+    // can unlock premium content for $0. It's exposed on GET /admin/security-status
+    // (admin-gated) and rendered in the dashboard's Security tab instead, where it stays
+    // auditable without being a beacon. paymentsKeyMode stays here: 'test' means no real
+    // money moves, which is an uptime signal, not an exploitable one.
     // Both fail silently by design: email.ts and sentry.ts no-op without a key,
     // so a moderated user gets no explanation and a 5xx alerts nobody, while the
     // app keeps reporting healthy. Same reasoning as `push` above.

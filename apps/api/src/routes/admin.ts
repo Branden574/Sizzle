@@ -528,11 +528,21 @@ admin.post('/support-requests/:id/resolve', async (c) => {
  */
 
 /** GET /admin/security-status — whether this admin has set a passphrase yet
- *  (drives the client's "set one" vs "unlock" screen). Leaks no secret. */
+ *  (drives the client's "set one" vs "unlock" screen), plus live money-path config.
+ *  Leaks no secret. `sandboxIapAllowed` MUST be false in production: when true the IAP
+ *  verifier accepts SANDBOX receipts (monetize.ts), which are never charged — anyone on
+ *  a sandbox Apple ID could unlock premium recipes for $0 while creators see phantom
+ *  sales. It's only needed while App Review tests purchases, and a leftover `true` is
+ *  otherwise invisible. Reported HERE rather than on the public /health so it stays
+ *  auditable without telling an anonymous scanner the paywall is currently bypassable. */
 admin.get('/security-status', async (c) => {
   const userId = c.get('userId')!;
   const { data } = await supabaseAdmin.from('admin_credentials').select('user_id').eq('user_id', userId).maybeSingle();
-  return c.json({ passphraseSet: !!data });
+  return c.json({
+    passphraseSet: !!data,
+    sandboxIapAllowed: env.ALLOW_SANDBOX_IAP === 'true',
+    paymentsKeyMode: !env.STRIPE_SECRET_KEY ? 'none' : env.STRIPE_SECRET_KEY.startsWith('sk_live') ? 'live' : 'test',
+  });
 });
 
 const passphraseSchema = z.object({

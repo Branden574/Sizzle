@@ -931,7 +931,7 @@ export const useSetCreator = adminMutation<{ id: string; status: 'regular' | 'el
 /* Admin second factor (passphrase). security-status + unlock + set are EXEMPT
  * from the server unlock gate, so they work before/without a token. */
 export function useAdminSecurityStatus(enabled: boolean) {
-  return useQuery({ queryKey: ['admin', 'security-status'], queryFn: () => apiGet<{ passphraseSet: boolean }>('/admin/security-status'), enabled });
+  return useQuery({ queryKey: ['admin', 'security-status'], queryFn: () => apiGet<{ passphraseSet: boolean; sandboxIapAllowed?: boolean; paymentsKeyMode?: string }>('/admin/security-status'), enabled });
 }
 /** Verify the passphrase and capture the returned unlock token for this tab. */
 export function useAdminUnlock() {

@@ -167,6 +167,8 @@ function SecurityTab() {
   const [confirm, setConfirm] = useState('');
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const change = useSetAdminPassphrase();
+  // Same query key as the dashboard's gate check — React Query serves it from cache.
+  const sec = useAdminSecurityStatus(true);
 
   const submit = async () => {
     setMsg(null);
@@ -182,6 +184,28 @@ function SecurityTab() {
   };
 
   return (
+    <>
+    {/* Live money-path config. Both of these are invisible from inside the app when wrong:
+        a leftover ALLOW_SANDBOX_IAP=true makes the verifier accept never-charged sandbox
+        receipts (free premium, phantom creator sales), and test Stripe keys make card 4242
+        look exactly like a real checkout. Surfaced here — admin-gated — rather than on the
+        public /health, where `true` would tell any scanner the paywall is bypassable. */}
+    <div style={card}>
+      <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)', marginBottom: 4 }}>Money path</div>
+      <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginBottom: 12, lineHeight: 1.5 }}>Live server config. Both must be green in production — change them on Vercel, then redeploy.</div>
+      <ConfigRow
+        label="Sandbox IAP receipts"
+        value={sec.data?.sandboxIapAllowed ? 'Accepted — paywall bypassable' : 'Rejected'}
+        bad={sec.data?.sandboxIapAllowed === true}
+        loading={sec.isLoading}
+      />
+      <ConfigRow
+        label="Stripe keys"
+        value={sec.data?.paymentsKeyMode === 'live' ? 'Live' : sec.data?.paymentsKeyMode === 'test' ? 'Test — no real money moves' : 'Not configured'}
+        bad={sec.data?.paymentsKeyMode !== 'live'}
+        loading={sec.isLoading}
+      />
+    </div>
     <div style={card}>
       <div style={{ fontSize: 15, fontWeight: 800, color: 'var(--text)', marginBottom: 4 }}>Change admin passphrase</div>
       <div style={{ fontSize: 12.5, color: 'var(--text-faint)', marginBottom: 12, lineHeight: 1.5 }}>Every admin action requires this passphrase. Changing it immediately signs out all unlocked sessions.</div>
@@ -190,6 +214,23 @@ function SecurityTab() {
       <PassInput value={confirm} onChange={setConfirm} placeholder="Confirm new passphrase" onEnter={submit} />
       {msg && <div style={{ ...gateErr, color: msg.ok ? '#1f9d55' : '#d8521e', background: msg.ok ? 'rgba(31,157,85,.1)' : 'rgba(216,82,30,.1)' }}>{msg.text}</div>}
       <Button onClick={submit} disabled={change.isPending || !current || !next} style={gateBtn}>{change.isPending ? 'Changing…' : 'Change passphrase'}</Button>
+    </div>
+    </>
+  );
+}
+
+/** One server-config line: label on the left, state chip on the right. */
+function ConfigRow({ label, value, bad, loading }: { label: string; value: string; bad: boolean; loading: boolean }) {
+  return (
+    <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', gap: 10, padding: '9px 0', borderTop: '1px solid var(--line)' }}>
+      <div style={{ fontSize: 13.5, fontWeight: 600, color: 'var(--text-soft)' }}>{label}</div>
+      {loading ? (
+        <div style={{ fontSize: 12.5, color: 'var(--text-faint-2)' }}>Checking…</div>
+      ) : (
+        <div style={{ ...chip(bad ? 'rgba(216,82,30,.12)' : 'rgba(31,157,85,.12)', bad ? '#d8521e' : '#1f9d55'), textAlign: 'right' }}>
+          {bad ? '⚠ ' : '✓ '}{value}
+        </div>
+      )}
     </div>
   );
 }
