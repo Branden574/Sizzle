@@ -72,18 +72,22 @@ function xhrPut(url: string, body: Blob, contentType: string, onProgress?: (pct:
  * the same path instead of the SDK's direct POST, which was silently 400ing.
  * Returns the public URL.
  */
+/** Buckets we upload into. */
+type UploadBucket = 'videos' | 'avatars' | 'banners';
+
 /** Mint a signed PUT URL + the object's public URL (shared by the JS XHR path
- *  and the native background-URLSession path, which PUTs from a file path). */
-export async function createSignedPutUrl(path: string): Promise<{ putUrl: string; publicUrl: string }> {
-  const { data, error } = await supabase.storage.from('videos').createSignedUploadUrl(path);
+ *  and the native background-URLSession path, which PUTs from a file path).
+ *  Defaults to `videos` so existing callers are unchanged. */
+export async function createSignedPutUrl(path: string, bucket: UploadBucket = 'videos'): Promise<{ putUrl: string; publicUrl: string }> {
+  const { data, error } = await supabase.storage.from(bucket).createSignedUploadUrl(path);
   if (error || !data?.signedUrl) throw mapSdkError(error ?? new Error('no signed url'));
   const signed = data.signedUrl;
   const putUrl = signed.startsWith('http') ? signed : `${webEnv.supabaseUrl}/storage/v1${signed.startsWith('/storage/v1') ? signed.slice('/storage/v1'.length) : signed}`;
-  return { putUrl, publicUrl: supabase.storage.from('videos').getPublicUrl(path).data.publicUrl };
+  return { putUrl, publicUrl: supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl };
 }
 
-async function putViaSignedUrl(path: string, body: Blob, contentType: string, onProgress?: (pct: number) => void): Promise<string> {
-  const { putUrl, publicUrl } = await createSignedPutUrl(path);
+async function putViaSignedUrl(path: string, body: Blob, contentType: string, onProgress?: (pct: number) => void, bucket: UploadBucket = 'videos'): Promise<string> {
+  const { putUrl, publicUrl } = await createSignedPutUrl(path, bucket);
   await xhrPut(putUrl, body, contentType, onProgress);
   return publicUrl;
 }
@@ -182,11 +186,17 @@ export function uploadToCloudflare(uploadUrl: string, file: File, onProgress?: (
 export async function uploadProfileImage(bucket: 'avatars' | 'banners', userId: string, file: File): Promise<string> {
   const ext = (file.name.split('.').pop() || 'jpg').toLowerCase().replace(/[^a-z0-9]/g, '');
   const path = `${userId}/${bucket}-${Date.now()}.${ext}`;
-  // cacheControl: the path embeds Date.now() (immutable URL — a new avatar is a new URL),
-  // so cache for a year instead of the SDK's 1h default; kills the hourly avatar re-pop.
-  const { error } = await supabase.storage.from(bucket).upload(path, file, { upsert: true, contentType: file.type, cacheControl: '31536000' });
-  if (error) throw error;
-  return supabase.storage.from(bucket).getPublicUrl(path).data.publicUrl;
+  // Signed URL + XHR PUT, NOT the SDK's direct storage POST. That POST 400s from the iOS
+  // WKWebView — the same failure that silently killed video posters for weeks (see uploadVideo
+  // below), which is why clips were moved onto this path. Avatars and banners were left behind
+  // on the broken one, so setting a profile or banner photo failed on the native app while
+  // working in a desktop browser.
+  //
+  // The one-year cache-control the SDK call used to pass is set by xhrPut as a request header;
+  // Supabase persists it the same way. Paths embed Date.now(), so a new photo is a new URL and
+  // caching for a year is safe.
+  const contentType = file.type || (ext === 'png' ? 'image/png' : 'image/jpeg');
+  return putViaSignedUrl(path, file, contentType, undefined, bucket);
 }
 
 /**
