@@ -1,6 +1,6 @@
 import type { ReportTargetType } from '@sizzle/shared';
 import { supabaseAdmin } from '../lib/supabase';
-import { sendEmail } from './email';
+import { escapeHtml, sendEmail } from './email';
 import { forbidden, notFound } from '../lib/errors';
 import { logModeration } from './audit';
 import { env } from '../env';
@@ -72,8 +72,8 @@ export async function fileReport(opts: {
   void notifyReport(opts).catch(() => {});
 }
 
-const esc = (s: unknown): string =>
-  String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+// The shared escaper now lives in services/email.ts, next to the templates that need it.
+const esc = escapeHtml;
 
 /**
  * The moderation alert. A raw UUID is unactionable at 2am — this resolves the target into

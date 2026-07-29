@@ -32,6 +32,20 @@ export async function userEmail(userId: string): Promise<string | null> {
   }
 }
 
+/**
+ * Escape a value for interpolation into email HTML.
+ *
+ * Every template below embeds moderation context — a recipe title, a removal reason — and a
+ * recipe title is fully user-controlled. Unescaped, a title containing markup lands as live
+ * HTML in the recipient's mail client: at minimum broken layout, at worst an attacker-authored
+ * link inside a message that is unmistakably from Sizzle. Mail clients strip <script>, so this
+ * is not XSS in the browser sense; it is a phishing surface in a trusted envelope.
+ *
+ * Exported so services/reports.ts uses this one instead of its own copy.
+ */
+export const escapeHtml = (s: unknown): string =>
+  String(s ?? '').replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;');
+
 const wrap = (body: string) =>
   `<div style="font-family:-apple-system,Segoe UI,Roboto,sans-serif;max-width:520px;margin:0 auto;color:#1b1512">
      <div style="font-size:22px;font-weight:700;margin-bottom:16px">Sizzle</div>${body}
@@ -42,15 +56,15 @@ const wrap = (body: string) =>
 export const emails = {
   banned: (reason: string | null, deleteAt: string | null) =>
     wrap(
-      `<p style="font-size:16px;line-height:1.5">Your Sizzle account has been suspended${reason ? ` for: <b>${reason}</b>` : ''}.</p>
+      `<p style="font-size:16px;line-height:1.5">Your Sizzle account has been suspended${reason ? ` for: <b>${escapeHtml(reason)}</b>` : ''}.</p>
        ${deleteAt ? `<p style="font-size:14px;color:#8a7c70">If you don't appeal, the account and its data will be permanently deleted on ${new Date(deleteAt).toLocaleDateString()}.</p>` : ''}
        <p style="font-size:14px">You can appeal from the app — open Sizzle and follow the prompts on the suspension screen.</p>`,
     ),
   removed: (title: string | null, reason: string | null) =>
     wrap(
-      `<p style="font-size:16px;line-height:1.5">Your post${title ? ` “${title}”` : ''} was removed${reason ? ` for: <b>${reason}</b>` : ''}.</p>
+      `<p style="font-size:16px;line-height:1.5">Your post${title ? ` “${escapeHtml(title)}”` : ''} was removed${reason ? ` for: <b>${escapeHtml(reason)}</b>` : ''}.</p>
        <p style="font-size:14px">If you think this was a mistake, you can appeal it from the post in the app.</p>`,
     ),
   restored: (title: string | null) =>
-    wrap(`<p style="font-size:16px;line-height:1.5">Good news — your post${title ? ` “${title}”` : ''} has been restored and is live again.</p>`),
+    wrap(`<p style="font-size:16px;line-height:1.5">Good news — your post${title ? ` “${escapeHtml(title)}”` : ''} has been restored and is live again.</p>`),
 };
