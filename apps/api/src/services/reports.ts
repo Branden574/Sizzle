@@ -3,6 +3,7 @@ import { supabaseAdmin } from '../lib/supabase';
 import { sendEmail } from './email';
 import { forbidden, notFound } from '../lib/errors';
 import { logModeration } from './audit';
+import { env } from '../env';
 
 /** Distinct reporters before a recipe is auto-hidden pending admin review. */
 const AUTOHIDE_THRESHOLD = 20;
@@ -87,7 +88,9 @@ async function notifyReport(opts: {
   category: string;
   reason?: string | null;
 }): Promise<void> {
-  const site = process.env.APP_ORIGIN || 'https://getsizzle.app';
+  // Read through the validated env object, not raw process.env — env.ts already parses
+  // APP_ORIGIN with this exact default, and a second inline default is free to drift.
+  const site = env.APP_ORIGIN;
   const lines: string[] = [];
   let who = `${opts.targetType} ${opts.targetId}`;
   let link = '';

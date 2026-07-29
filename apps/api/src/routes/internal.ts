@@ -31,10 +31,6 @@ internal.use('*', async (c, next) => {
  * that gap (and covers clips whose transcode exceeds the client poll's cap).
  */
 internal.get('/finalize-videos', async (c) => {
-  if (env.CRON_SECRET) {
-    const auth = c.req.header('authorization');
-    if (auth !== `Bearer ${env.CRON_SECRET}`) return c.json({ error: 'unauthorized' }, 401);
-  }
   const now = Date.now();
   const twoHoursAgo = new Date(now - 2 * 3_600_000).toISOString();
   const sixHoursAgo = new Date(now - 6 * 3_600_000).toISOString();
@@ -217,10 +213,6 @@ async function drainMediaDeletions(budgetMs: number): Promise<{ mediaDeleted: nu
  * is configured. (In local dev with no secret set, it's open — fine locally.)
  */
 internal.get('/publish-scheduled', async (c) => {
-  if (env.CRON_SECRET) {
-    const auth = c.req.header('authorization');
-    if (auth !== `Bearer ${env.CRON_SECRET}`) return c.json({ error: 'unauthorized' }, 401);
-  }
   const now = new Date().toISOString();
   const { data: due } = await supabaseAdmin
     .from('recipes')
@@ -245,10 +237,6 @@ internal.get('/publish-scheduled', async (c) => {
  * not a drip campaign.
  */
 internal.get('/save-nudges', async (c) => {
-  if (env.CRON_SECRET) {
-    const auth = c.req.header('authorization');
-    if (auth !== `Bearer ${env.CRON_SECRET}`) return c.json({ error: 'unauthorized' }, 401);
-  }
   const now = Date.now();
   const from = new Date(now - 21 * 86_400_000).toISOString();
   const to = new Date(now - 7 * 86_400_000).toISOString();

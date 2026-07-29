@@ -8,7 +8,7 @@
  */
 import { env } from '../env';
 
-export const transcribeProvider: 'openai' | 'mock' = env.OPENAI_API_KEY ? 'openai' : 'mock';
+const transcribeProvider: 'openai' | 'mock' = env.OPENAI_API_KEY ? 'openai' : 'mock';
 
 export interface Captions {
   vtt: string; // WebVTT captions

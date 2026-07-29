@@ -109,6 +109,3 @@ export async function moderateImages(urls: string[]): Promise<ModerationResult> 
     return { ok: true, providerError: true }; // network/timeout → fail open, but flag it
   }
 }
-
-/** @deprecated Synchronous local-only check. Prefer the async `moderate`. */
-export const moderateText = moderateLocal;

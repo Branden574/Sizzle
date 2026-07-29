@@ -36,7 +36,7 @@ export interface ButtonProps extends NativeButtonProps {
 }
 
 /** A tiny, dependency-free tactile hint for Android/WebView and supporting browsers. */
-export function triggerTactile(kind: 'selection' | 'success' | 'warning' = 'selection') {
+function triggerTactile(kind: 'selection' | 'success' | 'warning' = 'selection') {
   if (typeof navigator === 'undefined' || !('vibrate' in navigator)) return;
   if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) return;
   navigator.vibrate(kind === 'success' ? 14 : kind === 'warning' ? [12, 18, 12] : 8);

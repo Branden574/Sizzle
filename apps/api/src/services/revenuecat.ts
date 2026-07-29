@@ -44,8 +44,8 @@ export async function fetchNonSubscriptions(appUserId: string): Promise<Record<s
   return json.subscriber?.non_subscriptions ?? {};
 }
 
-/** The idempotency key for a consumable purchase — Apple's store transaction id
- *  when present, else RevenueCat's transaction id. */
-export function txnId(p: RCNonSubscription): string {
-  return p.store_transaction_id ?? p.id;
-}
+// NOTE: there is deliberately no shared `txnId(p)` helper here. The idempotency key for a
+// consumable purchase is Apple's `store_transaction_id` and ONLY that: routes/monetize.ts
+// filters out any purchase lacking one (:335) rather than falling back to RevenueCat's own
+// id, because that fallback would let a purchase with no Apple transaction id unlock content
+// and would not match the refund webhook, which keys off the same Apple id.

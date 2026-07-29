@@ -152,7 +152,8 @@ export function cookSummary(p: ProfileRow): CookSummary {
   };
 }
 
-export function videoDTO(v: VideoRow | null | undefined): VideoAssetDTO | null {
+/** Internal to this module — `toCard` is the public surface. */
+function videoDTO(v: VideoRow | null | undefined): VideoAssetDTO | null {
   if (!v) return null;
   // Only hand playback URLs to the client once the asset is READY. Cloudflare
   // populates hls_url early (while still transcoding), but its manifest returns
