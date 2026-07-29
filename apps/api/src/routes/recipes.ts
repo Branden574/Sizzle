@@ -1015,16 +1015,52 @@ recipes.post('/:id/comments', requireAuth, requireNotBanned, rateLimit({ windowM
 
 /** POST /recipes/:id/comments/:commentId/like — toggle a like on a comment. */
 recipes.post('/:id/comments/:commentId/like', requireAuth, requireNotBanned, rateLimit({ windowMs: 60_000, max: 90, name: 'comment-like' }), async (c) => {
-  const userId = c.get('userId')!;
+  const id = assertUuid(c.req.param('id'), 'recipe');
   const commentId = assertUuid(c.req.param('commentId'), 'comment');
+  const userId = c.get('userId')!;
+
+  // This route used to read ONLY :commentId — it never resolved the recipe, so none of the
+  // gates its four sibling comment routes apply ran. Anyone holding a comment UUID could like
+  // a comment on a draft, an auto-hidden post, a private account they don't follow, or someone
+  // who blocked them — and each fresh like pushes a `comment_like` notification to the author,
+  // which made it a block-bypass and an interaction-confirmation channel.
+  //
+  // Gate the RECIPE first (status / private-account / both directions of a block), exactly as
+  // POST /comments does.
+  const cookId = await recipeCookIdUnblocked(id, userId);
+
+  // Then the COMMENT. It must belong to THIS recipe — the same scope check DELETE makes at
+  // :commentId — and it must be one the viewer could actually see, mirroring the `canSee`
+  // predicate on GET /:id/comments: a hidden comment is visible only to the post owner, an
+  // admin, or its own author, and a blocked user's comments are never visible.
+  const { data: comment } = await supabaseAdmin
+    .from('comments')
+    .select('id, recipe_id, author_id, hidden')
+    .eq('id', commentId)
+    .maybeSingle();
+  if (!comment || comment.recipe_id !== id) throw notFound('Comment not found');
+
+  const authorId = comment.author_id as string;
+  if (authorId !== userId) {
+    const blocked = await loadBlockedIds(supabaseAdmin, userId);
+    if (blocked.has(authorId)) throw notFound('Comment not found');
+    if (comment.hidden) {
+      // Shadow-hidden: its own author still sees it as normal (handled above), but nobody
+      // else may interact with it except the post owner or an admin.
+      let isModerator = cookId === userId;
+      if (!isModerator) {
+        const { data: viewer } = await supabaseAdmin.from('profiles').select('role').eq('id', userId).maybeSingle();
+        isModerator = viewer?.role === 'admin';
+      }
+      if (!isModerator) throw notFound('Comment not found');
+    }
+  }
 
   const { data: liked, error } = await supabaseAdmin.rpc('toggle_comment_like', { p_user: userId, p_comment: commentId });
   if (error) throw dbFail(error.message);
-  const { data: row } = await supabaseAdmin.from('comments').select('like_count, author_id, recipe_id').eq('id', commentId).maybeSingle();
+  const { data: row } = await supabaseAdmin.from('comments').select('like_count').eq('id', commentId).maybeSingle();
   // Notify the comment's author on a fresh like (notify() skips self-likes).
-  if (liked && row?.author_id) {
-    await notify({ userId: row.author_id as string, type: 'comment_like', actorId: userId, recipeId: (row.recipe_id as string) ?? null });
-  }
+  if (liked) await notify({ userId: authorId, type: 'comment_like', actorId: userId, recipeId: id });
   return c.json({ liked: !!liked, likes: row?.like_count ?? 0 });
 });
 
