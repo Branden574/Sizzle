@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState, type CSSProperties } from 'react';
+import { Button } from './controls';
 
 /**
  * Full-bleed, horizontally-swipeable photo carousel for image recipe posts.
@@ -182,24 +183,22 @@ export function ImageCarousel({ images }: { images: string[] }) {
       {!coarse && (
         <>
           {idx > 0 && (
-            <button
-              type="button"
+            <Button
               aria-label="Previous photo"
               onClick={(e) => { e.stopPropagation(); goTo(idx - 1); }}
               style={arrowStyle('left')}
             >
               <Chevron dir="left" />
-            </button>
+            </Button>
           )}
           {idx < count - 1 && (
-            <button
-              type="button"
+            <Button
               aria-label="Next photo"
               onClick={(e) => { e.stopPropagation(); goTo(idx + 1); }}
               style={arrowStyle('right')}
             >
               <Chevron dir="right" />
-            </button>
+            </Button>
           )}
         </>
       )}

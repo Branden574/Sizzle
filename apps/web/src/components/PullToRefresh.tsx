@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useId, useRef, useState } from 'react';
 import { hapticArm, hapticError, hapticSuccess } from '../lib/haptics';
+import { Button } from './controls';
 
 export type RefreshPhase = 'idle' | 'pulling' | 'armed' | 'refreshing' | 'success' | 'failed';
 
@@ -245,10 +246,14 @@ export function PullToRefreshSpinner({
   return (
     <>
       <div aria-live="polite" role="status" style={SR_ONLY}>{aria}</div>
+      {/* Visually hidden, but reachable by keyboard and screen readers: pull-to-refresh is a
+          touch gesture with no non-touch equivalent, so this is the only way to refresh
+          without a pointer. SR_ONLY clips it to 1px, so the shared button's visual styling
+          is inert here — it is included for the focus-ring and disabled-click semantics. */}
       {onManualRefresh && (
-        <button type="button" onClick={onManualRefresh} disabled={refreshing} style={{ ...SR_ONLY, pointerEvents: 'auto' }}>
+        <Button onClick={onManualRefresh} disabled={refreshing} style={{ ...SR_ONLY, pointerEvents: 'auto' }}>
           {`Refresh ${noun}`}
-        </button>
+        </Button>
       )}
       <div
         style={{
