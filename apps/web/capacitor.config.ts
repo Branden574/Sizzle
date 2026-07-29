@@ -10,14 +10,28 @@ import type { CapacitorConfig } from '@capacitor/cli';
  * cleartext is enabled only so the *:lan dev builds can reach the http LAN
  * backend; the store build uses https and doesn't rely on it.
  */
+
+/**
+ * LAN dev builds only. `npm run ios:lan` / `android:lan` / `cap:sync:lan` set SIZZLE_LAN=1.
+ *
+ * This used to be unconditional, so the shipped Android build also carried
+ * android:usesCleartextTraffic and served the bundle over an http:// origin — the comment
+ * above claimed it was dev-only but nothing enforced that. Store builds now omit the block
+ * entirely, which leaves Android on its default https scheme with cleartext off.
+ *
+ * Safe to flip now specifically because Android has never been uploaded: changing
+ * androidScheme changes the WebView origin, which would orphan localStorage/IndexedDB for
+ * existing installs. There are none. iOS is unaffected either way — it uses its own scheme
+ * and is governed by NSAppTransportSecurity in Info.plist (currently NSAllowsLocalNetworking
+ * only, which is already the narrow form).
+ */
+const lanDev = process.env.SIZZLE_LAN === '1';
+
 const config: CapacitorConfig = {
   appId: 'app.sizzle.mobile',
   appName: 'Sizzle',
   webDir: 'dist',
-  server: {
-    androidScheme: 'http',
-    cleartext: true,
-  },
+  ...(lanDev ? { server: { androidScheme: 'http' as const, cleartext: true } } : {}),
   plugins: {
     // Show banners for pushes even while the app is in the foreground (iOS).
     FirebaseMessaging: {
