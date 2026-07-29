@@ -5,6 +5,7 @@ import { dbFail, badRequest } from '../lib/errors';
 import { optionalAuth, requireAuth, requireAdmin } from '../middleware/auth';
 import { buildCards, loadMutedIds, type RecipeRow } from '../mappers';
 import { normalizeTag } from '../services/hashtags';
+import { logModeration } from '../services/audit';
 import type { AppEnv } from '../types';
 
 export const hashtags = new Hono<AppEnv>();
@@ -236,6 +237,10 @@ hashtags.post('/:tag/moderate', requireAuth, requireAdmin, async (c) => {
   }
   const { error } = await supabaseAdmin.from('hashtags').update(patch).eq('normalized_name', tag);
   if (error) throw dbFail(error.message);
-  console.log('[hashtags] moderate', { admin: c.get('userId'), tag, action: body.action });
+  // Every other admin moderation action lands in moderation_log (and therefore in
+  // /admin/log). This one used to only console.log, so blocking or featuring a hashtag
+  // left no auditable trace of who did it. The target is a tag, not a user or recipe,
+  // so it rides in `detail`.
+  await logModeration({ adminId: c.get('userId'), action: `hashtag_${body.action}`, detail: tag });
   return c.json({ ok: true, tag, action: body.action });
 });
