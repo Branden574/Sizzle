@@ -12,43 +12,6 @@ interface IconBase {
 
 const HEART_D = 'M12 21C12 21 4 13.7 4 8.5A4.5 4.5 0 0 1 12 5a4.5 4.5 0 0 1 8 3.5C20 13.7 12 21 12 21Z';
 
-/* ---------- status bar ---------- */
-
-export function SignalIcon({ color }: { color: string }) {
-  return (
-    <svg width="18" height="12" viewBox="0 0 18 12" fill="none">
-      <rect x="0" y="7" width="3" height="5" rx="1" fill={color} />
-      <rect x="5" y="4.5" width="3" height="7.5" rx="1" fill={color} />
-      <rect x="10" y="2" width="3" height="10" rx="1" fill={color} />
-      <rect x="15" y="0" width="3" height="12" rx="1" fill={color} opacity="0.4" />
-    </svg>
-  );
-}
-
-export function WifiIcon({ color }: { color: string }) {
-  return (
-    <svg width="16" height="12" viewBox="0 0 16 12" fill="none">
-      <path
-        d="M8 2.5c2 0 3.8.8 5 2.1M8 6c1.2 0 2.3.5 3 1.3M3 4.6C4.2 3.3 6 2.5 8 2.5"
-        stroke={color}
-        strokeWidth="1.6"
-        strokeLinecap="round"
-      />
-      <circle cx="8" cy="9.6" r="1.2" fill={color} />
-    </svg>
-  );
-}
-
-export function BatteryIcon({ color }: { color: string }) {
-  return (
-    <svg width="26" height="13" viewBox="0 0 26 13" fill="none">
-      <rect x="1" y="1" width="21" height="11" rx="3" stroke={color} strokeWidth="1.1" opacity="0.5" />
-      <rect x="3" y="3" width="16" height="7" rx="1.5" fill={color} />
-      <path d="M24 4.5v4c.9-.4.9-3.6 0-4Z" fill={color} opacity="0.6" />
-    </svg>
-  );
-}
-
 /* ---------- chevrons / arrows ---------- */
 
 export function ChevronLeftIcon({ size = 20, stroke = '#1b1512', strokeWidth = 2.2 }: IconBase) {

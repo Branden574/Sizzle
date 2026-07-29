@@ -1,5 +1,17 @@
 import type { Comment, Cook, Recipe } from './types';
 
+/**
+ * Design-prototype fixtures + static UI constants.
+ *
+ * IMPORTANT: `cooks`, `recipes` and `baseComments` are NOT app data. Nothing in the running
+ * client reads them — the app's data model is `@sizzle/shared`, served by the API. They survive
+ * because `apps/api/src/scripts/seed.ts` imports them across the workspace boundary as the
+ * source of truth for `npm run seed`, so seeded content matches what the UI was designed
+ * around. Deleting them breaks the seed script; using them anywhere in the client is a bug.
+ *
+ * `tasteDefs` and `discoverHeights` ARE live client constants.
+ */
+
 export const cooks: Cook[] = [
   {
     id: 'mina',
@@ -373,10 +385,7 @@ export const tasteDefs: string[] = [
   'Drinks',
 ];
 
-export const trendChips: string[] = ['🔥 Trending', '15-min dinners', 'High protein', 'One pan', 'Sweet', 'Spicy'];
 
 /** Masonry tile heights for the Discover grid, cycled by index. */
 export const discoverHeights = ['188px', '230px', '200px', '250px', '210px', '240px', '196px', '224px'];
 
-export const cookById = (id: string): Cook | undefined => cooks.find((c) => c.id === id);
-export const recipeById = (id: string): Recipe | undefined => recipes.find((r) => r.id === id);

@@ -1,7 +1,6 @@
 import { create } from 'zustand';
 import type { RecipeCard, ReportTargetType } from '@sizzle/shared';
-import { baseComments, recipeById } from './data';
-import type { Comment, FeedKind, Phase, PostSettings, Tab } from './types';
+import type { FeedKind, Phase, Tab } from './types';
 
 /** A thing being reported (recipe / comment / profile) + an optional label for the sheet. */
 export type ReportTarget = { type: ReportTargetType; id: string; name?: string };
@@ -9,8 +8,8 @@ export type ReportTarget = { type: ReportTargetType; id: string; name?: string }
 /** Boolean sets keyed by id (taste labels, cook ids, recipe ids). */
 type BoolMap = Record<string, boolean>;
 
-/** Maps whose toggles share identical logic. */
-type ToggleMap = 'tastes' | 'followed' | 'saves' | 'downloads';
+/** Maps whose toggles share identical logic. Onboarding is the only caller. */
+type ToggleMap = 'tastes' | 'followed';
 
 /**
  * Set `true` to skip onboarding and boot straight into the app
@@ -145,18 +144,10 @@ export interface SizzleState {
   units: UnitPref;
   dataSaver: boolean;
   appLockEnabled: boolean;
-  likes: BoolMap;
-  dislikes: BoolMap;
-  saves: BoolMap;
-  downloads: BoolMap;
-  postSettings: Record<string, PostSettings>;
-  comments: Record<string, Comment[]>;
-  draft: string;
 
   // onboarding
   next: () => void;
   back: () => void;
-  finish: () => void;
   setPhase: (phase: Phase) => void;
   setOnbStep: (step: number) => void;
   /** Return to the first-run flow (used on sign-out). */
@@ -164,10 +155,6 @@ export interface SizzleState {
 
   // generic toggles
   toggle: (map: ToggleMap, id: string) => void;
-
-  // reactions (mutually exclusive)
-  onLike: (id: string) => void;
-  onDislike: (id: string) => void;
 
   // navigation
   setTab: (tab: Tab) => void;
@@ -180,7 +167,6 @@ export interface SizzleState {
   /** Apply an optimistic patch to the open viewer's cards (keeps likes/saves/follows live in the full-screen player). */
   patchViewer: (fn: (c: RecipeCard) => RecipeCard) => void;
   setOpenCook: (id: string | null) => void;
-  openCookFromSheet: () => void;
   setCommentsFor: (id: string | null) => void;
   setSettingsFor: (id: string | null) => void;
   openMore: (recipeId: string, isOwn: boolean) => void;
@@ -224,13 +210,6 @@ export interface SizzleState {
   setDataSaver: (v: boolean) => void;
   setAppLockEnabled: (v: boolean) => void;
   setAppUnlocked: (v: boolean) => void;
-
-  // creator post controls
-  togglePostSetting: (recipeId: string, key: keyof PostSettings) => void;
-
-  // comments
-  setDraft: (v: string) => void;
-  sendComment: () => void;
 }
 
 export const useSizzle = create<SizzleState>((set) => ({
@@ -287,13 +266,6 @@ export const useSizzle = create<SizzleState>((set) => ({
   defaultFeed: prefs0.defaultFeed,
   units: prefs0.units,
   dataSaver: prefs0.dataSaver,
-  likes: {},
-  dislikes: {},
-  saves: { r2: true, r4: true, r6: true },
-  downloads: { r2: true, r6: true },
-  postSettings: {},
-  comments: {},
-  draft: '',
 
   next: () =>
     set((s) => {
@@ -301,24 +273,12 @@ export const useSizzle = create<SizzleState>((set) => ({
       return { onbStep: s.onbStep + 1 };
     }),
   back: () => set((s) => ({ onbStep: Math.max(0, s.onbStep - 1) })),
-  finish: () => set({ phase: 'app' }),
   setPhase: (phase) => set({ phase }),
   setOnbStep: (step) => set({ onbStep: step }),
   resetToOnboarding: () => set({ phase: 'onboarding', onbStep: 0 }),
 
   toggle: (map, id) =>
     set((s) => ({ [map]: { ...s[map], [id]: !s[map][id] } }) as Partial<SizzleState>),
-
-  onLike: (id) =>
-    set((s) => ({
-      likes: { ...s.likes, [id]: !s.likes[id] },
-      dislikes: { ...s.dislikes, [id]: false },
-    })),
-  onDislike: (id) =>
-    set((s) => ({
-      dislikes: { ...s.dislikes, [id]: !s.dislikes[id] },
-      likes: { ...s.likes, [id]: false },
-    })),
 
   // Switching tabs dismisses every overlay covering the tab area (Messages
   // inbox, DM thread, cook/recipe views, pickers, notification/settings
@@ -366,9 +326,6 @@ export const useSizzle = create<SizzleState>((set) => ({
   setViewer: (v) => set({ viewer: v }),
   patchViewer: (fn) => set((s) => (s.viewer ? { viewer: { ...s.viewer, items: s.viewer.items.map(fn) } } : {})),
   setOpenCook: (id) => set({ openCook: id }),
-  // Jump from the recipe sheet to the recipe's cook profile.
-  openCookFromSheet: () =>
-    set((s) => ({ openCook: s.openRecipe ? (recipeById(s.openRecipe)?.cook ?? null) : null, openRecipe: null })),
   setCommentsFor: (id) => set({ commentsFor: id }),
   setSettingsFor: (id) => set({ settingsFor: id }),
   openMore: (recipeId, isOwn) => set({ moreFor: recipeId, moreIsOwn: isOwn }),
@@ -412,36 +369,4 @@ export const useSizzle = create<SizzleState>((set) => ({
   setUnits: (v) => set((s) => { savePrefs(prefsFrom(s, { units: v })); return { units: v }; }),
   setDataSaver: (v) => set((s) => { savePrefs(prefsFrom(s, { dataSaver: v })); return { dataSaver: v }; }),
   setAppLockEnabled: (v) => set((s) => { savePrefs(prefsFrom(s, { appLockEnabled: v })); return { appLockEnabled: v }; }),
-
-  togglePostSetting: (recipeId, key) =>
-    set((s) => {
-      const cur = s.postSettings[recipeId] || {};
-      return { postSettings: { ...s.postSettings, [recipeId]: { ...cur, [key]: !cur[key] } } };
-    }),
-
-  setDraft: (v) => set({ draft: v }),
-  sendComment: () =>
-    set((s) => {
-      const text = (s.draft || '').trim();
-      const id = s.commentsFor;
-      if (!text || !id) return {};
-      const mine: Comment = {
-        name: 'alexcooks',
-        init: 'A',
-        bg: 'linear-gradient(135deg,#3a2a22,#1b1512)',
-        text,
-        time: 'now',
-        likes: '0',
-      };
-      return {
-        comments: { ...s.comments, [id]: [mine, ...(s.comments[id] || [])] },
-        draft: '',
-      };
-    }),
 }));
-
-/** Comments shown for a recipe: the viewer's freshly-added ones, then the seeds. */
-export const commentsForRecipe = (state: SizzleState, recipeId: string): Comment[] => [
-  ...(state.comments[recipeId] || []),
-  ...baseComments,
-];
