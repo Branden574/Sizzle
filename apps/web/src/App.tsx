@@ -154,11 +154,29 @@ export default function App() {
     else if (authStatus === 'anon' || authStatus === 'guest') {
       resetToOnboarding();
       setWebEntered(false); // back to the marketing site on sign-out
-      // Wipe all cached user data (profile, saved/liked, DMs, notifications) so
-      // the next account on a shared device never sees the previous user's data.
-      queryClient.clear();
     }
   }, [authStatus, setPhase, resetToOnboarding]);
+
+  // Wipe all cached user data (profile, saved/liked, DMs, notifications) whenever the
+  // signed-in identity changes, so the next account on a shared device never reads the
+  // previous user's data. Keyed on the user id, not just the status: sign-out → sign-in
+  // passes through anon, but a recovery / OAuth deep link arriving while another account
+  // is already signed in swaps the session straight from A to B (see the `appUrlOpen`
+  // handler below → exchangeCodeForSession) and never reports anon. React Query keys are
+  // not account-scoped (['me'], ['notifications'], ['thread', id]…), so without this
+  // account B would read A's cached threads until every query happened to refetch.
+  // useAuth clears the sibling caches (signed playback URLs, local clips, profile
+  // snapshots) on the same transition; this is the query-cache half, kept here because
+  // App.tsx owns queryClient and importing it into useAuth would be an import cycle.
+  const authUserId = useAuth((s) => s.user?.id ?? null);
+  const lastAuthUserId = useRef<string | null>(null);
+  useEffect(() => {
+    const previous = lastAuthUserId.current;
+    lastAuthUserId.current = authUserId;
+    // Only a real identity CHANGE, never the initial null → restored-session resolution:
+    // clearing there would throw away the first queries of every cold start and refetch them.
+    if (previous && previous !== authUserId) queryClient.clear();
+  }, [authUserId]);
 
   const enterApp = (mode: 'signup' | 'login') => {
     setMode(mode);

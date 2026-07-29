@@ -104,6 +104,9 @@ export const useAuth = create<AuthState>((set, get) => ({
         // Cached profile snapshots are account-scoped paint data — never let account A's
         // profile/grid flash for account B on a same-device switch (no reload in this SPA).
         try { localStorage.removeItem('sizzle.cache.me'); localStorage.removeItem('sizzle.cache.cook'); } catch { /* private mode */ }
+        // The React Query cache is account-scoped paint data too, but clearing it lives in
+        // App.tsx (which owns queryClient) — importing it here would be a real import cycle,
+        // since data/queries.ts imports this module.
       }
       set({
         session,
