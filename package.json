@@ -2,7 +2,7 @@
   "name": "sizzle-monorepo",
   "private": true,
   "version": "0.1.0",
-  "description": "Sizzle — TikTok-style recipe app. Monorepo: web (Vite/React) + api (Hono) + shared types.",
+  "description": "Sizzle \u2014 TikTok-style recipe app. Monorepo: web (Vite/React) + api (Hono) + shared types.",
   "type": "module",
   "workspaces": [
     "packages/*",
@@ -19,10 +19,21 @@
     "db:stop": "supabase stop",
     "db:reset": "supabase db reset",
     "db:status": "supabase status",
-    "seed": "npm run seed -w @sizzle/api"
+    "seed": "npm run seed -w @sizzle/api",
+    "test": "npm run test:unit && npm run test:invariants && npm run test:controls -w @sizzle/web",
+    "test:unit": "tsx --test packages/shared/src/pricing.test.ts",
+    "test:invariants": "node --test tests/invariants/*.test.mjs",
+    "secrets:check": "node scripts/secrets-check.mjs",
+    "secrets:check:all": "node scripts/secrets-check.mjs --all",
+    "safety:diff": "node scripts/safety-diff.mjs",
+    "ci": "npm run typecheck && npm run test && npm run secrets:check:all",
+    "lint": "eslint ."
   },
   "devDependencies": {
-    "concurrently": "^9.1.0"
+    "concurrently": "^9.1.0",
+    "eslint": "^10.8.0",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "typescript-eslint": "^8.66.0"
   },
   "engines": {
     "node": ">=20"

@@ -1,0 +1,101 @@
+# Sizzle CI — runs on every PR and push to main.
+#
+# Deliberately needs ZERO production secrets: typecheck, build, unit + invariant +
+# contract tests, secret scan, and the migration append-only gate all run against
+# the repo alone. Deployment stays a separate, owner-authorized lane (CLAUDE.md →
+# Deploys) — a green run here means "safe to review", never "deployed".
+name: CI
+
+on:
+  pull_request:
+  push:
+    branches: [main]
+
+# Least privilege: read the repo, nothing else. No job in this file may deploy.
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          # Full history so the migration append-only diff and safety:diff --base work.
+          fetch-depth: 0
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install (reproducible)
+        run: npm ci
+
+      - name: Typecheck (web + api)
+        run: npm run typecheck
+
+      - name: Unit tests — money math
+        run: npm run test:unit
+
+      - name: Invariant tests — executable architectural memory
+        run: npm run test:invariants
+
+      - name: Contract tests — control architecture
+        run: npm run test:controls -w @sizzle/web
+
+      - name: Secret scan (all tracked files)
+        run: npm run secrets:check:all
+
+      - name: Risk-lane classification (informational)
+        if: github.event_name == 'pull_request'
+        env:
+          # Interpolated via env + quoting, never inline in the command (injection hygiene).
+          BASE_REF: ${{ github.base_ref }}
+        run: node scripts/safety-diff.mjs --base "origin/$BASE_REF"
+
+      - name: Migrations are append-only
+        if: github.event_name == 'pull_request'
+        env:
+          BASE_REF: ${{ github.base_ref }}
+        run: |
+          # Shipped migration files may never be edited or deleted (CLAUDE.md rule 3).
+          VIOLATIONS=$(git diff --name-status "origin/$BASE_REF"...HEAD -- supabase/migrations | grep -E '^[MDR]' || true)
+          if [ -n "$VIOLATIONS" ]; then
+            echo "::error::Shipped migrations were modified or deleted:"; echo "$VIOLATIONS"; exit 1
+          fi
+          echo "migrations append-only: ok"
+
+      - name: Build web
+        run: npm run build -w @sizzle/web
+        env:
+          # Public client config only — CI builds must not receive real secrets.
+          # The bundle here is validated for buildability, never deployed.
+          VITE_SUPABASE_URL: https://ci-placeholder.supabase.co
+          VITE_SUPABASE_ANON_KEY: ci-placeholder-anon-key
+          VITE_API_ORIGIN: https://ci-placeholder.invalid
+
+      - name: Build api
+        run: npm run build -w @sizzle/api
+
+      - name: Validate build artifacts exist
+        run: |
+          test -d apps/web/dist || { echo "::error::apps/web/dist missing"; exit 1; }
+          test -f apps/api/dist/index.js || { echo "::error::apps/api/dist/index.js missing"; exit 1; }
+          echo "artifacts ok: web dist + api dist/index.js"
+
+  dependency-review:
+    # Flags known-vulnerable or license-problematic dependency changes on PRs.
+    if: github.event_name == 'pull_request'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/dependency-review-action@v4
+        with:
+          fail-on-severity: high

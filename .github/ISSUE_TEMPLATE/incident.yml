@@ -1,0 +1,28 @@
+name: Production incident
+description: "Live problem affecting users NOW (see docs/operations/incident-response.md)"
+labels: [incident]
+body:
+  - type: dropdown
+    id: sev
+    attributes:
+      label: Severity
+      options: ["SEV-1 — broadly unusable / security / money / data", "SEV-2 — major feature broken", "SEV-3 — degraded", "SEV-4 — minor"]
+    validations: { required: true }
+  - type: textarea
+    id: symptoms
+    attributes: { label: What users are experiencing }
+    validations: { required: true }
+  - type: input
+    id: start
+    attributes: { label: When it started (time + timezone) }
+    validations: { required: true }
+  - type: textarea
+    id: evidence
+    attributes:
+      label: Evidence so far
+      description: Sentry issue IDs, request IDs, affected deployment, DB observations. No secrets.
+  - type: textarea
+    id: contained
+    attributes:
+      label: Containment taken
+      description: Rollback performed? Feature disabled? Nothing yet?

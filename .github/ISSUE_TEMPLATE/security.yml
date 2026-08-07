@@ -1,0 +1,24 @@
+name: Security concern
+description: Possible vulnerability or data exposure — keep details minimal here
+labels: [security]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        **Do not post working exploits, secrets, or user data here.** Describe the class of
+        issue; full details go through a private channel (sizzleappteam@gmail.com).
+  - type: dropdown
+    id: area
+    attributes:
+      label: Area
+      options: [Authentication, Authorization/RLS, Payments, Storage/media, API abuse, Native app, Secrets/config, Other]
+    validations: { required: true }
+  - type: textarea
+    id: description
+    attributes: { label: "General description (no exploit details)" }
+    validations: { required: true }
+  - type: dropdown
+    id: exploitability
+    attributes:
+      label: Your assessment
+      options: [Actively exploitable, Likely exploitable, Theoretical / hardening, Unsure]

@@ -1,0 +1,47 @@
+name: Bug report
+description: Something is broken or behaving wrong
+labels: [bug]
+body:
+  - type: dropdown
+    id: surface
+    attributes:
+      label: Surface
+      options: [iOS app, Android app, Web (getsizzle.app), API, Upload/video, Payments, Notifications, Other]
+    validations: { required: true }
+  - type: input
+    id: versions
+    attributes:
+      label: App version / native build / OTA bundle
+      description: "Settings → the version line (e.g. 1.0.101 · build 33). Web: just say web."
+    validations: { required: true }
+  - type: input
+    id: device
+    attributes:
+      label: Device / browser + OS version
+  - type: textarea
+    id: expected
+    attributes: { label: Expected behavior }
+    validations: { required: true }
+  - type: textarea
+    id: actual
+    attributes: { label: Actual behavior }
+    validations: { required: true }
+  - type: textarea
+    id: repro
+    attributes:
+      label: Steps to reproduce
+      placeholder: "1. …\n2. …\n3. …"
+    validations: { required: true }
+  - type: input
+    id: when
+    attributes: { label: Approximate time it happened (with timezone) }
+  - type: dropdown
+    id: impact
+    attributes:
+      label: User impact
+      options: [Just me, Several users, Seems widespread, Unsure]
+  - type: textarea
+    id: media
+    attributes:
+      label: Screenshot / screen recording
+      description: Never paste tokens, passwords, or payment details.

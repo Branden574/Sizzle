@@ -1,0 +1,57 @@
+{
+  "$schema": "https://docs.renovatebot.com/renovate-schema.json",
+  "extends": ["config:recommended", ":semanticCommitsDisabled"],
+  "timezone": "America/Los_Angeles",
+  "schedule": ["before 9am on monday"],
+  "prConcurrentLimit": 5,
+  "labels": ["dependencies"],
+  "rangeStrategy": "bump",
+  "vulnerabilityAlerts": {
+    "enabled": true,
+    "schedule": ["at any time"],
+    "labels": ["dependencies", "security"]
+  },
+  "packageRules": [
+    {
+      "description": "Patch updates to plain runtime/dev deps: automerge once CI is green. Everything the matchers below catch is EXCLUDED from this rule by ordering (later rules win).",
+      "matchUpdateTypes": ["patch"],
+      "automerge": true,
+      "platformAutomerge": true
+    },
+    {
+      "description": "Group ordinary minor updates for weekly review; never automerged.",
+      "matchUpdateTypes": ["minor"],
+      "automerge": false,
+      "groupName": "weekly minor updates"
+    },
+    {
+      "description": "Majors are explicit projects, one PR each, never automerged.",
+      "matchUpdateTypes": ["major"],
+      "automerge": false,
+      "labels": ["dependencies", "major"],
+      "addLabels": ["needs-owner-review"]
+    },
+    {
+      "description": "NATIVE-IMPACTING: any change requires cap sync + native validation and possibly a new binary. Never automerge at ANY level; grouped so the impact is reviewed as one unit.",
+      "matchPackagePatterns": ["^@capacitor", "^@capgo/", "^@capawesome", "^@revenuecat/", "^@capacitor-firebase/"],
+      "matchUpdateTypes": ["patch", "minor", "major"],
+      "automerge": false,
+      "groupName": "native (Capacitor/Capgo/RevenueCat/Firebase) — new binary may be required",
+      "addLabels": ["native", "needs-owner-review"]
+    },
+    {
+      "description": "Payment/auth-critical server deps: never automerge, even patches.",
+      "matchPackageNames": ["@supabase/supabase-js", "hono", "@hono/node-server", "zod"],
+      "matchUpdateTypes": ["patch", "minor", "major"],
+      "automerge": false,
+      "addLabels": ["needs-owner-review"]
+    },
+    {
+      "description": "Framework core grouped and held for deliberate review.",
+      "matchPackageNames": ["react", "react-dom", "vite", "typescript", "@vitejs/plugin-react"],
+      "matchUpdateTypes": ["minor", "major"],
+      "automerge": false,
+      "groupName": "framework core (React/Vite/TS)"
+    }
+  ]
+}
