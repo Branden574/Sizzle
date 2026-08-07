@@ -2,10 +2,35 @@ import { Hono } from 'hono';
 import { supabaseAdmin } from '../lib/supabase';
 import { sendDirectPush } from '../services/push';
 import { finalizeProviderAsset, deleteAssetMedia } from '../services/videoFinalize';
+import { captureException } from '../lib/sentry';
 import { env } from '../env';
 import type { AppEnv } from '../types';
 
 export const internal = new Hono<AppEnv>();
+
+/**
+ * Cron heartbeat: one upserted row per job in cron_runs, written ONLY on a
+ * successful run — so "age of last_success_at" is the alerting signal. /health
+ * reports each job's age; a job that dies keeps its last row and the age grows
+ * until it crosses the per-job threshold. Best-effort: a heartbeat write failure
+ * must never fail the cron that just did its real work.
+ */
+async function recordCronRun(job: string, startedAt: number, result: Record<string, unknown>): Promise<void> {
+  try {
+    await supabaseAdmin.from('cron_runs').upsert(
+      {
+        job,
+        last_started_at: new Date(startedAt).toISOString(),
+        last_success_at: new Date().toISOString(),
+        last_duration_ms: Date.now() - startedAt,
+        last_result: result,
+      },
+      { onConflict: 'job' },
+    );
+  } catch (err) {
+    console.error('[cron] heartbeat write failed', { job, err: String(err) });
+  }
+}
 
 // Fail CLOSED: every /internal/* route (Vercel Cron targets) requires the
 // CRON_SECRET bearer. Previously each route only checked `if (env.CRON_SECRET)`,
@@ -31,6 +56,7 @@ internal.use('*', async (c, next) => {
  * that gap (and covers clips whose transcode exceeds the client poll's cap).
  */
 internal.get('/finalize-videos', async (c) => {
+  const cronStarted = Date.now();
   const now = Date.now();
   const twoHoursAgo = new Date(now - 2 * 3_600_000).toISOString();
   const sixHoursAgo = new Date(now - 6 * 3_600_000).toISOString();
@@ -56,8 +82,9 @@ internal.get('/finalize-videos', async (c) => {
       pending.map((a) =>
         finalizeProviderAsset(a.id as string, (a.provider_uid as string) ?? '').catch((err) => {
           // Was `.catch(() => null)` — a swallowed failure made a stuck video
-          // undebuggable. Surface it (Sentry once configured) and count it.
+          // undebuggable. Surface it and count it.
           console.error('[finalize-cron] finalize failed', { assetId: a.id, err: String(err) });
+          void captureException(err, { cron: 'finalize-videos', assetId: a.id as string });
           return null;
         }),
       ),
@@ -104,6 +131,7 @@ internal.get('/finalize-videos', async (c) => {
     if (orphansCollected > 0) console.error('[finalize-cron] orphan assets collected', { count: orphansCollected });
   } catch (err) {
     console.error('[finalize-cron] orphan GC failed', { err: String(err) });
+    void captureException(err, { cron: 'finalize-videos', stage: 'orphan-gc' });
   }
 
   // DRAIN the media-deletion queue (account deletes, ban purges, recipe deletes,
@@ -112,7 +140,9 @@ internal.get('/finalize-videos', async (c) => {
   // left of ~12s. A row is removed only once its media is verifiably gone.
   const drained = await drainMediaDeletions(12_000);
 
-  return c.json({ checked: pending?.length ?? 0, ready, errored, processing, failed, abandoned, orphansCollected, ...drained });
+  const summary = { checked: pending?.length ?? 0, ready, errored, processing, failed, abandoned, orphansCollected, ...drained };
+  await recordCronRun('finalize-videos', cronStarted, summary);
+  return c.json(summary);
 });
 
 /** Buckets swept for a deleted account's storage prefix. */
@@ -202,6 +232,9 @@ async function drainMediaDeletions(budgetMs: number): Promise<{ mediaDeleted: nu
     .gte('attempts', 10);
   if (mediaParked && mediaParked > 0) {
     console.error('[finalize-cron] PARKED media deletions need manual reconciliation', { count: mediaParked });
+    // Parked rows are media we PROMISED to delete (GDPR) and haven't — loud
+    // beats a log line nobody reads within Vercel's short retention.
+    void captureException(new Error(`${mediaParked} parked media deletions need manual reconciliation`), { cron: 'finalize-videos', stage: 'media-drain' });
   }
   return { mediaDeleted, mediaRetried, mediaParked: mediaParked ?? 0 };
 }
@@ -213,6 +246,7 @@ async function drainMediaDeletions(budgetMs: number): Promise<{ mediaDeleted: nu
  * is configured. (In local dev with no secret set, it's open — fine locally.)
  */
 internal.get('/publish-scheduled', async (c) => {
+  const cronStarted = Date.now();
   const now = new Date().toISOString();
   const { data: due } = await supabaseAdmin
     .from('recipes')
@@ -224,6 +258,7 @@ internal.get('/publish-scheduled', async (c) => {
   if (ids.length) {
     await supabaseAdmin.from('recipes').update({ status: 'published', scheduled_at: null }).in('id', ids);
   }
+  await recordCronRun('publish-scheduled', cronStarted, { published: ids.length });
   return c.json({ published: ids.length });
 });
 
@@ -237,6 +272,7 @@ internal.get('/publish-scheduled', async (c) => {
  * not a drip campaign.
  */
 internal.get('/save-nudges', async (c) => {
+  const cronStarted = Date.now();
   const now = Date.now();
   const from = new Date(now - 21 * 86_400_000).toISOString();
   const to = new Date(now - 7 * 86_400_000).toISOString();
@@ -247,7 +283,10 @@ internal.get('/save-nudges', async (c) => {
     .gte('created_at', from)
     .lte('created_at', to)
     .limit(500);
-  if (!saves || saves.length === 0) return c.json({ nudged: 0 });
+  if (!saves || saves.length === 0) {
+    await recordCronRun('save-nudges', cronStarted, { nudged: 0, considered: 0 });
+    return c.json({ nudged: 0 });
+  }
 
   const userIds = [...new Set(saves.map((s) => s.user_id as string))];
   const recipeIds = [...new Set(saves.map((s) => s.recipe_id as string))];
@@ -283,6 +322,7 @@ internal.get('/save-nudges', async (c) => {
     perUser.add(s.user_id as string);
     if (ok) sent += 1;
   }
+  await recordCronRun('save-nudges', cronStarted, { nudged: sent, considered: saves.length });
   return c.json({ nudged: sent, considered: saves.length });
 });
 
@@ -294,11 +334,14 @@ internal.get('/save-nudges', async (c) => {
  * updated. Auth is enforced by the fail-closed CRON_SECRET middleware above.
  */
 internal.get('/rollup-watch-ratios', async (c) => {
+  const cronStarted = Date.now();
   const { data, error } = await supabaseAdmin.rpc('refresh_watch_ratios');
   if (error) {
     console.error('[internal] rollup-watch-ratios failed', { err: error.message });
+    void captureException(new Error(error.message), { cron: 'rollup-watch-ratios' });
     return c.json({ ok: false, error: error.message }, 500);
   }
+  await recordCronRun('rollup-watch-ratios', cronStarted, { updated: (data as number | null) ?? 0 });
   return c.json({ ok: true, updated: (data as number | null) ?? 0 });
 });
 
@@ -308,10 +351,13 @@ internal.get('/rollup-watch-ratios', async (c) => {
  * middleware above. Trend scores are momentum, not lifetime totals (see refresh_hashtag_trends).
  */
 internal.get('/rollup-hashtag-trends', async (c) => {
+  const cronStarted = Date.now();
   const { data, error } = await supabaseAdmin.rpc('refresh_hashtag_trends');
   if (error) {
     console.error('[internal] rollup-hashtag-trends failed', { err: error.message });
+    void captureException(new Error(error.message), { cron: 'rollup-hashtag-trends' });
     return c.json({ ok: false, error: error.message }, 500);
   }
+  await recordCronRun('rollup-hashtag-trends', cronStarted, { updated: (data as number | null) ?? 0 });
   return c.json({ ok: true, updated: (data as number | null) ?? 0 });
 });

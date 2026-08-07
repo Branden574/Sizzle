@@ -60,6 +60,22 @@ test('admin API keeps the double gate (role check AND second-factor unlock)', ()
   assert.match(src, /unlock|passphrase|second|adminKey|ADMIN_/i, 'admin second-factor unlock missing');
 });
 
+test('hashtag moderation keeps the admin second-factor unlock', () => {
+  // The one admin mutation outside the /admin router — found bypassing the
+  // passphrase gate by the 2026-08-06 audit. Must stay explicitly gated.
+  const src = read('apps/api/src/routes/hashtags.ts');
+  assert.match(src, /'\/:tag\/moderate',\s*requireAuth,\s*requireAdmin,\s*requireAdminUnlock/, 'requireAdminUnlock missing from the moderate route chain');
+});
+
+test('every cron handler records a success heartbeat', () => {
+  // 4 of 5 crons could die silently forever before cron_runs existed. Each
+  // handler must keep its recordCronRun call so /health staleness stays real.
+  const src = read('apps/api/src/routes/internal.ts');
+  for (const job of ['finalize-videos', 'publish-scheduled', 'save-nudges', 'rollup-watch-ratios', 'rollup-hashtag-trends']) {
+    assert.match(src, new RegExp(`recordCronRun\\('${job}'`), `${job} lost its heartbeat`);
+  }
+});
+
 test('Stripe webhook still verifies signatures before acting', () => {
   const src = read('apps/api/src/routes/monetize.ts');
   assert.match(src, /stripe-signature/i, 'stripe-signature header no longer read');

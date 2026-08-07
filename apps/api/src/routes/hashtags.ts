@@ -3,6 +3,7 @@ import type { FeedResponse } from '@sizzle/shared';
 import { supabaseAdmin } from '../lib/supabase';
 import { dbFail, badRequest } from '../lib/errors';
 import { optionalAuth, requireAuth, requireAdmin } from '../middleware/auth';
+import { requireAdminUnlock } from '../middleware/adminUnlock';
 import { buildCards, loadMutedIds, type RecipeRow } from '../mappers';
 import { normalizeTag } from '../services/hashtags';
 import { logModeration } from '../services/audit';
@@ -221,7 +222,14 @@ hashtags.post('/:tag/preference', requireAuth, async (c) => {
  * POST /hashtags/:tag/moderate { action } — admin-only. block / unblock / feature / unfeature /
  * sensitive / unsensitive. Every action is attributable via the admin gate + logged.
  */
-hashtags.post('/:tag/moderate', requireAuth, requireAdmin, async (c) => {
+// requireAdminUnlock is inline (not router-mounted like /admin/*) because this
+// admin action lives outside the /admin router — without it, this was the ONE
+// admin mutation a stolen admin session could hit without the passphrase second
+// factor (found by the 2026-08-06 autonomy audit). The web client attaches
+// x-admin-unlock only to /admin/* paths today, and nothing client-side calls
+// this route yet — when a dashboard UI wires it up, extend adminHeader() in
+// apps/web/src/lib/api.ts or expose it under /admin/.
+hashtags.post('/:tag/moderate', requireAuth, requireAdmin, requireAdminUnlock, async (c) => {
   const tag = normalizeTag(c.req.param('tag'));
   if (!tag) throw badRequest('Invalid hashtag');
   const body = await c.req.json<{ action?: string }>().catch(() => ({} as { action?: string }));

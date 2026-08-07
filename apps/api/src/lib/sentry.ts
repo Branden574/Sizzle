@@ -38,6 +38,10 @@ export async function captureException(err: unknown, extra?: Record<string, unkn
       platform: 'node',
       level: 'error',
       server_name: 'sizzle-api',
+      // Vercel injects the commit SHA at build time — with OTA meaning several
+      // client versions exist in the field, untagged events can't be attributed
+      // to a deploy. 'dev' = local run.
+      release: `sizzle-api@${process.env.VERCEL_GIT_COMMIT_SHA?.slice(0, 7) ?? 'dev'}`,
       exception: { values: [{ type: e.name, value: e.message }] },
       extra: { ...extra, stack: e.stack },
     };
