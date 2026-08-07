@@ -81,6 +81,10 @@ checklists apply to everything, the protocols apply to their domain.
 [ ] Read every migration affecting the structure
 [ ] Search all code references and all raw SQL
 [ ] Search background jobs, crons, analytics, mobile caches
+[ ] NEW TABLE the API uses immediately: run `notify pgrst, 'reload schema'` after
+    applying — PostgREST's schema cache does NOT reliably auto-reload on hosted
+    Supabase, and the API's upserts fail silently until it does (verified
+    2026-08-06: cron_runs heartbeats were no-ops until the manual reload)
 [ ] Inspect constraints, indexes, RLS policies, table grants AND column grants
       relacl covers table grants; pg_attribute.attacl covers column grants — check both
 [ ] Determine data volume; identify nullable / malformed values
