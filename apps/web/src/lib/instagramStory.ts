@@ -190,7 +190,7 @@ async function prepareShareVideoUrl(
     }
     if (resp.status === 'ready') return resp.mp4Url;
     onProgress?.(resp.percent ?? 0);
-    await new Promise((r) => setTimeout(r, 1500));
+    await new Promise<void>((r) => { setTimeout(r, 1500); });
   }
   return null;
 }

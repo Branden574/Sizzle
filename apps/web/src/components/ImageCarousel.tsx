@@ -53,7 +53,7 @@ export function ImageCarousel({ images }: { images: string[] }) {
     const next = Math.min(idxRef.current, Math.max(0, count - 1));
     applyTransform(next, false);
     if (next !== idxRef.current) setIdx(next);
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [count]);
 
   // Direction-locked touch swiper. Listeners are attached non-passively so we
@@ -131,7 +131,7 @@ export function ImageCarousel({ images }: { images: string[] }) {
       el.removeEventListener('touchend', onEnd);
       el.removeEventListener('touchcancel', onEnd);
     };
-    // eslint-disable-next-line react-hooks/exhaustive-deps
+     
   }, [count]);
 
   // Single image: no swiper, no gesture capture — a plain full-bleed photo.

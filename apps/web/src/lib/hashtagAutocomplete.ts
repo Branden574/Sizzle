@@ -60,7 +60,7 @@ export function useHashtagAutocomplete(text: string, ref: RefObject<HTMLTextArea
   };
 
   // Recompute whenever the caption text changes (the caret listeners handle cursor-only moves).
-  useEffect(() => { recompute(); return () => { if (debounce.current) clearTimeout(debounce.current); }; /* eslint-disable-next-line react-hooks/exhaustive-deps */ }, [text]);
+  useEffect(() => { recompute(); return () => { if (debounce.current) clearTimeout(debounce.current); };   }, [text]);
 
   /** Replace the active token with `#tag ` and return the new text + caret to place after it. */
   const apply = (tag: string): { next: string; caret: number } | null => {

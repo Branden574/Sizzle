@@ -173,7 +173,7 @@ export function useIapUnlock() {
       for (let i = 0; i < 5; i++) {
         const res = await apiSend<{ unlocked: boolean }>('POST', '/monetize/iap/confirm', { recipeId }).catch(() => ({ unlocked: false }));
         if (res.unlocked) return { unlocked: true, cancelled: false, pending: false };
-        await new Promise((r) => setTimeout(r, 1500));
+        await new Promise<void>((r) => { setTimeout(r, 1500); });
       }
       // Charged but not reflected yet — do NOT re-buy on retry (confirm-first claims
       // it); the UI shows a "processing" state instead of resetting to the buy button.
@@ -1287,7 +1287,7 @@ export async function pollVideoReady(assetId: string): Promise<boolean> {
     } catch {
       /* transient — keep polling */
     }
-    await new Promise((r) => setTimeout(r, Date.now() - started < 60_000 ? 2000 : 5000));
+    await new Promise<void>((r) => { setTimeout(r, Date.now() - started < 60_000 ? 2000 : 5000); });
   }
   return false; // timed out; the post still carries the asset id and self-heals on load
 }

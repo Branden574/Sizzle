@@ -254,7 +254,6 @@ function PassInput({ value, onChange, placeholder, onEnter, autoFocus }: { value
     <input
       type="password"
       value={value}
-      // eslint-disable-next-line jsx-a11y/no-autofocus
       autoFocus={autoFocus}
       autoComplete="off"
       onChange={(e) => onChange(e.target.value)}

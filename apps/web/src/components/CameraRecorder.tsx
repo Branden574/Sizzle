@@ -257,7 +257,7 @@ export function CameraRecorder({ onCapture, onClose }: { onCapture: (file: File)
   useEffect(() => {
     return () => {
       if (tickRef.current) window.clearInterval(tickRef.current);
-      try { recorderRef.current?.state !== 'inactive' && recorderRef.current?.stop(); } catch { /* noop */ }
+      try { if (recorderRef.current?.state !== 'inactive') recorderRef.current?.stop(); } catch { /* noop */ }
       stopStream();
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps

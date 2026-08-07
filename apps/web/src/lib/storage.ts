@@ -143,7 +143,7 @@ export function uploadVideoTus(
 
     const onAbort = () => finish(() => { void upload.abort(); reject(new DOMException('Upload cancelled', 'AbortError')); });
     if (opts.signal) {
-      if (opts.signal.aborted) return onAbort();
+      if (opts.signal.aborted) { onAbort(); return; }
       opts.signal.addEventListener('abort', onAbort);
     }
 
@@ -359,7 +359,7 @@ async function stripImageMetadata(file: File): Promise<Blob> {
     if (!ctx || !canvas.width) { bitmap.close?.(); return file; }
     ctx.drawImage(bitmap, 0, 0);
     bitmap.close?.();
-    const blob = await new Promise<Blob | null>((res) => canvas.toBlob(res, 'image/jpeg', 0.9));
+    const blob = await new Promise<Blob | null>((res) => { canvas.toBlob(res, 'image/jpeg', 0.9); });
     return blob ?? file;
   } catch {
     return file;

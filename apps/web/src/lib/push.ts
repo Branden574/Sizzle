@@ -89,7 +89,7 @@ async function getFcmToken(): Promise<string | null> {
       lastErr = (err as Error)?.message ?? String(err);
     }
     setDebug(`waiting for FCM token… (try ${attempt}/6 — ${lastErr})`);
-    if (attempt < 6) await new Promise((r) => setTimeout(r, 2500));
+    if (attempt < 6) await new Promise<void>((r) => { setTimeout(r, 2500); });
   }
   setDebug(`no FCM token after retries — ${lastErr}`);
   return null;

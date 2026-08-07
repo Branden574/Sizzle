@@ -26,7 +26,6 @@
 import { readFileSync } from 'node:fs';
 import { resolve, dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
-import { execFileSync } from 'node:child_process';
 import { asc, sleep, fail, CONFIG } from './lib/asc-client.mjs';
 
 const HERE = dirname(fileURLToPath(import.meta.url));
