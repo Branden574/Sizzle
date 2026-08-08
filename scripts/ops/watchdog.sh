@@ -86,9 +86,20 @@ if [ "${SIZZLE_WATCHDOG_TEST_PROMPT:-}" != "" ]; then PROMPT="$SIZZLE_WATCHDOG_T
 log "summoning claude -p ..."
 export PATH="/Users/brandenvincent-walker/.local/bin:/Users/brandenvincent-walker/.nvm/versions/node/v22.22.2/bin:/opt/homebrew/bin:/usr/bin:/bin:/usr/sbin"
 cd "$REPO" || exit 1
-/Users/brandenvincent-walker/.local/bin/claude -p "$PROMPT" \
-  --permission-mode acceptEdits \
-  --output-format text >> "$LOG" 2>&1
-STATUS=$?
+# Retry: a summon that dies on a transient network error (e.g. right after Mac
+# wake) must not burn the incident's 60-min cooldown for nothing.
+for attempt in 1 2 3; do
+  /Users/brandenvincent-walker/.local/bin/claude -p "$PROMPT" \
+    --permission-mode acceptEdits \
+    --output-format text >> "$LOG" 2>&1
+  STATUS=$?
+  [ $STATUS -eq 0 ] && break
+  log "summon attempt $attempt failed (exit $STATUS) — retrying in 60s"
+  sleep 60
+done
+if [ $STATUS -ne 0 ]; then
+  /usr/bin/osascript -e 'display notification "Incident summon failed 3 attempts — check sizzle-watchdog.log" with title "Sizzle ops" sound name "Basso"' 2>/dev/null
+  log "ALERT: summon failed all attempts"
+fi
 log "summon finished (exit $STATUS)"
 exit 0
