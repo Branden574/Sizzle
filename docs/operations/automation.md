@@ -13,10 +13,20 @@ launchd (this Mac, survives reboots)
 │     on anomaly: macOS notification + SUMMONS headless Claude
 │     (scripts/ops/incident-prompt.md) with full local powers —
 │     git/gh/vercel/capgo/MCP — 60-min cooldown per incident
-└── com.sizzle.daily-sweep     daily 08:13 → scripts/ops/daily-sweep.sh
+├── com.sizzle.daily-sweep     daily 08:13 → scripts/ops/daily-sweep.sh
       SUMMONS Claude for the maintenance pass (scripts/ops/sweep-prompt.md):
-      health, CI history, Renovate PRs, npm audit, stuck DB state, debt drift
+      health, CI history, Renovate PRs, npm audit, stuck DB state, debt drift,
+      Supabase security advisors + secret-scanning alerts quick-check
+└── com.sizzle.weekly-security Mon 09:07 → scripts/ops/security-sweep.sh
+      SUMMONS Claude for the adversarial security pass
+      (scripts/ops/security-sweep-prompt.md): Supabase advisors vs baseline,
+      CodeQL/Dependabot/secret-scanning alert triage, route auth audit,
+      RLS spot-checks, full-tree secret scan. Tightening-only fixes in-lane.
 ```
+
+GitHub-side (no Mac needed): CI security gates on every push, **CodeQL** SAST
+(push/PR/weekly), **secret scanning + push protection**, **Dependabot security
+updates** — all enabled on the repo.
 
 Plus a **cloud routine** (claude.ai — see below) as backup triage when the Mac
 is off, and CI/branch-protection/Renovate enforcing quality with nobody around.

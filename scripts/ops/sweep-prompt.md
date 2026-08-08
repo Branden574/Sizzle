@@ -7,6 +7,7 @@ Work through this checklist, fixing what falls in Level A/B lanes and recording 
 3. Renovate/dependency PRs: `gh pr list` — for open dependency PRs: CI green + patch/minor + not native/payment/auth ⇒ merge; native/payment/auth or major ⇒ leave with a comment summarizing risk for Branden.
 4. `npm audit` — new advisories since docs/engineering/autonomy-audit.md? Patch-level fixes in-lane; anything breaking → technical-debt.md entry.
 5. Stuck operational state via Supabase MCP (read-only checks): parked media deletions (pending_media_deletions attempts>=10), video_assets stuck non-ready >6h, cron_runs rows with last_result showing repeated failures.
+5b. Security quick-check: mcp__supabase__get_advisors (type=security) — ignore the documented baseline (deny-all INFO lints, pg_trgm, leaked-password pending); any NEW finding = investigate now, tightening-only fixes in-lane. Also `gh api repos/Branden574/Sizzle/secret-scanning/alerts?state=open` — any open alert is a drop-everything P0 (rotate per docs/engineering guidance, notify Branden).
 6. Flag drift: does docs/engineering/technical-debt.md reflect reality? Close entries that got fixed; add anything new you found.
 
 Ship rules: smallest correct change, regression test where practical, explicit staged paths, `npm run secrets:check` before every push, `node scripts/verify-deploy.mjs` after every push that touches an app. Never weaken security/entitlement checks; money code is out of sweep scope entirely (report only).

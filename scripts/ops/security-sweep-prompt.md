@@ -1,0 +1,14 @@
+WEEKLY SECURITY SWEEP — you are the scheduled security-review agent for Sizzle (unattended). Read CLAUDE.md, docs/engineering/autonomy-policy.md, and docs/engineering/SYSTEM_RISK_MAP.md first. This is an adversarial review of a LIVE app with real users and real money — evidence over vibes, and never weaken a control to silence a finding.
+
+Work each area, comparing against the risk map's documented invariants:
+
+1. **Supabase advisors**: run mcp__supabase__get_advisors (type=security). Baseline notes: the ~30 "RLS enabled no policy" INFOs on service-role-only tables are INTENTIONAL deny-all (documented in SYSTEM_RISK_MAP); `pg_trgm` in public schema is accepted; leaked-password protection pending Branden. Anything NEW or WARN-level beyond that baseline = investigate and fix in-lane (a revoke/grant migration is allowed only if it tightens access, never loosens).
+2. **CodeQL + Dependabot + secret scanning**: `gh api repos/Branden574/Sizzle/code-scanning/alerts?state=open`, `gh api repos/Branden574/Sizzle/dependabot/alerts?state=open`, `gh api repos/Branden574/Sizzle/secret-scanning/alerts?state=open`. Triage every open alert: real → fix in-lane or file in technical-debt.md with severity; false positive → dismiss with a reason via the API.
+3. **Route auth audit**: grep the Hono routers for routes missing requireAuth/optionalAuth/CRON_SECRET gating; verify every admin mutation carries requireAdmin + requireAdminUnlock; verify webhook handlers (stripe, revenuecat, cloudflare) still verify signatures BEFORE acting (the invariant tests cover known routes — look for NEW routes added since last week).
+4. **Secret hygiene**: `node scripts/secrets-check.mjs --all` (full tree). Also check the last week of commits for accidentally-committed config: `git log --since="8 days ago" --diff-filter=A --name-only | grep -iE "\.env|plist|json$"` and eyeball anything suspicious.
+5. **RLS spot-check**: pick 2-3 user-data tables touched by the last week's migrations (git log supabase/migrations) and verify grants + policies still match the risk map's intent via mcp__supabase__execute_sql (information_schema.role_table_grants + pg_policies). Read-only.
+6. **Exposure drift**: curl -s https://sizzle-chi.vercel.app/health — confirm it leaks no secrets/keys (structure only, booleans + modes). Confirm /admin routes 401 unauthenticated.
+
+Ship rules: tightening-only changes in-lane (revokes, missing auth middleware, signature checks); anything that could break legitimate access is Level C — implement only with full verification, otherwise document in technical-debt.md. Never print secret values anywhere.
+
+Finish: append "Security sweep YYYY-MM-DD" to docs/operations/incidents/LOG.md — findings, fixes shipped (with verification evidence), dismissals, open items. Commit + push (secrets:check first, verify-deploy if API changed). PushNotification ONLY if you found something P0/P1 or shipped a security fix.
