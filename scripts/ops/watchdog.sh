@@ -43,7 +43,11 @@ WEB_CODE=$(curl -sS -o /dev/null --max-time 25 -w "%{http_code}" "$WEB_URL" 2>/d
 case "$WEB_CODE" in 2*|3*) : ;; *) PROBLEMS+=("Frontend $WEB_URL HTTP $WEB_CODE") ;; esac
 
 # --- Probe 3: latest completed CI run on main ---
-CI=$(cd "$REPO" && /opt/homebrew/bin/gh run list --branch main --status completed --limit 1 \
+# --workflow CI: only the real CI pipeline. The Uptime workflow FAILS BY DESIGN
+# when production is down (and during force_fail alert tests) — /health probing
+# above already covers the outage itself, and the 9:00 2026-08-10 false-alarm
+# summon proved an Uptime failure would otherwise double-summon.
+CI=$(cd "$REPO" && /opt/homebrew/bin/gh run list --workflow CI --branch main --status completed --limit 1 \
   --json conclusion,displayTitle --jq '.[0] | .conclusion + "|" + .displayTitle' 2>/dev/null || echo "")
 if [ -n "$CI" ]; then
   CONC="${CI%%|*}"
