@@ -26,7 +26,12 @@ launchd (this Mac, survives reboots)
 
 GitHub-side (no Mac needed): CI security gates on every push, **CodeQL** SAST
 (push/PR/weekly), **secret scanning + push protection**, **Dependabot security
-updates** — all enabled on the repo.
+updates** — all enabled on the repo. Plus **Uptime paging**
+(.github/workflows/uptime.yml): GitHub's servers probe /health + getsizzle.app
+every ~10 min (3 tries, 45s apart, anti-flap); a failing run triggers GitHub's
+built-in notifications to Branden (email + GitHub mobile push) — the alert path
+that works while the Mac is asleep. Test the chain any time:
+`gh workflow run Uptime -f force_fail=true` (verified 2026-08-10).
 
 Plus a **cloud routine** (claude.ai — see below) as backup triage when the Mac
 is off, and CI/branch-protection/Renovate enforcing quality with nobody around.
