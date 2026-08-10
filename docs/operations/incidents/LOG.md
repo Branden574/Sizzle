@@ -74,3 +74,10 @@ All green, no incidents, no code changes. **Production health** `/health` = `ok`
 **⑦ Exposure drift:** `/health` = `ok`, structure-only (booleans + modes + commit SHA `eeffeb2`), **no secrets/keys**, `paymentsKeyMode` live. `/admin/security-status` and `/admin/log` both **401** unauthenticated.
 
 **Shipped this sweep** (staged explicitly — `apps/api/api/index.ts`, `docs/engineering/technical-debt.md`, `docs/operations/incidents/LOG.md`; pre-existing uncommitted web WIP App.tsx/sentry.ts/main.tsx left untouched per rule 11): the stack-trace-exposure fix + TD-19 rationale correction. Dismissals were applied directly via the GitHub API (no repo change). **For Branden (nothing Level D from this sweep beyond the standing items):** SYSTEM_RISK_MAP open finding #1 (recipe_steps/ingredients revoke migration) remains the one meaningful open security item — a ~2-line tightening migration that needs your authorization to run in prod; plus the standing enable-leaked-password-protection toggle, held major PRs #3/#6, and TD-1/TD-5/TD-8.
+
+## Auth hardening 2026-08-10 (attended)
+Enabled leaked-password protection (`password_hibp_enabled: true`) and raised the
+server password floor 6 → 10 via the Supabase Management API — the client signup
+form already required 10+, so the weaker server floor only affected API-direct
+signups. Verified live; security advisors now show zero actionable warnings
+(deny-all INFO baseline + accepted pg_trgm only). Existing passwords unaffected.
