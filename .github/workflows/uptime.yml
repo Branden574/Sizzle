@@ -1,0 +1,56 @@
+# Off-Mac uptime paging — zero external accounts. Runs on GitHub's servers
+# every ~10 min; when production is down the job FAILS, and GitHub notifies the
+# workflow's author (email + GitHub mobile app push) automatically. This is the
+# alert path that works while the Mac (and its watchdog) is asleep.
+#
+# Anti-flap: each target gets 3 probes 45s apart; the job only fails when a
+# target failed ALL of them. A sustained outage repeats the alert each cycle —
+# that's paging, not noise.
+name: Uptime
+
+on:
+  schedule:
+    - cron: '4,14,24,34,44,54 * * * *' # ~every 10 min, off the :00 stampede
+  workflow_dispatch:
+    inputs:
+      force_fail:
+        description: 'Fire a deliberate failure to test the alert chain'
+        required: false
+        default: 'false'
+
+permissions:
+  contents: read
+
+jobs:
+  probe:
+    runs-on: ubuntu-latest
+    timeout-minutes: 8
+    steps:
+      - name: Test-mode deliberate failure
+        if: ${{ github.event.inputs.force_fail == 'true' }}
+        run: |
+          echo "::error::ALERT-CHAIN TEST — this failure is intentional (force_fail=true)."
+          exit 1
+
+      - name: Probe API /health (honest endpoint — 503 = degraded with reasons)
+        run: |
+          for i in 1 2 3; do
+            CODE=$(curl -sS -o /tmp/health.json --max-time 25 -w '%{http_code}' https://sizzle-chi.vercel.app/health || echo 000)
+            echo "attempt $i: HTTP $CODE"
+            if [ "$CODE" = "200" ]; then exit 0; fi
+            [ $i -lt 3 ] && sleep 45
+          done
+          echo "::error::API unhealthy after 3 probes (last HTTP $CODE)"
+          cat /tmp/health.json 2>/dev/null || true
+          exit 1
+
+      - name: Probe frontend getsizzle.app
+        run: |
+          for i in 1 2 3; do
+            CODE=$(curl -sS -o /dev/null --max-time 25 -w '%{http_code}' https://getsizzle.app || echo 000)
+            echo "attempt $i: HTTP $CODE"
+            case "$CODE" in 2*|3*) exit 0 ;; esac
+            [ $i -lt 3 ] && sleep 45
+          done
+          echo "::error::Frontend unreachable after 3 probes (last HTTP $CODE)"
+          exit 1
