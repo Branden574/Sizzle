@@ -27,6 +27,25 @@ async function stuckVideoBacklog(): Promise<number | null> {
   }
 }
 
+/** Count media deletions that exhausted their retry budget (attempts >= 10) —
+ *  media we PROMISED to delete (GDPR/account erasure) and still haven't.
+ *  The finalize cron already logs + Sentry-reports this every run, but that path
+ *  is only visible to whoever watches Sentry; the daily ops sweep reads /health.
+ *  Deliberately NOT added to `problems`: a parked row is a reconciliation task,
+ *  not downtime, and 503-ing the API (and every uptime monitor with it) over one
+ *  undeleted object would be a self-inflicted outage. null = the probe failed. */
+async function parkedMediaDeletions(): Promise<number | null> {
+  try {
+    const { count, error } = await supabaseAdmin
+      .from('pending_media_deletions')
+      .select('id', { count: 'exact', head: true })
+      .gte('attempts', 10);
+    return error ? null : count ?? 0;
+  } catch {
+    return null;
+  }
+}
+
 /** Age (seconds) since each cron's last SUCCESSFUL run, from the cron_runs
  *  heartbeat table. A job with no row yet reports null and does NOT degrade
  *  health (bootstrap-safe: the table starts empty on first deploy). */
@@ -60,7 +79,7 @@ async function cronAges(): Promise<{ ages: Record<string, number | null>; stale:
 }
 
 health.get('/', async (c) => {
-  const [backlog, crons] = await Promise.all([stuckVideoBacklog(), cronAges()]);
+  const [backlog, crons, parked] = await Promise.all([stuckVideoBacklog(), cronAges(), parkedMediaDeletions()]);
 
   // Honest liveness: 'ok' only when the DB answers and nothing tracked is stale.
   // 'degraded' → HTTP 503 so a dumb uptime monitor alerts on status code alone.
@@ -84,6 +103,9 @@ health.get('/', async (c) => {
       // Videos stuck in a non-ready state past the point they should have finalized.
       // Growing = the finalize cron/webhook is failing; uptime alerting keys on it.
       stuckVideoBacklog: backlog,
+      // Media deletions parked past their retry budget — non-zero means media we
+      // promised to erase is still live and needs manual reconciliation.
+      parkedMediaDeletions: parked,
       // Seconds since each cron's last successful run (null = no heartbeat yet).
       cronAges: crons?.ages ?? null,
       // UGC filtering (Guideline 1.2) must never silently degrade: when this is

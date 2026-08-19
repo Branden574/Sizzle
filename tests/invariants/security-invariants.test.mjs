@@ -76,6 +76,18 @@ test('every cron handler records a success heartbeat', () => {
   }
 });
 
+test('parked media deletions stay visible on /health', () => {
+  // Rows at attempts>=10 are media we promised to erase (GDPR) and haven't. The
+  // cron's Sentry alert only reaches whoever watches Sentry; the daily ops sweep
+  // reads /health, so the gauge must survive future edits to this handler.
+  const src = read('apps/api/src/routes/health.ts');
+  assert.match(src, /pending_media_deletions/, 'parked-deletion probe removed from /health');
+  assert.match(src, /parkedMediaDeletions: parked/, 'parkedMediaDeletions no longer reported in the response');
+  // It must stay a report-only gauge: pushing it into `problems` 503s the API
+  // (and trips every uptime monitor) over a reconciliation task, not an outage.
+  assert.doesNotMatch(src, /problems\.push\([^)]*parked/i, 'parked deletions must not degrade health status');
+});
+
 test('Stripe webhook still verifies signatures before acting', () => {
   const src = read('apps/api/src/routes/monetize.ts');
   assert.match(src, /stripe-signature/i, 'stripe-signature header no longer read');
