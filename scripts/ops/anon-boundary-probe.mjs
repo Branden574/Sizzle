@@ -18,36 +18,32 @@
  * `rows=0` cannot distinguish "RLS holding" from "table empty", so an empty
  * table (e.g. `payouts`, 0 rows in prod per SYSTEM_RISK_MAP) is a weaker pass.
  *
+ * Coverage: every table `supabase/migrations` declares is probed — the classification in
+ * `anon-boundary-tables.mjs` must account for all of them, and CI fails if a migration adds
+ * one that nobody classified. Tables anon may legitimately read are checked a second way:
+ * the probe asserts the policy's own predicate (e.g. a blocked hashtag stays invisible),
+ * so "readable by design" never degrades into "readable, unchecked".
+ *
  * Usage:  node scripts/ops/anon-boundary-probe.mjs [--web https://getsizzle.app]
  * Exit:   0 = no anon-visible rows/columns where there must be none, and the
  *             positive control returned data (so the denials are trustworthy)
  *         1 = a boundary regression, or the probe could not run
  */
+// The table classification lives in its own module so CI can assert it still covers every
+// table the migrations declare (tests/invariants/security-invariants.test.mjs). Add a table
+// there when a migration creates one; never remove one to make the probe pass.
+import {
+  NO_ROWS_FOR_ANON,
+  ANON_READABLE_BY_DESIGN,
+  ANON_READABLE_FILTERS,
+  PROFILES_PUBLIC_COLS,
+  PROFILES_PII_COLS,
+  DENIED_RPC,
+} from './anon-boundary-tables.mjs';
+
 const args = process.argv.slice(2);
 const webIdx = args.indexOf('--web');
 const WEB = webIdx >= 0 ? args[webIdx + 1] : 'https://getsizzle.app';
-
-// Service-role-only / deny-all / owner-only tables — anon must receive ZERO rows.
-// Sources: SYSTEM_RISK_MAP (Money model, Auth, Database), the 20260701090000 /
-// 20260701100000 lockdown migrations, the 2026-08-10 sweep's live grant check.
-// Add a table when a migration locks it down; never remove one to make the probe pass.
-const NO_ROWS_FOR_ANON = [
-  // money / entitlements
-  'tips', 'iap_transactions', 'payouts', 'subscriptions', 'recipe_unlocks', 'product_purchases',
-  // admin / moderation / ops
-  'admin_credentials', 'admin_sessions', 'moderation_log', 'reports', 'cron_runs', 'pending_media_deletions',
-  // private user data
-  'push_tokens', 'support_requests', 'messages', 'user_blocks', 'notifications',
-  // paywalled content (owner-only direct read since 20260701090000; comments locked 20260701100000)
-  'recipes', 'recipe_steps', 'recipe_ingredients', 'video_assets', 'comments',
-];
-// `profiles` is column-scoped (20260701100000 + 20260712000000): public columns are
-// world-readable, PII columns must be permission-denied at the COLUMN level.
-const PROFILES_PUBLIC_COLS = 'id,handle';
-const PROFILES_PII_COLS = ['phone', 'role', 'banned', 'banned_reason', 'country', 'region', 'stripe_account_id', 'tastes', 'notif_prefs', 'ban_appeal_text', 'delete_at', 'boost'];
-// SECURITY DEFINER function whose EXECUTE was revoked from anon/authenticated
-// (20260701070000 / 20260808160000).
-const DENIED_RPC = { name: 'creator_earnings', body: { uid: '00000000-0000-0000-0000-000000000000' } };
 
 const fail = (msg) => { console.error(`anon-boundary-probe: FAIL — ${msg}`); process.exit(1); };
 
@@ -99,6 +95,24 @@ for (const t of NO_ROWS_FOR_ANON) {
   console.log(`  ${t.padEnd(26)} ${fmt(r)} ${verdict}`);
 }
 
+console.log('\n— tables anon may read, with the policy predicate checked live —');
+for (const t of ANON_READABLE_BY_DESIGN) {
+  const r = await probe(`${t}?select=*&limit=1`);
+  // Readable-by-design means rows are EXPECTED; zero rows would mean the probe below is
+  // vacuous (an empty table cannot demonstrate that the filter excludes anything).
+  const readable = r.status === 200 && (r.rows ?? 0) > 0;
+  console.log(`  ${t.padEnd(26)} ${fmt(r)} ${readable ? '✓ readable by design (policy cited in anon-boundary-tables.mjs)' : '⚠ no rows — filter checks below prove nothing'}`);
+  for (const { query, why } of ANON_READABLE_FILTERS[t] ?? []) {
+    const f = await probe(`${t}?select=id&${query}&limit=1`);
+    let verdict;
+    if (f.status === 200 && (f.rows ?? 1) > 0) { verdict = `❌ ANON READ A ROW IT MUST NOT — ${why}`; regressions++; }
+    else if (f.status === 200) verdict = `✓ ${why}`;
+    else if (f.code === '42501') verdict = `✓ denied outright — ${why}`;
+    else verdict = `? unexpected (${f.status} ${f.code}) — inspect`;
+    console.log(`    ${`${t}?${query}`.padEnd(38)} ${fmt(f)} ${verdict}`);
+  }
+}
+
 console.log('\n— profiles: column-scoped grant —');
 const pos = await probe(`profiles?select=${PROFILES_PUBLIC_COLS}&limit=1`);
 const posOk = pos.status === 200 && (pos.rows ?? 0) >= 1;
@@ -122,4 +136,5 @@ console.log(`  ${`rpc ${DENIED_RPC.name}`.padEnd(26)} ${fmt(rpc)} ${rpcOk ? '✓
 console.log('');
 if (!posOk) fail('positive control returned no data — the probe cannot vouch for the denials');
 if (regressions) fail(`${regressions} boundary regression(s) — anon can read something it must not (P1: verify with pg_policies/grants and fix by revoke migration)`);
-console.log(`anon-boundary-probe: OK — ${NO_ROWS_FOR_ANON.length} tables yield no rows, ${PROFILES_PII_COLS.length} profile PII columns denied, ${DENIED_RPC.name} not executable, positive control readable`);
+const filterChecks = Object.values(ANON_READABLE_FILTERS).reduce((n, f) => n + f.length, 0);
+console.log(`anon-boundary-probe: OK — ${NO_ROWS_FOR_ANON.length} tables yield no rows, ${filterChecks} policy-predicate checks on ${ANON_READABLE_BY_DESIGN.length} by-design-readable table(s), ${PROFILES_PII_COLS.length} profile PII columns denied, ${DENIED_RPC.name} not executable, positive control readable`);

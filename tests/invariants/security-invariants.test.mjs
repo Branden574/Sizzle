@@ -8,10 +8,17 @@
  */
 import assert from 'node:assert/strict';
 import { execFileSync } from 'node:child_process';
-import { readFileSync, existsSync } from 'node:fs';
+import { readFileSync, existsSync, readdirSync } from 'node:fs';
 import path from 'node:path';
 import test from 'node:test';
 import { fileURLToPath } from 'node:url';
+
+import {
+  CLASSIFIED_TABLES,
+  NO_ROWS_FOR_ANON,
+  ANON_READABLE_BY_DESIGN,
+  ANON_READABLE_FILTERS,
+} from '../../scripts/ops/anon-boundary-tables.mjs';
 
 const repo = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..', '..');
 const read = (p) => readFileSync(path.join(repo, p), 'utf8');
@@ -158,6 +165,47 @@ test('guardrail documents exist and were not deleted by cleanup', () => {
   ]) {
     assert.ok(existsSync(path.join(repo, f)), `${f} is part of the engineering constitution and must exist`);
   }
+});
+
+test('the anon-boundary probe classifies every table the migrations declare', () => {
+  // The probe (scripts/ops/anon-boundary-probe.mjs) is only a boundary test for tables it
+  // knows about. It silently stopped covering the schema once before: on 2026-08-21 it named
+  // 22 tables while the migrations declared 49, so 26 tables — including every collection,
+  // save, hashtag and analytics table — were never probed at all. This test makes the next
+  // `create table` fail CI until someone classifies it, which is the forcing function.
+  const dir = path.join(repo, 'supabase', 'migrations');
+  const declared = new Set();
+  for (const f of readdirSync(dir).filter((n) => n.endsWith('.sql'))) {
+    const sql = readFileSync(path.join(dir, f), 'utf8');
+    // `create table [if not exists] [public.]<name>` — migrations create nothing outside
+    // `public`, and none drop or rename a table, so accumulating across files is exact.
+    for (const m of sql.matchAll(/create\s+table\s+(?:if\s+not\s+exists\s+)?(?:public\.)?"?([a-z_][a-z0-9_]*)"?/gi)) {
+      declared.add(m[1].toLowerCase());
+    }
+  }
+  assert.ok(declared.size > 40, `expected the migrations to declare the full schema, parsed only ${declared.size}`);
+
+  const classified = new Set(CLASSIFIED_TABLES);
+  const unclassified = [...declared].filter((t) => !classified.has(t)).sort();
+  assert.deepEqual(unclassified, [],
+    `new table(s) not classified in scripts/ops/anon-boundary-tables.mjs: ${unclassified.join(', ')}. ` +
+    'Read the table\'s grants/policies in its migration, then add it to NO_ROWS_FOR_ANON or ' +
+    '(with a cited policy + filter checks) ANON_READABLE_BY_DESIGN.');
+
+  // A table classified but no longer declared means the list drifted the other way.
+  const stale = [...classified].filter((t) => !declared.has(t)).sort();
+  assert.deepEqual(stale, [], `classified table(s) no longer declared by any migration: ${stale.join(', ')}`);
+
+  // A table must not be in both buckets — that would let "readable by design" quietly
+  // cancel a "must yield no rows" assertion.
+  const both = NO_ROWS_FOR_ANON.filter((t) => ANON_READABLE_BY_DESIGN.includes(t));
+  assert.deepEqual(both, [], `table(s) in both buckets: ${both.join(', ')}`);
+
+  // Anything anon may read must carry at least one live predicate check, so widening the
+  // by-design list can never be a silent way to stop asserting anything about a table.
+  const unchecked = ANON_READABLE_BY_DESIGN.filter((t) => !(ANON_READABLE_FILTERS[t] ?? []).length);
+  assert.deepEqual(unchecked, [],
+    `anon-readable table(s) with no policy-predicate check: ${unchecked.join(', ')}`);
 });
 
 test('production Android config does not enable cleartext broadly', () => {
