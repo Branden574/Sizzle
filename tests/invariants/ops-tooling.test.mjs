@@ -7,9 +7,10 @@
  * when a stale Vercel CLI token threw `Error: vercel api 403` out of the poll loop.
  */
 import assert from 'node:assert/strict';
+import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-import { createVercelClient } from '../../scripts/verify-deploy.mjs';
+import { checkWebVersion, createVercelClient } from '../../scripts/verify-deploy.mjs';
 
 /** Minimal stand-in for a fetch Response, enough for the client's ok/status/json use. */
 const response = (status, body) => ({ ok: status >= 200 && status < 300, status, json: async () => body });
@@ -67,4 +68,74 @@ test('verify-deploy reports a real login problem when the refresh itself fails',
   await assert.rejects(() => client('prj_test'), /vercel login/);
   assert.equal(calls.fetch, 1, 'no point retrying with a token that could not be refreshed');
   assert.equal(calls.whoami, 1);
+});
+
+/*
+ * Frontend deploy verification (TD-8). Before this, the web branch printed the probe
+ * status and asserted NOTHING — a READY deployment serving a 500, or an alias pointing
+ * at a previous build, both passed as "verified". `/version.json` is emitted by the web
+ * build (apps/web/vite.config.ts) so the served surface can name its own commit, the
+ * way /health already does for the API.
+ */
+const HEAD = 'a'.repeat(40);
+const versionFetch = (status, body) => async () => ({
+  ok: status >= 200 && status < 300,
+  status,
+  json: async () => {
+    if (body === undefined) throw new Error('not json');
+    return body;
+  },
+});
+
+test('web verification passes when the served build names HEAD', async () => {
+  const v = await checkWebVersion('https://x.test', HEAD, versionFetch(200, { version: '1.2.3', commit: HEAD }));
+  assert.equal(v.ok, true);
+  assert.match(v.detail, /== HEAD/);
+});
+
+test('web verification accepts the short commit Vercel stamps', async () => {
+  const v = await checkWebVersion('https://x.test', HEAD, versionFetch(200, { version: '1.2.3', commit: HEAD.slice(0, 7) }));
+  assert.equal(v.ok, true, 'a prefix of HEAD is the same commit, not a mismatch');
+});
+
+test('web verification FAILS when the alias serves a different build', async () => {
+  const other = 'b'.repeat(40);
+  const v = await checkWebVersion('https://x.test', HEAD, versionFetch(200, { version: '1.2.3', commit: other }));
+  assert.equal(v.ok, false, 'a stale alias is the exact failure this check exists to catch');
+  assert.match(v.detail, /another build/);
+});
+
+test('web verification FAILS on a commit too short to identify a build', async () => {
+  const v = await checkWebVersion('https://x.test', HEAD, versionFetch(200, { version: '1.2.3', commit: 'a' }));
+  assert.equal(v.ok, false, '"a" prefix-matches most SHAs — it must not pass as a match');
+  assert.match(v.detail, /too short/);
+});
+
+test('web verification FAILS when version.json is missing', async () => {
+  const v = await checkWebVersion('https://x.test', HEAD, versionFetch(404));
+  assert.equal(v.ok, false);
+  assert.match(v.detail, /did not emit it/);
+});
+
+test('web verification FAILS when version.json is unreachable', async () => {
+  const v = await checkWebVersion('https://x.test', HEAD, async () => { throw new Error('ECONNREFUSED'); });
+  assert.equal(v.ok, false);
+  assert.match(v.detail, /unreachable/);
+});
+
+test('web verification reports — but does not fail — an unstamped archive CLI deploy', async () => {
+  const v = await checkWebVersion('https://x.test', HEAD, versionFetch(200, { version: '1.2.3', commit: null }));
+  assert.equal(v.ok, true, 'the documented webhook-outage fallback must not raise a false alarm');
+  assert.match(v.detail, /not asserted/);
+});
+
+test('the web build emits version.json — the check above has something to read', async () => {
+  const config = await readFile(new URL('../../apps/web/vite.config.ts', import.meta.url), 'utf8');
+  assert.match(config, /fileName: 'version\.json'/, 'apps/web/vite.config.ts must emit dist/version.json');
+  assert.match(config, /VERCEL_GIT_COMMIT_SHA/, 'the manifest must stamp the deploying commit');
+  const vercelJson = JSON.parse(await readFile(new URL('../../apps/web/vercel.json', import.meta.url), 'utf8'));
+  const rule = (vercelJson.headers ?? []).find((h) => h.source === '/version.json');
+  assert.ok(rule, 'version.json needs an explicit header rule');
+  const cacheControl = rule.headers.find((h) => h.key === 'Cache-Control')?.value ?? '';
+  assert.match(cacheControl, /no-store/, 'a cached version.json would report the PREVIOUS build as live');
 });

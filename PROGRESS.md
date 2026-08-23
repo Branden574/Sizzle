@@ -105,7 +105,7 @@ Still queued (documented, not launch-blocking): M7 storage-blob orphan sweep (bl
 - **Validation:** zod everywhere (+ length caps); UUID validation on `:id` params (malformed → 404).
 - **Content moderation hook** on recipe + comment creation (placeholder blocklist + link-spam; swap in a real provider).
 - **Independent security review** (security agent) — all CRITICAL/HIGH/MEDIUM resolved: webhook HMAC + uid validation, draft/removed hidden from non-owners, generic 5xx errors (no PG leak), parameterized search, atomic advisory-locked reaction RPC, demo-key boot guard. See [docs/security.md](docs/security.md).
-- **Deploy guide** ([docs/deploy.md](docs/deploy.md)): Supabase hosted + Railway/Fly API + static web + Cloudflare Stream.
+- **Deploy guide** ([docs/deploy.md](docs/deploy.md)): hosted Supabase + the two (reverse-named) Vercel projects — `sizzle` = the serverless API, `sizzle-api` = the frontend — plus Cloudflare Stream, cron schedules, and the mandatory `verify-deploy` step. *(Rewritten 2026-08-23; it previously described a Railway/Fly API and a generic static host, which production has never used.)*
 - Follow-ups (noted): real moderation provider, trusted-proxy config for IP limiter, analytics/APM (Sentry), vite/esbuild dev-CVE bump.
 
 ---

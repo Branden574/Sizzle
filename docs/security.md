@@ -17,7 +17,7 @@
 All CRITICAL/HIGH/MEDIUM findings resolved:
 - C-1 webhook signature/uid — fixed. H-1 draft exposure — fixed. H-3 raw error leakage — fixed.
 - M-1 search injection — fixed (parameterized `.ilike`). M-2 view spam — rate-limited. M-3 unfollow UUID — fixed. M-4 taste length — capped. M-5 reaction race — atomic RPC.
-- H-2 X-Forwarded-For spoofing — mitigated (per-user write limits unaffected); global IP limit requires trusted-proxy config in production (see deploy.md).
+- H-2 X-Forwarded-For spoofing — **resolved in code** (verified 2026-08-23): per-user write limits key off the authenticated user id and were never spoofable, and the anon IP key now prefers `x-vercel-forwarded-for`, else the **right-most** XFF hop (the one the edge appends) — never the client-supplied left-most entry (`apps/api/src/middleware/rateLimit.ts:7-18`). This no longer depends on separate trusted-proxy config, but any move off Vercel must re-establish an equivalent trusted hop (see deploy.md §2).
 - L-2 demo-key default — boot guard added. L-3 vite/esbuild dev CVE — dev-only, not production-exploitable; bump on next web dep update.
 
 ## Follow-ups before public launch

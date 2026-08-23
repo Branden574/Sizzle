@@ -37,10 +37,47 @@ function staticPages() {
 // On native the live OTA bundle version + native build are read at runtime.
 const APP_VERSION = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8')).version as string;
 
+/**
+ * Emit `dist/version.json` so a deploy can be verified from the SERVED surface.
+ *
+ * The API already answers this via `/health`'s `commit` field; the frontend had no
+ * equivalent, so `scripts/verify-deploy.mjs` could only ask Vercel's API whether a
+ * deployment carrying HEAD's SHA reached READY — never whether getsizzle.app is
+ * actually serving that build (TD-8). This closes that: the file is written by the
+ * build itself, so whatever is served came from whatever was built.
+ *
+ * The app never imports it — it is a static artifact for tooling, so it carries no
+ * runtime risk. Nothing secret goes in: the commit SHA is already public on /health.
+ *
+ * `commit` is null when no CI/Vercel SHA is in the environment (a plain local build,
+ * or an archive CLI deploy). verify-deploy reports that case rather than failing on
+ * it — see its web branch.
+ */
+function versionManifest() {
+  return {
+    name: 'sizzle-version-manifest',
+    generateBundle(this: { emitFile: (f: { type: 'asset'; fileName: string; source: string }) => void }) {
+      this.emitFile({
+        type: 'asset',
+        fileName: 'version.json',
+        source: JSON.stringify(
+          {
+            version: APP_VERSION,
+            commit: process.env.VERCEL_GIT_COMMIT_SHA || process.env.GITHUB_SHA || null,
+            builtAt: new Date().toISOString(),
+          },
+          null,
+          2,
+        ),
+      });
+    },
+  };
+}
+
 // https://vite.dev/config/
 export default defineConfig({
   define: { __APP_VERSION__: JSON.stringify(APP_VERSION) },
-  plugins: [staticPages(), react()],
+  plugins: [staticPages(), versionManifest(), react()],
   server: {
     // Don't trigger HMR reloads when `tsc -b` / `vite build` write these.
     watch: { ignored: ['**/*.tsbuildinfo', '**/dist/**'] },

@@ -5,8 +5,9 @@
  * a push is never assumed deployed until this passes.
  *
  * For each affected project: poll the Vercel API until a deployment carrying
- * HEAD's SHA reaches READY (or timeout), then probe the live surface and — for
- * the API — compare /health's `commit` field against HEAD.
+ * HEAD's SHA reaches READY (or timeout), then probe the live surface and confirm
+ * the SERVED build is HEAD — via /health's `commit` for the API, and /version.json
+ * for the frontend. "READY" alone is not proof the alias points at that build.
  *
  * Usage: node scripts/verify-deploy.mjs [--api] [--web] [--sha <sha>]
  *        (no flags = verify both projects)
@@ -90,6 +91,49 @@ export function createVercelClient({
 
 const sleep = (ms) => new Promise((r) => { setTimeout(r, ms); });
 
+/**
+ * Confirm the FRONTEND is serving this commit, from the served surface itself.
+ *
+ * Vercel's API telling us a deployment with HEAD's SHA reached READY is not the
+ * same claim as "getsizzle.app serves it" — an alias could point elsewhere. The
+ * build emits /version.json (see apps/web/vite.config.ts) so we can ask directly.
+ *
+ * Returns { ok, detail }. `commit: null` in the manifest means the build had no
+ * VERCEL_GIT_COMMIT_SHA / GITHUB_SHA — a plain archive CLI deploy, which is the
+ * documented webhook-outage fallback. That is reported, not failed: the file's
+ * presence still proves the current build was served, and failing there would
+ * raise a false alarm during exactly the outage the fallback exists for.
+ */
+export async function checkWebVersion(origin, sha, fetchImpl = globalThis.fetch) {
+  let res;
+  try {
+    res = await fetchImpl(`${origin}/version.json`, { redirect: 'follow', headers: { 'cache-control': 'no-cache' } });
+  } catch (e) {
+    return { ok: false, detail: `version.json unreachable (${e instanceof Error ? e.message : String(e)})` };
+  }
+  if (!res.ok) {
+    return { ok: false, detail: `version.json HTTP ${res.status} — the frontend build did not emit it (expected dist/version.json)` };
+  }
+  let body;
+  try {
+    body = await res.json();
+  } catch {
+    return { ok: false, detail: 'version.json is not valid JSON' };
+  }
+  if (!body?.commit) {
+    return { ok: true, detail: `serving version ${body?.version ?? '?'}, commit unstamped (archive CLI deploy) — SHA not asserted` };
+  }
+  // Guard the prefix compare below: a 1-char value would `startsWith`-match most
+  // SHAs. Anything shorter than a git short SHA is corrupt, not a match.
+  if (String(body.commit).length < 7) {
+    return { ok: false, detail: `version.json commit "${body.commit}" is too short to identify a build` };
+  }
+  if (!sha.startsWith(body.commit) && !body.commit.startsWith(sha)) {
+    return { ok: false, detail: `serving commit ${String(body.commit).slice(0, 7)} ≠ HEAD ${sha.slice(0, 7)} — the alias points at another build` };
+  }
+  return { ok: true, detail: `serving commit ${String(body.commit).slice(0, 7)} == HEAD ✓ (version ${body.version})` };
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const shaIdx = args.indexOf('--sha');
@@ -141,9 +185,22 @@ async function main() {
       continue;
     }
 
-    // Live probe — and for the API, confirm the serving commit IS this commit.
+    // Live probe — and for both projects, confirm the serving commit IS this commit.
     const res = await fetch(p.probe, { redirect: 'follow' }).catch((e) => ({ ok: false, status: String(e) }));
     console.log(`probe ${p.probe}: HTTP ${res.status}`);
+    if (key === 'web') {
+      // The probe result used to be printed and then ignored, so a READY frontend
+      // serving a 500 passed verification. Assert it, then confirm WHICH build.
+      if (!res.ok) {
+        console.error(`probe failed — getsizzle.app is not serving successfully`);
+        failed = true;
+        continue;
+      }
+      const verdict = await checkWebVersion(p.probe, sha);
+      console.log(`${verdict.ok ? '' : 'ERROR: '}${verdict.detail}`);
+      if (!verdict.ok) failed = true;
+      continue;
+    }
     if (key === 'api' && res.ok) {
       const body = await res.json().catch(() => null);
       const serving = body?.commit ?? null;
