@@ -16,7 +16,28 @@ function parseDsn(dsn: string): { url: string; publicKey: string } | null {
   }
 }
 
-const endpoint = DSN ? parseDsn(DSN) : null;
+/**
+ * Suppress reporting from a locally-served build.
+ *
+ * `npm run build` bakes VITE_SENTRY_DSN into the bundle, so serving dist/ from localhost — or
+ * running a Playwright reproduction against it — posts real events into the production `sizzle`
+ * project, indistinguishable from a user's crash. That has already happened once: a deliberate
+ * stale-chunk test raised a "SIZZLE-3 TypeError" alert that looked like a live incident.
+ *
+ * Native is exempt: Capacitor serves the app from capacitor://localhost (iOS) and
+ * http://localhost (Android), so hostname alone would silence every real device crash. Those
+ * are checked via Capacitor's own platform flag rather than the hostname.
+ */
+function isLocalDevHost(): boolean {
+  if (typeof window === 'undefined') return false;
+  // A real native install must keep reporting even though it serves from "localhost".
+  if (/^capacitor:$/i.test(location.protocol)) return false;
+  const w = window as unknown as { Capacitor?: { isNativePlatform?: () => boolean } };
+  if (w.Capacitor?.isNativePlatform?.()) return false;
+  return /^(localhost|127\.0\.0\.1|\[::1\]|0\.0\.0\.0)$/i.test(location.hostname);
+}
+
+const endpoint = DSN && !isLocalDevHost() ? parseDsn(DSN) : null;
 
 /** Report an exception to Sentry (best-effort; never throws). */
 export function captureException(err: unknown, extra?: Record<string, unknown>): void {

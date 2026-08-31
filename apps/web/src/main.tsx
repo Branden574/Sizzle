@@ -10,6 +10,36 @@ import './index.css';
 
 initSentry();
 
+/**
+ * Recover from a stale-chunk load after a deploy.
+ *
+ * Vite fingerprints every chunk, and Vercel only serves the CURRENT deployment's /assets — every
+ * previous deploy's chunk URLs 404 immediately (verified: prior hashes for the entry, AppShell and
+ * Marketing chunks all return 404 on getsizzle.app). So a tab open across a deploy holds the old
+ * index.html, and the first lazy import() it attempts — Marketing, AppShell, AdminDashboard —
+ * fetches a file that no longer exists and rejects with "TypeError: Importing a module script
+ * failed". Marketing and AdminDashboard have no error boundary above them, so on the public
+ * landing page that is a white screen with no way out.
+ *
+ * `vite:preloadError` is the hook Vite fires for precisely this. Reloading picks up the fresh
+ * index.html and its current hashes, which is the whole fix — the user's own chunk request is
+ * what tells us the page is stale.
+ *
+ * Guarded by a timestamp, not a boolean: a genuinely broken deploy must not reload-loop, but a
+ * tab left open across a LATER deploy still needs to heal. One reload per 30s window does both.
+ */
+const CHUNK_RELOAD_KEY = 'sz.chunkReloadAt';
+window.addEventListener('vite:preloadError', (event) => {
+  // Stop it surfacing as an unhandled rejection (and as Sentry noise on every deploy) — it is
+  // expected, and it self-heals below.
+  event.preventDefault();
+  let last = 0;
+  try { last = Number(sessionStorage.getItem(CHUNK_RELOAD_KEY)) || 0; } catch { /* private mode */ }
+  if (Date.now() - last < 30_000) return; // already tried very recently — let the UI fail visibly
+  try { sessionStorage.setItem(CHUNK_RELOAD_KEY, String(Date.now())); } catch { /* private mode */ }
+  window.location.reload();
+});
+
 if (Capacitor.isNativePlatform()) {
   // Lock the WebView viewport on native. iOS auto-zooms when any <input> under
   // 16px gains focus, and because the base viewport allows user scaling it stays

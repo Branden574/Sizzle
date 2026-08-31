@@ -498,9 +498,15 @@ export default function App() {
   if (showMarketing) {
     return (
       <div className="sz-stage marketing" data-theme={scheme}>
-        <Suspense fallback={<div style={{ position: 'absolute', inset: 0, background: 'var(--bg)' }} />}>
-          <Marketing onGetStarted={() => enterApp('signup')} onLogin={() => enterApp('login')} />
-        </Suspense>
+        {/* The marketing page is the public front door and it is a lazy chunk, so a failed load
+            here is a blank getsizzle.app for a first-time visitor. main.tsx reloads on
+            vite:preloadError (the stale-chunk-after-deploy case), and this boundary catches
+            anything else so the visitor gets a retry instead of nothing. */}
+        <ErrorBoundary fallback={<CrashFallback />}>
+          <Suspense fallback={<div style={{ position: 'absolute', inset: 0, background: 'var(--bg)' }} />}>
+            <Marketing onGetStarted={() => enterApp('signup')} onLogin={() => enterApp('login')} />
+          </Suspense>
+        </ErrorBoundary>
       </div>
     );
   }
