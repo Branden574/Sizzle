@@ -2,6 +2,7 @@ DAILY MAINTENANCE SWEEP — you are the scheduled engineering maintenance agent 
 
 Work through this checklist, fixing what falls in Level A/B lanes and recording the rest:
 
+0. FIRST, before anything else: `node scripts/ops/origin-drift.mjs`. `git fetch`/`git pull` are not allowlisted unattended (TD-27), so local `main` silently falls behind whenever a sweep advances remote `main`, and a stale tree yields confidently wrong findings in items 4 and 6. Exit 0 = in sync, proceed normally. Exit 3 = drifted: it prints which drifted files corrupt which check and writes origin's copies to `.codex/origin-<sha>/` — reason about **those**, not the working copy, and build any doc edit on them. Never `git pull` to resolve it; push through the GitHub git-data API (recipe in TD-27) and stash locally afterwards.
 1. Production health: GET https://sizzle-chi.vercel.app/health — status, problems, cronAges (any job stale?), stuckVideoBacklog. GET https://getsizzle.app (expect 200).
 2. CI: `gh run list --branch main --limit 5` — investigate any failure (root-cause, fix in-lane, push, verify).
 3. Renovate/dependency PRs: `gh pr list` — for open dependency PRs: CI green + patch/minor + not native/payment/auth ⇒ merge; native/payment/auth or major ⇒ leave with a comment summarizing risk for Branden.

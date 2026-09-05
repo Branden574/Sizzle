@@ -10,6 +10,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
+import { classifyDrift, driftReport, mirrorPathFor } from '../../scripts/ops/origin-drift.mjs';
 import { checkWebVersion, createVercelClient } from '../../scripts/verify-deploy.mjs';
 
 /** Minimal stand-in for a fetch Response, enough for the client's ok/status/json use. */
@@ -138,4 +139,70 @@ test('the web build emits version.json — the check above has something to read
   assert.ok(rule, 'version.json needs an explicit header rule');
   const cacheControl = rule.headers.find((h) => h.key === 'Cache-Control')?.value ?? '';
   assert.match(cacheControl, /no-store/, 'a cached version.json would report the PREVIOUS build as live');
+});
+
+/* ---------- origin-drift (TD-27): the sweep must notice a stale working tree ---------- */
+
+const SYNCED = 'c'.repeat(40);
+const AHEAD = 'd'.repeat(40);
+
+test('origin-drift reports in-sync when local HEAD equals origin/main', () => {
+  const r = driftReport({ localHead: SYNCED, originHead: SYNCED, files: [] });
+  assert.equal(r.inSync, true);
+  assert.match(r.lines.join('\n'), /in sync/);
+});
+
+test('origin-drift flags a stale lockfile as corrupting npm audit — the 2026-09-04 near-miss', () => {
+  // Exactly the drift that made `npm audit` re-report a fixed @xmldom/xmldom advisory.
+  const r = driftReport({
+    localHead: SYNCED,
+    originHead: AHEAD,
+    files: [{ path: 'package-lock.json', status: 'modified' }],
+    outDir: '.codex/origin-ddddddd',
+  });
+  assert.equal(r.inSync, false);
+  assert.deepEqual(r.corrupting.map((f) => f.path), ['package-lock.json']);
+  assert.match(r.lines.join('\n'), /npm audit \(sweep item 4\)/);
+  assert.match(r.lines.join('\n'), /npm audit --package-lock-only/, 'it must hand the sweep the command that reads the ORIGIN tree');
+});
+
+test('origin-drift flags the two docs the sweep itself edits', () => {
+  const { corrupting } = classifyDrift([
+    { path: 'docs/engineering/technical-debt.md', status: 'modified' },
+    { path: 'docs/operations/incidents/LOG.md', status: 'modified' },
+  ]);
+  assert.equal(corrupting.length, 2, 'building either edit on a stale base silently drops a prior sweep\'s entries');
+});
+
+test('origin-drift separates merely-behind files from check-corrupting ones', () => {
+  const { corrupting, other } = classifyDrift([
+    { path: 'package-lock.json', status: 'modified' },
+    { path: 'apps/web/src/screens/Feed.tsx', status: 'modified' },
+  ]);
+  assert.deepEqual(corrupting.map((f) => f.path), ['package-lock.json']);
+  assert.deepEqual(other.map((f) => f.path), ['apps/web/src/screens/Feed.tsx']);
+});
+
+test('origin-drift never tells the sweep to run a denied git command', () => {
+  const text = driftReport({ localHead: SYNCED, originHead: AHEAD, files: [], outDir: '.codex/x' }).lines.join('\n');
+  assert.match(text, /Do NOT `git pull`/, 'pull/fetch are not allowlisted unattended — the banner must say so');
+});
+
+test('origin-drift writes only inside the gitignored .codex scratch', async () => {
+  const src = await readFile(new URL('../../scripts/ops/origin-drift.mjs', import.meta.url), 'utf8');
+  const writeTargets = [...src.matchAll(/(?:writeFileSync|mkdirSync)\(([^,)]+)/g)].map((m) => m[1].trim());
+  assert.ok(writeTargets.length > 0, 'the script is supposed to materialise origin copies');
+  for (const target of writeTargets) {
+    assert.match(target, /dest|dirname\(dest\)|mirrorPathFor\(outDir/, `unexpected write target: ${target}`);
+  }
+  assert.match(src, /outDir = `\.codex\/origin-/, 'the scratch dir must stay under .codex/ (gitignored since TD-20)');
+  assert.equal(mirrorPathFor('.codex/origin-abc', 'docs/x.md'), '.codex/origin-abc/docs/x.md');
+});
+
+test('the drift check is wired into the sweep prompt before the checks it protects', async () => {
+  const prompt = await readFile(new URL('../../scripts/ops/sweep-prompt.md', import.meta.url), 'utf8');
+  assert.match(prompt, /origin-drift/, 'a tool nothing invokes is a tool the sweep will skip');
+  const drift = prompt.indexOf('origin-drift');
+  const audit = prompt.indexOf('npm audit');
+  assert.ok(drift < audit, 'the drift check must come BEFORE sweep item 4 (npm audit), which it protects');
 });
