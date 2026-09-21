@@ -566,3 +566,106 @@ signups. Verified live; security advisors now show zero actionable warnings
 7. **TD-21 (Supabase MCP `Unauthorized`) directly cost diagnostic depth here** — with it working, this session could have read project state instead of inferring it from DNS. It has been open since 2026-08-16; this incident is the concrete argument for fixing it.
 
 **Escalation channels — both are down, which is why this may not have reached you.** The push notification for this incident **could not be delivered**: `PushNotification` returned *"Mobile push not sent (Remote Control inactive)"* — the same dead channel recorded on 2026-09-06, now unfixed for 15 days. Combined with the `Uptime` workflow being disabled at 18:27:42Z, **every automated path from an unattended session to you is currently switched off**, and this commit is the only artifact carrying a live SEV-1. The one channel demonstrably still working is GitHub's own workflow-failure email (you acted on the 18:23 one within four minutes) — which is precisely the channel that re-enabling `Uptime` would restore. Re-enabling it is a two-second owner action and, given a production outage is ongoing, it is the highest-value item on the list above after the restore itself.
+
+## Incident 2026-09-21 15:17 PDT — watchdog re-summon, SAME SEV-1 still open: API 503 `database-unreachable`, outage now ≥4h — STILL NOT FIXED, still Level D
+
+**This is the same outage as the 14:16 PDT entry above, not a new one.** The watchdog's 60-minute
+cooldown expired and it re-fired at 15:17:53 local (22:17:52Z) on an unchanged condition. Nothing has
+been done about it in the intervening hour and nothing has recovered. The prior entry's root cause —
+the Supabase project host `gsxoaurmsgqascxukony.supabase.co` no longer resolves in DNS — is
+re-confirmed, not revised.
+
+**Confirmed still down, two probes ~3 minutes apart:**
+- `/health` `22:18:25Z` → **HTTP 503**, `problems:["database-unreachable"]`, `commit e2632a2`, 7.2 s.
+- `/health` `22:21:37Z` → **HTTP 503**, identical.
+- `getsizzle.app` → **200** (static Vercel bundle, as before — the shell loads, then cannot populate
+  or authenticate).
+
+### New evidence added this session (the prior root cause holds; these narrow it)
+
+1. **The break is user-facing on a real endpoint, not only the health probe.**
+   `GET /feed/for-you?limit=3` → **HTTP 500** `{"error":{"code":"db_error","message":"Something went
+   wrong"}}` in 7.3 s. The feed — the app's first screen — is dead for plain unauthenticated reads.
+
+2. **It is not the deployment, and that is now proven on a *fresh build*.** Two production deploys
+   landed during the outage (~21:23Z, ~21:25Z): both are the previous session's own **docs-only**
+   incident-log commits `35cd873` and `e2632a2` (`docs/operations/incidents/LOG.md` only), both
+   **Ready**, and `/health.commit` moved `1a0143c` → `e2632a2` as a result. **Do not read that commit
+   change as a suspicious deploy.** What it usefully proves: the failure reproduces identically on a
+   newly built deployment (`dpl_7MN824w25wAfcXyawBHfMvxLghMN`) with freshly injected env vars —
+   runtime logs still show `[internal] rollup-hashtag-trends failed { err: 'TypeError: fetch failed' }`
+   → **500 in 14 ms**. That eliminates "stale build artifact" and "env var never picked up by the old
+   build" outright. It also means the 15-day-stable deployment the prior entry named as the rollback
+   baseline is no longer the live one; rollback remains **not indicated** for the same reason as
+   before — no deployment can create a DNS record for a project that is not running.
+
+3. **The `supabase.co` zone is healthy; only this project's records are gone.** Same shell, same
+   minute:
+   - `https://supabase.co/` → **HTTP 307**, `dns=0.0599s`, `remote_ip=76.76.21.21`
+   - `https://gsxoaurmsgqascxukony.supabase.co/rest/v1/` → **curl exit 6**, `dns=0.000000s`
+   - `https://db.gsxoaurmsgqascxukony.supabase.co/` → **curl exit 6**, `dns=0.000000s`
+
+   The parent zone resolves normally and *both* the API subdomain and the direct-Postgres subdomain
+   for this ref are absent. A zone-level or platform-wide DNS fault would not look like this; the
+   entire per-project record family disappearing is what a project-level **pause or deprovision**
+   does. This is the strongest external discriminator obtainable without the dashboard.
+
+4. **The ref is the correct one — which raises the stakes on "do not create a fresh project."**
+   `gsxoaurmsgqascxukony` is canonical: `HOSTING.md:43,59` documents it for both `SUPABASE_URL` and
+   `VITE_SUPABASE_URL`, and it is **hardcoded as a `<link rel="preconnect">` in shipped bundles** —
+   `apps/web/index.html:30` *and* `apps/web/ios/App/App/public/index.html:30`. So the API is not
+   pointed at a stale project; and the **already-installed iOS app talks to this host directly** for
+   auth and PostgREST. Recreating the project under a new ref would therefore not be a config toggle:
+   it would need a web redeploy *and* a new native binary, on top of losing every row. Treat item 3
+   of the prior checklist as hard.
+
+5. **Supabase's status page has nothing new.** `status.supabase.com/api/v2/incidents/unresolved.json`
+   still lists exactly one unresolved incident — *"401 errors due to JWT rejections"*, created
+   2026-08-14, **last updated 2026-09-17**, i.e. untouched throughout our outage window. All
+   components read `operational` except that same API Gateway entry (`degraded_performance`). Not our
+   cause; re-confirmed rather than assumed.
+
+6. **No owner action has occurred in 4 hours.** The `Uptime` workflow is still
+   `state: disabled_manually`, `updated_at` unchanged at `2026-09-21T18:27:42Z`. Origin `main` has no
+   commits beyond the two incident-log ones. `vercel env ls production` still shows `SUPABASE_URL` /
+   `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` at **92d ago**, untouched.
+
+**Outage duration.** Last green off-Mac probe `17:54:46Z` · first failure `18:23:18Z` · still failing
+`22:21:37Z`. **≥ 3h58m of confirmed failure, ≥ 4h27m since the last known-good state, and ongoing.**
+
+**What I did.** Diagnosed and re-verified only — **no code change, no deploy, no rollback, no
+workflow or monitoring change, nothing committed but this entry.** There is still no in-lane fix:
+the failure is a missing DNS record for a Supabase project that this repository cannot start.
+
+**Why I again did not re-enable the `Uptime` pager.** Same conclusion as the prior session, same
+reasoning: `disabled_manually` four minutes after it paged is a deliberate human action, and an
+unattended session should not change monitoring configuration mid-incident. I have no new evidence
+the mute was accidental. It stays the cheapest high-value item on your list, and until it is back on,
+nothing pages you off-Mac.
+
+**Escalation — still dead.** `PushNotification` again returned *"Mobile push not sent (Remote Control
+inactive)"*, the same channel that has been down since 2026-09-06 (now 15 days). **This commit is
+once more the only artifact carrying a live SEV-1.** GitHub's workflow-failure email remains the one
+channel demonstrably reaching you — and it is exactly the channel that re-enabling `Uptime` restores.
+
+### For Branden — unchanged, still required (Level D, only you can do this)
+
+The checklist in the 14:16 entry stands verbatim; **none of it has been done.** Condensed, in order:
+
+1. Supabase dashboard → project `gsxoaurmsgqascxukony` (Sizzle production) → **Restore/Resume** if it
+   shows Paused. Clear any billing or free-tier limit warning first, or the restore will not stick.
+2. If the project is **missing entirely**, contact Supabase support about PITR/backup recovery
+   **before doing anything else**. **Do not create a replacement project** — see finding 4: with the
+   ref baked into shipped web *and* iOS bundles, a new ref means a native rebuild as well as
+   permanent loss of users, recipes, purchases and payout history.
+3. Verify on the real surface: `/health` must return **200** with `"status":"ok"` and `problems: []`,
+   **and** `GET /feed/for-you?limit=3` must return 200 rather than `db_error`. Then confirm sign-in on
+   getsizzle.app and watch `stuckVideoBacklog` drain toward 0 as `finalize-videos` catches up.
+4. `gh workflow enable uptime.yml` — restores off-Mac paging.
+5. Reconcile Stripe for the window `17:54Z → recovery` against the ledger. Handlers are idempotent and
+   Stripe retries, so recovery should be self-healing, but the prior entry could only inspect ~19
+   minutes of runtime logs and that is explicitly not a clean bill of health.
+6. TD-21 (Supabase MCP `Unauthorized`) cost diagnostic depth here for the second time in one day: both
+   `mcp__claude_ai_Supabase__list_projects` and the local `mcp__supabase__*` tools are
+   permission-gated in an unattended session, so project state still had to be inferred from DNS
+   rather than read.
