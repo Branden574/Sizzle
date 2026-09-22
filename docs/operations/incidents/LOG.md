@@ -1545,3 +1545,110 @@ through the GitHub git-data API. The `Uptime` pager stays muted for the reason s
    escalation path to you right now is a git commit, which is why nine sessions have produced no reply.
 10. After recovery: ship **TD-28** (cron false-green, 8 call sites) as the Level B PR — still correctly
     deferred, unverifiable against a DB that does not resolve.
+
+---
+
+## 2026-09-22 00:51 PDT — watchdog re-summon #9 (10th session) — SEV-1 ongoing, 13h28m
+
+**Fired:** `API degraded (503): database-unreachable` (watchdog 00:48:43 local).
+
+**Status: unchanged, and this is NOT a false alarm.** Two spaced `/health` probes
+(07:48:59Z, 07:51:20Z) both 503 `problems:["database-unreachable"]`;
+`GET /feed/for-you?limit=3` → 500 `{"error":{"code":"db_error"}}` (user-facing).
+
+**Root cause (re-confirmed, identical to the nine prior sessions):** the Supabase project
+`gsxoaurmsgqascxukony` has had **every per-project DNS record withdrawn**. Triple-resolver
+probe — system + `1.1.1.1` + `8.8.8.8` all agree:
+
+| name | A | CNAME |
+|---|---|---|
+| `supabase.co` (zone apex) | **OK 76.76.21.21** | ENODATA |
+| `gsxoaurmsgqascxukony.supabase.co` | **ENOTFOUND** | ENOTFOUND |
+| `db.gsxoaurmsgqascxukony.supabase.co` | **ENOTFOUND** | ENOTFOUND |
+
+Parent zone healthy + both per-project records NXDOMAIN across three independent resolvers =
+project-level pause/deprovision at the account level. **Level D — no repo change, rollback or
+config toggle can touch it.** Nothing was shipped this session but this log entry.
+
+**No owner action in 13h28m.** Origin head was still session 9's own log commit (`03d7789`,
+also what `/health.commit` reports); `Uptime` still `disabled_manually`. The nine hourly READY
+Production deploys on project `sizzle` are the **prior sessions' own docs-only log pushes**, not
+owner activity and not a bad deploy — builds are healthy (18–21s), the DB is not.
+
+### NEW — the financial-integrity clock nobody has bounded (the reason this session was worth running)
+
+Entry #9 framed the incident as *"urgent for USERS, not for DATA"* on the strength of Supabase's
+**1-year** restore window. That is right about the *database* and **wrong as a whole**: the
+**Stripe** side has a hard deadline measured in **days**, and it is now the binding constraint.
+
+**Mechanism (verified at source, not inferred):**
+
+- The webhook handler returns **500 on a DB failure** (`apps/api/src/routes/monetize.ts:1195`),
+  so events are **not silently dropped** — they queue in Stripe's retry machinery. Good design;
+  it is what makes the outage recoverable at all.
+- **User-initiated purchases are fail-closed.** The pending ledger row is inserted *before* the
+  checkout session is created (`monetize.ts:538` → `541`), so during the outage the insert throws
+  `dbFail` and **no Stripe checkout is ever created — no card is charged.** Correct ordering; no
+  money is moving on this path.
+- **Stripe-originated events are NOT fail-closed, and this is the exposure.** `invoice.paid`
+  (`monetize.ts:1138`), `customer.subscription.*` (`:1109-1111`), `charge.refunded` and
+  `charge.dispute.created/updated` (`:908-910`) all fire on **Stripe's** schedule, independent of
+  our database. During the outage that means: a subscription renewal **charges the fan's card for
+  real**, our webhook 500s, and **the entitlement is never extended — they paid and lost access.**
+  Same shape for a refund or chargeback: the money moves at Stripe, our ledger never learns.
+
+**The two deadlines** (from Stripe's own docs, fetched this session — `docs.stripe.com/**.md`
+serves raw markdown to plain curl, same trick as the Supabase docs in entry #9):
+
+| clock | source | expires |
+|---|---|---|
+| **Automatic retry** — "up to three days with an exponential back off in live mode" | `webhooks.md#automatic-retries` | **2026-09-24 18:23Z** |
+| **Manual replay wall** — "Stripe only returns events created in the last 30 days" (List Events API) | `webhooks/process-undelivered-events.md` | **2026-10-21 18:23Z** |
+
+Both measured from the first Uptime failure, **2026-09-21T18:23:07Z** (pinned in entry #9).
+
+**What this means for Branden — the actual decision:**
+
+- **Restore within ~2d 10h (by 2026-09-24 18:23Z) and the money self-heals with zero manual work.**
+  Stripe re-delivers, and the handlers are idempotent (`invoice.paid` dedupes on the unique
+  `provider_ref` index, `monetize.ts:1151`). **This is the cheapest possible outcome and it is
+  still available.**
+- **Restore after that but before 2026-10-21** → automatic retries are exhausted; recovery requires
+  a deliberate replay via the List Events API (`process-undelivered-events.md`). Doable, but it is
+  manual reconciliation of financial records rather than a no-op.
+- **After 2026-10-21** → the events are no longer listable and the drift is **permanently
+  unrecoverable**: fans charged without entitlement, refunds/disputes never reflected in the ledger.
+
+**Honest limit on this finding:** I could **not** verify that any renewals, refunds or disputes
+actually fall inside the outage window — that needs either the database (unreachable) or the live
+Stripe key (Level D; not touched). The *mechanism* and the *deadlines* are verified; the *volume*
+is unknown. Treat it as a live exposure of unknown size, not a confirmed loss.
+
+Also note: Stripe "prevents future retries" for a destination that is **disabled or deleted** when a
+retry is attempted (`webhooks.md`). Do **not** disable the Sizzle webhook endpoint to quiet the
+failure noise — that would convert a recoverable backlog into permanent loss.
+
+### Deliberately NOT done (unchanged from prior sessions, still correct)
+
+- **Did not re-enable `uptime.yml`.** `.github/workflows/**` is Level C, and the mute (~4 min after
+  the first failing run) is a deliberate human action.
+- **Did not ship TD-28** (cron false-green, 8 sites in `internal.ts`). Unverifiable against a DB that
+  does not resolve, and it perturbs the very signals being watched for recovery.
+- **Did not touch Stripe.** Reading live webhook delivery state needs the live secret key — Level D.
+
+### For Branden — Level D, only you can do this
+
+Steps 1-3 and 5-10 of entry #9 stand unchanged (dashboard → determine paused vs Fair-Use vs absent →
+Resume / upgrade to Pro / contact support re PITR; never create a replacement project — the ref is
+hardcoded in shipped iOS bundles). **The one change is to step 6, which is now the clock, not a
+footnote:**
+
+> **6 (REVISED). The Stripe reconcile window is the real deadline, and it is ~2d 10h away.**
+> Restoring the database **before 2026-09-24 18:23Z** makes the financial side a no-op — Stripe's
+> automatic retries land on idempotent handlers and nothing is lost. Miss it and you owe a manual
+> List-Events replay; miss **2026-10-21 18:23Z** and charged-but-unentitled fans and unreflected
+> refunds become permanent. Reconcile from **2026-09-21T17:54:46Z**. **Do not disable the webhook
+> endpoint** to quiet the alerts — that kills the retries.
+
+This reorders the priority: the Supabase restore was "urgent for users" at 13h; it is now **also the
+only thing standing between a self-healing money story and manual financial reconciliation.**
