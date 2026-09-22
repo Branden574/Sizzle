@@ -1166,3 +1166,125 @@ None of it has been done in 9+ hours. In order:
 6. **File the cron false-green defect** (17:22 entry, finding 2) as a TD entry and let a Level B PR fix it.
 7. **Rotate the Supabase PAT in `.mcp.json`** (18:26 entry, finding 1) **and** grant the MCP connector
    permission — both are required; either alone is insufficient (19:30 entry, finding 1).
+
+## Incident 2026-09-21 21:36 PDT — watchdog re-summon #6 (7th session), same SEV-1 open at 10h+ — still no owner action
+
+**What fired.** Watchdog summoned at 2026-09-21 21:36:46 local (`04:36:46Z`) with
+`API degraded (503): database-unreachable`, `/health.commit` = `28f8a32`.
+Seventh session on one continuous outage (14:16, 15:17, 17:22, 18:26, 19:30, 20:33, 21:36 PDT).
+
+**Root cause — unchanged, and this session deliberately did not re-derive it from scratch.**
+The Supabase project host `gsxoaurmsgqascxukony.supabase.co` has no DNS record — the signature of a
+project paused or deprovisioned at the Supabase account level. No repo change, deploy, or rollback
+can create that record. **Level D — owner-only.** Established in the 14:16 entry; re-confirmed six
+times since.
+
+**Outage duration.** Last green off-Mac probe `2026-09-21T17:54:46Z` · first confirmed failure
+`18:23:07Z` · still failing `2026-09-22T04:40:15Z`. **≥ 10h17m of confirmed failure, ≥ 10h45m since
+last known-good, and ongoing.**
+
+**Current state re-verified on the real surface** (not just the monitoring probe):
+- `/health` → **503** `{"status":"degraded","problems":["database-unreachable"], ..., "commit":"28f8a32"}` after a **7.20 s** stall — the same DB-connect timeout every prior session measured.
+- `GET /feed/for-you?limit=3` → **500 `{"error":{"code":"db_error"}}`** — the user-facing surface is still broken, not merely the health check.
+- `getsizzle.app` → 200 in 0.11 s (static bundle on Vercel; app shell loads, then cannot populate or authenticate).
+- All three of `/health`'s DB gauges are `null` (`stuckVideoBacklog`, `parkedMediaDeletions`, `cronAges`), which is what trips `health.ts:88`.
+
+### New this session
+
+**1. The DNS discriminator is now proved by record *type*, not just by failure — a strictly stronger
+form than the `curl exit 6` used by all six prior sessions, and it should be the one future sessions run.**
+Prior sessions inferred "no record" from `curl` exit 6 / `time_namelookup=0.000000s`. That conflates
+several failure modes (no record, resolver refusal, sandbox egress block). Resolving directly instead,
+via Node's `dns` module against **three independent recursive resolvers** (system, `1.1.1.1`, `8.8.8.8`):
+
+```
+  gsxoaurmsgqascxukony.supabase.co   A     -> ENOTFOUND   (all three resolvers)
+  gsxoaurmsgqascxukony.supabase.co   CNAME -> ENOTFOUND
+  db.gsxoaurmsgqascxukony.supabase.co      -> ENOTFOUND
+  supabase.co                        A     -> 76.76.21.21
+  supabase.co                        CNAME -> ENODATA     <-- the discriminator
+  getsizzle.app / sizzle-chi.vercel.app    -> resolve normally
+```
+
+`ENODATA` means *the name exists but has no record of that type*; `ENOTFOUND` means *the name does not
+exist* (NXDOMAIN). The parent zone answers authoritatively for itself while returning NXDOMAIN for the
+project label, on three unrelated resolvers. That is positive proof the record has been **withdrawn**,
+and it rules out the local-resolver/sandbox explanation that made five earlier watchdog summons false
+alarms — without depending on curl's exit codes at all.
+
+**2. A fourth path to the paused-vs-deleted question was tried for the first time, and is also gated —
+but unlike the other three, this one is worth opening because Supabase itself already sent the answer.**
+Sessions 1–6 proved three paths closed (claude.ai Supabase connector permission-gated · local `supabase`
+MCP `Unauthorized` · Management API 401, PAT revoked — all TD-21). This session tried a fourth:
+**Supabase emails the account owner when a project is paused or deprovisioned**, so the ops inbox very
+likely already contains the single most decision-relevant fact six sessions could not obtain.
+`mcp__claude_ai_Gmail__search_threads` → **"Claude requested permissions … but you haven't granted it yet."**
+This is a meaningfully better ask than the other three: it needs no credential rotation, only one
+connector permission, and it would answer *paused vs deleted* **and** *why* (inactivity, billing,
+over-limit) — the fact that determines whether step 1 or step 2 of the owner list below applies.
+
+**3. Confirmed: still zero corrective owner action at 10h17m.**
+- Origin `main` head is `28f8a32` — the *previous session's own* incident-log commit (`2026-09-22T03:37:43Z`). No other commits.
+- `Uptime` workflow: still `state: disabled_manually`, `updated_at` still `2026-09-21T11:27:42-07:00` — unchanged for 10h13m, no runs since the single failing run at `18:23:07Z`.
+- The live `/health.commit` tracks origin `main` exactly, so Vercel is deploying fine; nothing about this outage is deploy-side.
+- Bad deploy / rollback remains ruled out definitively (last pre-outage Production deploy is 15 days old, per the 14:16 and 20:33 entries). Rollback is still not a candidate and was not attempted.
+
+**4. `PushNotification` is still dead — now 16 days.** Returned *"Mobile push not sent (Remote Control
+inactive)"*, unchanged since 2026-09-06. **This commit is, for the seventh time, the only artifact
+carrying a live SEV-1.**
+
+**5. Untried channel, flagged rather than used: a `telegram` skill is present in this session's skill
+list.** Whether it is configured as Branden's channel could not be determined — the paths that would
+show its config are outside this session's command allowlist. An unattended session improvising a new
+outbound channel to a possibly-wrong destination during an incident is not a call it should make, so it
+was not fired. **If Telegram is in fact wired up, it is the obvious replacement for the dead
+`PushNotification` path** and is worth confirming while fixing the rest.
+
+**Why I again did not re-enable the `Uptime` pager — and the reason is substantive, not just precedent.**
+`.github/workflows/**` is a minimum-Level-C path, so it is out of lane. But the stronger argument is that
+re-enabling it would add no information: the mute at `18:27:42Z` (four minutes after the first failing
+run) proves Branden saw this alert, so resuming it would re-ring a bell he knowingly silenced about an
+outage he already knows about. The gap here is an **action** gap, not an awareness gap — session 6
+established this and nothing since contradicts it. What is missing is a channel that says something
+*new*, which is exactly what finding 2 would restore and what finding 5 might already provide.
+
+**What I did.** Diagnosed and re-verified only — **no code change, no deploy, no rollback, no workflow or
+monitoring change, nothing committed but this entry.** There is still no in-lane fix: the failure is a
+missing DNS record for a Supabase project this repository cannot start. `node scripts/verify-deploy.mjs`
+remains unusable during this outage (its success criterion is a 200 `/health`).
+The cron false-green defect (`internal.ts:67,251`, from the 17:22 entry) was **again not fixed** — the
+reasoning from session 6 holds: a ~6-line fix cannot be validated against a database that does not
+resolve, and shipping an unvalidatable change mid-incident is the wrong trade. It stays a Level B PR for
+after recovery.
+
+**Preserved, untouched:** the three locally-dirty ops files (`scripts/ops/origin-drift.mjs`,
+`scripts/ops/sweep-prompt.md`, `tests/invariants/ops-tooling.test.mjs`) are TD-27's materialised origin
+content, not local work — they read as dirty only against the stale local `HEAD` (`d4c5395` vs origin
+`28f8a32`). Left unstaged per CLAUDE.md rule 11; this entry was built on the **origin** copy of `LOG.md`
+via `scripts/ops/origin-drift.mjs`, not the stale working copy, and pushed through the GitHub API.
+
+### For Branden — unchanged, still required (Level D, only you can do this)
+
+None of it has been done in 10+ hours. In order:
+
+1. **Supabase dashboard → project `gsxoaurmsgqascxukony` (Sizzle production) → Restore/Resume** if it
+   shows Paused. Clear any billing or free-tier limit warning first, or the restore will not stick.
+   **Read whether it is Paused or absent** — seven sessions have been unable to determine this.
+2. If the project is **missing entirely**, contact Supabase support about PITR/backup recovery **before
+   anything else**. **Do not create a replacement project** — the ref is hardcoded as a `preconnect` in
+   shipped web *and* iOS bundles (`HOSTING.md:43,59`, `apps/web/index.html:30`,
+   `apps/web/ios/App/App/public/index.html:30`), so a new ref means a native rebuild *and* permanent loss
+   of users, recipes, purchases and payout history.
+3. **Verify on the real surface**: `/health` → **200**, `"status":"ok"`, `problems: []`, **and**
+   `GET /feed/for-you?limit=3` → 200 rather than `db_error`. Then sign in on getsizzle.app and watch
+   `stuckVideoBacklog` drain toward 0 as `finalize-videos` catches up.
+4. `gh workflow enable uptime.yml` — restores the one escalation channel demonstrably reaching you.
+5. **Reconcile Stripe** for `2026-09-21T17:54Z → recovery` against the ledger. Handlers are idempotent and
+   Stripe retries with backoff for ~3 days, so at 10h nothing should be permanently lost — but only
+   ~20-minute log windows have ever been inspectable, so this is explicitly **not** a clean bill of health.
+6. **Grant the Gmail connector permission** (finding 2) — cheapest new lead in seven sessions: the
+   pause/deprovision notice Supabase sent you almost certainly answers *paused vs deleted* and *why*.
+7. **Confirm whether the `telegram` channel is wired** (finding 5) — `PushNotification` has been dead 16 days.
+8. **Rotate the Supabase PAT in `.mcp.json`** **and** grant the MCP connector permission — both required;
+   either alone is insufficient (TD-21).
+9. **File the cron false-green defect** (17:22 entry, finding 2) as a TD entry; Level B PR after recovery.
