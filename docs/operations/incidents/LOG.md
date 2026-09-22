@@ -2926,3 +2926,110 @@ git-data API with a full 40-char parent SHA. Branden's pre-existing uncommitted 
    webhook with a 155-minute retry budget and no durable queue will lose refunds in *any* outage
    longer than that — this one merely made it visible. Same shape as the §7 alerting gap: a single
    delivery path with no fallback.
+
+---
+
+## 2026-09-22 15:26 PDT — watchdog re-summon (session 24): same SEV-1, 28h04m, no owner action
+
+**Fired:** `API degraded (503): database-unreachable`, watchdog 2026-09-22 15:23:10 PDT. Same
+condition, same 60-minute cooldown re-fire. **Nothing new in the diagnosis and nothing shipped but
+this log.**
+
+**State confirmed unchanged (four independent signals, not just `/health`):**
+
+- `/health` → **503 `database-unreachable`** at `22:23:27Z` and again at `22:26:51Z` — twice, ~3.5
+  min apart, per the anti-flap rule. Not a blip.
+- `/feed/for-you?limit=3` → **500 `{"error":{"code":"db_error"}}`** — a real user path, not a probe
+  artifact. Live users are still failing.
+- DNS (`.codex/dns-probe.mjs`): parent `supabase.co` **A=76.76.21.21** healthy, while
+  `gsxoaurmsgqascxukony.supabase.co` **and** `db.gsxoaurmsgqascxukony.supabase.co` are **ENOTFOUND
+  on system + 1.1.1.1 + 8.8.8.8**. Three unrelated resolvers agreeing = project-level
+  pause/deprovision, not a sandbox artifact and not a platform DNS fault.
+- `vercel ls sizzle` → every production deployment **READY** (the hourly cadence is prior sessions'
+  own docs-only log pushes); `getsizzle.app` serves **200**. **No bad deploy — rollback is not the
+  fix and would not touch this.** Level D, unchanged.
+
+**No owner action in 28h04m:** origin `main` was still `3baa1ef` (session 23's own log commit) when
+this session started, and `uptime.yml` remains `disabled_manually`.
+
+### New this session — one lead CHECKED and CLOSED (a negative result, recorded so nobody re-spends it)
+
+§2 tells the owner **not to manually disable** the Stripe webhook endpoint, because a destination
+disabled *at retry time* loses its remaining retries. The obvious follow-on worry — and the exact
+shape of the TD-35 lesson ("a provider clock you don't control and can't extend") — is whether
+**Stripe itself auto-disables** a destination that has been failing for days. If it does, it would
+silently convert the recoverable backlog into **permanent** loss *before* the 09-24 deadline, which
+would outrank everything else in this incident.
+
+**Checked against Stripe's public docs** (raw-markdown gate-bypass, §8 of the memory):
+
+- `docs.stripe.com/webhooks.md` — states retries run "**up to three days**… with an exponential back
+  off in live mode", and that disabling/deleting a destination prevents future retries. **No
+  automatic-disable trigger, threshold, or warning-email policy is described anywhere on the page.**
+- `docs.stripe.com/event-destinations.md` — the only disable mechanism documented is an explicit
+  user action: "*You can disable an event destination.*"
+- `docs.stripe.com/api/v2/core/event-destinations/object.md` — `status` is a two-value enum
+  (`enabled` / `disabled`) with **no documented automatic transition**; `status_details` exists but
+  its triggers are undocumented.
+
+**Conclusion: no documented Stripe auto-disable clock exists, so no new deadline can be added to
+§2.** `2026-09-24T18:23Z` remains the only Stripe deadline.
+
+**Stated honestly, because the distinction matters:** this is *absence of documentation*, **not**
+proof that Stripe never disables a chronically failing endpoint — `status_details` being undocumented
+is precisely where such a state would surface. It is not an all-clear; it is a closed lead. The
+owner-facing consequence is unchanged either way, and it is cheap insurance: **when you open the
+Stripe dashboard, glance at the endpoint's status before replaying.** If it shows `disabled`,
+re-enable it *first* — per the retry rule above, re-enabling before a retry is attempted preserves
+future retries.
+
+**Deliberately not re-derived** (settled sessions 13/18/19/23/14/15, and the memory says so): the
+cron asymmetry sweep is **closed**, payments (Stripe + Apple/RevenueCat), auth sessions, and the
+pause-policy lookup are all done. No new subsystem audit was invented — there was no evidence
+pointing at one, and the incident does not need one.
+
+**Not shipped, deliberately.** Everything parked in sessions 13–23 stays parked: TD-28/29/30/31/33/34
+(and TD-35's durable-queue fix, which is Level C — `monetize.ts` is on the security-sensitive list —
+and unverifiable against a database with no DNS record, hard rule 4). PR #8 held. `uptime.yml` stays
+muted (`.github/workflows/**` is minimum Level C; re-arming it unattended would override a deliberate
+human mute). `node scripts/verify-deploy.mjs` **not run** — its success criterion is a 200 `/health`,
+so it is unusable by construction during this outage, and this change is docs-only.
+
+**Channels.** `PushNotification` attempted as the summon's required closing step → **"Mobile push not
+sent (Remote Control inactive)"**, dark ~20 days, since *before* the outage began. **Sessions 1–24
+have paged nobody.** Per the completed channel inventory no new channel was hunted for, and the
+public-repo GitHub Issue stays rejected (it would publicly advertise a live outage and an open
+financial-webhook window on a production money system). `LOG.md` and the action sheet remain **pull,
+not push** — nothing in this entry reached anyone.
+
+**Secret check.** Per **TD-33** `npm run secrets:check` is structurally blind on the git-data-API push
+path, so a "clean" from it would be a no-op rather than a pass. Compensated as in sessions 18–23: the
+one changed file was scanned out-of-band for value-shaped credentials (prefix **plus** real-length
+tail, JWT triplets, `-----BEGIN` blocks) — **clean**. It is a doc, and no secret value was read,
+logged or committed at any point this session.
+
+**Working-tree note (TD-27).** `node scripts/ops/origin-drift.mjs` ran **first**, as the memory
+requires: local `HEAD d4c5395` vs origin `main 3baa1ef`, 7 files adrift. All reasoning and this edit
+were made against the **origin** copies in `.codex/origin-3baa1ef/`, and the commit went out through
+the GitHub git-data API with a full 40-char parent SHA. Branden's pre-existing uncommitted work
+(`scripts/ops/sweep-prompt.md`, `tests/invariants/ops-tooling.test.mjs`, untracked
+`scripts/ops/origin-drift.mjs`) was left untouched per hard rule 11.
+
+### For Branden
+
+1. **Unchanged, still the only fix, still Level D:** Supabase dashboard → project
+   `gsxoaurmsgqascxukony` → **Resume / Restore**. **28h04m** down. Read
+   `docs/operations/incidents/2026-09-21-supabase-project-unreachable.md`, not this log.
+2. **Before you click Resume:** Vercel → project **`sizzle`** (the API — naming is reversed) →
+   Settings → Cron Jobs → **`Disable Cron Jobs`** (TD-34, the 60-second trap).
+3. **After you restore:** app.revenuecat.com → Integrations → Webhooks → **Retry** each failed
+   `REFUND` / `CANCELLATION` since `2026-09-21T18:23Z` (§4 step 6). Their automatic retries expired
+   `2026-09-21T20:58Z` and restore will **not** replay them. Retrying is idempotent — retry freely.
+   Do it **before the next payout run**.
+4. **Money, unchanged:** **~44h** until Stripe's automatic retries stop being free
+   (`2026-09-24T18:23Z`). Do **not** disable the Stripe webhook endpoint to quiet alert noise. **New,
+   cheap:** when you're in there, check the endpoint isn't already showing `disabled` — if it is,
+   re-enable it *before* replaying, or the pending retries are lost.
+5. **Still the systemic fix:** a live App Store app moving real money should not run its production
+   database on a tier whose documented failure mode is administrative suspension. Paid-plan projects
+   cannot be paused at all. Billing is Level D — your call.
