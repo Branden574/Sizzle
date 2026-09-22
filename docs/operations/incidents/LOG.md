@@ -1943,3 +1943,83 @@ Control). You do **not** need to warn users about re-logging in — sessions sur
 The money self-heals on idempotent handlers if restore beats **`2026-09-24T18:23Z`**; after that it
 needs a deliberate List-Events replay. Then consider the **Pro plan** so a production money app is
 never pausable again.
+
+---
+
+## 2026-09-22 07:02 PDT (14:02Z) — SEV-1 day 2, summon #16: still down at 19h39m, nothing changed
+
+**Fired:** watchdog — API `503` `database-unreachable`. Same outage, continuous since
+`2026-09-21T18:23:07Z`. **Not a flap** — this is a persistently failing production outage, so
+the anti-flap path does not apply.
+
+**The action sheet is still the only page worth reading:**
+`docs/operations/incidents/2026-09-21-supabase-project-unreachable.md`. The diagnosis has been
+settled since session 3 and sixteen sessions have now confirmed it. I did not re-derive it, and
+this entry is deliberately short.
+
+### Re-verified (the documented cheap set, 14:02–14:10Z)
+
+| Probe | Result |
+|---|---|
+| `/health` | `503` `{"status":"degraded","problems":["database-unreachable"],"commit":"6e26ecf"}`, 7.40s |
+| `/feed/for-you?limit=3` | `500` `{"error":{"code":"db_error"}}` — real user path, live failure |
+| `getsizzle.app` | `200` — the static frontend is fine; it is the API's database that is gone |
+| DNS × 3 resolvers | `<ref>.supabase.co` and `db.<ref>.supabase.co` → **ENOTFOUND**; parent `supabase.co` → `76.76.21.21` **UP** |
+| `Uptime` workflow | still `disabled_manually`; last run `35638029940` is the 18:23:07Z failure; last success `35634994369` at 17:54:46Z |
+| `/health.commit` | `6e26ecf` = session 15's own docs push → **no owner action has landed** |
+
+Byte-identical to all fifteen prior sessions.
+
+### New this session — one clarification, and it narrows TD-21
+
+The local `supabase` MCP server **connected during this session**. Prior entries recorded it as
+"unavailable / permission-gated", which reads as a connection failure. Its tools still return
+permission-denied — as do the claude.ai Supabase connector and Gmail. That separates two things
+earlier entries conflated:
+
+- **Server connectivity is not the gate.** The MCP server attaches fine.
+- **The gate is the tool-permission layer** — and per TD-21 the PAT behind the connector is
+  *independently* revoked (401 direct from the Management API).
+
+So **a connector permission grant alone will not restore the agent's DB path.** It needs the
+grant *and* a PAT rotation — two separate owner actions, not one. Tried and denied this session:
+`list_projects`, `get_project_url`, Gmail `search_threads`. Paused-vs-billing-vs-deprovisioned
+remains unanswerable from inside a session; the dashboard or the ops inbox is still the only
+source that can answer it.
+
+### The money clock
+
+Stripe's automatic webhook retries expire **`2026-09-24T18:23Z`** — **52h21m of slack** as of
+this probe. Restore before it and the money self-heals on the idempotent handlers. Do **not**
+disable the Stripe webhook endpoint to quiet alert noise; that converts a fully recoverable
+backlog into permanent financial loss.
+
+### Not shipped, deliberately
+
+Nothing. No repo change can reach a hostname with no DNS record, so there is nothing to fix
+forward and nothing to roll back — the last *pre-outage* production deploy was 15 days old, and
+every deploy since is a prior session's own docs push. TD-28 and TD-29 stay parked (unverifiable
+against a dead DB, and any deploy perturbs the very signals being watched for recovery).
+`uptime.yml` stays muted — `.github/workflows/**` is minimum Level C, *and* re-arming it would
+override a deliberate human mute. `verify-deploy.mjs` is unusable by construction during a DB
+outage: its success criterion is a 200 `/health`. This change is docs-only and needs no deploy
+verification.
+
+### Alert path — still pull-only
+
+`PushNotification` re-tested live this session: **"Mobile push not sent (Remote Control
+inactive)"** — now ~19 days dead, still predating the outage. Sessions 1–16 have paged nobody.
+The §7 channel inventory is complete and unchanged; a GitHub Issue stays rejected (the repo is
+`PUBLIC` — verified again this session — and filing one would advertise a live outage and an open
+financial-webhook window). `LOG.md` and the action sheet remain **pull, not push**.
+
+### For Branden — THE ONE ACTION, unchanged for 19h39m
+
+Supabase dashboard → project `gsxoaurmsgqascxukony` → **Resume / Restore** (Level D — every agent
+DB path is closed). Read the action sheet, not this log. Expect **billing or a manual/platform
+action** rather than an inactivity pause (session 15 ruled inactivity out); if it is billing, fix
+the payment method *first* or the Resume will not hold. Your data is not on a deadline — the
+restore window is a year. After restore: run the **TD-29 backfill** for videos stranded by the
+finalizer's 6h window, then `gh workflow enable uptime.yml`, reconnect Remote Control, and
+consider the **Pro plan** so a production money app is never pausable again. **TD-21 needs two
+actions, not one** — a Supabase MCP permission grant *and* a PAT rotation.
