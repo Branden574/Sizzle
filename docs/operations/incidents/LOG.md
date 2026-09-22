@@ -2557,3 +2557,87 @@ Control inactive)"** — dark ~19 days, since before the outage began. Sessions 
 complete and every alternative (GitHub Issue on a PUBLIC repo, Gmail/Supabase connectors,
 `osascript`) was tried and ruled out in earlier sessions — stating that plainly rather than
 implying a notification landed.
+
+## SEV-1 watchdog summon #20 — 2026-09-22 18:14Z — condition unchanged at the 24-hour mark; re-verify only, by design
+
+**Nothing has changed.** This summon landed **61 minutes** after session 19 re-verified — exactly the
+watchdog's cooldown, re-firing on an unchanged condition. Per the action sheet's own instruction
+("the diagnosis is finished — read this, not the log"), this session re-verified the condition,
+refreshed the two decaying numbers on the sheet, and stopped. No new root-cause work was attempted
+and none was warranted.
+
+**Re-verification (18:14–18:20Z) — identical to sessions 1–19.**
+
+- **DNS, three resolvers agreeing** (system / `1.1.1.1` / `8.8.8.8`): `supabase.co` → **A 76.76.21.21**
+  with `CNAME ENODATA` (parent zone healthy), `gsxoaurmsgqascxukony.supabase.co` → **ENOTFOUND**,
+  `db.gsxoaurmsgqascxukony.supabase.co` → **ENOTFOUND**. Parent up + every per-project record gone =
+  the same account-level pause/deprovision, not a platform DNS fault. (Note for future sessions: the
+  probe must use `require('dns').promises.Resolver`; the callback-style `Resolver` throws
+  `ERR_INVALID_ARG_TYPE` under `await` and produces nine identical rows that look like a finding.)
+- **`/health` → 503** `{"status":"degraded","problems":["database-unreachable"]}`, probed twice
+  (18:14Z, 18:15Z), ~7.2 s each. `commit` `d797c5e` = origin `main` = session 19's own docs push — not
+  a rogue deploy.
+- **A real user path, not just liveness:** `GET /feed/for-you?limit=3` → **500**
+  `{"error":{"code":"db_error"}}` in 7.3 s. Live user-facing failure, not a probe artifact.
+- `getsizzle.app` → **200**. The static frontend is unaffected, as throughout.
+- `vercel ls sizzle`: newest production deployment **60 m** old, READY — session 19's docs push. The
+  hourly READY cadence remains these sessions' own log commits. No owner deploy; still no rollback
+  candidate (the last *pre-outage* prod deploy was 15 days old).
+- `gh api .../actions/workflows`: **`Uptime` = `disabled_manually`**. Its last run is still the
+  failure at **`2026-09-21T18:23:07Z`** (run `35638029940`), preceded by success at `17:54:46Z` —
+  the outage's start timestamp, unmoved.
+
+**The 24-hour mark passed during this session.** Start `2026-09-21T18:23:07Z` → **24h07m** as of
+18:30Z. Stripe's automatic-retry window (`2026-09-24T18:23Z`) now carries **~47h50m** of slack, down
+from 49h10m at session 19 — the free, zero-work money recovery is now inside two days. Still not a
+cliff: the dashboard `Resend` button runs to `2026-10-06` and the List Events API to `2026-10-21`.
+The action sheet's header and money-clock line were a session stale; **both were refreshed in this
+commit** (plus "nineteen"→"twenty" sessions) so the page Branden actually opens carries live numbers
+rather than numbers that quietly age into being wrong.
+
+**One re-test, recorded so it is neither repeated blindly nor silently dropped.** The ops inbox is
+still the single highest-value unknown in this incident: the Supabase email names *which* §1 branch
+applies (inactivity pause vs Fair Use / billing vs deprovisioned), and that is the one fact that
+changes what the owner does first. Connector permissions are **owner-settable and can change between
+sessions**, so `mcp__claude_ai_Gmail__search_threads` (`Supabase newer_than:3d`) was attempted
+**once**: *"Claude requested permissions to use … but you haven't granted it yet."* Unchanged.
+Calibration for future sessions: **once per day is proportionate** — one call against the incident's
+key unknown — but do not retry it within a session, and do not extend the probe to the Supabase
+connector, which earlier sessions proved is gated at the connector level (even `search_docs` is
+denied). The standing conclusion holds: **paused-vs-restricted-vs-deleted is unanswerable from
+inside an unattended session.**
+
+**Nothing shipped beyond docs; nothing new opened; no code change was in scope.** TD-28, TD-29,
+TD-30, TD-33 and TD-34 all stay parked for the reasons sessions 13–19 recorded (unverifiable against
+a dead DB, and a mid-SEV-1 API deploy to a money-adjacent media pipeline trades a documented,
+reversible problem for an undocumented risk). PR #8 stays held (TD-31). `uptime.yml` stays muted —
+`.github/workflows/**` is minimum Level C and re-arming it unattended would override a deliberate
+human mute. The cron/asymmetry sweep is **closed** (sessions 13/18/19): `finalize-videos` is the only
+cron with outage-outrun windows, no third one is hiding, and this session did not go looking for one.
+`node scripts/verify-deploy.mjs` was **not run** — its success criterion is a 200 `/health`, so it is
+unusable by construction during this outage, and this change is docs-only.
+
+**Secret check.** Per **TD-33**, `npm run secrets:check` is structurally blind on the git-data-API
+push path (it scans the index/working tree, not the `.codex/` blobs actually uploaded), so a "clean"
+from it would be a no-op rather than a pass. Compensated as in sessions 18–19: both changed files
+scanned out-of-band for value-shaped credentials (prefix **plus** real-length tail, JWT triplets,
+`-----BEGIN` blocks) — **clean**. Both are docs.
+
+### For Branden
+
+1. **Unchanged, still the only fix, still Level D:** Supabase dashboard → project
+   `gsxoaurmsgqascxukony` → **Resume / Restore**. **24h07m** down. Read
+   `docs/operations/incidents/2026-09-21-supabase-project-unreachable.md` — not this log.
+2. **Before you click Resume:** Vercel → project **`sizzle`** (the API — naming is reversed) →
+   Settings → Cron Jobs → **`Disable Cron Jobs`**. One **project-wide** button; Vercel has no
+   per-cron switch, so don't go hunting for one and conclude the step is impossible — that lands you
+   in the TD-34 trap, where the first cron tick after Resume flips every outage-stranded video to a
+   terminal `error` the finalizer refuses to re-poll.
+3. **Money:** **~47h50m** until Stripe's automatic retries stop being free. Do **not** disable the
+   Stripe webhook endpoint to quiet alert noise — Stripe prevents retries for a destination disabled
+   at retry time, which converts a fully recoverable backlog into **permanent** loss.
+
+**Alert path — still not delivered.** `PushNotification` was attempted at the end of this session:
+**"Mobile push not sent (Remote Control inactive)."** Dark ~19 days, since *before* the outage began.
+Sessions 1–20 have paged **nobody**. `LOG.md` and the action sheet remain **pull, not push** — no
+notification reached anyone, and this entry does not imply one did.
