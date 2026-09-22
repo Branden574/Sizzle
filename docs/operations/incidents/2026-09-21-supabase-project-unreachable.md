@@ -1,7 +1,7 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
 **Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
-(11:23 AM PDT Mon 09-21). **24h07m as of 2026-09-22 18:30Z** — re-verified by session 20.
+(11:23 AM PDT Mon 09-21). **24h54m as of 2026-09-22 19:17Z** — re-verified by session 21.
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
 
 > **🛑 READ §4 STEP 0 BEFORE YOU CLICK RESUME.** Session 18 found that the first
@@ -10,12 +10,12 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > re-poll** — which silently converts TD-29's prescribed backfill into a no-op and makes
 > its counting query return `0`. One dashboard toggle before Resume avoids the whole mess.
 
-> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — ~47h50m of slack left (§2).**
+> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — ~47h03m of slack left (§2).**
 > Restore before it and the money self-heals with zero manual work. Missing it is *not* a
 > cliff — manual replay stays open to `2026-10-06` (dashboard) / `2026-10-21` (API). There is
 > real time; this is urgent, not frantic.
 
-This page exists because twenty unattended watchdog sessions have now diagnosed the same
+This page exists because twenty-one unattended watchdog sessions have now diagnosed the same
 outage and appended well over 1,000 lines to `LOG.md`. The diagnosis is finished. This is
 the one-page action sheet. **Read this, not the log.**
 
@@ -288,6 +288,7 @@ and eleven prior sessions each recorded a piece of it without putting it togethe
 | GitHub Actions `Uptime` failure email | **The only channel ever proven to reach you — and it is muted.** `disabled_manually` since ~18:27Z, ~4 min after the first failing run. |
 | GitHub Issue | **Not usable.** `gh repo view` → `visibility: PUBLIC`. Filing one would publicly advertise a live outage *and* an open financial-webhook window on a production money system. Ruled out on purpose — don't re-propose it. |
 | Gmail / Supabase MCP connectors | Permission-gated unattended (connector-level; even `search_docs` is denied). |
+| **`telegram` plugin** (session 21) | **Unknown — worth 5 attended minutes.** A `telegram` plugin *is* installed (skills `telegram:access` / `telegram:configure`), which no session 1–20 had noticed. Both skills **fail to load** unattended, and the sandbox blocks reading their config, so this session could not tell unconfigured from broken. If it can be made to work it is the push channel this table otherwise says does not exist — and unlike `uptime.yml` it cannot be silenced by one click, and unlike `PushNotification` it does not depend on Remote Control. |
 | `LOG.md` + this page | The only channels carrying anything — but **pull, not push.** They require you to come and look. |
 
 **The reframe that matters.** Sessions 6–11 read the 4-minute mute as *"proof of awareness —

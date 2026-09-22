@@ -2641,3 +2641,67 @@ scanned out-of-band for value-shaped credentials (prefix **plus** real-length ta
 **"Mobile push not sent (Remote Control inactive)."** Dark ~19 days, since *before* the outage began.
 Sessions 1–20 have paged **nobody**. `LOG.md` and the action sheet remain **pull, not push** — no
 notification reached anyone, and this entry does not imply one did.
+
+## SEV-1 watchdog summon #21 — 2026-09-22 19:17Z — unchanged at 24h54m; re-verify only
+
+**Nothing has changed.** Third consecutive summon on the 61-minute cooldown re-firing against an
+unchanged condition (session 19 → 20 → 21). Per the action sheet, the diagnosis is finished; this
+session re-verified, added one small negative finding to the alert-path audit, and stopped.
+
+**Re-verification (19:17–19:20Z) — identical to sessions 1–20.** `gsxoaurmsgqascxukony.supabase.co`
+and `db.<ref>.supabase.co` → **ENOTFOUND**; parent `supabase.co` → **A 76.76.21.21** (healthy), the
+same account-level withdrawal. `/health` → **503** `{"status":"degraded","problems":["database-unreachable"]}`,
+probed twice (19:17Z, 19:18Z), ~7.2–7.6 s each; `commit 830a66d` = origin `main` = session 20's docs
+push, not a rogue deploy. `GET /feed/for-you?limit=3` → **500** `{"error":{"code":"db_error"}}` in
+7.6 s — live user-facing failure. `getsizzle.app` → **200** (static frontend unaffected). `Uptime` =
+**`disabled_manually`**, last run still the `2026-09-21T18:23:07Z` failure (`35638029940`) preceded by
+success at `17:54:46Z` — the outage start, unmoved.
+
+**Elapsed / money.** Start `2026-09-21T18:23:07Z` → **24h54m** at 19:17Z. Stripe's automatic-retry
+window (`2026-09-24T18:23Z`) carries **~47h03m** of slack — still free, zero-work recovery if restore
+beats it; `Resend` runs to `2026-10-06` and the List Events API to `2026-10-21`. Sheet header and
+money line refreshed in this commit.
+
+**One new negative finding for §7's alert-path audit — a candidate channel, ruled out for now.** No
+prior session had noticed that a **`telegram` plugin is installed** (skills `telegram:access` and
+`telegram:configure` are both listed in this session). If it worked it would be the push channel §7
+says does not exist. It does not: **both skills fail to load** (`Execute skill: telegram:access` /
+`telegram:configure` → error), and the sandbox blocks reading outside the repo, so this session could
+not determine whether it is merely unconfigured or broken. Recorded so (a) future sessions do not
+re-derive it — treat it like the Gmail probe, worth at most one attempt per day — and (b) Branden has
+a concrete lead worth 5 attended minutes, since a working Telegram page would close the §7 gap
+without depending on Remote Control or an un-muted `uptime.yml`.
+
+**Per-session channel re-tests, both unchanged.** Gmail (`mcp__claude_ai_Gmail__search_threads`,
+`Supabase after:2026/09/20`) → *"you haven't granted it yet"* — the ops inbox, which holds the email
+naming **which** §1 branch applies, remains the incident's highest-value unknown and is still
+unreachable. `PushNotification` → *"Mobile push not sent (Remote Control inactive)."* Dark ~20 days,
+since before the outage. **Sessions 1–21 have paged nobody.**
+
+**Nothing shipped beyond docs; nothing new opened; no code change in scope.** TD-28/29/30/33/34 stay
+parked and PR #8 (TD-31) stays held, for the reason sessions 13–20 recorded and this session
+re-affirmed rather than re-litigated: every one is unverifiable against a database with no DNS record
+(hard rule 4), and a mid-SEV-1 API deploy into the money-adjacent media pipeline trades a documented,
+reversible problem for an undocumented risk. `uptime.yml` stays muted — `.github/workflows/**` is
+minimum Level C and re-arming it would override a deliberate human mute. `verify-deploy.mjs` not run:
+its success criterion is a 200 `/health`, unusable by construction during this outage, and this change
+is docs-only.
+
+**Secret check.** Per **TD-33** `npm run secrets:check` is structurally blind on the git-data-API push
+path, so a "clean" from it would be a no-op. Compensated as in sessions 18–20: both changed files
+scanned out-of-band for value-shaped credentials (prefix **plus** real-length tail, JWT triplets,
+`-----BEGIN` blocks) — **clean**. Both are docs.
+
+### For Branden
+
+1. **Unchanged, still the only fix, still Level D:** Supabase dashboard → project
+   `gsxoaurmsgqascxukony` → **Resume / Restore**. **24h54m** down. Read
+   `docs/operations/incidents/2026-09-21-supabase-project-unreachable.md` — not this log.
+2. **Before you click Resume:** Vercel → project **`sizzle`** (the API — naming is reversed) →
+   Settings → Cron Jobs → **`Disable Cron Jobs`** (one project-wide button; there is no per-cron
+   switch). Skipping it is the TD-34 trap.
+3. **Money:** **~47h03m** until Stripe's automatic retries stop being free. Do **not** disable the
+   Stripe webhook endpoint to quiet alert noise — that converts a recoverable backlog into permanent
+   loss.
+4. **New, optional, 5 minutes:** check whether the installed `telegram` plugin can be made to work
+   (see above). It is the only un-audited push channel left, and §7 is why this outage is on hour 25.
