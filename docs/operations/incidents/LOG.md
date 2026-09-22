@@ -2325,3 +2325,113 @@ now dark roughly **19 days**, i.e. since before the outage began. So this sweep,
 1–17, has **paged nobody**; `LOG.md` and the action sheet remain pull-not-push. This is
 independent of TD-32 but points the same way: neither the maintenance job's silence nor its
 findings have a working path to a human.
+
+## 2026-09-22 — watchdog summon #18, Supabase SEV-1 still OPEN (21h52m). One new finding: TD-34, the only pre-Resume action in this incident
+
+**What fired.** `API degraded (503): database-unreachable`, watchdog 09:04:15 PDT. Same
+condition as sessions 1–17; the 60-minute cooldown re-firing on an unchanged state, exactly as
+the false-alarm memory predicts. **Not a false alarm** — a 503 with a JSON body is the real
+class, and it reproduced on every probe below.
+
+**State re-verified, unchanged.** `/health` → 503 `{"status":"degraded","problems":["database-unreachable"]}`,
+`commit 213e5c5` (= origin HEAD, prior sessions' docs pushes, no rogue deploy). DNS probe
+(`.codex/dns-probe.mjs`) across **three** resolvers agrees: `supabase.co` → `A=76.76.21.21` /
+`CNAME=ENODATA` (parent zone healthy) while both `gsxoaurmsgqascxukony.supabase.co` and
+`db.gsxoaurmsgqascxukony.supabase.co` → **`ENOTFOUND`** on system, `1.1.1.1` and `8.8.8.8`.
+Still project-level DNS withdrawal, still Level D. User-facing proof, not just the probe
+endpoint: `GET /feed/for-you?limit=3` → **500 `{"error":{"code":"db_error"}}`**.
+
+**Both gated paths re-tested, both still closed** (one call each, not a bypass hunt):
+`mcp__supabase__get_advisors` → identical `Unauthorized … SUPABASE_ACCESS_TOKEN` (TD-21, PAT
+still revoked); `mcp__claude_ai_Gmail__search_threads` for Supabase mail in the last 14 days →
+**permission-denied at the connector**. That second one is worth stating because it is the
+cheapest possible answer to §1's open question — *which* dashboard branch applies — and it
+remains unavailable. The ops inbox still almost certainly holds the email.
+
+### The new finding — TD-34, and it changes the restore procedure
+
+Session 18's question was **"what happens in the first 60 seconds *after* Branden clicks
+Resume?"** — the one thing 17 sessions had not audited, since all of them (correctly) focused on
+why the DB was down. It paid, and the finding has a **pre-Resume** action, which nothing else in
+this incident does.
+
+TD-29 (session 13) established that `finalize-videos`' rescue SELECT is floored at
+`created_at >= now-6h` (`internal.ts:61-74`), so an outage longer than 6h permanently orphans
+whatever was mid-transcode, and prescribed: count them, then re-drive those ids through the
+finalizer. **Both halves of that remedy are defeated by code in the same handler.** The two
+*abandon* UPDATEs that follow the SELECT carry **no lower `created_at` bound** and run
+unconditionally, outside the `if (pending.length)` guard — `pending`/`uploading` older than 2h
+and `processing` older than 6h are flipped to `status='error'`. After a >6h outage the rescue
+and abandon windows no longer overlap, so the whole stranded cohort falls *only* into abandon,
+and the cron runs **every minute** (`vercel.json:10-11`). Therefore, within 60s of the DB
+returning:
+
+1. **`videoFinalize.ts:213` short-circuits on `ready`/`error`** — so re-driving those ids
+   through the finalizer, TD-29's literal remedy, does **nothing**. Silent no-op.
+2. **TD-29's counting query returns `0`**, because it filters on the three statuses that were
+   just overwritten. It reads as "nothing was stranded" — closing the item for the wrong reason.
+3. **Recoverable content is probably being mislabelled.** Cloudflare was up the entire outage,
+   so much of that cohort very likely finished transcoding and sits `ready` on the provider.
+   Only our row is wrong.
+
+Worth being precise about what this is *not*: in normal operation the design is sound — ">6h in
+`processing` = genuinely stuck" is a reasonable inference. It is **outage duration** that
+falsifies the premise, which makes this the same class of defect as TD-29 rather than a new one,
+and the second time in this incident that a hardcoded recovery window has been outrun.
+
+**It is reversible, and I want to be careful not to overstate it.** The UPDATE sets `status`
+only, so `provider_uid` survives. `video_assets` has no `updated_at`
+(`20260619120000_init_schema.sql:29-40`), so the flip leaves no timestamp — but the abandon path
+never writes `last_polled_at` (`20260717002042_…:14`), which stays frozen pre-outage and is the
+reconstruction handle. And since **no rows could be created while the DB was unreachable**, the
+cohort is exactly the non-ready assets from the ~6h before 18:23:07Z — a tight, checkable range.
+So: a procedure trap that wastes the clean capture and can produce a false all-clear, not
+permanent data loss. **Volume is unknown** and stays unknown — counting needs the DB.
+
+Written up as **§4 step 0** of the action sheet (both queries, plus the
+`status='processing', last_polled_at=null` reset required to clear the terminal short-circuit),
+flagged at the top of the page, added as step 0 of §1, and cross-referenced from §6. Filed as
+**TD-34**.
+
+### Not shipped, deliberately — unchanged from sessions 8–17
+
+Nothing executable. The code fix (floor the abandon UPDATEs symmetric with the rescue SELECT)
+is Level B and touches `internal.ts`, which `safety:diff` does not classify as
+security-sensitive — but **any API deploy is unverifiable while `/health` returns 503**
+(CLAUDE.md hard rule 4), so it stays parked exactly like TD-28/29/30/31/33. `verify-deploy.mjs`
+was **not** run: its success criterion is a 200 `/health`, so it is unusable by construction
+during this outage, and this change is docs-only anyway. `uptime.yml` stays muted
+(`.github/workflows/**` is Level C and re-arming it would override a deliberate human mute).
+No rollback: the last pre-outage production deploy was 15 days old, so a bad deploy was never a
+candidate. The owner-facing half of TD-34 needs no deploy at all, which is precisely why it was
+worth filing mid-outage rather than after restore.
+
+**Secret check.** Per TD-33, `npm run secrets:check` is structurally blind on the git-data API
+push path (it scans the index/working tree, not the `.codex/` blobs actually uploaded), so its
+"clean" would be a no-op rather than a pass. Compensated the same way the 09-22 sweep did: the
+three changed files were scanned out-of-band for value-shaped credentials (prefix **plus**
+real-length tail, plus JWT and `-----BEGIN` blocks) — clean. All three are docs.
+
+### For Branden
+
+1. **Unchanged and still the only thing that matters:** Supabase dashboard → project
+   `gsxoaurmsgqascxukony` → **Resume / Restore** (Level D). ~22h down. Expect billing/Fair Use
+   rather than an inactivity pause — read the action sheet, not this log.
+2. **NEW, and it must happen BEFORE you click Resume:** Vercel → project **`sizzle`** (the API —
+   naming is reversed) → Settings → Cron Jobs → **disable `/internal/finalize-videos`**. Ten
+   seconds, no deploy. Then Resume, capture the stranded video list, re-enable. If you forget,
+   nothing is lost — §4 step 0 has the reconstruction query — but the clean capture is gone and
+   the old counting query will lie to you with a reassuring `0`.
+3. **After restore, in order:** merge PR #8 as the first post-incident deploy (TD-31) → run the
+   TD-29/TD-34 video capture → `gh workflow enable uptime.yml` → reconnect Remote Control so
+   `PushNotification` works → grep `~/Library/Logs/sizzle-sweep.log` for `paused`/`ALERT` across
+   09-07…09-20 (TD-32) → consider **Pro** so a production money app is never pausable.
+
+### Alert path — still not delivered
+
+`PushNotification` attempted at the end of this session; it returned **"Mobile push not sent
+(Remote Control inactive)"** — dark ~19 days, since before the outage began. Sessions 1–18 have
+now paged **nobody**. `LOG.md` and the action sheet remain **pull, not push**, and the channel
+inventory is complete — every alternative (GitHub Issue on a PUBLIC repo, Gmail/Supabase
+connectors, `osascript`) has been tried and ruled out in earlier sessions. Stating it plainly
+rather than implying a notification landed.

@@ -1,10 +1,16 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
 **Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
-(11:23 AM PDT Mon 09-21). **20h44m as of 2026-09-22 15:07Z** — re-verified by session 17.
+(11:23 AM PDT Mon 09-21). **21h52m as of 2026-09-22 16:15Z** — re-verified by session 18.
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
 
-> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — 51h16m of slack left (§2).**
+> **🛑 READ §4 STEP 0 BEFORE YOU CLICK RESUME.** Session 18 found that the first
+> `finalize-videos` cron tick after restore (within **60 seconds**) mass-flips every
+> outage-stranded video to a **terminal `error` state that the finalizer refuses to
+> re-poll** — which silently converts TD-29's prescribed backfill into a no-op and makes
+> its counting query return `0`. One dashboard toggle before Resume avoids the whole mess.
+
+> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — 50h08m of slack left (§2).**
 > Restore before it and the money self-heals with zero manual work. Missing it is *not* a
 > cliff — manual replay stays open to `2026-10-06` (dashboard) / `2026-10-21` (API). There is
 > real time; this is urgent, not frantic.
@@ -17,6 +23,10 @@ one-page action sheet. **Read this, not the log.**
 
 ## 1. What you have to do (Level D — owner only, ~2 minutes)
 
+0. **First, disable the `finalize-videos` cron** — Vercel → project **`sizzle`** (the API;
+   naming is reversed) → Settings → Cron Jobs → disable `/internal/finalize-videos`. No
+   deploy needed. This is a 10-second toggle that buys you an unhurried capture window;
+   see §4 step 0 for why it matters and what to do if you forget.
 1. Open the [Supabase dashboard](https://supabase.com/dashboard) → org → project `gsxoaurmsgqascxukony`.
 2. The dashboard tells you *why* it stopped. Act per the branch below.
 3. **Restore the existing project. Never create a new one** — see §3.
@@ -127,17 +137,69 @@ curl -s "https://sizzle-chi.vercel.app/feed/for-you?limit=3"
 
 # 4. Re-arm the pager (it is currently disabled_manually)
 gh workflow enable uptime.yml
-# 5. TD-29 — videos stranded by the finalizer's 6h window (NEW, found session 13).
-#    The outage outran `finalize-videos`' lookback floor (internal.ts:61-74 filters
-#    created_at >= now-6h), so any asset left pending/uploading/processing at
-#    2026-09-21T18:23Z will NEVER be picked up again — Stream webhooks are skipped and
-#    the client poll is long gone. Nothing self-heals these. Count them first:
-#      select id, status, created_at from video_assets
-#       where provider='cloudflare' and status in ('pending','uploading','processing')
-#         and created_at < now() - interval '6 hours';
-#    If the count is > 0, re-drive those ids through the finalizer once (a one-off
-#    backfill). Not time-critical — the rows persist — but it never fixes itself.
+# 5. TD-29/TD-34 — videos stranded by the outage. SEE STEP 0 BELOW FIRST: if the
+#    finalize-videos cron was running when you resumed, the counting query returns 0
+#    for the wrong reason and you need the TD-34 reconstruction query instead.
 ```
+
+### Step 0 (do this BEFORE Resume) — TD-34, the 60-second trap
+
+**Found session 18 by reading the cron rather than trusting TD-29's write-up.** TD-29 said
+stranded assets "will never be picked up again." That is true but incomplete, and the missing
+half inverts the recovery procedure:
+
+`finalize-videos` runs **every minute** (`apps/api/vercel.json:10-11`). Its *rescue* SELECT is
+floored at `created_at >= now-6h` (`internal.ts:61-74`) — that is TD-29. But the two *abandon*
+UPDATEs immediately after it have **no lower bound at all** and run unconditionally, outside the
+`if (pending.length)` block:
+
+```js
+.in('status',['pending','uploading']).lt('created_at', twoHoursAgo).update({status:'error'})
+.eq('status','processing')      .lt('created_at', sixHoursAgo).update({status:'error'})
+```
+
+After a >6h outage the two windows no longer overlap, so every stranded asset falls *only* in
+the abandon window. Consequences, in order of severity:
+
+1. **`error` is terminal and the finalizer refuses to re-poll it** — `videoFinalize.ts:213`
+   returns immediately for `ready`/`error`. So TD-29's prescribed remedy ("re-drive those ids
+   through the finalizer once") becomes a **silent no-op** once the flip has happened.
+2. **The old counting query returns `0`**, because it filters on
+   `status in ('pending','uploading','processing')` — all of which have just been overwritten.
+   It reads as "nothing was stranded," which would close TD-29 for exactly the wrong reason.
+3. **The flip is probably destroying recoverable content.** Cloudflare was up for the whole
+   outage, so assets that were `processing` at 18:23Z very likely finished transcoding and sit
+   `ready` on Cloudflare right now. Only our record of them is wrong.
+
+**Good news: it is reversible, and the rows are not lost.** The UPDATE sets `status` only, so
+`provider_uid` survives — and `video_assets` has **no `updated_at`** (`init_schema.sql:29-40`),
+but `last_polled_at` (`20260717002042_…`) is never touched by the abandon path, so it stays
+frozen at its last pre-outage value. That is the reconstruction handle.
+
+```sql
+-- IF YOU DISABLED THE CRON FIRST: the original TD-29 query is still correct.
+select id, status, created_at, provider_uid from video_assets
+ where provider='cloudflare' and status in ('pending','uploading','processing');
+
+-- IF THE CRON ALREADY RAN (status was overwritten to 'error'): reconstruct the cohort.
+-- No rows could be CREATED during the outage (DB unreachable), so the stranded set is
+-- exactly the non-ready assets from the ~6h before it started.
+select id, created_at, last_polled_at, provider_uid from video_assets
+ where provider='cloudflare' and status='error' and provider_uid is not null
+   and created_at   >= timestamptz '2026-09-21T12:23:07Z'
+   and created_at   <  timestamptz '2026-09-21T18:23:07Z'
+   and (last_polled_at is null or last_polled_at < timestamptz '2026-09-21T18:23:07Z');
+
+-- To actually recover them you must clear the terminal state first, or the finalizer
+-- short-circuits at videoFinalize.ts:213 and does nothing. Check each uid against
+-- Cloudflare before flipping, then for the ones CF reports ready:
+--   update video_assets set status='processing', last_polled_at=null where id in (...);
+-- and let the (re-enabled) cron pick them up.
+```
+
+Re-enable the cron once you have the list. **Not time-critical** — the rows persist
+indefinitely — but it does not fix itself, and it gets harder to identify the longer normal
+traffic accumulates around it.
 
 Then reconcile money: compare Stripe's dashboard events since `2026-09-21T17:54:46Z` (last
 known-good) against the ledger. Handlers are idempotent — **let Stripe's retries redeliver;
@@ -177,6 +239,13 @@ never retry charges manually.**
   outage longer than 6h permanently orphans whatever was mid-transcode. Needs a one-off
   backfill (§4 step 5) **and** a resilience fix so duration alone cannot strand user content.
   Level B, but deliberately not shipped mid-outage — unverifiable against a dead DB.
+- **TD-34 (NEW, session 18)** — the same cron's *abandon* UPDATEs have **no lower
+  `created_at` bound**, so the first tick after restore mass-flips the stranded cohort to
+  terminal `error`, which `videoFinalize.ts:213` then refuses to re-poll. This makes TD-29's
+  own remedy a no-op and its counting query return `0`. **Fully written up as §4 step 0 —
+  it is the one finding in this incident with a pre-Resume action.** The code fix (floor the
+  abandon windows, or exempt a known outage interval) is Level B and also not shipped
+  mid-outage, for the same unverifiability reason.
 - **Systemic (recommend, Level C):** a live App Store app runs its production database on a
   **pausable** tier with **no managed backups** (free tier self-serves `db dump`). Pro
   projects cannot be paused. *"Upgrade to Pro" is the real control here* — it removes both
