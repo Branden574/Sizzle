@@ -1769,3 +1769,82 @@ list: run the **TD-29 backfill** for video assets stranded by the finalizer's 6h
 re-arm the pager (`gh workflow enable uptime.yml` + reconnect Remote Control). `PushNotification`
 is still dead ("Remote Control inactive", 18+ days), so this file remains a **pull** channel — no
 one has been paged.
+
+## Incident 2026-09-22 04:58 PDT — watchdog summon #14, same Supabase outage — NEW: user sessions DO survive restore (evidence); a new alert channel was tried and is also blocked
+
+**Condition unchanged, re-verified in the documented cheap set (~8 calls).** `/health` three
+times (`11:58:04Z` watchdog, `11:58:20Z`, `12:01:20Z`) — all **503
+`problems:["database-unreachable"]`**, `commit 38d4fcb`, every DB-derived gauge (`cronAges`,
+`stuckVideoBacklog`, `parkedMediaDeletions`) `null`. `GET /feed/for-you?limit=3` → **500
+`{"error":{"code":"db_error"}}`** in 7.24s — real user-facing failure, not a probe artifact.
+Triple-resolver DNS byte-identical to all thirteen prior sessions: `supabase.co` →
+`A=76.76.21.21`/`CNAME=ENODATA`, while `gsxoaurmsgqascxukony.supabase.co` **and**
+`db.gsxoaurmsgqascxukony.supabase.co` → `ENOTFOUND` on system + `1.1.1.1` + `8.8.8.8`.
+Origin head `38d4fcb` = session 13's own TD-29 commit and `/health.commit` agrees, so **no owner
+action has landed**; `Uptime` still `disabled_manually` (`gh workflow list --all`). The local
+`supabase` MCP was re-tested once (`get_project_url`) and is still **permission-gated**, so the
+paused-vs-deleted question remains unanswerable from here. **Duration 17h38m** as of `12:01:20Z`.
+**Stripe auto-retry slack 54h22m** (expires `2026-09-24T18:23Z`). No 14th diagnosis — the root
+cause is settled in `2026-09-21-supabase-project-unreachable.md`.
+
+### NEW — auth sessions survive the outage; nobody has to log back in
+
+Session 13's transferable lesson was *"during a long outage, look for hardcoded recovery windows
+the outage has outrun."* It audited the five crons. **The other thing with a clock on it is the
+auth session**, and nobody had checked it. If the Supabase Auth host is NXDOMAIN, every
+`/token?grant_type=refresh_token` call fails; the natural worry is that access tokens (1h) expire,
+refresh fails, clients clear the session, and **every user on the platform is silently logged out**
+— which would turn restore from "everything resumes" into a forced re-login for the entire user
+base, OAuth round-trip included. **Verified false, at source.**
+
+- **App code never signs out on failure.** `signOut` has exactly three callers, all explicit user
+  actions — `AppSettingsSheet.tsx:329,413`, `BannedScreen.tsx:54`, `PasscodeLock.tsx:170`. There is
+  no 401/5xx interceptor in `apps/web/src/lib/api.ts` or `lib/supabase.ts` that clears the session.
+- **The library preserves it too.** `@supabase/auth-js` **2.108.2** (`persistSession` +
+  `autoRefreshToken: true`, `lib/supabase.ts:23`). In `GoTrueClient.js:4158`, `_removeSession()` on a
+  failed refresh is guarded by `if (!isAuthRetryableFetchError(error))`. A DNS failure is not a fetch
+  `Response`, so `lib/fetch.js:37-38` wraps it as **`AuthRetryableFetchError`** — the guard is false
+  and the session is **not** removed. `_recoverAndRefresh` (`:3995-4011`) explicitly delegates to
+  that single source of truth rather than second-guessing it. The 500/503 path is covered too:
+  `NETWORK_ERROR_CODES` (`fetch.js:32`) classifies 500–530 as retryable *"infrastructure errors
+  [that] should not cause session invalidation."*
+
+So stored sessions stay on-device through an outage of any length, and the first successful refresh
+after restore resumes them. **Restore is a clean no-op for auth** — the opposite of TD-29, and worth
+knowing before anyone plans a comms message about re-logging-in. *Honest limit:* this covers the
+client. A server-side **refresh-token inactivity timeout**, if one is configured in the project's
+Auth settings, is dashboard state I cannot read — if set shorter than the outage it would override
+this. Default Supabase has none, but do not treat that as verified.
+
+### The alert path: one new channel tried, also blocked
+
+`PushNotification` re-tested live → *"Mobile push not sent (Remote Control inactive)"* — **19 days
+dead**, still predating the outage, so sessions 1–14 have paged nobody. §7's finding holds.
+
+**New this session:** since these sessions run on Branden's own Mac, a native macOS banner via
+`osascript -e 'display notification …'` is the direct equivalent of the dead desktop-notification
+path and had never been tried. **It is sandbox-gated** (*"This command requires approval"*).
+Recorded so session 15 does not spend a call rediscovering it — the channel inventory in §7 is now
+complete and `LOG.md` + the action sheet remain **pull-only**.
+
+### Not shipped, deliberately
+
+No code change: nothing in the repo can reach a hostname with no DNS record, so there is nothing to
+fix forward and nothing to roll back (the API's last prod deploys are prior sessions' own docs-only
+log pushes, not a bad release). TD-28 and TD-29 both stay parked — unverifiable against a dead DB,
+and any deploy perturbs the very signals being watched for recovery. `uptime.yml` stays muted:
+`.github/workflows/**` is minimum Level C *and* re-arming it would override a deliberate human mute.
+`verify-deploy.mjs` remains unusable by construction during a DB outage — its success criterion is a
+200 `/health`. This change is docs-only and needs no deploy verification.
+
+### For Branden — THE ONE ACTION, unchanged for 17h38m
+
+Supabase dashboard → project `gsxoaurmsgqascxukony` → **Restore** (Level D — every agent DB path is
+closed: the TD-21 PAT is revoked, both Supabase MCP paths and Gmail are connector-gated). Read
+`docs/operations/incidents/2026-09-21-supabase-project-unreachable.md` first — one page, and it tells
+you which branch you are in. The ops inbox almost certainly holds the Supabase mail from
+~`2026-09-21 18:00Z` naming the pause reason, which decides Resume vs fix-billing vs call-support.
+**After restore:** run the **TD-29 backfill** for video assets stranded by the finalizer's 6h window,
+then re-arm the pager (`gh workflow enable uptime.yml` + reconnect Remote Control). You do **not**
+need to warn users about re-logging in — sessions survive (above). The money self-heals on idempotent
+handlers if restore beats **`2026-09-24T18:23Z`**; after that it needs a deliberate List-Events replay.
