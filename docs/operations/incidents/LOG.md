@@ -3113,3 +3113,79 @@ Unchanged from session 24 — re-stated because nothing here self-heals:
    is administrative suspension, and the alerting layer that should have caught it has no
    working push path (§7). Upgrading the plan and re-arming one alert channel are both your
    call, and together they are the difference between 2 minutes and 29 hours.
+
+## 2026-09-22 — duplicate session on summon #25's firing (session 26): SEV-1 unchanged at 29h20m
+
+**Short by design.** This session was re-invoked on the **same watchdog payload session 25
+already worked** — fired `16:25:06 PDT`, `/health` body carrying commit `34493fb`. Session 25
+diagnosed nothing new, logged it, and pushed `e333cfb`. So this entry records an independent
+re-verification and nothing else. The artifact that matters is still the action sheet
+(`2026-09-21-supabase-project-unreachable.md`), not this log.
+
+**Re-verified independently — unchanged, hour 29.**
+
+| probe | time (PDT) | result |
+|---|---|---|
+| `/health` | 16:35:54 | **503** `database-unreachable`, 8.5s, commit `e333cfb` |
+| `/feed/for-you?limit=3` | 16:41:41 | **500** `{"error":{"code":"db_error"}}`, 8.2s |
+| `/health` | 16:42:18 | **503** `database-unreachable`, 7.4s, commit `e333cfb` |
+| `getsizzle.app` | 16:42:26 | **200**, 0.75s |
+
+DNS unchanged and still unambiguous across three resolvers (system · 1.1.1.1 · 8.8.8.8):
+`supabase.co` → **A 76.76.21.21** (parent zone healthy), while `gsxoaurmsgqascxukony.supabase.co`
+and `db.<ref>.supabase.co` → **ENOTFOUND** on every resolver (one `ETIMEOUT` on 8.8.8.8's A
+lookup for `<ref>`, same NXDOMAIN class — CNAME for the same name was ENOTFOUND there too).
+Project-level record withdrawal, exactly as sessions 1–25 recorded. Multi-second stalls on both
+API probes are the DB-connect timeout, not an overloaded DB.
+
+Two things that fall out for free and are worth stating because they close doubts rather than
+open questions: `/health` now serves **`e333cfb`**, so session 25's docs push deployed and the
+API build/deploy path is healthy — this failure reproduces on a brand-new build with freshly
+injected env vars, which kills "stale artifact" and "env var never picked up". And
+`getsizzle.app` 200 while `/feed/for-you` 500s is the honest user-facing shape: the shell loads,
+every data path behind it fails.
+
+**Nothing shipped but this entry, and nothing was invented to ship.** Sessions 13/18/19 closed
+the cron-window sweep, session 23 closed payments, session 14 closed auth sessions, session 15
+closed the pause policy, session 24 closed the Stripe auto-disable question, session 25 closed
+the telegram lead. TD-28/29/30/31/33/34/35 all stay parked for the same reason: unverifiable
+against a database with no DNS record (hard rule 4). `uptime.yml` stays muted
+(`.github/workflows/**` ≥ Level C, and re-arming it would override a deliberate human mute).
+`verify-deploy.mjs` **not run** — it asserts a 200 `/health`, so it is unusable by construction
+during this outage, and this change is docs-only. No rollback: every prod deploy is READY and
+the fault is outside Vercel entirely.
+
+**Secret check.** Per **TD-33** `npm run secrets:check` is structurally blind on the
+git-data-API push path. Compensated as in sessions 18–25: the single changed file (this log) was
+scanned out-of-band for value-shaped credentials (prefix **plus** real-length tail, JWT
+triplets, `-----BEGIN`) — **clean**. Docs only; no secret value read, logged or committed.
+
+**Working-tree note (TD-27).** `origin-drift.mjs` ran **first**: local `HEAD d4c5395` vs origin
+`main e333cfb`, 7 files adrift — local `LOG.md` is **427** lines against origin's **3,115**, so
+appending to the working copy would have destroyed ~2,700 lines of this incident's history. This
+entry was built on the origin copy in `.codex/origin-e333cfb/` and pushed through the GitHub
+git-data API. Branden's uncommitted work (`sweep-prompt.md`,
+`tests/invariants/ops-tooling.test.mjs`, untracked `scripts/ops/origin-drift.mjs`) untouched per
+hard rule 11.
+
+### For Branden
+
+Unchanged from sessions 24–25. Re-stated only because none of it self-heals:
+
+1. **The only fix, Level D:** Supabase dashboard → project `gsxoaurmsgqascxukony` →
+   **Resume / Restore**. **29h20m** down. Read the action sheet, not this log.
+2. **Before Resume:** Vercel → project **`sizzle`** (the API — naming is reversed) → Settings →
+   Cron Jobs → **`Disable Cron Jobs`** (TD-34, the 60-second trap that would flip the whole
+   stranded video cohort to `status='error'` and make TD-29's backfill a silent no-op).
+3. **After restore:** app.revenuecat.com → Integrations → Webhooks → **Retry** each failed
+   `REFUND` / `CANCELLATION` since `2026-09-21T18:23Z`. Their auto-retries expired
+   `2026-09-21T20:58Z` (**26h44m** ago) and restore will **not** replay them. Idempotent — retry
+   freely, and do it **before the next payout run**.
+4. **Stripe:** **~42h40m** of auto-retry slack left (`2026-09-24T18:23Z`). Do **not** disable the
+   endpoint; check it isn't already showing `disabled` before replaying.
+5. **The one that prevents a session 27:** the free tier's documented failure mode is
+   administrative suspension, and the alerting layer that should have caught it has no working
+   push path. `PushNotification` was attempted again as this session's closing step and again
+   returned **Remote Control inactive** (~20 days dark, since *before* the outage) — **sessions
+   1–26 have paged nobody.** Upgrading the plan and re-arming one alert channel are both your
+   call, and together they are the difference between 2 minutes and 29 hours.
