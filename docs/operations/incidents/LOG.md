@@ -2158,3 +2158,159 @@ is now known to be recoverable via Dashboard `Resend` through **2026-10-06** and
 cliff. After restore: TD-29 video backfill, then `gh workflow enable uptime.yml`, reconnect
 Remote Control, and consider **Pro** so a production money app is never pausable again. TD-21
 needs **two** owner actions — a Supabase MCP permission grant *and* a PAT rotation.
+
+## Daily sweep 2026-09-22 — first completed sweep since 09-06 (14 days dark, new TD-32); prod still down (SEV-1 not re-diagnosed); the 12-day-untriaged security PR triaged
+
+**This is the scheduled maintenance sweep, not a watchdog summon** — launchd
+`com.sizzle.daily-sweep` fired its normal 08:13 PDT slot. It landed in the middle of the open
+Supabase SEV-1, so this entry deliberately does **not** re-derive that outage: the diagnosis is
+finished and lives in `docs/operations/incidents/2026-09-21-supabase-project-unreachable.md`.
+Read the action sheet, not this. What follows is the sweep checklist and only what was new in it.
+
+### Step 0 — origin drift (TD-27): drifted, and the workaround earned its keep
+
+`scripts/ops/origin-drift.mjs` exited 3 — local `d4c5395` vs origin `62ec867`, 7 files differing.
+Every doc edit below, and the `npm audit`, was therefore built on the **origin** copies in
+`.codex/origin-62ec867/` rather than the working tree. The local `package-lock.json` genuinely
+differs from origin's, so auditing the working copy would have produced wrong advisory output —
+precisely the failure mode TD-27 exists to prevent. Also confirmed that the three paths
+`git status` reports as locally modified/untracked (`scripts/ops/origin-drift.mjs`,
+`scripts/ops/sweep-prompt.md`, `tests/invariants/ops-tooling.test.mjs`) are **byte-identical to
+origin's copies** — already-landed work that local git cannot see, so there was nothing to
+preserve and nothing to re-commit.
+
+### 1. Production health — still down, unchanged
+
+`/health` → 503, `status:"degraded"`, `problems:["database-unreachable"]`, with `cronAges`,
+`stuckVideoBacklog` and `parkedMediaDeletions` all `null` (each needs the DB).
+`getsizzle.app` → 200 in 0.40s; the frontend is fine, it is the database that is gone.
+DNS re-probed for calibration rather than assumed: `gsxoaurmsgqascxukony.supabase.co` **and**
+`db.gsxoaurmsgqascxukony.supabase.co` are both `ENOTFOUND` while `supabase.co` resolves
+(`76.76.21.21`) and `getsizzle.app` resolves — the same project-level DNS withdrawal sessions
+1–17 established, **not** the host-side blip class. `/health.commit` is `62ec867`, still a
+session's own docs push, so no owner action has landed.
+
+### 2. CI — green
+
+`gh run list --branch main --limit 5`: five consecutive `success` runs, all of them SEV-1
+sessions' docs pushes. Nothing to investigate.
+
+### 3. Dependency PRs — where the real work of this sweep was
+
+Three open, and **PR #8 had never been triaged by anyone.** It was opened 2026-09-10 — after the
+last completed sweep (09-06) — and every session since 09-21 has been a watchdog summon rather
+than a sweep, so it sat for 12 days. That gap is itself now TD-32, below.
+
+- **PR #8 — `hono` 4.13.0 → 4.13.5.** CI-green patch bump that clears three advisories.
+  Commented with a full reachability triage and **held for owner merge**; filed as TD-31. Two
+  reasons it is not an unattended merge, the first decisive: (a) merging deploys the API, and the
+  sweep's own ship rule requires `scripts/verify-deploy.mjs` afterwards, whose success criterion
+  is a 200 `/health` — which returns 503 `database-unreachable` regardless of what this bump
+  does, making the change **unverifiable by construction** (hard rule 4); (b) precedent —
+  TD-2 / `autonomy-audit.md:34` classified the prior hono bump as "owner-authorized deploy
+  (money-path dep)" because hono is mounted app-wide and carries the Stripe webhook and auth
+  middleware, which is more specific than the generic "patch + not payment/auth ⇒ merge" lane.
+- **PR #6** (esbuild + grouped vite) and **PR #3** (`@hono/node-server` 2.0.10) — unchanged and
+  already triaged under TD-18, so no duplicate comments were posted. #6 is the head of the
+  Vite 5→8 major queue and needs a local build plus an iOS-Simulator smoke; #3 has carried no
+  security driver since TD-19 closed.
+
+### 4. `npm audit` (against origin's lockfile) — 3 advisories, one genuinely new
+
+`esbuild` MODERATE and `vite` HIGH are **already recorded** in TD-18: dev-server scope,
+semver-major fixes, open as Dependabot alerts since 08-08, and the 09-03 sweep already noted the
+changed audit output so it would not be misread as new exposure. The new one is **hono** —
+installed 4.13.0 sits inside the `<= 4.13.4` range of three advisories that appear in **no**
+existing doc. Triaged by reading the code rather than the severity label:
+
+- `GHSA-gqvv-2mrq-wpjv` (`toSSG()` writes outside the output directory) — **unreachable**;
+  `grep -rn toSSG apps/api/src` = 0 matches, there is no static-generation path.
+- `GHSA-g6gw-c38x-mqfc` (unbounded dot-notation nesting in `parseBody()` → memory exhaustion) —
+  **unreachable**; `grep -rn parseBody apps/api/src` = 0 matches.
+- `GHSA-crvj-82cr-hjcx` (query parser reads parameters **after** the URL fragment → cache-key /
+  proxy interpretation differential) — **the only one with a surface.** The API does set publicly
+  cacheable headers on query-param routes behind Vercel's CDN: `seo.ts:224,347` (`s-maxage=3600`),
+  `feed.ts:280` (`s-maxage=30`), `hashtags.ts:37,72` (`max-age`). The shape is **public-content
+  cache poisoning, not an auth or PII bypass** — no gated route is publicly cached, and
+  `feed.ts:280` sets the public header only when `userId` is absent, so personalized feeds are
+  never shared-cached. Consistent with the upstream MODERATE rating.
+
+The fix is non-breaking (`npm audit fix`, i.e. PR #8) but deploying it is blocked as above → TD-31.
+
+### 5. Stuck operational state — not checkable, as expected
+
+All of it needs the DB. `mcp__supabase__get_advisors` was re-tested this session and still
+returns `Unauthorized … valid access token` — TD-21 unchanged, the PAT is still revoked. Parked
+media deletions, `video_assets` stuck non-ready, and `cron_runs` failure history are therefore
+unobservable, and `/health` reports them as `null`. Note that TD-29 already records the one
+instance of this class that will **not** self-heal — assets stranded outside `finalize-videos`'
+6h lookback — together with the counting query to run after the restore.
+
+### 5b. Security — clean everywhere it is observable
+
+GitHub secret-scanning `state=open` returns `[]`. Checked the full list too, rather than only
+the open filter: alert #1 (the 2026-07-15 Supabase PAT) is `state:resolved`,
+`resolution:revoked`, `resolved_at 2026-08-10T14:52:32Z` — which matches TD-20's closure note
+exactly, so **no drift there**. (The word "open" inside that row is historical description of
+the original finding, not current status; worth stating because it reads like drift at a glance.)
+Supabase advisors blocked per §5.
+
+### 6. Flag drift — the register is accurate; two entries added
+
+Spot-checked the entries a stale tree would most plausibly have desynced: TD-18 (PR #6/#3 state),
+TD-19 (correctly closed — GitHub narrowed the advisory range off the installed 1.19.17), TD-20
+(correctly closed — verified against the live alert API, above), and TD-28/29/30 (all correctly
+still open; nothing executable has shipped since 09-21). **No entry needed closing.** Two added:
+TD-31 (the hono trio and the PR #8 hold) and TD-32, which is the finding this sweep exists to
+have caught.
+
+### TD-32 — the daily sweep was dark for two weeks and said nothing
+
+Verified, not inferred: `gh api …/commits?since=2026-09-06&until=2026-09-21T18:00Z` returns
+**zero** commits, and a completed sweep appends a `LOG.md` section and pushes on **every** run by
+design — so no sweep completed 09-07 through 09-20 inclusive. The schedule itself is intact: it
+fired normally today (this session *is* the 08:13 PDT launchd slot) and `~/.sizzle-ops/paused` is
+absent now.
+
+**The cause is undetermined, and I could not determine it from inside the session.** Two
+candidate mechanisms, both in `scripts/ops/daily-sweep.sh`: the pause flag at `:8`, which exits 0
+after writing a single line to `~/Library/Logs/sizzle-sweep.log` and notifying **nobody**; and
+the all-attempts-failed path at `:31-34`, which *does* fire an `osascript` desktop notification —
+but that is local-only and evaporates on an unattended or sleeping Mac. The decisive evidence is
+`~/Library/Logs/sizzle-sweep.log`, which sits outside this session's allowed working directory
+and is blocked by the sandbox. **Branden: that file answers it in one grep.**
+
+The cost is already realised rather than hypothetical — PR #8's security advisory went untriaged
+for 12 days because nothing ran to see it. And structurally this is the action sheet's §7
+alerting finding one layer up: **a maintenance job whose non-execution is silent is
+indistinguishable from one that ran and found nothing.** The cheap fix needs no new
+infrastructure, because the sweep's output *is* a git commit — compare the newest
+`ops: daily sweep` commit date against today and shout when the gap exceeds ~2 days. Worth
+routing that through a channel that survives a sleeping Mac, unlike `osascript`.
+
+### Not shipped, deliberately
+
+Nothing executable. No repo change reaches a hostname with no DNS record, and **any** API deploy
+is unverifiable while `/health` is 503 (hard rule 4) — so PR #8 stays held and TD-28, TD-29 and
+TD-30 stay parked exactly as sessions 8–17 left them. `uptime.yml` stays muted
+(`.github/workflows/**` is Level C, and re-arming it would override a deliberate human mute).
+`scripts/verify-deploy.mjs` was **not** run: its success criterion is a 200 `/health`, so it is
+unusable by construction during this outage, and this change touches no app anyway.
+`npm run secrets:check` was run before the push. This change is docs-only.
+
+**Level note:** TD-31 and TD-32 were filed in `docs/engineering/technical-debt.md`, which is
+Level C, following the precedent set by TD-28 (session 8), TD-29 (session 13) and TD-30
+(session 17) in this same incident — additive documentation with zero production effect, and a
+register that silently omits findings is worse than one kept consistent.
+
+### For Branden
+
+1. **Unchanged and still the only thing that matters:** Supabase dashboard → project
+   `gsxoaurmsgqascxukony` → **Resume / Restore** (Level D; every agent DB path is closed).
+   ~21h down. Expect billing rather than an inactivity pause — read the action sheet, not this log.
+2. **New, and it needs you because the evidence is outside the sandbox:** grep
+   `~/Library/Logs/sizzle-sweep.log` for `paused` / `ALERT` around 09-07…09-20 to find out why
+   the daily sweep was dark for 14 days (TD-32).
+3. **After restore, in order:** merge PR #8 as the first post-incident deploy (TD-31) → run
+   TD-29's video backfill → `gh workflow enable uptime.yml` → reconnect Remote Control so
+   `PushNotification` works again → consider **Pro** so a production money app is never pausable.
