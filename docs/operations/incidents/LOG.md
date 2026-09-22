@@ -1288,3 +1288,98 @@ None of it has been done in 10+ hours. In order:
 8. **Rotate the Supabase PAT in `.mcp.json`** **and** grant the MCP connector permission — both required;
    either alone is insufficient (TD-21).
 9. **File the cron false-green defect** (17:22 entry, finding 2) as a TD entry; Level B PR after recovery.
+
+## Incident 2026-09-21 22:41 PDT — watchdog re-summon #7 (8th session), same SEV-1, now 11h22m
+
+**Same outage, same root cause, still Level D, still zero corrective owner action.** `API degraded
+(503): database-unreachable`. Supabase project `gsxoaurmsgqascxukony` does not resolve; no repo change,
+rollback or redeploy can fix it. Per the standing note, this entry records only what is **new** —
+sessions 1-7 (14:16 / 15:17 / 17:22 / 18:26 / 19:30 / 20:33 / 21:36 PDT) hold the full derivation.
+
+**Re-verified, twice, before concluding anything.**
+- `/health` → **503** `{"status":"degraded","problems":["database-unreachable"],"commit":"a126267"}` at
+  05:41:59Z and again at 05:47Z. Second probe: `dns:0.0037s total:7.27s` — the familiar ~7 s DB-connect
+  stall, so the API itself is healthy and waiting on a database that isn't there.
+- **User-facing proof, not just monitoring:** `GET /feed/for-you?limit=3` → **500**
+  `{"error":{"code":"db_error"}}`. `getsizzle.app` → 200 (static shell serves; the app behind it does not).
+- **DNS, triple-resolver, record-type comparison** (system · `1.1.1.1` · `8.8.8.8`, all three identical):
+  `supabase.co` → `CNAME ENODATA` + `A 76.76.21.21` (zone healthy) · `gsxoaurmsgqascxukony.supabase.co`
+  → `CNAME ENOTFOUND` **and** `A ENOTFOUND` · `db.gsxoaurmsgqascxukony.supabase.co` → both `ENOTFOUND`.
+  Parent zone resolves, *every* per-project record is withdrawn = project-level pause/deprovision.
+  Three unrelated resolvers agreeing rules out any sandbox artifact.
+
+**1. Owner action since 21:36: none.** Origin `main` head is `a126267` — the *7th session's own* log
+commit (2026-09-22T04:43:44Z); nothing else has landed. `Uptime` is still `disabled_manually`. The live
+`/health.commit` tracks origin `main` exactly, so Vercel keeps deploying fine — nothing here is deploy-side,
+and rollback remains ruled out (last pre-outage Production deploy was already 15 days old).
+
+**2. NEW — the two remaining leads are both gated, and one of them is gated harder than session 7 knew.**
+- `mcp__claude_ai_Gmail__search_threads` → *"Claude requested permissions … but you haven't granted it yet."*
+  Session 7's lead (Supabase emails the owner on pause/deprovision) is sound but unreachable from here.
+- `mcp__supabase__search_docs` → **the same permission error**. This is the new part: `search_docs` reads
+  *public documentation* and touches no project, no credential and no PAT — yet it is denied too. So the
+  gate sits at the **connector level, not per-tool-sensitivity**, which kills the idea that a harmless
+  docs-only call could slip through and establish the pause-vs-delete retention clock. It also simplifies
+  the ask: granting the connector is **one** action covering both, and there is no cheaper partial path
+  worth trying next time. Combined with the revoked PAT (TD-21), **paused-vs-deleted remains unanswerable
+  from inside an unattended session** — only the dashboard or the ops inbox answers it.
+
+**3. NEW — closed a loose end instead of writing an eighth identical diagnosis: filed TD-28.** The cron
+false-green defect has been named in four entries (first in the 17:22 session) and deferred four times
+with the instruction "file it" sitting unactioned on Branden's list. It is now a register row, verified at
+source this session rather than carried forward on trust — and the verification **widened** it: it is not
+two call sites but **eight** (`internal.ts:67, 103, 110, 251, 280, 296-298, 344, 361`). `supabase-js`
+resolves failures as `{ data: null, error }`; every one of these reads only `data`, treats `null` as
+"nothing to do", and returns **HTTP 200**. `recordCronRun` (`:18-33`) cannot save it — its own upsert fails
+and its `catch` only logs, deliberately and correctly. So Vercel Cron has shown **five green crons through
+an 11-hour total database outage**. TD-28 also records the honest limit, which prior entries overstated:
+`/health.cronAges` is *not* permanently fooled — `last_success_at` stops advancing, so the ages do go stale
+— the false green is at the HTTP-status layer. (Here it was moot: `cronAges` was `null` outright, the
+health DB probe having failed first.)
+
+**4. Still not shipping the TD-28 fix, and the reasoning is unchanged and still right.** ~6 lines per call
+site, Level B, and the *logic* is unit-testable against a mocked client with no live DB. But the happy path
+cannot be verified on a real surface while the database does not resolve (CLAUDE.md hard rule 4), and
+deploying an unvalidated API change mid-SEV-1 would perturb the exact cron/health signals being used to
+watch for recovery. Level B PR after restoration.
+
+**5. `PushNotification` still dead — 17 days.** Returned *"Mobile push not sent (Remote Control inactive)"*.
+For the eighth time this git commit is the only artifact carrying a live SEV-1. The `telegram` skill was
+again **not** fired: session 7 established its config is unreadable under this allowlist, and an unattended
+session must not improvise an outbound channel to an unverified destination during an incident — the failure
+mode is announcing a production outage to the wrong recipient.
+
+**Why the `Uptime` pager stays muted (unchanged, and deliberate).** `.github/workflows/**` is minimum
+Level C, and the mute at `18:27:42Z` — four minutes after the first failing run — is itself evidence
+Branden *saw* this alert. Re-enabling it would re-ring a bell he knowingly silenced about an outage he
+already knows about. This is an action gap, not an awareness gap.
+
+**What I did.** Verified and filed only — **no code change, no deploy, no rollback, no workflow or
+monitoring change, no security control touched.** Shipped: this entry + the TD-28 register row, explicit
+paths only, `secrets:check` clean. `node scripts/verify-deploy.mjs` is still unusable during this outage
+(its success criterion is a 200 `/health`). Built on **origin's** `LOG.md`/`technical-debt.md` via
+`scripts/ops/origin-drift.mjs` (local HEAD `d4c5395` is 8 commits stale — TD-27) and pushed through the
+GitHub git-data API.
+
+### For Branden — unchanged, Level D, only you can do this
+
+1. **Supabase dashboard → project `gsxoaurmsgqascxukony` → Restore/Resume** if it shows Paused; clear any
+   billing / free-tier warning first or the restore won't stick. **Read whether it is Paused or absent** —
+   eight sessions have now failed to determine this, and it decides step 2.
+2. If the project is **gone**, contact Supabase support about PITR/backup recovery **before anything else**.
+   **Do not create a replacement project** — the ref is hardcoded as a `preconnect` in shipped web *and*
+   iOS bundles (`HOSTING.md:43,59`, `apps/web/index.html:30`, `apps/web/ios/App/App/public/index.html:30`),
+   so a new ref means a native rebuild *and* permanent loss of users, recipes, purchases and payout history.
+3. **Verify on the real surface**: `/health` → 200 `"ok"` `problems: []` **and** `GET /feed/for-you?limit=3`
+   → 200 rather than `db_error`. Then watch `stuckVideoBacklog` drain as `finalize-videos` catches up.
+4. `gh workflow enable uptime.yml`.
+5. **Reconcile Stripe** for `2026-09-21T17:54Z → recovery`. Handlers are idempotent and Stripe retries with
+   backoff for ~3 days, so at 11h nothing should be permanently lost — but only ~20-minute log windows have
+   ever been inspectable, so this is **not** a clean bill of health. The retry window is the real deadline.
+6. **Grant the claude.ai connector permission** (finding 2) — now known to cover Gmail *and* Supabase docs in
+   one action; the Supabase pause/deprovision email in the ops inbox almost certainly answers paused-vs-deleted.
+7. **Confirm whether `telegram` is wired** — `PushNotification` has been dead 17 days and every escalation
+   path to you is currently a git commit.
+8. **Rotate the Supabase PAT in `.mcp.json`** *and* grant the MCP connector permission — both, either alone
+   is insufficient (TD-21).
+9. ~~File the cron false-green defect~~ — **done this session, TD-28.** Ship the fix as a Level B PR after recovery.
