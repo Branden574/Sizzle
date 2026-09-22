@@ -1,7 +1,11 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
-**Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`.
+**Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
+(11:23 AM PDT Mon 09-21). **15h34m as of 2026-09-22 09:57Z** — re-verified by session 12.
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
+
+> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — 56h26m of slack left (§2).**
+> Restore before it and the money self-heals. There is real time; this is urgent, not frantic.
 
 This page exists because eleven unattended watchdog sessions have now diagnosed the same
 outage and appended ~1,100 lines to `LOG.md`. The diagnosis is finished. This is the
@@ -137,6 +141,47 @@ never retry charges manually.**
   the pause risk and the Fair Use restriction mechanism in one step.
 - **TD-21** — restore a DB path for the agent (PAT rotation; the connector grant alone is
   insufficient because the PAT behind it is revoked).
-- **Alerting gap** — `PushNotification` has been returning *"Remote Control inactive"* for
-  18 days, so unattended sessions cannot page you. `LOG.md` and this file are the only
-  channels that carry anything. Worth fixing before the next SEV-1.
+- **Alerting gap — promoted to §7. It is not a footnote; it is why this is still open.**
+
+---
+
+## 7. Why a 2-minute fix has gone 15+ hours — there is no working alert path to you
+
+Session 12 audited every automated channel from production to you. **All of the push
+channels are dead or muted.** This is the finding that actually explains the elapsed time,
+and eleven prior sessions each recorded a piece of it without putting it together.
+
+| Channel | Verified state (session 12) |
+|---|---|
+| `PushNotification` (Remote Control) | **Dead — 18 days.** Re-tested this session: *"Mobile push not sent (Remote Control inactive)."* It died **before** the outage, so sessions 1–12 have paged **nobody**, ever. |
+| GitHub Actions `Uptime` failure email | **The only channel ever proven to reach you — and it is muted.** `disabled_manually` since ~18:27Z, ~4 min after the first failing run. |
+| GitHub Issue | **Not usable.** `gh repo view` → `visibility: PUBLIC`. Filing one would publicly advertise a live outage *and* an open financial-webhook window on a production money system. Ruled out on purpose — don't re-propose it. |
+| Gmail / Supabase MCP connectors | Permission-gated unattended (connector-level; even `search_docs` is denied). |
+| `LOG.md` + this page | The only channels carrying anything — but **pull, not push.** They require you to come and look. |
+
+**The reframe that matters.** Sessions 6–11 read the 4-minute mute as *"proof of awareness —
+so this is an action gap, not an awareness gap."* With the push channel now confirmed dead
+*since before the outage*, the sharper reading is: **muting `Uptime` removed the last working
+push path.** Since 18:27Z on 09-21 there has been **no automated signal of any kind** from
+production to you — only files you would have to open unprompted. You were told once, in
+minute 4, and never again.
+
+**Calibration, stated honestly rather than alarmingly.** The elapsed 15h34m splits roughly
+into **~11.5h of waking hours** (11:27 AM → ~11 PM PDT Mon) and **~4h overnight**. The waking
+gap is real and is what this section is about. But the escalating *"still zero owner action"*
+refrain in eleven LOG entries is miscalibrated for the current moment: the last stretch is
+overnight, the next realistic action window is Tuesday morning PDT, and the money deadline
+still has **56h** of slack. Urgent, with room.
+
+### The one follow-up that makes the next SEV-1 different
+
+```sh
+gh workflow enable uptime.yml     # re-arms the only channel that has ever reached you
+```
+
+Do this **after** the restore (while the DB is down it would just re-fire into a muted void,
+and re-enabling it now would override a deliberate human mute — `.github/workflows/**` is
+minimum Level C, so no unattended session will do it for you). Then reconnect Remote Control
+so `PushNotification` works again. **A monitor whose only delivery path can be switched off
+by one click, with no fallback, is a single point of failure in the alerting layer** — worth a
+`SYSTEM_RISK_MAP` row alongside the pausable-free-tier finding in §6.
