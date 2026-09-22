@@ -2023,3 +2023,138 @@ restore window is a year. After restore: run the **TD-29 backfill** for videos s
 finalizer's 6h window, then `gh workflow enable uptime.yml`, reconnect Remote Control, and
 consider the **Pro plan** so a production money app is never pausable again. **TD-21 needs two
 actions, not one** — a Supabase MCP permission grant *and* a PAT rotation.
+
+## 2026-09-22 08:02 PDT (15:02Z) — summon #17, SEV-1 day 2 at 20h44m — a NEW signal that decomposed into a false alarm riding on the same outage
+
+**Fired:** `API unreachable (HTTP 000)` + `Frontend https://getsizzle.app HTTP 000000`, raw body
+`curl: (6) Could not resolve host: sizzle-chi.vercel.app`. **This is not the signal the previous
+sixteen summons fired on** (`503 database-unreachable`), so it was triaged as a new claim rather
+than pattern-matched to the open incident.
+
+### The signal decomposes into two independent things
+
+**(a) The `HTTP 000` itself — FALSE ALARM (6th of 7 in this class).** The claim embedded in the
+raw body is that *`sizzle-chi.vercel.app` has no DNS*, which — if true — would have been a second
+provider failing and a likely shared billing root cause. It is false. Triple-resolver probe
+(`.codex/dns-probe-vercel.mjs`, same ENODATA-vs-ENOTFOUND discriminator used on Supabase):
+
+| Name | system | 1.1.1.1 | 8.8.8.8 |
+|---|---|---|---|
+| `sizzle-chi.vercel.app` | A=216.198.79.67,64.29.17.67 | A=216.198.79.67,64.29.17.67 | A=216.198.79.195,64.29.17.195 |
+| `getsizzle.app` | A=216.150.16.129,216.150.1.129 | A=216.150.1.129,216.150.16.129 | A=216.150.1.1,216.150.16.1 |
+
+Healthy A records on all three resolvers — the exact opposite of the Supabase result, which is
+`ENOTFOUND` on all three. Two spaced end-to-end probes confirm recovery: **15:04:43Z** API `503` /
+frontend `200`, **15:06:32Z** API `503` / frontend `200`. The host resolved and answered both
+times, so the `000` was a client-side resolution failure on this Mac. The frontend's `000000` is
+again the double-`000` artifact of `watchdog.sh:44`, not a status.
+
+**Triage refinement worth keeping: a blip in this class can ride *on top of* a real outage.** All
+five prior false alarms occurred against otherwise-green production, so "000 ⇒ nothing is wrong"
+was safe shorthand. It is not safe here — the 000 was noise while production was genuinely down
+for a different reason. Decompose the signal; don't let either half mask the other.
+
+**(b) The underlying SEV-1 — unchanged and still open.** Byte-identical to all sixteen prior
+sessions. Continuous since `2026-09-21T18:23:07Z`; **20h44m** at probe time. Not a flap, so the
+anti-flap path does not apply to this half.
+
+| Probe | Result |
+|---|---|
+| `/health` | `503` `{"status":"degraded","problems":["database-unreachable"],"commit":"92e2dad"}`, 7.29s |
+| `/feed/for-you?limit=3` | `500` `{"error":{"code":"db_error"}}` — real user path, live failure |
+| `getsizzle.app` | `200` — static frontend fine; it is the API's database that is gone |
+| DNS × 3 resolvers | `<ref>.supabase.co` + `db.<ref>.supabase.co` → **ENOTFOUND**; parent `supabase.co` → `76.76.21.21` **UP** |
+| `/health.commit` | `92e2dad` = session 16's own docs push → **no owner action has landed** |
+
+The diagnosis was **not** re-derived. See
+`docs/operations/incidents/2026-09-21-supabase-project-unreachable.md`.
+
+### New this session — the money clock has a third layer, and the replay path has one hazard
+
+The question nobody had asked: *every entry tells Branden that after `2026-09-24T18:23Z` recovery
+needs "a deliberate Events replay" — is that replay actually safe to run, and is the owner-facing
+path documented?* Two findings, both verified.
+
+**1. There is a 15-day Dashboard `Resend` window, and it is the owner-friendly path.** Verified
+from `docs.stripe.com/webhooks.md` (§8 gate-bypass — Stripe docs serve raw markdown to plain
+`curl`, outside the connector gate). The action sheet listed only the 3-day auto-retry and the
+30-day List Events API window. Stripe documents **three** layers, all counted from *event
+creation*:
+
+| Layer | Window | Oldest event expires |
+|---|---|---|
+| Automatic retries (live mode) | 3 days | `2026-09-24T18:23Z` (already recorded) |
+| **Dashboard → event → `Resend`** | **15 days** | **`2026-10-06T18:23Z`** (new) |
+| CLI `stripe events resend` / List Events API | 30 days | `2026-10-21T18:23Z` (already recorded) |
+
+This matters because it is the only recovery path that **needs no live secret key** — Branden
+does credentials himself (hard rule 7), so a dashboard button is materially easier than a CLI
+path requiring `sk_live`. Also confirmed from the same page: the existing "do NOT disable the
+webhook endpoint" warning is correct and doc-backed — *"If your destination has been disabled or
+deleted when we attempt a retry, we prevent future retries of that event."*
+
+**2. The replay is financially safe, but it duplicates welcome DMs — new TD-30.** Before
+recommending that anyone replay hundreds of live financial events, the handlers were read rather
+than assumed. Every financial write is durably guarded, and one non-financial write is not:
+
+- Safe: `invoice.paid` dedupes on the unique `provider_ref` index (`:1151`); subscription rows
+  upsert on `subscriber_id,creator_id` (`:1129`); unlocks/purchases upsert with
+  `ignoreDuplicates` (`:1095`, `:1099`); the tips flip is status-filtered (`:1092`).
+- Safe, and worth recording because it *looks* wrong: the dispute-repay idempotency key is
+  **hour-bucketed** (`:1088`). That is deliberate and documented at `:1076-1081` — Stripe replays
+  a key's first response including errors for 24h, so a fixed key that once captured
+  `balance_insufficient` would poison every redelivery. The durable double-pay guard is the
+  `hasTransferInGroup(repayGroup)` check at `:1083`, which runs *before* the transfer. **No
+  double-payout risk on replay.**
+- **Not safe: `sendWelcomeDm` (`:98-110`) is the only non-idempotent write in the webhook.** The
+  conversation upsert dedupes on `user_a,user_b` (`:104`), but the message insert at `:107` is a
+  plain `insert` with no dedupe, and `messages` has no unique constraint to backstop it
+  (`supabase/migrations/20260625040000_direct_messages.sql:20`; the `unique (user_a, user_b)` at
+  `:15` is on `conversations`). Its one caller is `customer.subscription.created` when the sub is
+  active (`:1132-1134`). Any invocation that redelivers after partially succeeding — plausible at
+  restore, when the queued backlog floods a just-woken DB — re-inserts the DM and re-fires the
+  push (`:109`).
+
+**Honest severity: low, and non-financial** — a duplicate welcome DM plus one duplicate push, per
+affected new subscriber. It is **not** an incident escalation. It is filed because it sits
+directly on the restore path the owner is about to execute, and because the mitigation is free:
+the documented List Events filter `delivery_success=false` returns only never-delivered events,
+so using it avoids replaying anything that already succeeded. The fragility is **pre-existing**,
+not outage-caused — Stripe is at-least-once by design — and the affected volume is **unknown**
+(counting needs the DB).
+
+### Not shipped, deliberately
+
+Nothing executable. No repo change reaches a hostname with no DNS record, so there is nothing to
+fix forward and nothing to roll back. TD-28, TD-29 and now TD-30 all stay parked: unverifiable
+against a dead DB (hard rule 4), and any deploy perturbs the signals being watched for recovery.
+`uptime.yml` stays muted (`.github/workflows/**` is Level C *and* re-arming overrides a deliberate
+human mute). `verify-deploy.mjs` remains unusable by construction — its success criterion is a
+200 `/health` — so it was not run; READY state is not in question since the API is answering.
+This change is docs-only.
+
+**Level note:** TD-30 was filed in `docs/engineering/technical-debt.md`, which is Level C under
+the autonomy policy. Filed anyway, following the precedent set by TD-28 (session 8) and TD-29
+(session 13) in this same incident: the row is additive documentation with zero production
+effect, and a register that silently omits the third finding is worse than one kept consistent.
+
+### Alert path — still pull-only
+
+`PushNotification` re-tested this session; result recorded in the notification attempt below.
+The §7 channel inventory is complete and unchanged — a GitHub Issue stays rejected (repo is
+PUBLIC; filing one would advertise a live outage and an open financial-webhook window). `LOG.md`
+and the action sheet remain **pull, not push**. Sessions 1–17 have paged nobody.
+
+### For Branden — THE ONE ACTION, unchanged for 20h44m
+
+Supabase dashboard → project `gsxoaurmsgqascxukony` → **Resume / Restore** (Level D — every agent
+DB path is closed). Read the action sheet, not this log. Expect **billing or a manual/platform
+action** rather than an inactivity pause (ruled out session 15); if billing, fix the payment
+method *first* or Resume will not hold. Data is not on a deadline — the restore window is a year.
+
+**The money is less urgent than sixteen entries implied**: missing the 09-24 auto-retry deadline
+is now known to be recoverable via Dashboard `Resend` through **2026-10-06** and the API through
+**2026-10-21**. Still restore before 09-24 if you can — that path is zero-work — but it is not a
+cliff. After restore: TD-29 video backfill, then `gh workflow enable uptime.yml`, reconnect
+Remote Control, and consider **Pro** so a production money app is never pausable again. TD-21
+needs **two** owner actions — a Supabase MCP permission grant *and* a PAT rotation.

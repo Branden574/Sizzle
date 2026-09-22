@@ -1,11 +1,13 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
 **Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
-(11:23 AM PDT Mon 09-21). **15h34m as of 2026-09-22 09:57Z** — re-verified by session 12.
+(11:23 AM PDT Mon 09-21). **20h44m as of 2026-09-22 15:07Z** — re-verified by session 17.
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
 
-> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — 56h26m of slack left (§2).**
-> Restore before it and the money self-heals. There is real time; this is urgent, not frantic.
+> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — 51h16m of slack left (§2).**
+> Restore before it and the money self-heals with zero manual work. Missing it is *not* a
+> cliff — manual replay stays open to `2026-10-06` (dashboard) / `2026-10-21` (API). There is
+> real time; this is urgent, not frantic.
 
 This page exists because eleven unattended watchdog sessions have now diagnosed the same
 outage and appended ~1,100 lines to `LOG.md`. The diagnosis is finished. This is the
@@ -38,13 +40,15 @@ free-tier quota that Fair Use restricts.
 
 ## 2. The money clock — this is the part with a deadline
 
-The DB is safe (restore window is **1 year**). **Stripe is not.** Two deadlines, both
-counted from the first failure `2026-09-21T18:23:07Z`:
+The DB is safe (restore window is **1 year**). **Stripe is not** — but it has **three**
+recovery layers, not one. Each window is counted from *event creation*, so the oldest
+undelivered events (from the first failure `2026-09-21T18:23:07Z`) expire first:
 
 | Deadline | What expires | Consequence |
 |---|---|---|
 | **`2026-09-24T18:23Z`** | Stripe's automatic webhook retries (*"up to three days"*, live mode) | **Restore before this and the money self-heals with zero manual work.** |
-| `2026-10-21T18:23Z` | List Events API 30-day window | Between the two dates, recovery needs a deliberate Events replay. **After it, loss is permanent.** |
+| `2026-10-06T18:23Z` | Dashboard per-event **`Resend`** button (15 days) | Recovery needs **no secret key** — open the event in the Stripe dashboard and click Resend. This is the owner path. |
+| `2026-10-21T18:23Z` | CLI `stripe events resend` + List Events API (30 days) | Last resort; needs `sk_live`. **After it, loss is permanent.** |
 
 **Verified mechanism** (all in `apps/api/src/routes/monetize.ts`):
 
@@ -64,6 +68,28 @@ counted from the first failure `2026-09-21T18:23:07Z`:
 **Honest limit:** the *number* of affected events is unverifiable from an unattended
 session — it needs either the DB or the live Stripe key (Level D). Mechanism and deadlines
 are verified; **exposure size is unknown.**
+
+### Replaying the backlog is safe for money — one non-financial duplicate (TD-30)
+
+Verified session 17 by reading the handlers, not assuming. Every financial write is durably
+guarded, so a replay cannot double-charge or double-pay: `invoice.paid` dedupes on the unique
+`provider_ref` index (`:1151`), subscriptions upsert on `subscriber_id,creator_id` (`:1129`),
+unlocks/purchases upsert with `ignoreDuplicates` (`:1095`, `:1099`), the tips flip is
+status-filtered (`:1092`), and the dispute re-pay is guarded by `hasTransferInGroup` *before*
+the transfer (`:1083`) — its hour-bucketed idempotency key (`:1088`) looks wrong but is
+deliberate and documented at `:1076-1081`.
+
+The one exception: **`sendWelcomeDm` (`:98-110`) re-sends on redelivery.** The conversation
+upsert dedupes (`:104`) but the message insert (`:107`) has no dedupe and `messages` has no
+unique constraint to backstop it. Caller is `customer.subscription.created` when active
+(`:1132-1134`). Impact is a duplicate welcome DM + one duplicate push per affected new
+subscriber — annoying, not financial.
+
+**Mitigation when you replay:** use the documented `delivery_success=false` filter on List
+Events, which returns only events that were never successfully delivered, so nothing that
+already succeeded gets re-run. Let the automatic retries drain first and only replay what
+their 3-day window missed — Stripe warns that a manual resend does *not* cancel the automatic
+retry, so running both at once is how you would get duplicates.
 
 ### ⚠️ Do NOT disable the Stripe webhook endpoint to quiet alert noise
 
