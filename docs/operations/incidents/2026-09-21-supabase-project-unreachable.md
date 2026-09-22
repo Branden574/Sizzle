@@ -1,7 +1,7 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
 **Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
-(11:23 AM PDT Mon 09-21). **26h02m as of 2026-09-22 20:25Z** — re-verified by session 22.
+(11:23 AM PDT Mon 09-21). **27h02m as of 2026-09-22 21:25Z** — re-verified by session 23.
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
 
 > **🛑 READ §4 STEP 0 BEFORE YOU CLICK RESUME.** Session 18 found that the first
@@ -10,12 +10,22 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > re-poll** — which silently converts TD-29's prescribed backfill into a no-op and makes
 > its counting query return `0`. One dashboard toggle before Resume avoids the whole mess.
 
-> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — ~45h58m of slack left (§2).**
-> Restore before it and the money self-heals with zero manual work. Missing it is *not* a
-> cliff — manual replay stays open to `2026-10-06` (dashboard) / `2026-10-21` (API). There is
+> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — ~44h of slack left (§2).**
+> Restore before it and the **Stripe** half self-heals with zero manual work. Missing it is *not*
+> a cliff — manual replay stays open to `2026-10-06` (dashboard) / `2026-10-21` (API). There is
 > real time; this is urgent, not frantic.
 
-This page exists because twenty-two unattended watchdog sessions have now diagnosed the same
+> **🍎 NEW, session 23 — the Apple/RevenueCat half does NOT self-heal, and its window has
+> ALREADY CLOSED.** RevenueCat retries a failing webhook **5 times over 155 minutes total**,
+> not three days. Every Apple refund/chargeback event from the first ~24.5 h of this outage has
+> therefore **permanently exhausted its automatic retries**, and restoring the database will not
+> replay them. Consequence per missed event: a refunded buyer **keeps premium access forever**
+> and the creator is **paid out for a purchase Apple reversed**. Recovery is the dashboard
+> **Retry** button, and it is now a *manual* step that restore does not cover — see §2 "The
+> Apple clock" and §4 step 6. Good news, also session 23: the **grant** side is safe and
+> self-heals; nobody is charged without eventually getting their unlock (§2).
+
+This page exists because twenty-three unattended watchdog sessions have now diagnosed the same
 outage and appended well over 1,000 lines to `LOG.md`. The diagnosis is finished. This is
 the one-page action sheet. **Read this, not the log.**
 
@@ -98,6 +108,74 @@ undelivered events (from the first failure `2026-09-21T18:23:07Z`) expire first:
 session — it needs either the DB or the live Stripe key (Level D). Mechanism and deadlines
 are verified; **exposure size is unknown.**
 
+### The Apple clock (TD-35) — 2h35m, not 3 days, and it expired ~24h ago
+
+**Found session 23.** Sessions 1–22 read "the money clock" as *the Stripe clock*. Sizzle has a
+**second, independent payment rail** — Apple IAP via RevenueCat — and it is live in production:
+`vercel env ls production` shows **`REVENUECAT_API_KEY` and `REVENUECAT_WEBHOOK_AUTH` both set,
+67 days old**. Its retry budget is an order of magnitude smaller than Stripe's:
+
+> RevenueCat *"will retry later (up to 5 times) with an increasing delay (5, 10, 20, 40, and
+> 80 minutes)"* — [docs/integrations/webhooks](https://www.revenuecat.com/docs/integrations/webhooks)
+
+That is **155 minutes ≈ 2h35m** of automatic retries, total, from first failure.
+
+| | Stripe | **RevenueCat** |
+|---|---|---|
+| Automatic retries | 3 days → `2026-09-24T18:23Z` | **155 min → `2026-09-21T20:58Z` — GONE** |
+| Manual replay | dashboard to `10-06`, API to `10-21` | dashboard **Retry** button, no documented deadline |
+| Does restore fix it? | **Yes**, if it beats the deadline | **No.** Manual, per event. |
+
+Rolling form: any RevenueCat event older than ~2h35m has exhausted. As of 21:25Z that means
+**everything from `18:23Z` on 09-21 through ~`18:50Z` today**, and the boundary advances with the
+clock — an event only survives if restore happens within 2h35m of *it*.
+
+**What is lost per missed event** (verified by reading `apps/api/src/routes/monetize.ts:796-859`,
+not assumed). The handler is *correctly* written — it returns **500 on any DB failure**
+(`:818`, `:829`, `:834`, `:849`) precisely so RevenueCat redelivers, and its own comment at
+`:814-815` states the stake: *"A read FAILURE must retry, not silently 200 — otherwise the
+refunded unlock would survive forever."* The defect is not in our code; it is that **the
+external retry budget is smaller than the outage**. Once the 5 retries are spent, on a
+`REFUND` / `CANCELLATION` that never landed:
+
+1. `recipe_unlocks` is never deleted → **the refunded buyer keeps premium access permanently.**
+2. `iap_transactions.revoked_at` is never stamped → no record that a reversal was owed.
+3. The `tips` ledger row stays `status='succeeded'`, `provider='apple'` → **the creator is
+   credited and paid out for a purchase Apple reversed.** Real money, and the loss-protection
+   the Stripe path gets from `charge.refunded` / `dispute.*` (`:908-910`) is simply absent here.
+4. `bumpGoal` never unwinds the funding goal.
+
+**Nothing else repairs it.** Verified: `fetchNonSubscriptions` is called *only* on the grant path
+(`:326`), nothing else in the codebase reads or writes `revoked_at`, and none of the five crons in
+`apps/api/vercel.json` reconciles IAP refunds. This webhook is the **sole** revocation mechanism.
+
+**Scope is genuinely narrow, and that is worth saying.** Only `REFUND` and `CANCELLATION` events
+touch the database (`:806`); every other RevenueCat event type short-circuits to a 200 at `:858`
+without a query, so the outage cost it nothing. The exposed set is *Apple refunds and chargebacks
+that occurred during the outage window* — plausibly zero. **Volume is unverifiable from an
+unattended session** (it needs the RevenueCat dashboard or the DB); mechanism and deadline are
+verified, **exposure size is unknown** — the same honest limit as the Stripe half.
+
+**Replay is safe** — same standard as session 17 applied to Stripe, re-derived here by reading the
+writes: the `recipe_unlocks` delete is idempotent by construction (documented at `:824`), the
+`revoked_at` stamp is a plain overwrite, the ledger reversal is filtered on `status='succeeded'`
+(`:845`) so it cannot double-reverse, and `bumpGoal` only runs for rows that filter actually
+matched. Retrying a delivered event is a no-op.
+
+### The grant side is SAFE and self-heals — nobody is charged into a void
+
+Checked in the same pass, because "Apple charged me and I got nothing" is the obvious fear.
+`apps/web/src/data/queries.ts:161-181` is **confirm-first**: the next time the buyer taps Unlock,
+`/iap/confirm` runs *before* any new purchase and claims a still-unconsumed purchase of that tier
+(`:165-169`) — explicitly "what prevents a double-charge when the buyer taps Unlock a second
+time". During the outage the 5 in-flight retries (`:173-177`) fail, the UI settles on a
+**`pending` / "processing"** state rather than resetting to a buy button (`:178-180`), and the
+purchase stays unconsumed on RevenueCat's side. After restore the next tap grants it. The server
+half is fail-closed too: `/iap/confirm` needs `requireAuth` and a live DB, so no grant is ever
+half-written. **Residual, stated honestly:** the heal is user-triggered, so a buyer who never
+returns stays charged-without-unlock indefinitely — the unconsumed purchase persists, so it heals
+whenever they do come back, but nothing pushes it.
+
 ### Replaying the backlog is safe for money — one non-financial duplicate (TD-30)
 
 Verified session 17 by reading the handlers, not assuming. Every financial write is durably
@@ -159,7 +237,30 @@ gh workflow enable uptime.yml
 # 5. TD-29/TD-34 — videos stranded by the outage. SEE STEP 0 BELOW FIRST: if the
 #    finalize-videos cron was running when you resumed, the counting query returns 0
 #    for the wrong reason and you need the TD-34 reconstruction query instead.
+# 6. TD-35 — Apple refunds that were dropped. THIS ONE IS NOT AUTOMATIC (see below).
 ```
+
+### Step 6 (do this AFTER restore) — TD-35, the Apple refunds restore will NOT replay
+
+Unlike the Stripe backlog, **nothing happens on its own here** — RevenueCat's 5 automatic retries
+expired `2026-09-21T20:58Z` (§2). This is a manual, per-event dashboard action:
+
+1. **app.revenuecat.com** → your project → **Integrations → Webhooks** (or a customer's
+   **Customer History**) → find events in a **failed / retrying** state since
+   `2026-09-21T18:23Z`. Per the docs: *"Find the failed (or retrying) event in the table and
+   click Retry."*
+2. Filter to **`REFUND`** and **`CANCELLATION`** types — those are the only two this endpoint
+   acts on (`monetize.ts:806`); anything else was 200'd during the outage and needs nothing.
+3. **Retry each one.** Replay is idempotent (§2), so retrying an already-delivered event is a
+   no-op — when in doubt, retry.
+4. **If the dashboard no longer lists them** (retention is not documented publicly, so assume it
+   may not go back far enough), reconcile by hand instead: for each Apple refund Apple reports
+   over the outage window, confirm `iap_transactions.revoked_at` is set, the matching
+   `recipe_unlocks` row is gone, and the `tips` row for that `provider_ref` is `refunded` not
+   `succeeded`. Any correction must be **append-only and auditable** (financial rule #5).
+
+**Do this before the next payout run**, because item 3 in §2's loss list is a creator being paid
+for a reversed sale — that is the one consequence that gets harder to unwind after money moves.
 
 ### Step 0 (do this BEFORE Resume) — TD-34, the 60-second trap
 
@@ -221,9 +322,11 @@ time-critical** — the rows persist
 indefinitely — but it does not fix itself, and it gets harder to identify the longer normal
 traffic accumulates around it.
 
-Then reconcile money: compare Stripe's dashboard events since `2026-09-21T17:54:46Z` (last
-known-good) against the ledger. Handlers are idempotent — **let Stripe's retries redeliver;
-never retry charges manually.**
+Then reconcile money on **both** rails: compare Stripe's dashboard events since
+`2026-09-21T17:54:46Z` (last known-good) against the ledger, **and** run step 6 for Apple.
+Handlers are idempotent — **let Stripe's retries redeliver; never retry charges manually.**
+RevenueCat is the opposite case and the easy one to forget: its retries are already spent, so
+its events only come back if you press Retry.
 
 ---
 
@@ -266,6 +369,17 @@ never retry charges manually.**
   it is the one finding in this incident with a pre-Resume action.** The code fix (floor the
   abandon windows, or exempt a known outage interval) is Level B and also not shipped
   mid-outage, for the same unverifiability reason.
+- **TD-35 (NEW, session 23)** — **the Apple/RevenueCat refund webhook has a 155-minute total
+  retry budget, so a >2h35m outage permanently drops refund revocations.** Our handler is
+  correct (it 500s so RevenueCat redelivers); the external budget is simply smaller than the
+  outage, and no cron or other code path reconciles refunds. Per dropped event a refunded buyer
+  keeps access forever and a creator is paid for a reversed sale. **Fully written up as §2 "The
+  Apple clock" + §4 step 6 — it is the second finding in this incident with a manual owner
+  action, and the only deadline that has already passed.** Resilience fix (Level C, payments
+  path): persist inbound RevenueCat events to a durable queue and drain them with a reconciling
+  job, so revocation survives an outage longer than the provider's retry budget — the same
+  at-least-once discipline the Stripe path gets for free from a 3-day window. Not shipped
+  mid-outage, same reason as TD-28/29/30/31/33/34.
 - **Systemic (recommend, Level C):** a live App Store app runs its production database on a
   **pausable** tier with **no managed backups** (free tier self-serves `db dump`). Pro
   projects cannot be paused. *"Upgrade to Pro" is the real control here* — it removes both

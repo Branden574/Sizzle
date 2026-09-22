@@ -2791,3 +2791,138 @@ git-data API. The pre-existing uncommitted local work (`scripts/ops/sweep-prompt
    is disabled at retry time, converting a fully recoverable backlog into **permanent** loss.
 4. **Still optional, still 5 minutes:** the installed `telegram` plugin (§7) is the only un-audited
    push channel left. §7 is why this outage is on hour 26 with nobody paged.
+
+## 2026-09-22 — watchdog summon #23, Supabase SEV-1 hour 27: a SECOND money clock, and it expired ~24h ago (TD-35)
+
+**Status unchanged and re-verified: still down, still Level D, still the owner's dashboard.** This
+entry exists for one reason — sessions 1–22 read "the money clock" as *the Stripe clock*, and it is
+not the only one. **Sizzle has a second, independent payment rail (Apple IAP via RevenueCat) whose
+webhook retry budget is 155 minutes, not 3 days. It ran out `2026-09-21T20:58Z`, roughly 24.5 hours
+before this session.** Restoring the database will not replay those events. That is TD-35, and it is
+the only deadline in this incident that has **already passed**.
+
+**State re-verification (probed 21:21–21:25Z, matching session 22 exactly).** DNS via Node's
+resolver: `gsxoaurmsgqascxukony.supabase.co` → **ENOTFOUND**, `db.<ref>` → **ENOTFOUND**,
+parent `supabase.co` → **ENODATA** (zone healthy, per-project records withdrawn) — the same
+account-level pause/deprovision signature, unmoved. `/health` → **503**
+`{"status":"degraded","problems":["database-unreachable"]}` in **7.23 s**, `commit 8520b6c` =
+origin `main` = session 22's own docs push, not a rogue deploy. A real user path, not just
+liveness: `GET /feed/for-you?limit=3` → **500**. Elapsed **27h02m** at 21:25Z. Stripe's automatic
+window (`2026-09-24T18:23Z`) still carries **~44h** of slack. No new diagnosis was attempted and
+none was needed — the root cause has been settled since session 3 and re-deriving it is how these
+sessions burn themselves.
+
+**The finding, and the question that produced it.** The lens that paid off in sessions 13, 18 and 19
+is *"what else has a clock the outage has outrun?"* Sessions 13/18/19 applied it to the crons and
+**closed** that sweep; session 14 applied it to auth sessions (safe); session 15 to the project's own
+pause policy. This session applied it to the one place §2 of the action sheet reasons about only
+half of: **payments**. §2 is 60 lines on Stripe's three recovery layers and says restoring "and the
+money self-heals with zero manual work." For the Apple half that sentence is **false**, and the
+correction is now in the sheet.
+
+**Verified, in this order, before claiming anything (hard rule 1).** (a) *Is RevenueCat even live?*
+`/health` cannot answer — `health.ts:120` computes `payments` from `stripeConfigured` alone, and both
+the configured and unconfigured webhook states return 401, so neither probe distinguishes them. The
+env listing settled it without revealing values: `vercel env ls production` → **`REVENUECAT_API_KEY`
+and `REVENUECAT_WEBHOOK_AUTH` both set on Production, 67 days old.** It is live. (b) *What is the
+budget?* RevenueCat's public docs: *"retry later (up to 5 times) with an increasing delay (5, 10, 20,
+40, and 80 minutes)"* = **155 min ≈ 2h35m**, against Stripe's 3 days + 15-day resend + 30-day API.
+(c) *Does anything else repair it?* No — `fetchNonSubscriptions` is called only on the grant path
+(`monetize.ts:326`), nothing else reads or writes `revoked_at`, and none of the five crons in
+`apps/api/vercel.json` reconciles IAP refunds. **This webhook is the sole revocation mechanism.**
+
+**Our code is not the defect, and should not be "fixed" to 200.** `monetize.ts:796-859` already does
+the right thing: 500 on every DB failure (`:818`, `:829`, `:834`, `:849`) so the provider redelivers,
+with the stake spelled out at `:814-815` — *"A read FAILURE must retry, not silently 200 — otherwise
+the refunded unlock would survive forever."* The defect is that **the provider's retry budget is
+smaller than the outage**, with no durable queue behind it. Per dropped `REFUND`/`CANCELLATION`:
+`recipe_unlocks` never deleted (**refunded buyer keeps premium access permanently**),
+`iap_transactions.revoked_at` never stamped, the `tips` row left `status='succeeded'`/`provider='apple'`
+(**the creator is credited and paid out for a purchase Apple reversed** — none of the loss-protection
+the Stripe path gets from `charge.refunded`/`dispute.*` at `:908-910`), and `bumpGoal` never unwound.
+
+**Scope is narrow, and saying so is part of the finding.** Only `REFUND` and `CANCELLATION` reach the
+database (`:806`); every other RevenueCat event type short-circuits to a 200 at `:858` without a
+query, so the outage cost those nothing. The exposed set is exactly *Apple refunds and chargebacks
+that occurred during the outage window* — **plausibly zero**. Volume is unverifiable from here (it
+needs the RevenueCat dashboard or the DB); mechanism and deadline are verified. **Exposure size
+unknown** — the same honest limit §2 already states for Stripe, and it is not being dressed up.
+
+**The good news, audited in the same pass: the GRANT side is safe and self-heals.** "Apple charged me
+and I got nothing" is the obvious fear and it does not hold. `apps/web/src/data/queries.ts:161-181`
+is **confirm-first** — the next tap of Unlock calls `/iap/confirm` *before* purchasing and claims a
+still-unconsumed purchase of that tier (`:165-169`), which is explicitly "what prevents a
+double-charge when the buyer taps Unlock a second time". Mid-outage the five in-flight retries
+(`:173-177`) fail, the UI settles on **`pending`/"processing"** rather than resetting to a buy button
+(`:178-180`), and the purchase stays unconsumed at RevenueCat; after restore the next tap grants it.
+The server half is fail-closed too (`/iap/confirm` needs `requireAuth` and a live DB). Residual,
+stated plainly: the heal is **user-triggered**, so a buyer who never returns stays
+charged-without-unlock until they do — nothing pushes it. **So the asymmetry is the whole finding:
+grants self-heal, revocations do not.**
+
+**Replay is safe** — session 17's standard, re-derived here against these writes rather than assumed:
+the `recipe_unlocks` delete is idempotent by construction (documented `:824`), the `revoked_at` stamp
+is a plain overwrite, the ledger reversal filters on `status='succeeded'` (`:845`) so it cannot
+double-reverse, and `bumpGoal` runs only for rows that filter matched. Retrying an already-delivered
+event is a no-op, so "when in doubt, retry" is the correct instruction to give the owner.
+
+**Shipped (docs only).** `docs/operations/incidents/2026-09-21-supabase-project-unreachable.md` — a
+new header callout (the sheet's own money-clock line previously promised a zero-work self-heal that
+is only true for Stripe), a new §2 "The Apple clock (TD-35)" with the comparison table and the
+grant-side all-clear, a new **§4 step 6** with the concrete dashboard procedure, the §4 reconcile
+paragraph corrected to cover both rails, and §6 + elapsed/session-count refreshed.
+`docs/engineering/technical-debt.md` — **TD-35** filed (P2, payments/IAP). Nothing else: no code
+change was in scope and none was shipped.
+
+**Not shipped, deliberately.** The resilience fix (persist inbound RevenueCat events durably and
+drain them with a reconciling job) is **Level C** — `monetize.ts` is on the autonomy-policy
+security-sensitive list and a durable queue likely adds DDL — and it is unverifiable against a
+database with no DNS record (hard rule 4). TD-28/29/30/31/33/34 stay parked for the reasons sessions
+13–22 recorded; PR #8 (TD-31) stays held; `uptime.yml` stays muted (`.github/workflows/**` is minimum
+Level C and re-arming it would override a deliberate human mute). The cron/asymmetry sweep stays
+**closed** — this session did not reopen it, it applied the same lens to a different subsystem.
+`node scripts/verify-deploy.mjs` **not run**: its success criterion is a 200 `/health`, so it is
+unusable by construction during this outage, and this change is docs-only.
+
+**Channels.** `PushNotification` attempted as the summon's required closing step → **"Mobile push not
+sent (Remote Control inactive)"**, dark ~20 days, since *before* the outage. **Sessions 1–23 have
+paged nobody.** Per session 20's once-per-day calibration the Gmail probe was not re-spent (sessions
+20/21 already used today's budget), and session 21's `telegram` lead was not re-tried 60 minutes
+after it failed — both stay open owner leads in §7. `LOG.md` and the action sheet remain **pull, not
+push**; nothing in this entry reached anyone.
+
+**Secret check.** Per **TD-33** `npm run secrets:check` is structurally blind on the git-data-API push
+path (it scans the index and working tree, not the `.codex/` blobs actually uploaded), so a "clean"
+from it would be a no-op rather than a pass. Compensated as in sessions 18–22: both changed files
+scanned out-of-band for value-shaped credentials (prefix **plus** real-length tail, JWT triplets,
+`-----BEGIN` blocks) — **clean**. Both are docs. Note the finding above was established from
+`vercel env ls`, which prints **names, environments and ages only** — no value was read, logged or
+committed.
+
+**Working-tree note (TD-27).** `node scripts/ops/origin-drift.mjs` ran first, as the memory requires:
+local `HEAD d4c5395` vs origin `main 8520b6c`, 7 files adrift. All reasoning and both edits were made
+against the **origin** copies in `.codex/origin-8520b6c/`, and the commit went out through the GitHub
+git-data API with a full 40-char parent SHA. Branden's pre-existing uncommitted work
+(`scripts/ops/sweep-prompt.md`, `tests/invariants/ops-tooling.test.mjs`, untracked
+`scripts/ops/origin-drift.mjs`) was left untouched per hard rule 11.
+
+### For Branden
+
+1. **Unchanged, still the only fix, still Level D:** Supabase dashboard → project
+   `gsxoaurmsgqascxukony` → **Resume / Restore**. **27h02m** down. Read
+   `docs/operations/incidents/2026-09-21-supabase-project-unreachable.md`, not this log.
+2. **Before you click Resume:** Vercel → project **`sizzle`** (the API — naming is reversed) →
+   Settings → Cron Jobs → **`Disable Cron Jobs`** (TD-34, the 60-second trap).
+3. **NEW — after you restore, and this one is not automatic:** app.revenuecat.com → Integrations →
+   Webhooks → find failed/retrying **`REFUND`** and **`CANCELLATION`** events since
+   `2026-09-21T18:23Z` and press **Retry** on each (§4 step 6). Their automatic retries expired
+   `2026-09-21T20:58Z` and restore will *not* replay them. Retrying is idempotent, so retry freely.
+   **Do it before the next payout run** — the consequence that gets hard to unwind is a creator
+   being paid for a sale Apple reversed. Plausibly zero events; the check is cheap either way.
+4. **Money, unchanged:** ~44h until Stripe's automatic retries stop being free. Do **not** disable
+   the Stripe webhook endpoint to quiet alert noise — Stripe suppresses retries for a destination
+   disabled at retry time, converting a recoverable backlog into **permanent** loss.
+5. **Worth noting for later (TD-35, Level C):** a payment rail whose only revocation path is a
+   webhook with a 155-minute retry budget and no durable queue will lose refunds in *any* outage
+   longer than that — this one merely made it visible. Same shape as the §7 alerting gap: a single
+   delivery path with no fallback.
