@@ -2705,3 +2705,89 @@ scanned out-of-band for value-shaped credentials (prefix **plus** real-length ta
    loss.
 4. **New, optional, 5 minutes:** check whether the installed `telegram` plugin can be made to work
    (see above). It is the only un-audited push channel left, and §7 is why this outage is on hour 25.
+
+## SEV-1 watchdog summon #22 — 2026-09-22 20:25Z — unchanged at 26h02m; re-verify only
+
+**Nothing has changed.** Fourth consecutive summon on the 61-minute cooldown re-firing against an
+unchanged condition (sessions 19 → 20 → 21 → 22). Per the action sheet the diagnosis is finished;
+this session re-verified the condition, refreshed the sheet's three decaying numbers, and stopped.
+No new root-cause work was attempted and none was warranted.
+
+**Re-verification (20:22–20:26Z) — identical to sessions 1–21.**
+
+- **DNS, three resolvers agreeing** (system / `1.1.1.1` / `8.8.8.8`, via `.codex/dns-probe.mjs`):
+  `supabase.co` → **A 76.76.21.21**, `CNAME ENODATA` (parent zone healthy);
+  `gsxoaurmsgqascxukony.supabase.co` → **ENOTFOUND**; `db.gsxoaurmsgqascxukony.supabase.co` →
+  **ENOTFOUND**. Parent up + every per-project record withdrawn = the same account-level
+  pause/deprovision, not a platform DNS fault.
+- **`/health` → 503** `{"status":"degraded","problems":["database-unreachable"]}`, probed twice
+  (20:23Z, 20:25Z), 7.48 s and 7.24 s. `commit 3d85113` = origin `main` = session 21's own docs
+  push, not a rogue deploy.
+- **A real user path, not just liveness:** `GET /feed/for-you?limit=3` → **500**
+  `{"error":{"code":"db_error","message":"Something went wrong"}}` in 7.25 s. Live user-facing
+  failure, not a probe artifact.
+- `getsizzle.app` → **200** in 0.25 s. The static frontend is unaffected, as throughout.
+- `vercel ls sizzle --yes`: newest production deployment **1 h** old, READY — session 21's docs
+  push; the hourly READY cadence remains these sessions' own log commits. No owner deploy, and
+  still no rollback candidate (the last *pre-outage* prod deploy was 15 days old).
+- `gh api .../actions/workflows`: **`Uptime` = `disabled_manually`** (CI, CodeQL, Dependabot all
+  `active`). Its last run is still the failure at **`2026-09-21T18:23:07Z`** (run `35638029940`),
+  preceded by success at `17:54:46Z` — **the outage start timestamp, unmoved for the 22nd session.**
+
+**Elapsed / money.** Start `2026-09-21T18:23:07Z` → **26h02m** at 20:25Z. Stripe's automatic-retry
+window (`2026-09-24T18:23Z`) carries **~45h58m** of slack — still the free, zero-work recovery if
+restore beats it; the dashboard `Resend` button runs to `2026-10-06` and the List Events API to
+`2026-10-21`. Sheet header, money-clock line and session count (`twenty-one`→`twenty-two`) refreshed
+in this commit, so the page Branden actually opens carries live numbers instead of numbers that
+quietly age into being wrong.
+
+**Per-session channel re-tests — deliberately NOT spent this session, and why.** Session 20
+calibrated the Gmail probe at **once per day**; sessions 20 and 21 both spent an attempt on 09-22,
+so today's budget is already over-drawn and a third identical call would be noise, not evidence. The
+same reasoning applies to session 21's `telegram` plugin lead: it was tried **61 minutes ago** and
+both skills failed to load, so re-running it this session would be re-deriving, not probing. Both
+remain open owner leads in §7 of the sheet, unchanged. `PushNotification` **was** attempted (it is
+the summon's own required closing step) → **"Mobile push not sent (Remote Control inactive)."**
+Dark ~20 days, since *before* the outage began. **Sessions 1–22 have paged nobody.** `LOG.md` and the
+action sheet remain **pull, not push** — this entry does not imply any notification reached anyone.
+
+**Nothing shipped beyond docs; nothing new opened; no code change was in scope.** TD-28, TD-29,
+TD-30, TD-33 and TD-34 stay parked and PR #8 (TD-31) stays held, for the reason sessions 13–21
+recorded and this session re-affirmed rather than re-litigated: every one is unverifiable against a
+database with no DNS record (hard rule 4 — reproduce before fixing), and a mid-SEV-1 API deploy into
+the money-adjacent media pipeline would trade a documented, reversible problem for an undocumented
+risk. `uptime.yml` stays muted — `.github/workflows/**` is minimum Level C and re-arming it
+unattended would override a deliberate human mute. The cron/asymmetry sweep stays **closed**
+(sessions 13/18/19): `finalize-videos` is the only cron with outage-outrun windows, and this session
+did not go looking for a third. `node scripts/verify-deploy.mjs` was **not run** — its success
+criterion is a 200 `/health`, so it is unusable by construction during this outage, and this change
+is docs-only.
+
+**Secret check.** Per **TD-33**, `npm run secrets:check` is structurally blind on the git-data-API
+push path (it scans the index and working tree, not the `.codex/` blobs actually uploaded), so a
+"clean" from it would be a no-op rather than a pass. Compensated as in sessions 18–21: both changed
+files scanned out-of-band for value-shaped credentials (prefix **plus** real-length tail, JWT
+triplets, `-----BEGIN` blocks) — **clean**. Both are docs.
+
+**Working-tree note (TD-27).** `node scripts/ops/origin-drift.mjs` ran first, as the memory requires:
+local `HEAD d4c5395` vs origin `main 3d85113`, 7 files adrift. All reasoning and both edits were made
+against the **origin** copies in `.codex/origin-3d85113/`, and the commit went out through the GitHub
+git-data API. The pre-existing uncommitted local work (`scripts/ops/sweep-prompt.md`,
+`tests/invariants/ops-tooling.test.mjs`, untracked `scripts/ops/origin-drift.mjs`) was left untouched
+(hard rule 11).
+
+### For Branden
+
+1. **Unchanged, still the only fix, still Level D:** Supabase dashboard → project
+   `gsxoaurmsgqascxukony` → **Resume / Restore**. **26h02m** down. Read
+   `docs/operations/incidents/2026-09-21-supabase-project-unreachable.md` — not this log.
+2. **Before you click Resume:** Vercel → project **`sizzle`** (the API — naming is reversed) →
+   Settings → Cron Jobs → **`Disable Cron Jobs`** (one project-wide button; there is no per-cron
+   switch, so don't conclude the step is impossible). Skipping it is the TD-34 trap: the first cron
+   tick after Resume flips every outage-stranded video to a terminal `error` the finalizer refuses
+   to re-poll.
+3. **Money:** **~45h58m** until Stripe's automatic retries stop being free. Do **not** disable the
+   Stripe webhook endpoint to quiet alert noise — Stripe suppresses retries for a destination that
+   is disabled at retry time, converting a fully recoverable backlog into **permanent** loss.
+4. **Still optional, still 5 minutes:** the installed `telegram` plugin (§7) is the only un-audited
+   push channel left. §7 is why this outage is on hour 26 with nobody paged.
