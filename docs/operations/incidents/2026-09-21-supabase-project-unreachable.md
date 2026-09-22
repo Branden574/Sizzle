@@ -1,7 +1,7 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
 **Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
-(11:23 AM PDT Mon 09-21). **21h52m as of 2026-09-22 16:15Z** — re-verified by session 18.
+(11:23 AM PDT Mon 09-21). **22h50m as of 2026-09-22 17:13Z** — re-verified by session 19.
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
 
 > **🛑 READ §4 STEP 0 BEFORE YOU CLICK RESUME.** Session 18 found that the first
@@ -10,23 +10,42 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > re-poll** — which silently converts TD-29's prescribed backfill into a no-op and makes
 > its counting query return `0`. One dashboard toggle before Resume avoids the whole mess.
 
-> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — 50h08m of slack left (§2).**
+> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — 49h10m of slack left (§2).**
 > Restore before it and the money self-heals with zero manual work. Missing it is *not* a
 > cliff — manual replay stays open to `2026-10-06` (dashboard) / `2026-10-21` (API). There is
 > real time; this is urgent, not frantic.
 
-This page exists because eleven unattended watchdog sessions have now diagnosed the same
-outage and appended ~1,100 lines to `LOG.md`. The diagnosis is finished. This is the
-one-page action sheet. **Read this, not the log.**
+This page exists because nineteen unattended watchdog sessions have now diagnosed the same
+outage and appended well over 1,000 lines to `LOG.md`. The diagnosis is finished. This is
+the one-page action sheet. **Read this, not the log.**
 
 ---
 
 ## 1. What you have to do (Level D — owner only, ~2 minutes)
 
-0. **First, disable the `finalize-videos` cron** — Vercel → project **`sizzle`** (the API;
-   naming is reversed) → Settings → Cron Jobs → disable `/internal/finalize-videos`. No
-   deploy needed. This is a 10-second toggle that buys you an unhurried capture window;
-   see §4 step 0 for why it matters and what to do if you forget.
+0. **First, disable the crons** — Vercel → project **`sizzle`** (the API; naming is
+   reversed) → Settings → Cron Jobs → click **Disable Cron Jobs**. No deploy needed.
+   This is a 10-second toggle that buys you an unhurried capture window; see §4 step 0
+   for why it matters and what to do if you forget.
+
+   > **Corrected session 19 — the control is project-wide, not per-cron.** Sessions 18's
+   > wording ("disable `/internal/finalize-videos`") implies a per-cron switch. Vercel's
+   > own docs describe exactly one control — a **`Disable Cron Jobs`** button that stops
+   > **all** of a project's crons ([manage-cron-jobs](https://vercel.com/docs/cron-jobs/manage-cron-jobs),
+   > last updated 2026-08-11: *"Disabling Cron Jobs: Click the Disable Cron Jobs button"*;
+   > updating or deleting an individual entry needs a `vercel.json` edit **and a redeploy**).
+   > `vercel crons ls --project sizzle` likewise lists the five paths with no per-cron state.
+   > **Don't go hunting for a per-cron toggle and conclude this step is impossible** — that
+   > lands you on Resume with `finalize-videos` live, which is the exact TD-34 trap.
+   >
+   > **Disabling all five is safe, and is in fact better.** Audited session 19:
+   > `publish-scheduled` has no lower `created_at` bound (`internal.ts:251-256`), so
+   > anything scheduled mid-outage still publishes whenever the cron resumes — nothing
+   > strands; both rollups recompute from source; `save-nudges` is daily and dedupes
+   > forever via `save_nudges`. The bonus: zero DB write pressure at the moment of Resume,
+   > which matters if the dashboard shows the **Fair Use / quota** branch below, where
+   > *"pausing does not remove usage already accumulated."* Re-enable with the same button
+   > once you have the stranded-video list.
 1. Open the [Supabase dashboard](https://supabase.com/dashboard) → org → project `gsxoaurmsgqascxukony`.
 2. The dashboard tells you *why* it stopped. Act per the branch below.
 3. **Restore the existing project. Never create a new one** — see §3.
@@ -177,7 +196,7 @@ but `last_polled_at` (`20260717002042_…`) is never touched by the abandon path
 frozen at its last pre-outage value. That is the reconstruction handle.
 
 ```sql
--- IF YOU DISABLED THE CRON FIRST: the original TD-29 query is still correct.
+-- IF YOU DISABLED THE CRONS FIRST: the original TD-29 query is still correct.
 select id, status, created_at, provider_uid from video_assets
  where provider='cloudflare' and status in ('pending','uploading','processing');
 
@@ -197,7 +216,8 @@ select id, created_at, last_polled_at, provider_uid from video_assets
 -- and let the (re-enabled) cron pick them up.
 ```
 
-Re-enable the cron once you have the list. **Not time-critical** — the rows persist
+Re-enable the crons (same project-wide button) once you have the list. **Not
+time-critical** — the rows persist
 indefinitely — but it does not fix itself, and it gets harder to identify the longer normal
 traffic accumulates around it.
 

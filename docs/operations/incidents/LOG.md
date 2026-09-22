@@ -2435,3 +2435,125 @@ now paged **nobody**. `LOG.md` and the action sheet remain **pull, not push**, a
 inventory is complete — every alternative (GitHub Issue on a PUBLIC repo, Gmail/Supabase
 connectors, `osascript`) has been tried and ruled out in earlier sessions. Stating it plainly
 rather than implying a notification landed.
+
+## SEV-1 watchdog summon 2026-09-22 10:09 PDT (session 19) — outage unchanged at 22h50m; corrected the one pre-Resume instruction, which pointed at a Vercel control that does not exist
+
+**Outage unchanged, not re-diagnosed.** The root cause has been settled since session 5 and lives
+in the action sheet; this session re-verified state, then spent its budget on the only thing an
+unattended session can still change — whether the owner's recovery procedure actually works when
+he runs it.
+
+**Step 0 (TD-27) first, as always.** `scripts/ops/origin-drift.mjs`: local `d4c5395` vs origin
+`04b2efb`, 7 files differing (incl. `LOG.md` itself and the action sheet, which exists only on
+origin). Every edit below was built on `.codex/origin-04b2efb/`, never the working copy. The
+three locally-modified/untracked paths (`sweep-prompt.md`, `ops-tooling.test.mjs`,
+`origin-drift.mjs`) were left untouched per hard rule 11.
+
+**Re-verification (all fresh this session, nothing inherited):** `/health` **503**
+`database-unreachable`, probed twice ~20s apart and again at 17:13Z — `stuckVideoBacklog`,
+`parkedMediaDeletions` and `cronAges` all `null` (each needs the DB). A real user path, not just
+liveness: `GET /feed/for-you?limit=3` → **500 `{"error":{"code":"db_error"}}`**. DNS re-probed
+rather than assumed via Node's resolver: `gsxoaurmsgqascxukony.supabase.co` and
+`db.gsxoaurmsgqascxukony.supabase.co` both **ENOTFOUND**, while `supabase.co` itself answers
+(`76.76.21.21`, and **ENODATA** for CNAME — name exists, no record of that type). Same
+project-level DNS withdrawal, not the host-blip class, and not the `status.supabase.com` 401
+red herring. `vercel ls sizzle` shows every production deploy **Ready**, newest 59m old — these
+remain prior sessions' own docs-only log pushes, so **no owner action has landed**. Rollback was
+never a candidate (last pre-outage deploy was 15 days old).
+
+### The finding: §1 step 0 named a per-cron toggle that Vercel does not have
+
+Session 18's pre-Resume instruction read *"Settings → Cron Jobs → disable
+`/internal/finalize-videos`"*. **There is no per-cron disable.** Vercel's own docs
+(`vercel.com/docs/cron-jobs/manage-cron-jobs.md`, `last_updated: 2026-08-11`) list exactly three
+maintenance operations, and only one of them is a toggle: *"**Disabling Cron Jobs**: Click the
+**Disable Cron Jobs** button"* — project-wide. Updating or deleting an individual entry is
+explicitly *"change/remove the configuration in `vercel.json` … and then redeploy"*. Corroborated
+from the other side: `vercel crons ls --project sizzle` returns the five paths and schedules with
+**no per-cron state column** at all.
+
+Why this is worth a session rather than a typo fix: **step 0 is the only pre-Resume action in the
+entire incident**, and its whole value is that it is faster and easier than the alternative. An
+owner who opens that settings page looking for a switch next to `finalize-videos`, doesn't find
+one, and concludes the step is unavailable will click **Resume** with the every-minute cron live
+— which is precisely the TD-34 trap the step exists to avoid, and it costs the clean capture
+plus hands him a falsely reassuring `0` from TD-29's counting query. A correct instruction costs
+nothing; this one had a plausible path to failing at the exact moment it mattered.
+
+**Disabling all five is safe — verified, not assumed, because the corrected instruction now asks
+him to do exactly that.** `publish-scheduled` selects `status='scheduled'` with
+`lte('scheduled_at', now)` and **no lower bound** (`internal.ts:251-256`), so anything scheduled
+during the outage still publishes whenever the cron resumes — nothing strands, it just publishes
+late; the 200-row cap drains at one run per minute. Both rollups recompute from source.
+`save-nudges` is daily (21:00 UTC) on a 14-day-wide sliding window and dedupes forever through
+`save_nudges` (`internal.ts:274-317`), so skipping runs loses nothing. There is also a real
+bonus: all-crons-off means **zero DB write pressure at the instant of Resume**, which matters
+specifically on the **Fair Use / quota** branch of §1, where *"pausing does not remove usage
+already accumulated."* Action sheet updated at §1 step 0 (with the correction called out
+inline, since sessions read that page and not this log), plus the two §4 wording follow-ons.
+
+### The TD-34 asymmetry sweep is now complete — two more paths checked, both clean
+
+Session 18's generalised lesson was *"when an outage outruns a hardcoded window, check whether
+the cleanup path shares the rescue path's bound."* Applied to the two remaining paths that could
+plausibly carry it, to close the question rather than leave it open:
+
+- **`pending_media_deletions` drain (`internal.ts:168-240`) — clean, and it is the destructive
+  one, so it was worth proving.** Its budget is `attempts < 10`, a **counter, not a time
+  window**, so elapsed outage cannot age a row into abandonment. And `attempts` is incremented
+  only at `:222`, reachable only after the opening `SELECT` at `:170` succeeds — which it cannot
+  while the DB is unreachable. So no retry budget has been burned by this outage, and the
+  GDPR-priority ordering and pagination-vs-error distinction (`:186-187`, `:218-225`) are intact.
+  Nothing to do at restore.
+- **`publish-scheduled` — clean**, per the no-lower-bound reading above.
+
+Combined with session 13 (rescue windows) and session 18 (finalize-videos' abandon windows),
+**every cron in `vercel.json` has now been audited for outage-outrun windows, and
+`finalize-videos` remains the only one that has them.** TD-29 and TD-34 are the complete set —
+no third one is hiding.
+
+### Not shipped, deliberately — and this session actively reconsidered rather than inherited it
+
+The obvious temptation was to ship the TD-34 code fix (floor the abandon `UPDATE`s) so step 0
+stops depending on the owner remembering anything. Rejected, on the merits: any API deploy is
+unverifiable while `/health` returns 503 (hard rule 4), the "right" floor is a genuine design
+choice with a steady-state consequence (a symmetric 6h floor means genuinely-stuck rows are
+never cleaned up at all), it touches the video pipeline of a live app with no way to test
+against a DB, and — decisively — **TD-34's harm is reversible and already has a written
+reconstruction procedure**, so an unverifiable mid-outage design change to a money-adjacent
+media pipeline trades a documented, recoverable problem for an undocumented risk. The docs fix
+achieves the same protection at zero deploy risk, which is why it was the right half to ship.
+Everything else stays parked as sessions 8–18 left it: PR #8 held (TD-31), TD-28/29/30 parked,
+`uptime.yml` stays muted (`.github/workflows/**` is Level C and re-arming it would override a
+deliberate human mute). `verify-deploy.mjs` **not run** — its success criterion is a 200
+`/health`, so it is unusable by construction during this outage, and this change is docs-only.
+
+**Secret check.** Per TD-33 `npm run secrets:check` is structurally blind on the git-data API
+push path (it scans the index/working tree, not the `.codex/` blobs actually uploaded), so a
+"clean" from it would be a no-op rather than a pass. Compensated as in sessions 18 and the 09-22
+sweep: both changed files scanned out-of-band for value-shaped credentials (prefix **plus**
+real-length tail, JWT triplets, `-----BEGIN` blocks) — clean. Both are docs.
+
+### For Branden
+
+1. **Unchanged and still the only fix:** Supabase dashboard → project `gsxoaurmsgqascxukony` →
+   **Resume / Restore** (Level D). **22h50m** down. Expect the billing/Fair Use branch, not an
+   inactivity pause — read the action sheet, not this log.
+2. **Corrected, and read this one before you click Resume:** the pre-Resume step is Vercel →
+   project **`sizzle`** → Settings → Cron Jobs → **`Disable Cron Jobs`** — one **project-wide**
+   button. Do **not** look for a per-cron switch for `finalize-videos`; Vercel has none, and
+   giving up on the step is how you land in the TD-34 trap. Turning all five off is safe and
+   slightly better; re-enable with the same button once you've captured the stranded-video list.
+3. **After restore, in order:** merge PR #8 as the first post-incident deploy (TD-31) → run the
+   TD-29/TD-34 video capture → `gh workflow enable uptime.yml` → reconnect Remote Control so
+   `PushNotification` works → grep `~/Library/Logs/sizzle-sweep.log` for `paused`/`ALERT` across
+   09-07…09-20 (TD-32) → consider **Pro** so a production money app is never pausable.
+
+### Alert path — still not delivered
+
+`PushNotification` attempted again at the end of this session: **"Mobile push not sent (Remote
+Control inactive)"** — dark ~19 days, since before the outage began. Sessions 1–19 have paged
+**nobody**. `LOG.md` and the action sheet remain **pull, not push**. The channel inventory is
+complete and every alternative (GitHub Issue on a PUBLIC repo, Gmail/Supabase connectors,
+`osascript`) was tried and ruled out in earlier sessions — stating that plainly rather than
+implying a notification landed.
