@@ -2314,3 +2314,14 @@ register that silently omits findings is worse than one kept consistent.
 3. **After restore, in order:** merge PR #8 as the first post-incident deploy (TD-31) → run
    TD-29's video backfill → `gh workflow enable uptime.yml` → reconnect Remote Control so
    `PushNotification` works again → consider **Pro** so a production money app is never pausable.
+
+### Alert path — the sweep's page to Branden was **not delivered**
+
+Recorded rather than left implicit, following the 09-06 precedent of correcting a log that
+implied a page had landed. `PushNotification` was attempted at the end of this sweep with a
+one-liner covering both owner items (the 21h outage and TD-32). It returned **"Mobile push not
+sent (Remote Control inactive)"** — the same dead channel §7 of the action sheet inventories,
+now dark roughly **19 days**, i.e. since before the outage began. So this sweep, like sessions
+1–17, has **paged nobody**; `LOG.md` and the action sheet remain pull-not-push. This is
+independent of TD-32 but points the same way: neither the maintenance job's silence nor its
+findings have a working path to a human.
