@@ -788,3 +788,118 @@ None of it has been done. In order:
 5. **Reconcile Stripe** for `2026-09-21T17:54Z → recovery` against the ledger (see money note).
 6. **File the cron false-green defect** (new finding 2) as a TD entry, and let a Level B PR fix it.
 7. **TD-21 (Supabase MCP `Unauthorized`) has now cost diagnostic depth three times in one day.** With it working, any of these three sessions could have read project state directly instead of inferring a pause from DNS.
+
+## Incident 2026-09-21 18:26 PDT — watchdog re-summon #3, SAME SEV-1 still open: API 503 `database-unreachable`, outage now ≥7h — STILL NOT FIXED, still Level D
+
+**Fourth session on one outage.** Same incident as the 14:16, 15:17 and 17:22 PDT entries above — not a
+new one. The watchdog's 60-minute cooldown expired and it re-fired at 18:26:42 local (01:26:42Z) on an
+unchanged condition. **Nothing has recovered and no owner action has been taken in the ~1h since the
+last entry.** Root cause stands exactly as written three times already: the Supabase project host
+`gsxoaurmsgqascxukony.supabase.co` has no DNS record. Re-confirmed, not revised.
+
+**Confirmed still down, probes ~6 minutes apart:**
+- `/health` `01:27:00Z` → **HTTP 503**, `problems:["database-unreachable"]`, `commit 7519c96`, 7.20 s.
+- `/health` `01:33:04Z` → **HTTP 503**, identical body, 7.29 s.
+- `GET /feed/for-you?limit=3` → **HTTP 500** `{"error":{"code":"db_error","message":"Something went wrong"}}`, 7.20 s.
+- `getsizzle.app` → **200** in 0.45 s (static bundle only — the shell loads, then cannot populate).
+- All three DB probes in `health.ts` are `null` (`stuckVideoBacklog`, `parkedMediaDeletions`, `cronAges`),
+  which is the `backlog === null && crons === null` branch at `apps/api/src/routes/health.ts:88` — a
+  genuine probe failure, not a crossed threshold.
+
+**DNS discriminator re-run in one shell, unchanged from both prior sessions:**
+- `https://supabase.co/` → **HTTP 307**, `dns=0.063263s`, `remote_ip=76.76.21.21` (parent zone healthy)
+- `https://gsxoaurmsgqascxukony.supabase.co/rest/v1/` → `Could not resolve host`, **curl exit 6**, `dns=0.000000s`
+- `https://db.gsxoaurmsgqascxukony.supabase.co/` → `Could not resolve host`, **curl exit 6**, `dns=0.000000s`
+
+Parent zone up, *every* per-project record (`<ref>` and `db.<ref>`) still absent = project-level
+pause/deprovision. No repo change, deploy, or rollback can create that record.
+
+**Outage duration.** Last green off-Mac probe `2026-09-21T17:54:46Z` · first failure `18:23:18Z` · still
+failing `2026-09-22T01:33:04Z`. **≥ 7h09m of confirmed failure, ≥ 7h38m since last known-good, and ongoing.**
+
+### Still no owner action (all re-checked this session)
+
+- `Uptime` workflow: still `state: disabled_manually`, `updated_at` still `2026-09-21T18:27:42Z`. Off-Mac paging has now been off for 7 hours.
+- Origin `main` head is `7519c96` — the *previous session's own* incident-log commit (`2026-09-22T00:28:53Z`). No other commits.
+- `vercel ls sizzle`: latest Production deploy is 1h old and is that same docs-only commit; all `● Ready`. **The last pre-outage Production deploy is 15 days old** — so no deploy landed anywhere near `18:23Z`, which rules out a bad deploy *definitively* rather than by inference. Rollback is still not a candidate.
+- `vercel env ls production`: `SUPABASE_URL` / `SUPABASE_ANON_KEY` / `SUPABASE_SERVICE_ROLE_KEY` still **92d ago**, untouched. No config drift.
+- Supabase status page: still exactly one unresolved incident (*"401 errors due to JWT rejections"*, created 2026-08-14, **last updated 2026-09-17**) — untouched through our entire window; page indicator `minor` / "Partially Degraded Service" from that same entry. Not our cause; re-confirmed rather than assumed.
+
+### New evidence this session
+
+**1. TD-21 is a REVOKED PERSONAL ACCESS TOKEN, not merely a permission gate — the fix is different from what the last three entries assumed.** Prior sessions recorded "Supabase MCP blocked / `Unauthorized`" and attributed it to the unattended session not having the connector permission granted. I probed the Supabase **Management API directly**, bypassing MCP entirely, using the PAT stored in `.mcp.json` (44 chars, `SUPABASE_ACCESS_TOKEN`; value never printed or logged):
+
+```
+GET https://api.supabase.com/v1/projects                      -> 401 {"message":"Unauthorized"}
+GET https://api.supabase.com/v1/organizations                 -> 401 {"message":"Unauthorized"}
+GET https://api.supabase.com/v1/projects/gsxoaurmsgqascxukony -> 401 {"message":"Unauthorized"}
+```
+
+The token demonstrably reached the header: the shell used `TOKEN=$(python3 -c …) && curl …`, and
+`TOKEN=$(cmd)` takes `cmd`'s exit status, so a failed extraction would have short-circuited the `&&`
+and curl would never have run. Curl ran and returned 401. A valid PAT returns 200 on `/v1/projects`.
+**Therefore the stored PAT is invalid/revoked/expired, and granting the Claude connector permission
+alone will NOT restore project-state visibility — the PAT has to be rotated (Level D).**
+
+*Honest limit on this inference:* a control request with **no** `Authorization` header also returns
+401, so the status code alone does not discriminate "missing" from "invalid". The discriminator is
+that a well-formed 44-char token *was* delivered and still got 401, where a valid one yields 200.
+
+*Non-inference a future session must not make:* this PAT has been `Unauthorized` since **2026-08-16/17**
+(per project memory), i.e. **over a month before this outage began**. So the 401 is a pre-existing,
+independent defect and is **not** evidence of a new account-level suspension or billing lockout.
+Do not read it as a second symptom of the same cause.
+
+**2. Paused-vs-deleted is still unanswerable, and that is now the single most decision-relevant unknown.**
+It determines whether Branden's first action is *"click Restore"* or *"contact Supabase support about
+PITR before touching anything"* — items 1 and 2 of his checklist are mutually exclusive first moves.
+The Management API was the last remaining path to read project state without the dashboard, and
+finding 1 closes it. **Only the owner, in the dashboard, can resolve this.** Four sessions have now
+had to infer a pause from DNS absence.
+
+**3. Request mix this window (`01:10:34Z–01:30:34Z`, Vercel's 100-row cap):**
+
+```
+  42 GET /internal/publish-scheduled     -> 200
+  40 GET /internal/finalize-videos       -> 200
+  10 GET /health                         -> 503
+   4 GET /internal/rollup-hashtag-trends -> 500
+   2 GET /feed/for-you                   -> 500   <-- this session's own probe
+   2 GET /internal/rollup-watch-ratios   -> 500
+```
+
+**No real user traffic appears in this window — but do NOT conclude users have abandoned the app.**
+82 of the 100 retained rows are the two every-minute crons, which saturate the 100-row cap inside
+20 minutes; genuine user requests are plausibly just truncated out. This is weaker evidence than the
+`/cooks/suggested?tastes=…` hit the 17:22 session captured, and it neither confirms nor refutes it.
+The 200s on `publish-scheduled` / `finalize-videos` against a dead database are the **latent
+false-green defect** recorded as finding 2 of the 17:22 entry, reproducing exactly as predicted.
+
+**4. The cron false-green defect from the 17:22 session is still unfiled and unfixed.** Unchanged
+assessment: editing `docs/engineering/technical-debt.md` is minimum Level C under `autonomy-policy.md`,
+and the ~6-line fix at `apps/api/src/routes/internal.ts:67,251` cannot be validated against a database
+that does not resolve. It remains a Level B PR for after recovery.
+
+**What I did.** Diagnosed and re-verified only — **no code change, no deploy, no rollback, no workflow
+or monitoring change, nothing committed but this entry.** There is still no in-lane fix: the failure is
+a missing DNS record for a Supabase project this repository cannot start.
+`node scripts/verify-deploy.mjs` remains unusable — its success criterion is a 200 `/health`, so during
+a DB outage it simply hangs. READY was confirmed with `vercel ls sizzle --yes` instead.
+
+**Why I again did not re-enable the `Uptime` pager.** Fourth session, same reasoning:
+`disabled_manually` four minutes after it paged is a deliberate human action, and an unattended session
+should not change monitoring configuration mid-incident. I still have no evidence the mute was
+accidental. It stays the cheapest high-value item on the list below — until it is back on, nothing
+pages Branden off-Mac.
+
+### For Branden — unchanged, still required (Level D, only you can do this)
+
+None of it has been done in 7+ hours. In order:
+
+1. **Supabase dashboard → project `gsxoaurmsgqascxukony` (Sizzle production) → Restore/Resume** if it shows Paused. Clear any billing or free-tier limit warning first, or the restore will not stick. **While you are there, read whether the project is Paused or absent** — four sessions have been unable to determine this (new finding 2).
+2. If the project is **missing entirely**, contact Supabase support about PITR/backup recovery **before anything else**. **Do not create a replacement project** — the ref is hardcoded as a `preconnect` in shipped web *and* iOS bundles (`HOSTING.md:43,59`, `apps/web/index.html:30`, `apps/web/ios/App/App/public/index.html:30`), so a new ref means a native rebuild *and* permanent loss of users, recipes, purchases and payout history.
+3. **Verify on the real surface**: `/health` → **200**, `"status":"ok"`, `problems: []`, **and** `GET /feed/for-you?limit=3` → 200 rather than `db_error`. Then sign in on getsizzle.app and watch `stuckVideoBacklog` drain toward 0 as `finalize-videos` catches up.
+4. `gh workflow enable uptime.yml` — restores the one escalation channel demonstrably reaching you.
+5. **Reconcile Stripe** for `2026-09-21T17:54Z → recovery` against the ledger. Handlers are idempotent and Stripe retries with backoff for ~3 days, so at 7h in nothing should be permanently lost — but only ~20-minute log windows have ever been inspectable, so this is explicitly not a clean bill of health.
+6. **File the cron false-green defect** (17:22 entry, finding 2) as a TD entry and let a Level B PR fix it.
+7. **Rotate the Supabase PAT in `.mcp.json`** (new finding 1). This is a *different* action from granting the MCP connector permission, which is what the last three entries implied was needed. TD-21 has now cost diagnostic depth in **four** sessions in one day, and with a working token any of them could have read project state directly instead of inferring a pause from DNS — including answering item 1's paused-vs-absent question without you.
