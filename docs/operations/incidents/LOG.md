@@ -1848,3 +1848,98 @@ you which branch you are in. The ops inbox almost certainly holds the Supabase m
 then re-arm the pager (`gh workflow enable uptime.yml` + reconnect Remote Control). You do **not**
 need to warn users about re-logging in — sessions survive (above). The money self-heals on idempotent
 handlers if restore beats **`2026-09-24T18:23Z`**; after that it needs a deliberate List-Events replay.
+
+## Incident 2026-09-22 06:03 PDT — watchdog summon #15, same Supabase outage — NEW: there is no data-loss deadline (1-year restore window), and inactivity auto-pause is RULED OUT
+
+**Condition unchanged, re-verified in the documented cheap set (~7 calls).** `/health` at
+`13:00:30Z` (watchdog), `13:00:57Z` and `13:03:01Z` — all **503
+`problems:["database-unreachable"]`**, every DB-derived gauge (`cronAges`, `stuckVideoBacklog`,
+`parkedMediaDeletions`) `null`. `GET /feed/for-you?limit=3` → **500 `{"error":{"code":"db_error"}}`**
+in 7.25s: live user-facing failure, not a probe artifact. Triple-resolver DNS byte-identical to all
+fourteen prior sessions — `supabase.co` → `A=76.76.21.21`/`CNAME=ENODATA`, while
+`gsxoaurmsgqascxukony.supabase.co` **and** `db.gsxoaurmsgqascxukony.supabase.co` → `ENOTFOUND` on
+system + `1.1.1.1` + `8.8.8.8`. Origin head is now `765cf53` = **session 14's own docs-only log
+push**, and `/health.commit` agrees, so **no owner action has landed**; `Uptime` is still
+`disabled_manually`. **Duration 18h40m** as of `13:03:01Z`. **Stripe auto-retry slack 53h20m**
+(expires `2026-09-24T18:23Z`). No 15th diagnosis — root cause is settled in
+`2026-09-21-supabase-project-unreachable.md`.
+
+### NEW — the platform's own pause policy answers two things nobody had looked up
+
+Sessions 13 and 14 each found their result by asking what else had a *clock* on it. The clock
+nobody had checked is the one on the **project itself**: if it is paused, does the data expire?
+Supabase's public docs are readable from here via the plain-`curl` gate-bypass (§8), and
+`guides/platform/free-project-pausing.md` settles it. **This is documented platform policy, not an
+observation about our project** — it does not tell us which state `gsxoaurmsgqascxukony` is in.
+
+**1. There is no imminent data-loss deadline — the restore window is 1 year.** *"You can restore a
+paused project for up to 1 year after it was paused… The project will return to its previous state,
+including data and configurations."* (The page's own anchor is the legacy `#90-day-window-to-restore`,
+but the body text says one year — worth knowing, because the stale 90-day number is what most people
+remember and it is the number that would panic someone.) So **the urgency here is the outage, not
+the data.** Nothing is decaying toward permanent loss. The two things that *are* on real clocks stay
+exactly as filed: **TD-29** (video assets stranded outside the finalizer's 6h window — already
+overrun, needs the post-restore backfill) and the **Stripe 72h retry slack** above.
+
+**2. Automatic pausing for inactivity is ruled out.** The documented trigger is *"low activity over
+a 7-day period"*, where *"a few user requests to the database each day over the previous week is
+enough to keep the project from being paused"*, and the docs count *"API calls to your project or
+…requests via your connected application"* as qualifying activity. Sizzle is live on the App Store
+with real users, **and** runs five Vercel crons against the DB — `finalize-videos` alone fires
+**every minute** (~1,440 DB-touching invocations/day), continuously, right up to `18:23Z` on 09-21.
+The project cannot have met the inactivity criterion. Supabase also *"sends two emails… a warning
+email roughly one week before the pause takes effect"* — so the inactivity path would have put a
+warning in the ops inbox around **09-14**, a week before anything broke.
+
+**Why this matters for the owner:** the action sheet asks which branch you are in — Resume vs
+fix-billing vs call-support. This removes the benign branch. A live, continuously-queried project
+does not get auto-paused for inactivity, so the remaining explanations are **billing/payment
+failure**, or a **manual or platform-side action** (deprovision / abuse / support hold). That
+changes what to look for in the inbox: check for a **billing or payment-failure** notice, and for
+the **absence of an ~09-14 inactivity warning** — that absence is itself the confirmation. It also
+changes the dashboard path: a billing-hold project needs the payment method fixed *before* Resume
+will stick, rather than a one-click Resume.
+
+**Prevention (owner decision, Level D — billing).** *"Projects under a paid plan cannot be paused
+and are not subject to automatic pausing for inactivity."* Sizzle is a **live App Store app moving
+real money on a free-tier database**. Whatever the reason turns out to be, the structural fix for
+a production financial system is the **Pro plan** — it removes the entire pause failure mode. Filed
+as a postmortem follow-up; it is a billing change, so it is Branden's to make.
+
+### Not shipped, deliberately
+
+No code change — nothing in the repo can reach a hostname with no DNS record, so there is nothing
+to fix forward and nothing to roll back (the API's recent prod deploys are prior sessions' own
+docs-only log pushes, not a bad release). TD-28 and TD-29 stay parked: unverifiable against a dead
+DB, and any deploy perturbs the very signals being watched for recovery. I deliberately did **not**
+pre-write the TD-29 backfill script — session 14 parked it for good reason, and an untested script
+authored against a dead DB is not something to hand someone for a post-restore recovery run.
+`uptime.yml` stays muted (`.github/workflows/**` is minimum Level C, *and* re-arming it would
+override a deliberate human mute). `verify-deploy.mjs` remains unusable by construction during a DB
+outage — its success criterion is a 200 `/health`. This change is docs-only and needs no deploy
+verification.
+
+### The alert path — still pull-only
+
+`PushNotification` re-tested live and still reports **Remote Control inactive** (now ~19 days, still
+predating the outage), so sessions 1–15 have paged nobody. The channel inventory in §7 is complete —
+every option has been tried and each is dead, gated, or deliberately rejected (a GitHub Issue stays
+rejected: the repo is public and it would advertise a live outage and an open financial-webhook
+window). `LOG.md` and the action sheet remain **pull, not push**. Saying so plainly rather than
+claiming a notification was sent.
+
+### For Branden — THE ONE ACTION, unchanged for 18h40m
+
+Supabase dashboard → project `gsxoaurmsgqascxukony` → **Resume / Restore** (Level D — every agent DB
+path is closed: the TD-21 PAT is revoked, both Supabase MCP paths and Gmail are connector-gated).
+Read `docs/operations/incidents/2026-09-21-supabase-project-unreachable.md` first. **New as of this
+session:** your data is **not** on a deadline — the restore window is a year — so do not let fear of
+data loss rush the diagnosis. But do expect **billing or a manual/platform action** rather than an
+inactivity pause, and check the ops inbox for a payment-failure notice (and for the *absence* of an
+~09-14 inactivity warning, which confirms it). If it is billing, fix the payment method *first* or
+the Resume will not hold. **After restore:** run the **TD-29 backfill** for video assets stranded by
+the finalizer's 6h window, then re-arm the pager (`gh workflow enable uptime.yml` + reconnect Remote
+Control). You do **not** need to warn users about re-logging in — sessions survive (session 14).
+The money self-heals on idempotent handlers if restore beats **`2026-09-24T18:23Z`**; after that it
+needs a deliberate List-Events replay. Then consider the **Pro plan** so a production money app is
+never pausable again.
