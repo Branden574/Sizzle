@@ -1383,3 +1383,165 @@ GitHub git-data API.
 8. **Rotate the Supabase PAT in `.mcp.json`** *and* grant the MCP connector permission — both, either alone
    is insufficient (TD-21).
 9. ~~File the cron false-green defect~~ — **done this session, TD-28.** Ship the fix as a Level B PR after recovery.
+
+## Incident 2026-09-21 23:44 PDT — watchdog re-summon #8 (9th session), same SEV-1 at 12h22m
+
+**Same outage, same root cause, still Level D. Nothing shipped but this log.** What is new is the
+first thing in nine sessions that changes *Branden's* decision rather than refining the diagnosis:
+the **recovery window is quantified (1 year, not days)** and there is a **second, better-fitting
+pause mechanism** than the inactivity one every prior entry assumed — and the two lead to
+*different first moves*.
+
+**What fired.** `scripts/ops/watchdog.sh` at 23:44:58 PDT — `API degraded (503): database-unreachable`,
+`commit f753d45`. Not the `HTTP 000` class; a 503 with a JSON body, correctly treated as real.
+
+**Re-established in 5 calls (the set recorded by session 8 — it worked, keep it).**
+- `/health` **503** `["database-unreachable"]` at `06:45:12Z` and again `06:47:32Z` (7.2 s both — the
+  connect stall, not a fast refusal). `commit f753d45` = origin head, so **no rogue deploy**.
+- `GET /feed/for-you?limit=3` → **500 `{"error":{"code":"db_error"}}`** — user-facing, not a probe artifact.
+- `scripts/ops/origin-drift.mjs` → local `d4c5395`, origin **`f753d45`** = **session 8's own log commit**.
+  **No corrective owner action in the 12h22m.**
+- `gh api …/actions/workflows` → `Uptime` still **`disabled_manually`**; CI / CodeQL / Dependabot active.
+- Triple-resolver record-type probe (system + `1.1.1.1` + `8.8.8.8`, all three agreeing):
+  `supabase.co` → **A `76.76.21.21`**, CNAME `ENODATA` (name exists) · `gsxoaurmsgqascxukony.supabase.co`
+  → **`ENOTFOUND`** · `db.gsxoaurmsgqascxukony.supabase.co` → **`ENOTFOUND`**. Parent zone healthy,
+  **every per-project record withdrawn** = project-level pause/deprovision. Unchanged.
+
+**Outage start pinned to the minute (new — prior entries carried two conflicting anchors).**
+`gh run list --workflow uptime.yml`: last green **`2026-09-21T17:54:46Z`**, first failure
+**`2026-09-21T18:23:07Z`**. So the true start is inside that 28-minute window. Use **17:54:46Z** as the
+Stripe reconciliation bound (conservative) and **18:23:07Z** for duration. That reconciles the "17:54Z"
+and "11h22m @ 22:41 PDT" figures in earlier entries — both were right, measuring different things.
+
+### Finding 1 — the Supabase platform incident on the status page is NOT ours (ruled out, cheaply)
+
+`status.supabase.com` reports `minor / Partially Degraded Service`, which looks alarming mid-incident.
+It is **unrelated**: the one unresolved incident is **"401 errors due to JWT rejections"**
+(`6q5902p2xd9f`), open since **2026-08-14**, component *API Gateway*, status `identified`. That failure
+mode is a **resolving host returning 401** — ours is **NXDOMAIN on three independent resolvers**. A
+platform gateway fault does not withdraw one project's DNS records while the parent zone stays healthy.
+Record it so session 10 does not re-chase it.
+
+### Finding 2 — the recovery window is **1 year**, and the data is not at near-term risk (NEW)
+
+Eight sessions said paused-vs-deleted was unanswerable and left the data-loss clock unbounded. The
+clock itself is public and was never read. `supabase.com/docs/**.md` serves **raw markdown to plain
+`curl`** — it is not behind the connector gate that blocks `mcp__supabase__search_docs`, WebFetch and
+Gmail. (Found via `docs/sitemap.xml`; the `.md` suffix is the trick.)
+
+From `guides/platform/free-project-pausing.md`:
+- *"You can restore a paused project for up to **1 year** after it was paused"* — Dashboard → org →
+  project → **Resume project** → confirm; *"The project will return to its previous state, including
+  data and configurations."*
+- Heed the slug/anchor mismatch: the URL and the in-page anchor still say `#90-day-window-to-restore`
+  (legacy). Body text on **both** relevant pages says 1 year, and the companion troubleshooting page is
+  titled *"…Paused for More Than 1 Year"*. **Even on the conservative 90-day reading the deadline is
+  ~2026-12-20** — so this is urgent for *users*, not for *data*. That distinction was missing from all
+  eight prior entries and it is the one that should lower Branden's panic and raise his clarity.
+- Past the window (`troubleshooting/restore-project-after-90-days-pause.md`): data is still recoverable
+  by downloading the `.backup` + Storage objects from Project Overview **before deletion** — but that
+  path forces a **new project ref**, which for Sizzle means a native rebuild (the ref is a hardcoded
+  `preconnect` in shipped web *and* iOS bundles). So "Resume", never "recreate", remains a hard rule.
+
+**Caveat, stated plainly:** this bounds the window *if the project is paused*. If it was **deleted**,
+`guides/platform/backups.md` is explicit — *"When you delete a project, we permanently remove all
+associated data, including any backups stored in S3. This action is irreversible."* Paused-vs-deleted
+is still unreadable from inside an unattended session (all three paths remain closed — see below).
+
+### Finding 3 — inactivity is probably the WRONG pause mechanism; Fair Use / quota fits better (NEW)
+
+Every prior entry assumed "paused for inactivity". The docs make that **doubtful for Sizzle**, and the
+alternative changes step 1.
+
+`free-project-pausing.md`: pausing hits Free Plan projects with *"too few user queries"* over 7 days —
+*"Typically a few user requests to the database each day over the previous week is enough to keep the
+project from being paused."* But **session 3 proved live user traffic** (a Vercel runtime-log hit on
+`/cooks/suggested?tastes=Chinese,Japanese,Korean` — real query params no monitoring probe generates).
+A project serving real App Store users clears that bar easily. **The inactivity story and the observed
+traffic are in tension.**
+
+`billing-faq.md` supplies a mechanism that fits without tension — the **Fair Use Policy**. Restrictions
+apply to an organization that: *continually exceeds the Free Plan quota* · continually exceeds Pro quota
+with spend cap on · **has overdue invoices** · **has an expired credit card**. And *"How is the Fair Use
+Policy applied?"* lists **"Pausing projects"** first, *"generally applied to all projects of the
+restricted organization."*
+
+Why this fits Sizzle specifically: it is a **video app on the free tier**, and per `CLAUDE.md` **native
+uploads land in Supabase Storage** before the server relays them to Cloudflare — so real usage burns
+free-tier **storage + egress**, exactly the quota Fair Use polices. Not proven; but it is the
+hypothesis consistent with *both* the DNS signature *and* the known live traffic, and the inactivity
+one is not.
+
+**Why the distinction decides his first move** (`billing-faq.md`, "How can I remove restrictions"):
+- **Inactivity pause** → click **Resume**, done.
+- **Fair Use / quota pause** → Resume alone *will not stick*. *"To remove restrictions, you will need to
+  address the issue that caused the restriction."* Quota restrictions lift **when the billing cycle
+  resets**, or **immediately by upgrading to Pro**. Note also: *"Pausing or deleting a project stops new
+  usage from accumulating, but does not remove usage that already occurred during the current billing
+  cycle."* — so a resume-into-the-same-cycle can re-restrict.
+- **Overdue invoice / expired card** → fix the payment method first; nothing else works.
+
+The **dashboard banner and the pause email say which** — and Supabase *does* email the owner
+(`free-project-pausing.md`: a warning ~1 week before, and a confirmation once paused). Two emails
+should already be in the ops inbox. That remains the cheapest unblock and is still gated (below).
+
+### Finding 4 — the systemic one: a live App Store app's production DB cannot sit on a pausable tier
+
+Free Plan projects are **pausable by design**; Pro Plan projects *"cannot be paused and are not subject
+to automatic pausing"* (`free-project-pausing.md`), and Pro also restores managed daily backups, which
+the free tier does not have — `backups.md` tells free-tier users to *self-export* via `supabase db dump`.
+So today Sizzle has **no managed restorable backup** and a **DB that can be switched off by policy**,
+under a product that is LIVE with real users and real money. Whatever the immediate cause, that is the
+standing risk, and no repo change can mitigate it.
+
+**Recommended (Level C — `docs/engineering/**`, so flagged, not written):** add a `SYSTEM_RISK_MAP.md`
+entry recording that the production database runs on a tier whose documented failure mode is
+administrative suspension, citing `free-project-pausing.md` and `billing-faq.md#fair-use-policy`, with
+"upgrade to Pro" as the control. I did not edit the guardrail docs — that lane needs his sign-off.
+
+### Still closed, do not re-probe (sessions 5–8 settled this; confirmed again by Finding 2's workaround)
+
+Project *state* remains unreadable unattended: the claude.ai Supabase connector, the local `supabase`
+MCP server, and `api.supabase.com` direct (**401, PAT revoked** — TD-21) are all shut, and the gate is
+**connector-level, not per-tool**. Today's `curl`-the-docs route is **not** a hole in that gate — it
+reads *public documentation only* and touches no project, credential or PAT. It bounds the clock; it
+cannot tell you whether the project is paused or gone.
+
+**What I did.** Verified and filed only — **no code change, no deploy, no rollback, no workflow or
+monitoring change, no security control touched.** `verify-deploy.mjs` remains unusable during this
+outage (its success criterion is a 200 `/health`). Built on **origin's** `LOG.md` via
+`scripts/ops/origin-drift.mjs` (local HEAD `d4c5395` is stale — TD-27), `secrets:check` clean, pushed
+through the GitHub git-data API. The `Uptime` pager stays muted for the reason session 6 established:
+`.github/workflows/**` is Level C and the mute was a deliberate human action.
+
+### For Branden — Level D, only you can do this
+
+1. **Open the Supabase dashboard and read the banner on the org + project `gsxoaurmsgqascxukony`.**
+   You are looking for **which** of three states: paused-for-inactivity · **Fair-Use/quota or billing
+   restriction** · project absent. Nine sessions have failed to determine this; it is one glance, and
+   it selects the fix below. **Check the org's billing/usage page too, not just the project.**
+2. **Then act on what it says:**
+   - *Paused (inactivity)* → **Resume project**; data and config come back as-is.
+   - *Restricted (quota / Fair Use)* → **upgrading to Pro lifts it immediately**; resuming without
+     addressing usage can re-restrict in the same billing cycle.
+   - *Overdue invoice / expired card* → fix payment first, then resume.
+   - *Absent* → **contact Supabase support about PITR/backup recovery before anything else**, and
+     **do not create a replacement project** (new ref ⇒ native rebuild + loss of users, recipes,
+     purchases and payout history).
+3. **Regardless of cause: move this org to Pro.** It is the documented control that makes the failure
+   impossible to repeat (Finding 4) and it restores managed daily backups, which you do not have today.
+4. **Verify on the real surface:** `/health` → 200 `"ok"` `problems: []` **and**
+   `GET /feed/for-you?limit=3` → 200 rather than `db_error`. Then watch `stuckVideoBacklog` drain.
+5. `gh workflow enable uptime.yml`.
+6. **Reconcile Stripe** for **`2026-09-21T17:54:46Z` → recovery**. Handlers are idempotent and Stripe
+   retries ~3 days, so at 12h nothing should be permanently lost — but only ~20-minute log windows were
+   ever inspectable, so this is **not** a clean bill of health. The retry window is the real deadline.
+7. **Grant the claude.ai connector permission** — one grant covers Gmail *and* Supabase; **the two pause
+   emails Supabase sent you almost certainly name the exact reason** in Finding 3, which is the whole
+   question in step 1.
+8. **Rotate the Supabase PAT in `.mcp.json`** *and* grant the connector permission — both; either alone
+   is insufficient (TD-21).
+9. **Confirm whether `telegram` is wired.** `PushNotification` has been dead **17 days**; every
+   escalation path to you right now is a git commit, which is why nine sessions have produced no reply.
+10. After recovery: ship **TD-28** (cron false-green, 8 call sites) as the Level B PR — still correctly
+    deferred, unverifiable against a DB that does not resolve.
