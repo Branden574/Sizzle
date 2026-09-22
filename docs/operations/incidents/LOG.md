@@ -669,3 +669,122 @@ The checklist in the 14:16 entry stands verbatim; **none of it has been done.** 
    `mcp__claude_ai_Supabase__list_projects` and the local `mcp__supabase__*` tools are
    permission-gated in an unattended session, so project state still had to be inferred from DNS
    rather than read.
+
+## Incident 2026-09-21 17:22 PDT — watchdog re-summon #2, SAME SEV-1 still open: API 503 `database-unreachable`, outage now ≥6h — STILL NOT FIXED, still Level D
+
+**Third session on one outage.** Same incident as the 14:16 and 15:17 PDT entries above — not a new
+one. The watchdog's 60-minute cooldown expired and it re-fired at 17:22:56 local (00:22:56Z) on an
+unchanged condition. **Nothing has recovered and no owner action has been taken in the ~2h since the
+last entry.** The root cause stands exactly as written: the Supabase project host
+`gsxoaurmsgqascxukony.supabase.co` has no DNS record. Re-confirmed, not revised.
+
+**Confirmed still down, probes ~3 minutes apart:**
+- `/health` `00:23:24Z` → **HTTP 503**, `problems:["database-unreachable"]`, `commit 4cd51ef`, 7.2 s.
+- `/health` `00:26:36Z` → **HTTP 503**, identical, 7.17 s.
+- `GET /feed/for-you?limit=3` → **HTTP 500** `{"error":{"code":"db_error"}}`, 7.2 s.
+- `getsizzle.app` → **200** in 87 ms (static bundle only — the shell loads, then cannot populate).
+
+**DNS discriminator re-run in one shell, unchanged from the prior session:**
+- `https://supabase.co/` → **HTTP 307**, `dns=0.060829s`, `remote_ip=76.76.21.21` (parent zone healthy)
+- `https://gsxoaurmsgqascxukony.supabase.co/rest/v1/` → `Could not resolve host`, **curl exit 6**, `dns=0.000000s`
+- `https://db.gsxoaurmsgqascxukony.supabase.co/` → `Could not resolve host`, **curl exit 6**
+
+Parent zone up, *every* per-project record (`<ref>` and `db.<ref>`) still absent = project-level
+pause/deprovision. No repo change, deploy, or rollback can create that record.
+
+**Outage duration.** Last green off-Mac probe `2026-09-21T17:54:46Z` · first failure `18:23:18Z` ·
+still failing `2026-09-22T00:26:36Z`. **≥ 6h03m of confirmed failure, ≥ 6h32m since last known-good,
+and ongoing.**
+
+### Still no owner action (all three re-checked this session)
+
+- `Uptime` workflow: still `state: disabled_manually`, `updated_at` still `2026-09-21T18:27:42Z`. Off-Mac paging has been off for 6 hours.
+- Origin `main` head is `4cd51ef` — the *previous session's own* incident-log commit. No other commits.
+- `vercel ls sizzle`: latest Production deploy is 2h old and is that same docs-only commit. All `● Ready`. No rogue deploy; rollback still not indicated.
+- Supabase status page: still exactly one unresolved incident (*"401 errors due to JWT rejections"*, created 2026-08-14, **last updated 2026-09-17**) — untouched through our entire window. Not our cause.
+- **Supabase MCP still blocked (TD-21, third time in one day).** `mcp__claude_ai_Supabase__list_projects` returned *"Claude requested permissions … but you haven't granted it yet."* Project state still cannot be read; it is still inferred from DNS.
+
+### New evidence this session
+
+**1. Real users are hitting the failure right now — not just probes.** Runtime logs show
+`GET /cooks/suggested?tastes=Chinese%2CJapanese%2CKorean&limit=5` → **500** `[db_error] TypeError:
+fetch failed` (7 s). That request carries a **populated taste-preference set**; neither the watchdog
+(which only probes `/health`) nor any probe in these three sessions generates it. Previous entries
+could only prove the *endpoints* were broken; this proves **live user sessions are being served
+errors**. Request mix over the retained 20-minute window (`00:04:17Z–00:24:34Z`, 100-row cap):
+
+```
+  42 GET /internal/publish-scheduled  -> 200
+  42 GET /internal/finalize-videos    -> 200
+   8 GET /health                      -> 503
+   2 GET /feed/for-you                -> 500
+   2 GET /cooks/suggested             -> 500   <-- real user traffic
+   2 GET /internal/rollup-watch-ratios-> 500
+   2 GET /internal/rollup-hashtag-trends -> 500
+```
+
+**2. LATENT DEFECT FOUND (pre-existing, not caused by this outage): two every-minute crons return
+HTTP 200 while doing nothing, and can write a false-green heartbeat.** Verified in code, not
+inferred from the logs:
+
+- `apps/api/src/routes/internal.ts:67` (`finalize-videos`) and `:251` (`publish-scheduled`)
+  destructure **`const { data } = await supabaseAdmin…`** and never read `error`. A failed query
+  yields `data: null`, so the route computes an all-zeros summary and returns **200**.
+- By contrast `rollup-hashtag-trends` (`:355-359`) and `rollup-watch-ratios` (`:336-344`) *do* check
+  `error` and correctly return **500** — which is exactly why those two show 500 in the table above
+  while the other two show 200 during a total database outage.
+
+The designed alerting signal is sound and is **not** the bug: `recordCronRun` (`:18-33`) writes
+`cron_runs.last_success_at` only on success, and `/health` alerts on that row's *age*
+(`apps/api/src/routes/health.ts:54-58`). During *this* outage the heartbeat write also fails, so no
+false green is produced — `/health` simply reports `cronAges: null`.
+
+**The real exposure is the partial failure.** If the database is *reachable* but one query fails —
+an RLS/grant change on `video_assets` or `recipes`, a dropped column, a broken `gc_orphan_video_assets`
+— then `finalize-videos` skips all its work, **`recordCronRun` succeeds**, and it stamps a **fresh
+`last_success_at` with an all-zeros result**. `/health.cronAges` then reads green, Vercel Cron's
+non-2xx alerting never fires, and video finalization is silently dead. That is precisely the
+"stuck `pending` forever — unplayable AND never thumbnail-moderated" failure the cron's own header
+comment (`:48-57`) exists to prevent.
+
+**Not shipped, deliberately.** It is unrelated to this incident's cause, fixing it mid-SEV-1 would
+change cron failure semantics under an active outage (turning 42 silent 200s into 42 alerting 500s
+per 20 min), and there is no way to validate a fix against a database that does not resolve.
+**Please file it as a TD-register entry** — I did not edit `docs/engineering/technical-debt.md`
+because that path is minimum Level C under `autonomy-policy.md` and needs your sign-off.
+Suggested fix when the DB is back: read `error` on those two queries and return 500, matching the
+rollup routes — a ~6-line change in one file, Level B, with a regression test that stubs a failing
+`supabaseAdmin` query and asserts a non-2xx plus no `cron_runs` write.
+
+**3. Money — narrower window than before, same verdict: not a clean bill of health.** Zero Stripe
+webhook deliveries appear in the retained log window, but Vercel returned only **~20 minutes**
+(`00:04:17Z–00:24:34Z`, 100-row cap), so the other ~5h40m of the outage is uninspectable. Stripe
+retries failed deliveries with backoff for up to ~3 days and our handlers are idempotent by design,
+so at 6h in **nothing should be permanently lost yet** — but the ledger must still be reconciled
+against Stripe's dashboard once the project is back.
+
+**What I did.** Diagnosed and re-verified only — **no code change, no deploy, no rollback, no
+workflow or monitoring change, nothing committed but this entry.** There is still no in-lane fix:
+the failure is a missing DNS record for a Supabase project this repository cannot start.
+`node scripts/verify-deploy.mjs` remains unusable (its success criterion is a 200 `/health`).
+
+**Why I again did not re-enable the `Uptime` pager.** Same reasoning as both prior sessions:
+`disabled_manually` four minutes after it paged is a deliberate human action, and an unattended
+session should not change monitoring configuration mid-incident. No new evidence the mute was
+accidental.
+
+**Escalation — still dead.** `PushNotification` is still *"Mobile push not sent (Remote Control
+inactive)"* (down since 2026-09-06, now 15 days). **This commit is, for the third time, the only
+artifact carrying a live SEV-1.**
+
+### For Branden — unchanged, still required (Level D, only you can do this)
+
+None of it has been done. In order:
+
+1. **Supabase dashboard → project `gsxoaurmsgqascxukony` (Sizzle production) → Restore/Resume** if it shows Paused. Clear any billing or free-tier limit warning first, or the restore will not stick.
+2. If the project is **missing entirely**, contact Supabase support about PITR/backup recovery **before anything else**. **Do not create a replacement project** — the ref is hardcoded as a `preconnect` in shipped web *and* iOS bundles (`HOSTING.md:43,59`, `apps/web/index.html:30`, `apps/web/ios/App/App/public/index.html:30`), so a new ref means a native rebuild *and* permanent loss of users, recipes, purchases and payout history.
+3. **Verify on the real surface**: `/health` → **200**, `"status":"ok"`, `problems: []`, **and** `GET /feed/for-you?limit=3` → 200 rather than `db_error`. Then sign in on getsizzle.app and watch `stuckVideoBacklog` drain toward 0.
+4. `gh workflow enable uptime.yml` — restores the one escalation channel demonstrably reaching you.
+5. **Reconcile Stripe** for `2026-09-21T17:54Z → recovery` against the ledger (see money note).
+6. **File the cron false-green defect** (new finding 2) as a TD entry, and let a Level B PR fix it.
+7. **TD-21 (Supabase MCP `Unauthorized`) has now cost diagnostic depth three times in one day.** With it working, any of these three sessions could have read project state directly instead of inferring a pause from DNS.
