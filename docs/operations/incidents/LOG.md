@@ -3033,3 +3033,83 @@ the GitHub git-data API with a full 40-char parent SHA. Branden's pre-existing u
 5. **Still the systemic fix:** a live App Store app moving real money should not run its production
    database on a tier whose documented failure mode is administrative suspension. Paid-plan projects
    cannot be paused at all. Billing is Level D — your call.
+
+---
+
+## 2026-09-22 — incident, watchdog re-summon (session 25): same SEV-1 at 29h05m
+
+**Deliberately short.** The diagnosis finished at session 13; sessions 14–24 added the money
+rails, the TD-34 trap and the channel audit. This log is now 3,000+ lines on one unresolved
+owner action, and length has become a liability — it buries the two-minute fix. The action
+sheet (`2026-09-21-supabase-project-unreachable.md`) is the artifact that matters; I edited it
+and kept this entry to what changed.
+
+**Re-verified, nothing recovered.** Watchdog fired 16:25:06 PDT on the 60-minute cooldown,
+one cycle after session 24. `/health` → **503 `database-unreachable`**, commit `34493fb`,
+7.2s (the DB-connect stall). `/feed/for-you` → **500**, 7.3s. DNS unchanged and unambiguous:
+`gsxoaurmsgqascxukony.supabase.co` and `db.<ref>.supabase.co` both **ENOTFOUND**, while
+`supabase.co` and `api.supabase.com` resolve. Same project-level DNS withdrawal, hour 29.
+`getsizzle.app` still 200 — the shell loads, every data path behind it fails.
+
+**Nothing shipped, and nothing was invented to ship.** All of TD-28/29/30/31/33/34/35 stays
+parked for the reason sessions 13–24 gave: unverifiable against a database with no DNS record
+(hard rule 4). `uptime.yml` stays muted (`.github/workflows/**` ≥ Level C; re-arming it would
+override a deliberate human mute). `verify-deploy.mjs` **not run** — it asserts a 200 `/health`,
+so it is unusable by construction during this outage, and this change is docs-only. No new
+subsystem audit: there is no evidence pointing at one, and manufacturing a 25th finding would
+be noise, not diligence.
+
+**Two things did change, both small, both verified this session:**
+
+1. **TD-21 sharpened — the local `supabase` MCP server is tokenless, not permission-gated.**
+   §5 had it filed under the same connector-level gate as the claude.ai connector. It is
+   actually *connected* and answers: `get_advisors` returns **"Unauthorized. Please provide a
+   valid access token … `--access-token` flag or `SUPABASE_ACCESS_TOKEN`"** — a server-side
+   auth failure, not a permission prompt. Independent second confirmation that the **revoked
+   PAT** is the blocker, and it gives TD-21 a concrete close condition: rotate the PAT, expose
+   it as `SUPABASE_ACCESS_TOKEN`. Still **Level D** (owner does credentials), so still not
+   mine — but the agent DB path is one owner-side token away, not a grant negotiation.
+   Re-tested alongside it: claude.ai Supabase and Gmail connectors both still gated.
+2. **The `telegram` lead (session 21) is closed as "attended-only", not open.** Reproduced:
+   both `telegram:access` and `telegram:configure` fail to load, and the plugin directory read
+   is sandbox-blocked. It is not an open investigation — no further unattended session should
+   spend time on it. Logged in §7 so it stops being re-picked-up.
+
+**Channels — still zero reach.** `PushNotification` attempted as the summon's closing step →
+**"Mobile push not sent (Remote Control inactive)."** Dark ~20 days, since *before* the outage.
+**Sessions 1–25 have paged nobody.** GitHub Issue stays rejected (public repo; it would
+advertise a live outage and an open financial-webhook window on a production money system).
+This entry, like the 24 before it, is **pull, not push**.
+
+**Secret check.** Per **TD-33** `npm run secrets:check` is structurally blind on the
+git-data-API push path, so a "clean" from it would be a no-op. Compensated as in sessions
+18–24: both changed files scanned out-of-band for value-shaped credentials (prefix **plus**
+real-length tail, JWT triplets, `-----BEGIN`) — **clean**. Both are docs; no secret value was
+read, logged or committed.
+
+**Working-tree note (TD-27).** `origin-drift.mjs` ran **first**: local `HEAD d4c5395` vs origin
+`main 34493fb`, 7 files adrift — local `LOG.md` is **427** lines against origin's **3,035**, so
+appending to the working copy would have destroyed ~2,600 lines of this incident's history.
+Both edits were built on the origin copies in `.codex/origin-34493fb/` and pushed through the
+GitHub git-data API. Branden's uncommitted work (`sweep-prompt.md`,
+`tests/invariants/ops-tooling.test.mjs`, untracked `scripts/ops/origin-drift.mjs`) untouched
+per hard rule 11.
+
+### For Branden
+
+Unchanged from session 24 — re-stated because nothing here self-heals:
+
+1. **The only fix, Level D:** Supabase dashboard → project `gsxoaurmsgqascxukony` →
+   **Resume / Restore**. **29h05m** down. Read the action sheet, not this log.
+2. **Before Resume:** Vercel → project **`sizzle`** (the API — naming is reversed) → Settings →
+   Cron Jobs → **`Disable Cron Jobs`** (TD-34, the 60-second trap).
+3. **After restore:** app.revenuecat.com → Integrations → Webhooks → **Retry** each failed
+   `REFUND` / `CANCELLATION` since `2026-09-21T18:23Z`. Their auto-retries expired
+   `2026-09-21T20:58Z` (~26h30m ago) and restore will **not** replay them. Idempotent — retry
+   freely. Do it **before the next payout run**.
+4. **Money:** **~43h** of Stripe auto-retry slack left (`2026-09-24T18:23Z`). Do **not** disable
+   the Stripe webhook endpoint; check it isn't already `disabled` before replaying.
+5. **Systemic, and the one that prevents a session 26:** the free tier's documented failure mode
+   is administrative suspension, and the alerting layer that should have caught it has no
+   working push path (§7). Upgrading the plan and re-arming one alert channel are both your
+   call, and together they are the difference between 2 minutes and 29 hours.

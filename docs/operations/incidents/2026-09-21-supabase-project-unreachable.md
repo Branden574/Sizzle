@@ -1,7 +1,7 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
 **Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
-(11:23 AM PDT Mon 09-21). **27h02m as of 2026-09-22 21:25Z** — re-verified by session 23.
+(11:23 AM PDT Mon 09-21). **29h05m as of 2026-09-22 23:28Z** — re-verified by session 25.
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
 
 > **🛑 READ §4 STEP 0 BEFORE YOU CLICK RESUME.** Session 18 found that the first
@@ -10,7 +10,7 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > re-poll** — which silently converts TD-29's prescribed backfill into a no-op and makes
 > its counting query return `0`. One dashboard toggle before Resume avoids the whole mess.
 
-> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — ~44h of slack left (§2).**
+> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — ~43h of slack left (§2).**
 > Restore before it and the **Stripe** half self-heals with zero manual work. Missing it is *not*
 > a cliff — manual replay stays open to `2026-10-06` (dashboard) / `2026-10-21` (API). There is
 > real time; this is urgent, not frantic.
@@ -342,11 +342,22 @@ its events only come back if you press Retry.
 - **`status.supabase.com` is a red herring.** Its open incidents (JWT 401s since 2026-08-14;
   project-creation latency 2026-09-22) both state existing-project availability is
   unaffected. A resolving host returning 401 is not NXDOMAIN.
-- **Paused-vs-deleted is unanswerable from inside a session.** All three paths are closed:
-  the claude.ai Supabase connector and the local `supabase` MCP server are both
-  permission-gated (the gate is *connector-level* — even `search_docs` is denied), and
+- **Paused-vs-deleted is unanswerable from inside a session.** All paths are closed: the
+  claude.ai Supabase connector and Gmail connector are permission-gated (re-tested session
+  25 — both return "requested permissions … not granted" unattended), and
   `api.supabase.com` direct returns **401, PAT revoked** (TD-21). Only the dashboard or the
   ops inbox answers it.
+  - **Refined session 25 — the local `supabase` MCP server is NOT permission-gated; it is
+    tokenless.** Sessions ≤24 recorded it under the same connector-level gate as the
+    claude.ai one. It is in fact *connected and reachable* this session, and
+    `mcp__supabase__get_advisors` returns a server-side error, not a permission prompt:
+    *"Unauthorized. Please provide a valid access token to the MCP server via the
+    `--access-token` flag or `SUPABASE_ACCESS_TOKEN`."* That is an **independent second
+    confirmation of TD-21's diagnosis** (the PAT, not the grant, is the blocker) and it
+    hands TD-21 a concrete close condition: rotate the PAT and expose it to the server as
+    `SUPABASE_ACCESS_TOKEN`. Rotation is **Level D** (owner does credentials), so no
+    unattended session can do it — but it means the agent DB path is *one owner-side token*
+    away, not blocked on a permission grant that would also have to be negotiated.
 - **Cron `responseStatusCode: 0` rows are noise** — timing jitter from the ~7s DB-connect
   stall crossing the invocation budget. Their absence is *not* recovery.
 
@@ -402,7 +413,7 @@ and eleven prior sessions each recorded a piece of it without putting it togethe
 | GitHub Actions `Uptime` failure email | **The only channel ever proven to reach you — and it is muted.** `disabled_manually` since ~18:27Z, ~4 min after the first failing run. |
 | GitHub Issue | **Not usable.** `gh repo view` → `visibility: PUBLIC`. Filing one would publicly advertise a live outage *and* an open financial-webhook window on a production money system. Ruled out on purpose — don't re-propose it. |
 | Gmail / Supabase MCP connectors | Permission-gated unattended (connector-level; even `search_docs` is denied). |
-| **`telegram` plugin** (session 21) | **Unknown — worth 5 attended minutes.** A `telegram` plugin *is* installed (skills `telegram:access` / `telegram:configure`), which no session 1–20 had noticed. Both skills **fail to load** unattended, and the sandbox blocks reading their config, so this session could not tell unconfigured from broken. If it can be made to work it is the push channel this table otherwise says does not exist — and unlike `uptime.yml` it cannot be silenced by one click, and unlike `PushNotification` it does not depend on Remote Control. |
+| **`telegram` plugin** (session 21) | **Unknown — worth 5 attended minutes.** A `telegram` plugin *is* installed (skills `telegram:access` / `telegram:configure`), which no session 1–20 had noticed. Both skills **fail to load** unattended, and the sandbox blocks reading their config, so this session could not tell unconfigured from broken. If it can be made to work it is the push channel this table otherwise says does not exist — and unlike `uptime.yml` it cannot be silenced by one click, and unlike `PushNotification` it does not depend on Remote Control. **Re-tested session 25: both skills still fail to load and the plugin directory read is still sandbox-blocked — reproduced, not resolved. Treat this as "needs 5 attended minutes", not as an open investigation; no further unattended session should spend time on it.** |
 | `LOG.md` + this page | The only channels carrying anything — but **pull, not push.** They require you to come and look. |
 
 **The reframe that matters.** Sessions 6–11 read the 4-minute mute as *"proof of awareness —
