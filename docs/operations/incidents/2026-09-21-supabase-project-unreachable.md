@@ -101,6 +101,16 @@ curl -s "https://sizzle-chi.vercel.app/feed/for-you?limit=3"
 
 # 4. Re-arm the pager (it is currently disabled_manually)
 gh workflow enable uptime.yml
+# 5. TD-29 — videos stranded by the finalizer's 6h window (NEW, found session 13).
+#    The outage outran `finalize-videos`' lookback floor (internal.ts:61-74 filters
+#    created_at >= now-6h), so any asset left pending/uploading/processing at
+#    2026-09-21T18:23Z will NEVER be picked up again — Stream webhooks are skipped and
+#    the client poll is long gone. Nothing self-heals these. Count them first:
+#      select id, status, created_at from video_assets
+#       where provider='cloudflare' and status in ('pending','uploading','processing')
+#         and created_at < now() - interval '6 hours';
+#    If the count is > 0, re-drive those ids through the finalizer once (a one-off
+#    backfill). Not time-critical — the rows persist — but it never fixes itself.
 ```
 
 Then reconcile money: compare Stripe's dashboard events since `2026-09-21T17:54:46Z` (last
@@ -135,6 +145,12 @@ never retry charges manually.**
   destructure `const { data } = …` without checking `error`, so a failed run reports success
   at the HTTP-status layer. Level B PR, deliberately **not** shipped mid-outage (unverifiable
   against a dead DB, and it perturbs the signals being watched for recovery).
+- **TD-29 (NEW, session 13)** — `finalize-videos` silently abandons work after a >6h
+  outage: `internal.ts:61-74` floors the sweep at `created_at >= now-6h`, and nothing else
+  re-drives a stuck asset (Stream webhooks skipped `:54`; client poll caps ~10 min). Any
+  outage longer than 6h permanently orphans whatever was mid-transcode. Needs a one-off
+  backfill (§4 step 5) **and** a resilience fix so duration alone cannot strand user content.
+  Level B, but deliberately not shipped mid-outage — unverifiable against a dead DB.
 - **Systemic (recommend, Level C):** a live App Store app runs its production database on a
   **pausable** tier with **no managed backups** (free tier self-serves `db dump`). Pro
   projects cannot be paused. *"Upgrade to Pro" is the real control here* — it removes both

@@ -1684,3 +1684,88 @@ only thing standing between a self-healing money story and manual financial reco
 **What I did NOT do, deliberately.** No code change (nothing in the repo can reach a hostname with no DNS record). No `gh workflow enable uptime.yml` — re-arming the pager is minimum Level C *and* would override a deliberate human mute; it is written into §7 as the owner's post-restore step instead. No TD-28 cron false-green fix (unverifiable against a dead DB, and it perturbs the signals being watched for recovery). No `verify-deploy.mjs` — unusable by construction during a DB outage, since its success criterion is a 200 `/health`; this is a docs-only change and needs no deploy verification.
 
 **For Branden — THE ONE ACTION, unchanged:** Supabase dashboard → project `gsxoaurmsgqascxukony` → **Restore** (Level D; every agent DB path is closed, TD-21 PAT revoked). `docs/operations/incidents/2026-09-21-supabase-project-unreachable.md` is one page and tells you which branch you are in; the ops inbox almost certainly holds the Supabase mail from ~2026-09-21 18:00Z that names the reason. **Then `gh workflow enable uptime.yml` and reconnect Remote Control** — otherwise the next SEV-1 gets the same silence this one did.
+
+## Incident 2026-09-22 03:56 PDT — watchdog summon #13, same Supabase outage — found a NON-self-healing side effect: the video finalizer's 6h window has now been outrun
+
+**Condition unchanged, re-verified in the documented cheap set.** `/health` three times
+(`10:56:48Z`, `10:57:12Z`, `11:00:19Z`) — all **503 `problems:["database-unreachable"]`**,
+`commit 2f378e9`, all DB-derived gauges `null`. `GET /feed/for-you?limit=3` → **500
+`{"error":{"code":"db_error"}}`** in 7.23s (real user-facing failure, not a probe artifact).
+Triple-resolver DNS identical to all twelve prior sessions: `supabase.co` →
+`A=76.76.21.21`/`CNAME=ENODATA`, while `gsxoaurmsgqascxukony.supabase.co` **and**
+`db.gsxoaurmsgqascxukony.supabase.co` → `ENOTFOUND` on system + `1.1.1.1` + `8.8.8.8`.
+Origin head `2f378e9` = session 12's own log commit and `/health.commit` agrees, so **no owner
+action has landed**; `Uptime` still `disabled_manually` (`gh workflow list --all`).
+**Duration 16h37m** as of `11:00:19Z`. **Stripe auto-retry slack 55h23m** (expires
+`2026-09-24T18:23Z`). Root cause is settled and lives in the action sheet — no 13th diagnosis.
+Gmail was re-tested once to try the ops-inbox shortcut and is still permission-gated
+(`mcp__claude_ai_Gmail__search_threads` → permission not granted), consistent with §5.
+
+### NEW — most of the system self-heals on restore, but one thing now does NOT
+
+Twelve sessions established *that* the DB is down. None asked **what the outage's duration is
+quietly destroying**, i.e. whether restore is a clean no-op. It is not quite. I audited all five
+crons in `apps/api/vercel.json` against a 16h+ gap:
+
+| cron | schedule | behaviour after a 16h gap |
+|---|---|---|
+| `publish-scheduled` | `* * * * *` | **Safe.** Selects ≤200 due rows, flips `scheduled`→`published` (`internal.ts:248-263`). **No push fan-out**, so no notification burst; a backlog drains at ≤200/min. |
+| `finalize-videos` | `* * * * *` | ⚠️ **NOT self-healing — see below.** |
+| `save-nudges` | `0 21 * * *` | **Safe.** The `2026-09-21 21:00Z` run fell inside the outage and failed at its first query, so there is no partial state (the push-then-record order, `:313`→`:321`, could double-send only if the DB died *mid-loop*; the outage predates that run by 2h37m). `save_nudges` upserts on `user_id,recipe_id` = one nudge ever, and the 7–21 day window is 14 days wide, so a skipped day loses nothing. |
+| `rollup-watch-ratios` | `17,47 * * * *` | **Safe.** Recomputes from source via RPC (`:336-344`). |
+| `rollup-hashtag-trends` | `*/15 * * * *` | **Safe.** Recomputes 24h + 7d from source (`:353-361`). |
+
+**The finalizer's recovery window is 6 hours, and the outage is now 16h37m
+(`internal.ts:61-74`):**
+
+```
+.in('status', ['pending','uploading','processing'])
+.gte('created_at', sixHoursAgo)        // ← hard floor, oldest-first, limit 40
+```
+
+Any `video_assets` row that was still `pending`/`uploading`/`processing` when the database went
+away at `2026-09-21T18:23Z` is now **older than the finalizer's own lookback floor**. When the DB
+comes back, that row is **outside the query and will never be picked up again.** Nothing else
+re-drives it: Stream webhooks are deliberately skipped (`:54`) and the client poll caps at ~10
+minutes (CLAUDE.md), long since gone. By the cron's own docstring (`:49-57`) such a post is left
+"stuck `pending` forever — unplayable AND never thumbnail-moderated", which is precisely the gap
+this cron exists to close.
+
+So unlike the Stripe backlog — which self-heals on idempotent handlers if restore beats
+`2026-09-24T18:23Z` — **these clips do not come back on their own at any restore time.** The rows
+are not lost, they are simply orphaned, so the fix is a one-off backfill after restore rather than
+anything time-critical. Added to the action sheet as a post-restore step (§4) and as a follow-up
+(§6, new **TD-29**).
+
+**Honest limits, stated plainly.** (a) **Volume is unknown** — counting affected rows needs the
+database. It could be zero. The outage began 11:23 AM PDT on a Monday, a plausible
+active-upload hour, so zero should not be assumed. (b) This is a **pre-existing** fragility that
+any >6h outage would trigger, not damage caused by the outage alone; the outage is just the first
+event long enough to cross it. (c) I did **not** verify a moderation *bypass* — a stuck `pending`
+asset should not surface to viewers; the docstring's "never thumbnail-moderated" is about the
+asset never reaching moderation, not about unmoderated content being served. Do not escalate it
+to a moderation incident without checking the read path.
+
+### Not shipped, deliberately
+
+The obvious patch — widen the finalizer window, or backfill the orphans — was **not** shipped, for
+the same reason TD-28 stays parked: it is **unverifiable against a database that has no DNS
+record**, and it perturbs the very signals being watched for recovery. A permanent window widening
+also changes cron cost and scan shape every minute forever to solve a once-per-outage problem; the
+right shape is a one-off backfill plus a deliberate resilience guard, designed and tested against a
+live DB. Also unchanged: no rollback (nothing in the repo can reach a hostname with no DNS record),
+no `gh workflow enable uptime.yml` (Level C, and it would override a deliberate human mute),
+no Stripe access (Level D). `verify-deploy.mjs` remains unusable by construction during a DB
+outage — its success criterion is a 200 `/health`. This change is docs-only and needs no deploy
+verification.
+
+### For Branden — THE ONE ACTION, unchanged for 16h37m
+
+Supabase dashboard → project `gsxoaurmsgqascxukony` → **Restore** (Level D; every agent DB path is
+closed — the TD-21 PAT is revoked and both Supabase MCP paths plus Gmail are connector-gated).
+Read `docs/operations/incidents/2026-09-21-supabase-project-unreachable.md` first — one page, and
+it tells you which branch you are in. **Then** two things this session adds to the after-restore
+list: run the **TD-29 backfill** for video assets stranded by the finalizer's 6h window, and
+re-arm the pager (`gh workflow enable uptime.yml` + reconnect Remote Control). `PushNotification`
+is still dead ("Remote Control inactive", 18+ days), so this file remains a **pull** channel — no
+one has been paged.
