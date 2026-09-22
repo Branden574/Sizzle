@@ -86,10 +86,17 @@ path that heals installed apps.
 ## 4. After you restore — verification (any session can run this)
 
 ```sh
-node .codex/dns-probe.mjs                      # <ref>.supabase.co must return an A record, not ENOTFOUND
-curl -s https://sizzle-chi.vercel.app/health   # expect status:"ok", problems:[]
-curl -s "https://sizzle-chi.vercel.app/feed/for-you?limit=3"   # expect 200, not 500 db_error
-gh workflow enable uptime.yml                  # re-arm the pager (currently disabled_manually)
+# 1. DNS must come back first — an A record, not ENOTFOUND. Nothing else can pass until this does.
+node -e "require('dns').promises.resolve4('gsxoaurmsgqascxukony.supabase.co').then(a=>console.log('UP',a),e=>console.log('STILL DOWN:',e.code))"
+
+# 2. API health — expect status:"ok", problems:[]  (503 + database-unreachable = still down)
+curl -s https://sizzle-chi.vercel.app/health
+
+# 3. A real user path, not just liveness — expect 200, not 500 db_error
+curl -s "https://sizzle-chi.vercel.app/feed/for-you?limit=3"
+
+# 4. Re-arm the pager (it is currently disabled_manually)
+gh workflow enable uptime.yml
 ```
 
 Then reconcile money: compare Stripe's dashboard events since `2026-09-21T17:54:46Z` (last
