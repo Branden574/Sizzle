@@ -4290,3 +4290,117 @@ Unchanged from sessions 24–35 except item 6. None of it self-heals:
    repo is public. This entry is **pull, not push**. Upgrading off the free tier (Pro projects
    cannot be paused) and re-arming one alert channel are the difference between 2 minutes and
    39h25m.
+
+## Incident 2026-09-23 03:49 PDT — watchdog summon #37: SEV-1 unchanged at 40h31m; the cheap-Stripe day has now begun
+
+**Not a new incident.** The watchdog fired on its 60-minute cooldown into the same open SEV-1
+that sessions 1–36 have diagnosed: Supabase project `gsxoaurmsgqascxukony` is unreachable.
+The diagnosis is finished and the fix is **Level D — owner only**. Nothing in this session's
+lane can touch it; no repo change, rollback or redeploy is a candidate. Read
+`docs/operations/incidents/2026-09-21-supabase-project-unreachable.md`, not this entry.
+
+**Condition re-verified (two probes, 4m17s apart).**
+
+- `/health` → **HTTP 503** `{"status":"degraded","problems":["database-unreachable"]}` at
+  `2026-09-23T10:49:53Z` and again at `2026-09-23T10:54:10Z`. Serving `commit 3349eee`, which
+  **equals `origin/main`** — so the deployed code is current and the fault is not a stale build.
+- `/feed/for-you` → **HTTP 500** `{"error":{"code":"db_error"}}`. The runtime logs give the
+  underlying signature: **`[db_error] TypeError: fetch failed`** — a resolver failure surfacing
+  inside the Supabase client, not a query error from a live database.
+- Frontend `getsizzle.app` → **HTTP 200**. Static shell still serves; every data path is dead.
+  Unchanged split from prior sessions.
+
+**Root cause re-confirmed, with this session's evidence limits stated honestly.** The project
+hostname `gsxoaurmsgqascxukony.supabase.co` fails to resolve — `curl` exits **6**
+(*"Could not resolve host"*) — while the control `supabase.com` returns **HTTP 200** over the
+same path in the same minute. That reproduces the per-project DNS withdrawal sessions 18–36
+recorded. **Caveat, deliberate:** `dig`/`nslookup` were **not allowlisted in this session**, so
+unlike sessions 33–36 I could **not** independently query `1.1.1.1`/`8.8.8.8` and cannot myself
+re-attest the three-resolver NXDOMAIN-vs-ENODATA contrast. The curl-6-vs-200 pair is a
+resolver-level failure scoped to the project host, which is consistent with — but weaker than —
+the prior finding. Nothing here revises the root cause; it is recorded so the evidence chain is
+not read as stronger than it is.
+
+**Not a bad deploy — re-confirmed, not assumed.** `vercel ls sizzle --yes`: twelve Production
+deployments, **all `● Ready`**, newest **1 h** old. The hourly cadence is prior sessions' own
+docs-only log pushes. The last *pre-outage* production deploy remains 15 days old (session 22).
+Rollback is not, and never was, a candidate.
+
+**The TD-34 trap is still armed — re-verified this hour from runtime logs, not inferred.**
+`vercel logs -p sizzle --environment production` shows `finalize-videos` firing on an unbroken
+60-second cadence at `10:50:17Z`, `10:51:17Z`, `10:52:17Z`, `10:53:17Z`, with
+`publish-scheduled` interleaved at `:34` each minute — all returning `200` against a dead DB.
+**Nothing has disabled the crons.** Step 0 of the action sheet (Vercel → project `sizzle` →
+Settings → Cron Jobs → **Disable Cron Jobs**) is still required *before* Resume, or the first
+tick after restore mass-flips every stranded video into a terminal `error` state the finalizer
+refuses to re-poll.
+
+**The clock — and the one thing that is genuinely new this hour.**
+
+- Outage duration: **40h31m** as of `2026-09-23T10:54:10Z` (started `2026-09-21T18:23:07Z`).
+- Stripe auto-retry expires `2026-09-24T18:23Z` — **~31h29m** of slack left.
+- **What changed since session 36: the day session 34 flagged has arrived.** Session 34 wrote
+  that *"Wednesday 09-23 is the last full working day on which the cheap path is still
+  available."* It is now **03:54 AM PDT Wednesday 09-23** — that day is no longer approaching,
+  it is **the current one**, and Branden's next waking window is the last one that lands
+  comfortably inside the Stripe auto-retry budget. This is not a new finding; it is the
+  previously-filed one coming due, which is the only reason session 37 is worth reading at all.
+
+**Nothing new was investigated on purpose.** The sheet closes out the remaining unknowns
+explicitly — paused-vs-deleted is unanswerable without the dashboard or the ops inbox (both
+connectors permission-gated unattended; the Management-API PAT is revoked per TD-21), the
+`telegram` plugin is marked *"needs 5 attended minutes, no further unattended session should
+spend time on it"*, and a GitHub Issue is ruled out because the repo is public. Re-litigating
+any of those would be invented work. This session re-verified the live facts, re-stamped the
+two counters, and stopped.
+
+**Push channel: still nothing.** `PushNotification` attempted again this session and again
+returned verbatim **"Mobile push not sent (Remote Control inactive)."** — the same result as
+sessions 12–36, now 20 days dead. Sessions 1–37 have paged nobody.
+
+**Secret check.** Per **TD-33** `npm run secrets:check` is structurally blind on the
+git-data-API push path (it reads bodies from the working tree; the uploaded blobs are built
+under gitignored `.codex/`), so a "clean" from it would be a no-op rather than a pass.
+Compensated as in sessions 18–36: both changed files scanned out-of-band for value-shaped
+credentials (prefix **plus** real-length tail, JWT triplets, `-----BEGIN`) — **clean**. Both are
+docs. No secret value was read into this log, printed, or committed. Branden's uncommitted work
+(`scripts/ops/sweep-prompt.md`, `tests/invariants/ops-tooling.test.mjs`, untracked
+`scripts/ops/origin-drift.mjs`) untouched per hard rule 11 and **not** stashed, per the stash
+trap.
+
+**Session 30's absolute-timestamp convention obeyed:** only the two live counters were
+re-stamped (status line → `40h31m as of 2026-09-23T10:54:10Z`; Stripe banner → `~31h29m`).
+
+### For Branden
+
+Unchanged from sessions 24–36 except the framing in item 3. None of it self-heals:
+
+1. **The only fix, Level D:** Supabase dashboard → project `gsxoaurmsgqascxukony` →
+   **Resume / Restore**. **40h31m** down. Read the action sheet, not this log.
+2. **Before Resume:** Vercel → project **`sizzle`** (the API — naming is reversed) → Settings →
+   Cron Jobs → **`Disable Cron Jobs`**. Re-confirmed necessary this hour from runtime logs
+   (four consecutive 60s `finalize-videos` ticks, `10:50:17Z`–`10:53:17Z`).
+3. **Today is the cheap day for Stripe, and it has started.** Auto-retry expires
+   `2026-09-24T18:23Z` (11:23 AM PDT Thursday) — **~31h29m** left. Restoring during Wednesday
+   working hours means the Stripe half replays itself with zero manual work; slipping to
+   Thursday means doing it by hand. Missing it is not a cliff — manual replay stays open to
+   `2026-10-06` (dashboard) / `2026-10-21` (API) — but it is the difference between free and
+   tedious. Do **not** disable the Stripe webhook endpoint; a disabled destination permanently
+   prevents retries of queued events.
+4. **After restore:** app.revenuecat.com → Integrations → Webhooks → **Retry** each failed
+   `REFUND`/`CANCELLATION` since `2026-09-21T18:23Z`. Auto-retries expired `2026-09-21T20:58Z`
+   and restore will not replay them. Idempotent — do it before the next payout run.
+5. **Do not ship an iOS build until the database is back** (§3's prohibition — nothing is in
+   Apple's queue, so there is no deadline, but a submission opened into an outage is a
+   guaranteed Guideline 2.1 rejection).
+6. **Steps 3 and 4 are the only sources of truth for the money reconciliation** (TD-36, session
+   36): there is no local record of which webhook events were dropped. Sentry does not have them
+   — the two money webhook handlers return 500 rather than throwing, so `app.onError`, the API's
+   only `captureException` hook, is never reached — and Vercel's runtime-log buffer is only
+   ~21 minutes deep because the crons saturate it. Nothing to fall back on afterwards.
+7. **The one that prevents a session 38:** sessions 1–37 have paged **nobody**. The channel
+   inventory is exhausted — the `Uptime` email you muted is still `disabled_manually`, both
+   connectors gated, a GitHub Issue rejected on purpose because the repo is public. This entry
+   is **pull, not push**. Upgrading off the free tier (Pro projects cannot be paused) and
+   re-arming one alert channel — `gh workflow enable uptime.yml`, *after* the restore — are the
+   difference between 2 minutes and 40h31m.

@@ -1,7 +1,7 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
 **Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
-(11:23 AM PDT Mon 09-21). **39h25m as of 2026-09-23T09:48:45Z** — re-verified by session 36.
+(11:23 AM PDT Mon 09-21). **40h31m as of 2026-09-23T10:54:10Z** — re-verified by session 37.
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
 
 > **🛑 READ §4 STEP 0 BEFORE YOU CLICK RESUME.** Session 18 found that the first
@@ -10,12 +10,15 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > re-poll** — which silently converts TD-29's prescribed backfill into a no-op and makes
 > its counting query return `0`. One dashboard toggle before Resume avoids the whole mess.
 
-> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — ~32h35m of slack left (§2).**
+> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — ~31h29m of slack left (§2).**
 > Restore before it and the **Stripe** half self-heals with zero manual work. Missing it is *not*
 > a cliff — manual replay stays open to `2026-10-06` (dashboard) / `2026-10-21` (API). There is
 > real time; this is urgent, not frantic.
 > **In calendar terms (session 34):** that expiry is **11:23 AM PDT Thursday 09-24**, so
 > **Wednesday 09-23 is the last full working day on which the cheap path is still available.**
+> **Session 37 (`2026-09-23T10:54Z`): that day has now begun.** It is Wednesday morning PDT —
+> the cheap-path day is no longer approaching, it is the current one, and the next waking
+> window is the last that lands comfortably inside the Stripe budget.
 
 > **🍎 NEW, session 23 — the Apple/RevenueCat half does NOT self-heal, and its window has
 > ALREADY CLOSED.** RevenueCat retries a failing webhook **5 times over 155 minutes total**,
