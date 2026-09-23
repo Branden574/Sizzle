@@ -5757,3 +5757,22 @@ reached you only because you came and looked.**
    **upgrade off the free tier** (Pro projects cannot be paused — it removes the failure mode
    itself), **reconnect Remote Control**, and add `Bash(git fetch:*)` to `.claude/settings.json`
    (TD-27). Then `gh workflow enable uptime.yml` **after** restore. TD-21 needs a PAT rotation.
+
+**Closing note — session 48, written after the calls it reports.**
+
+**Deploy verification closed out, and it doubles as a fifth negative probe.**
+`node scripts/verify-deploy.mjs --api --sha 400161b53cd763aa2dc0a144d58f168872f70b95` →
+*"deployment: READY … health status: degraded (database-unreachable) — deployed but unhealthy"*,
+returning in seconds rather than hanging — TD-37's fix on its third real outing, invoked with
+`--sha` exactly as that entry prescribes. `/health` at `21:29:31Z` then reported
+`commit: 400161b`, so the alias serves this commit: **503**, `database-unreachable`, 7.32s stall.
+That is the correct terminal state for a docs-only push, and it is also the **free control** noted
+in §5 — the failure reproducing on a brand-new build with freshly injected environment variables
+kills "stale artifact" and "env var never picked up" in one shot, for the **48th** time.
+
+**The push itself used the blob-first path** (session 46's fix) and needed it: `LOG.md` is now
+**597,726 bytes** and the three-file tree would have blown the inline-content limit outright. Full
+40-char SHAs throughout, and the script re-asserted the parent still pointed at `b008cee` before
+building the tree, so the push could not silently clobber a concurrent session. Reinforces the
+standing note that this log's unbounded growth is itself the problem — **worth splitting into
+per-incident files once production is back**.
