@@ -1,7 +1,7 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
 **Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
-(11:23 AM PDT Mon 09-21). **32h06m as of 2026-09-23 02:29Z** — re-verified by session 29.
+(11:23 AM PDT Mon 09-21). **33h07m as of 2026-09-23 03:30Z** — re-verified by session 30.
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
 
 > **🛑 READ §4 STEP 0 BEFORE YOU CLICK RESUME.** Session 18 found that the first
@@ -10,7 +10,7 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > re-poll** — which silently converts TD-29's prescribed backfill into a no-op and makes
 > its counting query return `0`. One dashboard toggle before Resume avoids the whole mess.
 
-> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — ~39h53m of slack left (§2).**
+> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — ~38h53m of slack left (§2).**
 > Restore before it and the **Stripe** half self-heals with zero manual work. Missing it is *not*
 > a cliff — manual replay stays open to `2026-10-06` (dashboard) / `2026-10-21` (API). There is
 > real time; this is urgent, not frantic.
@@ -120,7 +120,7 @@ undelivered events (from the first failure `2026-09-21T18:23:07Z`) expire first:
 session — it needs either the DB or the live Stripe key (Level D). Mechanism and deadlines
 are verified; **exposure size is unknown.**
 
-### The Apple clock (TD-35) — 2h35m, not 3 days, and it expired ~24h ago
+### The Apple clock (TD-35) — 2h35m, not 3 days, and it expired `2026-09-21T20:58Z`
 
 **Found session 23.** Sessions 1–22 read "the money clock" as *the Stripe clock*. Sizzle has a
 **second, independent payment rail** — Apple IAP via RevenueCat — and it is live in production:
@@ -139,7 +139,7 @@ That is **155 minutes ≈ 2h35m** of automatic retries, total, from first failur
 | Does restore fix it? | **Yes**, if it beats the deadline | **No.** Manual, per event. |
 
 Rolling form: any RevenueCat event older than ~2h35m has exhausted. As of 21:25Z that means
-**everything from `18:23Z` on 09-21 through ~`18:50Z` today**, and the boundary advances with the
+**everything from `18:23Z` on 09-21 through ~`18:50Z` on 09-22**, and the boundary advances with the
 clock — an event only survives if restore happens within 2h35m of *it*.
 
 **What is lost per missed event** (verified by reading `apps/api/src/routes/monetize.ts:796-859`,
@@ -453,6 +453,21 @@ restore will not replay it (§2, §4 step 6). So the honest current framing is *
 with room" — one deadline has already been missed and is accruing manual cleanup, while the
 other is inside two days. The *tone* correction session 12 made was right for session 12; do not
 carry it forward as a reason to treat hour 31 as relaxed.
+
+**Sweep, session 30 (2026-09-23 03:30Z) — session 28 fixed one instance of doc rot; this
+hour the whole page was swept for the class.** Every relative time expression in the sheet
+(`ago`, `today`, `now`, `currently`, `this hour`) was checked against the clock. Two were
+still decaying and have been converted to absolute timestamps, changing no finding: §2’s
+heading *"The Apple clock … it expired **~24h ago**"* was written at hour 27 and was
+**30h32m** by this hour — it now names `2026-09-21T20:58Z`; and §2’s rolling-boundary
+sentence said *"through ~`18:50Z` **today**"*, which a reader on 09-23 resolves to the wrong
+day — it now says `09-22`. The other four are safe and were deliberately left: the "this
+hour" in §2’s source-audit note and the "28h28m ago" in the paragraph above sit inside
+*dated* blocks, so they read correctly as historical statements, and §4’s "currently
+`disabled_manually`" / "`ready` on Cloudflare right now" describe **states**, not elapsed
+time. **Standing convention for every future session: in this sheet write absolute
+timestamps, not elapsed offsets — except the two live counters at the top of the page (the
+status line and the Stripe banner), which are re-stamped each session by design.**
 
 ### The one follow-up that makes the next SEV-1 different
 
