@@ -5617,3 +5617,143 @@ reported `commit: 0790e1b`, so the alias serves this commit: **503**, `database-
 control** noted in §5 — the failure reproducing on a brand-new build with freshly injected
 environment variables kills "stale artifact" and "env var never picked up" in one shot, for the
 47th time.
+
+---
+
+## 2026-09-23 21:25Z — watchdog session 48 — SEV-1 unchanged, hour 51. One small verified finding (TD-34's obvious fix is a no-op).
+
+**Short, like sessions 46 and 47.** The diagnosis finished 45 sessions ago and one owner-side
+dashboard click ends it. **If you are reading the log at all, read the action sheet
+(`2026-09-21-supabase-project-unreachable.md`) instead.** The one thing below that is new is a
+*negative* result about TD-34 that will save a future session from shipping a fix that does nothing.
+
+**What fired.** `scripts/ops/watchdog.sh` at 14:23:45 PDT — API degraded (503),
+`problems:["database-unreachable"]`.
+
+**Re-verification — four negative probes, one of them a real user path.** `/health` on
+`sizzle-chi.vercel.app`: `21:23:43Z` (summon capture), `21:24:07Z` (7.24s), `21:25:28Z` (7.24s) —
+all **503**, all `{"status":"degraded","problems":["database-unreachable"]}`, all `commit: b008cee`.
+User-facing path, better proof than a probe endpoint: `GET /feed/for-you?limit=3` → **500
+`{"error":{"code":"db_error","message":"Something went wrong"}}`** in 7.23s. The ~7.24s stall is the
+DB-connect timeout, unchanged since session 3. **Not a flap** — hour 51 of one continuous outage, so
+the anti-flap rule does not apply.
+
+**Root cause re-confirmed, byte-for-byte identical to sessions 41/46/47.** Triple-resolver Node `dns`
+probe (`.codex/dns-probe.mjs`), all three agreeing — system, `1.1.1.1`, `8.8.8.8`:
+`supabase.co` → **A `76.76.21.21`**, `CNAME` **ENODATA**; `gsxoaurmsgqascxukony.supabase.co` →
+**ENOTFOUND**; `db.gsxoaurmsgqascxukony.supabase.co` → **ENOTFOUND**. Parent zone up, **both**
+per-project records withdrawn = account-level pause/restriction. Three unrelated resolvers agreeing
+kills the sandbox-blocked explanation outright. No repo change, rollback or redeploy can touch it.
+
+**Rollback re-confirmed as never a candidate.** `vercel ls sizzle --yes` at `21:26Z`: the fourteen
+newest production deployments are **all `● Ready`**, ages 59m–9h, durations 16–22s — prior sessions'
+own hourly docs-only log pushes (settled, §5), not rogue deploys. `/health` serves `b008cee`, which
+**is** current `origin/main`. The last pre-outage deploy is 17 days old.
+
+**TD-34 trap still armed — session 48 makes it six.** `vercel crons ls --project sizzle` at `21:26Z`
+still lists all five paths, `finalize-videos` and `publish-scheduled` both `* * * * *`. Sessions 34,
+43, 44, 46 and 47 each measured this. `Disable Cron Jobs` on the Vercel **`sizzle`** project is ten
+seconds and must happen **before** Resume.
+
+### The one new thing: TD-34's intuitive fix does NOT defuse TD-34
+
+Six consecutive sessions have logged "trap still armed", which makes *"why not just fix it in code
+and stop depending on the owner clicking a toggle in the right order?"* the obvious next thought. I
+evaluated it against the live code (`apps/api/src/routes/internal.ts`, re-read this session, not
+recalled) and it is a **reject** — but the *reason* is the useful part, because the fix a reasonable
+engineer reaches for first is a **silent no-op**.
+
+Verified in source, exactly as sessions 18/34 described: the rescue SELECT is bounded
+`.gte('created_at', sixHoursAgo)`, while **both** abandon UPDATEs are bounded on one side only —
+`['pending','uploading'] … .lt('created_at', twoHoursAgo)` and `'processing' … .lt('created_at',
+sixHoursAgo)` — and both run **unconditionally, outside** the `if (pending && pending.length)` guard.
+
+The trap-defusing patch that suggests itself is *"the SELECT clearly failed, so skip the destructive
+UPDATEs"* — note the handler destructures `const { data: pending } = await …` and **never inspects
+`error`**, which makes an error-guard look like the obviously-missing check. **It would not fire.**
+At the first tick after Resume the database is healthy, so the SELECT **succeeds**; it simply returns
+**empty**, because a cohort created ~51h ago is outside `created_at >= now-6h`. No error exists to
+guard on. The UPDATEs then match that same cohort on `created_at < now-2h` / `< now-6h` and flip it
+to terminal `error`. **A guard on SELECT failure is precisely the wrong shape: the bug is two
+windows that stopped overlapping, not an unchecked error.** The actually-correct fix is to bound the
+abandon UPDATEs on **both** sides (a band such as `>= now-6h AND < now-2h`), capping their blast
+radius to a recent window instead of all history.
+
+**Not shipped, deliberately, and this is the lane call.** `internal.ts` is not on the
+security-sensitive list, so the change itself would be Level B — but it fails session 45's test for
+in-lane work during a Level D outage: ***does verifying it require the dead dependency?*** It does.
+This is a change to SQL filter semantics on the video pipeline whose only real proof is rows in a
+database, and it would begin executing **within 60 seconds of Resume**, unverified, at the single
+most fragile moment of the recovery. Shipping an unverifiable destructive-UPDATE change to run
+hands-off at restore is strictly worse than the documented alternative, which already works and is
+reversible: **Disable Cron Jobs before Resume** (§4 step 0), plus the cohort-reconstruction queries
+already written there (the UPDATE sets `status` only — `provider_uid` survives and the abandon path
+never writes `last_polled_at`, so the cohort rebuilds from a tight `created_at` range). Filed as a
+note under TD-34 rather than a patch. **Generalised: when a trap gets re-measured session after
+session, the pressure to convert it into code is real — check that the patch you're reaching for
+actually intersects the failure, because a defensive guard aimed at the wrong precondition ships the
+feeling of a fix and none of the effect.**
+
+**Counters re-stamped (the only action-sheet edits this session, per session 30's convention).**
+Elapsed **51h02m** as of `2026-09-23T21:25:28Z`. Stripe free-retry slack **20h58m** (expires
+`2026-09-24T18:23Z` = 11:23 AM PDT Thursday). Session/line counts advanced to **forty-seven** and
+**5,600+**. Sessions 37/46's dated "cheap-path Wednesday" stamps were **left as written** — they sit
+in dated blocks and read correctly as history, and per session 28's lesson the fix for rotting prose
+is not another prediction. For the record without embedding one: this probe lands at **2:25 PM PDT
+Wednesday**.
+
+**Angles rejected before spending calls** (session 40's rule — recorded so nobody re-opens them):
+re-probing paused-vs-deleted (all three paths closed and settled in §5 — connector gate, tokenless
+local MCP, revoked PAT); re-auditing crons for outage-outrun windows (sessions 13/18/19 closed that
+set: TD-29 + TD-34 are the whole of it); re-probing the dead push channels (§7 inventory is
+exhaustively verified).
+
+**Lane discipline.** Everything that would end this is **Level D** (owner credentials/dashboard):
+Supabase Resume, the Vercel cron toggle, the RevenueCat Retry clicks, the TD-21 PAT rotation, and
+`gh workflow enable uptime.yml` (`.github/workflows/**` is minimum Level C, and re-enabling it now
+would both override a deliberate human mute and fire into a muted void). **Nothing was shipped,
+nothing was weakened, no security control was touched.**
+
+**Secrets.** Nothing staged — the git-data push path never stages, so `npm run secrets:check` would
+report a no-op "clean (0 files)" (TD-33). Compensated as in sessions 18–47: both files in this push
+were grepped directly for **value-shaped** credentials
+(`sbp_|sk_live|whsec_|eyJ[A-Za-z0-9_-]{10,}|-----BEGIN` with a real-length tail). The only hits are
+the long-known **self-referential false positives** — the literal `-----BEGIN` inside backticks in
+prior sessions' own secret-check paragraphs in `LOG.md` (expected, per session 40; inspect, don't
+panic). No secret value was read into this log, printed, or committed.
+
+**Working tree.** `scripts/ops/origin-drift.mjs` exited 3 (local `d4c5395` vs origin `b008cee`,
+8 files). All four locally-dirty paths — `scripts/verify-deploy.mjs`,
+`tests/invariants/ops-tooling.test.mjs`, `scripts/ops/origin-drift.mjs`,
+`scripts/ops/sweep-prompt.md` — were `diff`ed against the origin mirror and are **byte-identical**,
+i.e. the line-20 checkout repair rather than human WIP, so per the stash trap they were left in place
+and neither stashed nor committed (hard-rule 11). This entry was written on the **origin** copy of
+`LOG.md` (5,619 lines), not the stale local one (428 lines), which would have silently truncated 46
+prior entries.
+
+**`PushNotification` was called before this paragraph was written** (session 38's ordering rule),
+and is **still dead**, verbatim: *"Mobile push not sent (Remote Control inactive)."* That is the
+**48th** consecutive session with no working push path. `telegram` was not re-probed (§7 — the
+channel inventory is exhaustively verified and complete). **This entry, like the 47 before it,
+reached you only because you came and looked.**
+
+### For Branden — unchanged from sessions 24–47, and none of it self-heals
+
+1. **The only fix, Level D:** Supabase dashboard → project `gsxoaurmsgqascxukony` →
+   **Resume / Restore**. **51h02m** down. The dashboard also tells you *which* branch you are in
+   (paused / billing-restricted / deleted) — the one fact 48 sessions have not been able to get.
+2. **Before you click Resume:** Vercel → project **`sizzle`** (the API — the naming is reversed) →
+   Settings → Cron Jobs → **Disable Cron Jobs**. Ten seconds. Re-confirmed still undone at `21:26Z`.
+   This session confirmed there is no safe code-side substitute for it (see the TD-34 section above).
+3. **Stripe: 20h58m of free-retry slack.** Restore before `2026-09-24T18:23Z` and the Stripe half
+   replays itself. Not a cliff (manual replay runs to `2026-10-06` dashboard / `2026-10-21` API),
+   but it is the difference between free and tedious. Do **not** disable the Stripe webhook endpoint.
+4. **After restore:** app.revenuecat.com → Integrations → Webhooks → **Retry** each failed
+   `REFUND`/`CANCELLATION` since `2026-09-21T18:23Z`. Auto-retries expired `2026-09-21T20:58Z` and
+   restore will **not** replay them. Idempotent — do it before the next payout run.
+5. **Do not ship an iOS build until the database is back** (§3).
+6. **Items 3 and 4 are the only sources of truth for the money reconciliation** (TD-36).
+7. **48 sessions have now paged nobody.** Owner-side fixes that end this class of session:
+   **upgrade off the free tier** (Pro projects cannot be paused — it removes the failure mode
+   itself), **reconnect Remote Control**, and add `Bash(git fetch:*)` to `.claude/settings.json`
+   (TD-27). Then `gh workflow enable uptime.yml` **after** restore. TD-21 needs a PAT rotation.
