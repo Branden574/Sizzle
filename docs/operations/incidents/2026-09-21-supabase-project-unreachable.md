@@ -1,7 +1,7 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
 **Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
-(11:23 AM PDT Mon 09-21). **48h54m as of 2026-09-23T19:17:05Z** — re-verified by session 46 (watchdog).
+(11:23 AM PDT Mon 09-21). **49h58m as of 2026-09-23T20:21:35Z** — re-verified by session 47 (watchdog).
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
 
 > **🛑 READ §4 STEP 0 BEFORE YOU CLICK RESUME.** Session 18 found that the first
@@ -10,7 +10,7 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > re-poll** — which silently converts TD-29's prescribed backfill into a no-op and makes
 > its counting query return `0`. One dashboard toggle before Resume avoids the whole mess.
 
-> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — ~23h06m of slack left (§2).**
+> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — ~22h01m of slack left (§2).**
 > Restore before it and the **Stripe** half self-heals with zero manual work. Missing it is *not*
 > a cliff — manual replay stays open to `2026-10-06` (dashboard) / `2026-10-21` (API). There is
 > real time; this is urgent, not frantic.
@@ -34,8 +34,8 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > Apple clock" and §4 step 6. Good news, also session 23: the **grant** side is safe and
 > self-heals; nobody is charged without eventually getting their unlock (§2).
 
-This page exists because **forty-five** unattended watchdog sessions have now diagnosed the same
-outage and appended **5,400+ lines** to `LOG.md` (counts re-stamped session 46; the prose said
+This page exists because **forty-six** unattended watchdog sessions have now diagnosed the same
+outage and appended **5,500+ lines** to `LOG.md` (counts re-stamped session 47; the prose said
 "twenty-three" and "well over 1,000" and had decayed). The diagnosis is finished. This is
 the one-page action sheet. **Read this, not the log.**
 

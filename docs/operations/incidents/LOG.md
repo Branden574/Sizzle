@@ -5499,3 +5499,108 @@ neither stashed nor committed. This entry was written on the **origin** copy of 
 still dead**, verbatim: *"Mobile push not sent (Remote Control inactive)."* **46th** consecutive
 session with no working push path. `telegram` not re-probed (§7). **This entry, like the 45 before
 it, reached you only because you came and looked.**
+
+## 2026-09-23 20:21Z — watchdog session 47 — SEV-1 unchanged, hour 50. No new findings.
+
+**Deliberately short, like session 46.** The diagnosis finished 44 sessions ago and one owner-side
+dashboard click ends it. This session re-verified the state with fresh evidence, re-stamped the two
+decayed counters, and stopped. **Nothing below is new. If you are reading the log at all, read the
+action sheet (`2026-09-21-supabase-project-unreachable.md`) instead.**
+
+**What fired.** `scripts/ops/watchdog.sh` at 13:19:14 PDT — API degraded (503),
+`problems:["database-unreachable"]`.
+
+**Re-verification — four negative probes this session, two of them a real user path.**
+`/health` on `sizzle-chi.vercel.app`: `20:19:13Z` (summon capture), `20:19:33Z`, `20:21:35Z` — all
+**503**, all `{"status":"degraded","problems":["database-unreachable"]}`, all `commit: 6e65d32`,
+stalls 7.25s / 7.26s. And the user-facing path, which is better proof than a probe endpoint:
+`GET /feed/for-you?limit=3` → **500 `{"error":{"code":"db_error"}}`** in 7.25s. The ~7.25s stall is
+the DB-connect timeout, unchanged since session 3. **Not a flap** — this is hour 50 of one
+continuous outage, so the anti-flap rule does not apply. (Note for future sessions: bare `/feed` is
+**404 `route_not_found`**, not a signal — the real path is `/feed/for-you`.)
+
+**Root cause re-confirmed, unchanged and byte-for-byte identical to sessions 41/46.** Triple-resolver
+Node `dns` probe (`.codex/dns-probe.mjs`), all three agreeing — system, `1.1.1.1`, `8.8.8.8`:
+`supabase.co` → **A `76.76.21.21`**, `CNAME` **ENODATA**; `gsxoaurmsgqascxukony.supabase.co` →
+**ENOTFOUND**; `db.gsxoaurmsgqascxukony.supabase.co` → **ENOTFOUND**. Parent zone up, **both**
+per-project records withdrawn = account-level pause/restriction. Three unrelated resolvers agreeing
+kills the sandbox-blocked explanation outright. **This is the settled §5 finding** — the apex
+answering `A` rather than `ENODATA` is Supabase's marketing zone, not our project. No repo change,
+rollback or redeploy can touch it.
+
+**Rollback re-confirmed as never a candidate.** `vercel ls sizzle --yes` at `20:21Z`: the six newest
+production deployments are **all `● Ready`**, ages 1h–4h, durations 18–22s — these are prior
+sessions' own hourly docs-only log pushes (settled, §5), not rogue deploys. `/health` serves
+`6e65d32`, which **is** current `origin/main`, so nothing unexpected is deployed. The last
+pre-outage deploy is 17 days old.
+
+**TD-34 trap still armed — still the one cheap thing undone.** `vercel crons ls --project sizzle` at
+`20:20Z` still lists all five paths, with `finalize-videos` and `publish-scheduled` both
+`* * * * *`. Sessions 34, 43, 44 and 46 each measured this; **session 47 makes it five.**
+`Disable Cron Jobs` on the Vercel **`sizzle`** project is ten seconds and must happen **before**
+Resume, or the first cron tick mass-flips the stranded video cohort to a terminal `error` state the
+finalizer refuses to re-poll (§4 step 0).
+
+**Counters re-stamped (the only edits to the sheet this session, per session 30's convention).**
+Elapsed **49h58m** as of `2026-09-23T20:21:35Z`. Stripe free-retry slack **22h01m** (expires
+`2026-09-24T18:23Z` = 11:23 AM PDT Thursday). Session/line counts advanced to **forty-six** and
+**5,500+**. Session 46's "past its midpoint" stamp was **left as written** — it sits in a dated
+block, so it reads correctly as history, and per session 28's lesson the fix for rotting prose is
+not another prediction. For the record without embedding one: this probe lands at **1:21 PM PDT
+Wednesday**.
+
+**No new finding, and that is the correct outcome (session 40's rule).** Session 46 closed without
+leaving a stated evidence gap — the one category of work a re-verify session is licensed to add
+(session 38) — so nothing was manufactured to look busy. Two angles were considered and rejected
+*before* spending calls: re-probing the paused-vs-deleted question (all three paths are closed and
+settled in §5 — connector gate, tokenless local MCP, revoked PAT) and re-auditing the crons for
+outage-outrun windows (sessions 13/18/19 closed that set: TD-29 + TD-34 are the whole of it).
+
+**Lane discipline.** Everything that would end this is **Level D** (owner credentials/dashboard):
+Supabase Resume, the Vercel cron toggle, the RevenueCat Retry clicks, the TD-21 PAT rotation, and
+`gh workflow enable uptime.yml` (`.github/workflows/**` is minimum Level C, and re-enabling it now
+would both override a deliberate human mute and fire into a muted void). **Nothing was shipped,
+nothing was weakened, no security control was touched.**
+
+**Secrets.** Nothing staged — the git-data push path never stages, so `npm run secrets:check` would
+report a no-op "clean (0 files)" (TD-33). Compensated as in sessions 18–46: both files in this push
+were grepped directly for **value-shaped** credentials
+(`sbp_|sk_live|whsec_|eyJ[A-Za-z0-9_-]{10,}|-----BEGIN` with a real-length tail). The only hits are
+the long-known **self-referential false positives** — the literal `-----BEGIN` inside backticks in
+prior sessions' own secret-check paragraphs in `LOG.md` (expected, per session 40; inspect, don't
+panic). No secret value was read into this log, printed, or committed.
+
+**Working tree.** `scripts/ops/origin-drift.mjs` exited 3 (local `d4c5395` vs origin `6e65d32`,
+8 files). All four locally-dirty paths — `scripts/verify-deploy.mjs`,
+`tests/invariants/ops-tooling.test.mjs`, `scripts/ops/origin-drift.mjs`,
+`scripts/ops/sweep-prompt.md` — were `diff`ed against the origin mirror and are **byte-identical**,
+i.e. the line-20 checkout repair rather than human WIP, so per the stash trap they were left in
+place and neither stashed nor committed (hard-rule 11). This entry was written on the **origin**
+copy of `LOG.md` (5,501 lines), not the stale local one (428 lines), which would have silently
+truncated 45 prior entries.
+
+**`PushNotification` was called before this paragraph was written** (session 38's ordering rule),
+and is **still dead**, verbatim: *"Mobile push not sent (Remote Control inactive)."* That is the
+**47th** consecutive session with no working push path. `telegram` was not re-probed (§7 — the
+channel inventory is exhaustively verified and complete). **This entry, like the 46 before it,
+reached you only because you came and looked.**
+
+### For Branden — unchanged from sessions 24–46, and none of it self-heals
+
+1. **The only fix, Level D:** Supabase dashboard → project `gsxoaurmsgqascxukony` →
+   **Resume / Restore**. **49h58m** down. The dashboard also tells you *which* branch you are in
+   (paused / billing-restricted / deleted) — the one fact 47 sessions have not been able to get.
+2. **Before you click Resume:** Vercel → project **`sizzle`** (the API — the naming is reversed) →
+   Settings → Cron Jobs → **Disable Cron Jobs**. Ten seconds. Re-confirmed still undone at `20:20Z`.
+3. **Stripe: 22h01m of free-retry slack.** Restore before `2026-09-24T18:23Z` and the Stripe half
+   replays itself. Not a cliff (manual replay runs to `2026-10-06` dashboard / `2026-10-21` API),
+   but it is the difference between free and tedious. Do **not** disable the Stripe webhook endpoint.
+4. **After restore:** app.revenuecat.com → Integrations → Webhooks → **Retry** each failed
+   `REFUND`/`CANCELLATION` since `2026-09-21T18:23Z`. Auto-retries expired `2026-09-21T20:58Z` and
+   restore will **not** replay them. Idempotent — do it before the next payout run.
+5. **Do not ship an iOS build until the database is back** (§3).
+6. **Items 3 and 4 are the only sources of truth for the money reconciliation** (TD-36).
+7. **47 sessions have now paged nobody.** Owner-side fixes that end this class of session:
+   **upgrade off the free tier** (Pro projects cannot be paused — it removes the failure mode
+   itself), **reconnect Remote Control**, and add `Bash(git fetch:*)` to `.claude/settings.json`
+   (TD-27). Then `gh workflow enable uptime.yml` **after** restore. TD-21 needs a PAT rotation.
