@@ -5140,3 +5140,105 @@ with no working push path to you. The `telegram` plugin was **not** re-probed: �
 further unattended session should spend time on it"* after three reproductions, and that
 instruction was honored. **This entry, like the 42 before it, reached you only because you
 came and looked.**
+
+## Watchdog 2026-09-23T17:08Z (session 44) — SEV-1 unchanged at 46h48m; Stripe slack under 26h; nothing shipped
+
+**Fired:** `API degraded (503): database-unreachable`, watchdog 10:07:59 PDT. **Not a false
+alarm** (503 + JSON body = the real-outage class, not the HTTP-000 host-blip class) and **not a
+new incident** — same root cause as the open SEV-1. Read
+`docs/operations/incidents/2026-09-21-supabase-project-unreachable.md`, not this entry.
+Session 43 closed 53 minutes earlier and had already done the deep work; this session
+deliberately re-verified rather than re-investigated.
+
+**Independently re-verified this session** (measured, not inherited):
+
+| Check | Result |
+|---|---|
+| `/health` ×4 | **503** `problems:["database-unreachable"]`, **7.24s each** (7.248 / 7.235 / 7.245 — the DB-connect stall), commit `d775710` (= session 43's push, so deploys are promoting) |
+| `/feed/for-you?limit=3` | **500 `db_error`** — a real user path, not just liveness |
+| `getsizzle.app` | **200** — static frontend, no DB dependency; **not** evidence of recovery |
+| DNS ×3 resolvers | `<ref>.supabase.co` **and** `db.<ref>.supabase.co` → **ENOTFOUND** on system / 1.1.1.1 / 8.8.8.8, with controls passing in the same run (apex `supabase.co` → A 76.76.21.21; `aws-0-us-east-1.pooler.supabase.com` → 3 A records). The project's records are gone; this is not a resolver fault. |
+| Vercel prod deploys (`sizzle`) | 9 hourly **READY**, newest 51m — these are the sessions' own doc pushes |
+| `Uptime` workflow | still `disabled_manually` |
+| CI, last 5 on `main` | **5× success** (13:02Z–16:19Z) |
+| `npm run test:invariants` | **38/38 pass** |
+
+**Crons are still live — §4 step 0 has still not been done.** `vercel crons ls --project sizzle`
+lists all five paths, and the runtime-log window `10:05:34`–`10:10:17` PDT holds a
+`finalize-videos` + `publish-scheduled` invocation **every single minute**, both returning `200`.
+The TD-34 trap is armed, now **~9.3h** after session 34 first confirmed it and ~1h after session
+43 re-confirmed it. This is the cheapest outstanding owner action (ten seconds, no deploy) and it
+is still open.
+
+**One correction to session 43's record, and it is reassuring rather than otherwise.** Session 43
+logged *"Secret-scanning alerts: `[]`"*. The unfiltered endpoint actually returns **1** alert, so
+the `[]` reading was a filtered view, not the total. The alert is **not new and not open**:
+`supabase_personal_access_token`, created **2026-08-07T01:01:32Z**, `state: resolved`,
+`resolution: revoked`, `resolved_at: 2026-08-10T14:52:32Z`, `push_protection_bypassed: false`.
+That is the historic `git add -A` PAT leak, already handled. Explicit re-query with
+`?state=open` → **0**. Two things worth carrying forward: the security posture is genuinely
+clean, and this is documentary evidence for **TD-21** that the Supabase PAT was **revoked as the
+resolution of that leak on 08-10**, ~6 days before the MCP token began returning 401 — i.e. TD-21
+needs a *rotation by Branden*, and no amount of permission-granting inside a session will fix it.
+
+**Rollback re-confirmed as a non-candidate.** Not because it was tried, but because the failure is
+outside the repo entirely: the project's DNS records do not exist, so no Vercel deployment — new
+or previous — can reach a database. The incident-response rule "rollback first when rollback is
+safer" does not apply to a dependency that has been deprovisioned or suspended upstream.
+
+**Nothing shipped, and that is the correct call.** No Level A/B fix exists: the cause is a
+Supabase project that cannot be resolved, and the only fix is a dashboard action by Branden
+(Level D). TD-28/29/34/35/36 all stay parked for the reason sessions 13–43 recorded — each is
+unverifiable against a dead DB, and the ship rule requires `scripts/verify-deploy.mjs` to observe
+a 200 `/health`, which is impossible while this SEV-1 is open. `gh workflow enable uptime.yml`
+deliberately **not** run: `.github/workflows/**` is minimum Level C, and it would override a
+deliberate human mute to re-fire alerts into a void.
+
+**Blocked paths re-tested cheaply, per §5's own rule — all reproduce.**
+`mcp__claude_ai_Supabase__list_projects` → *"requested permissions … not granted"* (gated).
+The `supabase` MCP server exposes no `list_projects`/`get_project` at all this session, only
+`execute_sql`/`apply_migration`-class tools, and TD-21's token is dead regardless (see the
+secret-scanning finding above for why). **Paused vs. restricted vs. deleted therefore remains
+unanswerable from inside a session** — §1's branch table still has to be resolved by Branden at
+the dashboard. `dig` is not allowlisted; the DNS evidence above was gathered with Node's
+`dns.promises.Resolver`, which is the portable substitute for future sessions.
+
+**Clocks re-stamped:** outage **46h48m**. Stripe auto-retry **25h11m** left (expires
+`2026-09-24T18:23Z`). Local time **10:11 AM PDT Wednesday 09-23** — the free-replay path is
+still open, and today is the last full working day inside it.
+
+**Secret check.** Per **TD-33** `npm run secrets:check` is a structural **no-op on this push path**
+(it reads *staged working-tree* files while the git-data API uploads blobs built under gitignored
+`.codex/`), so it is not a pass and was not treated as one. Compensated as in sessions 18–43: both
+changed files scanned out-of-band for **value-shaped** credentials — prefix *plus* a real-length
+tail, JWT triplets, PEM headers. **Result: 1 hit, and it is this paragraph's own prose** (the
+literal PEM-header token quoted above), which is precisely the false-hit class TD-33 warns about;
+zero hits in the action sheet. **Clean.** Both files are docs. No secret value was read into this
+log, printed, or committed — including the secret-scanning alert above, which was queried for
+metadata only.
+
+### For Branden — unchanged from sessions 24–43, and none of it self-heals
+
+1. **The only fix, Level D:** Supabase dashboard → project `gsxoaurmsgqascxukony` →
+   **Resume / Restore**. **46h48m** down. The dashboard also tells you *which* branch you are in
+   (paused / restricted / deleted) — the one fact 44 sessions have not been able to get.
+2. **Before you click Resume:** Vercel → project **`sizzle`** (the API — the naming is reversed)
+   → Settings → Cron Jobs → **Disable Cron Jobs**. Ten seconds. **Measured still undone this
+   session** (a cron firing every minute, right now); skipping it silently turns the
+   stranded-video recovery into a no-op (§4 step 0).
+3. **Stripe: 25h11m of free-retry slack** (expires `2026-09-24T18:23Z`). Restore before it and the
+   Stripe half replays itself. Not a cliff — manual replay runs to `2026-10-06` (dashboard) /
+   `2026-10-21` (API) — but it is the difference between free and tedious. Do **not** disable the
+   Stripe webhook endpoint; a disabled destination permanently prevents retries of queued events.
+4. **After restore:** app.revenuecat.com → Integrations → Webhooks → **Retry** each failed
+   `REFUND`/`CANCELLATION` since `2026-09-21T18:23Z`. Auto-retries expired `2026-09-21T20:58Z`;
+   restore will **not** replay them. Idempotent — do it before the next payout run.
+5. **Do not ship an iOS build until the database is back** (§3).
+6. **Items 3 and 4 are the only sources of truth for the money reconciliation** (TD-36) — no local
+   record of the dropped events exists; the runtime-log window is ~20 minutes deep.
+7. **44 sessions have now paged nobody.** The three owner-side fixes that end this class of
+   session: **upgrade off the free tier** (Pro projects cannot be paused — it removes the failure
+   mode itself), **reconnect Remote Control** so `PushNotification` works, and `Bash(git fetch:*)`
+   in `.claude/settings.json` (TD-27). Then `gh workflow enable uptime.yml` **after** restore.
+   **TD-21 additionally needs a Supabase PAT rotation, not a permission grant** — this session
+   proved the old token was revoked on 2026-08-10 as the resolution of the 08-07 leak.

@@ -1,7 +1,7 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
 **Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
-(11:23 AM PDT Mon 09-21). **45h52m as of 2026-09-23T16:15:36Z** — re-verified by session 43 (watchdog).
+(11:23 AM PDT Mon 09-21). **46h48m as of 2026-09-23T17:11:14Z** — re-verified by session 44 (watchdog).
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
 
 > **🛑 READ §4 STEP 0 BEFORE YOU CLICK RESUME.** Session 18 found that the first
@@ -10,7 +10,7 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > re-poll** — which silently converts TD-29's prescribed backfill into a no-op and makes
 > its counting query return `0`. One dashboard toggle before Resume avoids the whole mess.
 
-> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — ~26h07m of slack left (§2).**
+> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — ~25h11m of slack left (§2).**
 > Restore before it and the **Stripe** half self-heals with zero manual work. Missing it is *not*
 > a cliff — manual replay stays open to `2026-10-06` (dashboard) / `2026-10-21` (API). There is
 > real time; this is urgent, not frantic.
@@ -48,7 +48,10 @@ the one-page action sheet. **Read this, not the log.**
    disabled it. **Re-measured session 43** (`15:53:17Z`–`16:13:17Z`): 21 `finalize-videos`
    + 21 `publish-scheduled` in 20 minutes, and `vercel crons ls --project sizzle` still
    lists all five paths — so the trap remains armed 8.5h after session 34 said so, and
-   this step has still not been done.
+   this step has still not been done. **Re-measured again session 44** (`17:05Z`–`17:10Z`):
+   one `finalize-videos` **and** one `publish-scheduled` every single minute, both `200`,
+   and `vercel crons ls` still lists all five — armed ~9.3h after session 34, and still
+   the cheapest outstanding action on this page.
 
    > **Corrected session 19 — the control is project-wide, not per-cron.** Sessions 18's
    > wording ("disable `/internal/finalize-videos`") implies a per-cron switch. Vercel's
