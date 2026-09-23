@@ -1,7 +1,7 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
 **Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
-(11:23 AM PDT Mon 09-21). **37h20m as of 2026-09-23 07:43Z** — re-verified by session 34.
+(11:23 AM PDT Mon 09-21). **38h23m as of 2026-09-23T08:46:21Z** — re-verified by session 35.
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
 
 > **🛑 READ §4 STEP 0 BEFORE YOU CLICK RESUME.** Session 18 found that the first
@@ -10,7 +10,7 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > re-poll** — which silently converts TD-29's prescribed backfill into a no-op and makes
 > its counting query return `0`. One dashboard toggle before Resume avoids the whole mess.
 
-> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — ~34h39m of slack left (§2).**
+> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — ~33h37m of slack left (§2).**
 > Restore before it and the **Stripe** half self-heals with zero manual work. Missing it is *not*
 > a cliff — manual replay stays open to `2026-10-06` (dashboard) / `2026-10-21` (API). There is
 > real time; this is urgent, not frantic.
@@ -267,6 +267,64 @@ path that heals installed apps.
 > not clobber a version already in review — but **nothing anywhere stops a brand-new
 > submission being opened into an outage**, and `npm run release:ios:full`
 > (`docs/app-store-auto-submit.md`) would do exactly that, hands-off.
+
+> ### ⚠️ Correction, session 35 (`2026-09-23T08:46:21Z`) — the fallback costs hours, not an App Store round-trip
+>
+> **The heading above stands — Restore the existing project. What is wrong is the stated *cost
+> of the alternative*, and it is wrong in the expensive direction.** The claim that a new ref
+> "is a **native-rebuild-and-resubmit** event (App Store review)" and that "restoring the
+> existing project is the only path that heals installed apps" does not survive reading the
+> artifacts it cites.
+>
+> **Every hardcoded occurrence of the ref in a shipped artifact is a `<link rel="preconnect">`
+> hint — functionally inert.** Grepping the repo for `gsxoaurmsgqascxukony` returns exactly
+> three hits and all three are that same line: `apps/web/index.html:30`,
+> `apps/web/ios/App/App/public/index.html:30` (the shipped native web dir), and a
+> `Debug-iphonesimulator` build product that never shipped. A preconnect is a latency hint —
+> it opens a speculative socket, and a dead one costs nothing but the hint. **No native
+> artifact pins the host:** `Info.plist`'s ATS block is generic (`NSAllowsLocalNetworking`
+> only, no per-domain exception), `capacitor.config.ts` sets no `allowNavigation`, and the
+> string "supabase" appears in neither.
+>
+> **The functional URL is build-time JS — and JS is exactly what Capgo ships.**
+> `apps/web/src/lib/env.ts:7` reads `import.meta.env.VITE_SUPABASE_URL`, which Vite inlines
+> statically into the bundle at build time. That bundle and `index.html` both live in `dist`,
+> the directory Capgo uploads (`--path dist`). OTA is live on the shipped build:
+> `@capgo/capacitor-updater` ^8.51.0 (`apps/web/package.json:43`), wired at
+> `capacitor.config.ts:46-55` with `autoUpdate: 'onLaunch'` and `defaultChannel: 'production'`,
+> and that config's own comment cites Apple 3.3.2 — web-layer updates need no review. This repo
+> has shipped real OTA bundles through that path.
+>
+> **And the OTA channel is working right now, mid-outage** — Capgo's update check talks to Capgo
+> Cloud, not to Supabase. Repointing every installed iPhone at a new ref is a rebuild plus one
+> `bundle upload`, landing on each user's next cold launch. **Hours, not days. Apple is not in
+> the loop.**
+>
+> **What a new ref *does* still cost — the real blockers, none of which is Apple:**
+> 1. **Data + Storage migration** out of a project whose hostname does not resolve. This is the
+>    genuine blocker, and if Resume is unavailable it may well be unavailable too.
+> 2. **OAuth reconfiguration (Level D).** Google Cloud Console and the Apple Service ID have
+>    `https://<old-ref>.supabase.co/auth/v1/callback` registered as the redirect URI, and the
+>    client builds the authorize URL from the project URL (`nativeOAuth.ts:41` supplies only the
+>    `app.sizzle.mobile://login-callback` return leg, which is ref-independent). Both consoles
+>    must be updated or Google/Apple sign-in breaks.
+> 3. **Vercel env vars** (`SUPABASE_URL` + keys) on both projects, then redeploy.
+> 4. **Every user is signed out.** Sessions are JWTs issued by the old project. Session 14's
+>    "sessions survive this outage" result does **not** extend to a ref change — that finding was
+>    about retryable fetch errors not clearing the session, not about a changed issuer.
+> 5. Users stay broken until their **next cold launch** (`autoUpdate: 'onLaunch'`).
+>
+> **Why this matters even though the recommendation is unchanged:** if Resume turns out to be
+> unavailable — deleted project, or a billing hold needing a human at Supabase — the uncorrected
+> §3 tells you installed apps cannot be healed without an App Store round-trip. That is the kind
+> of sentence that stops an owner looking for a fallback at all. The fallback is real and it is
+> same-day. **Restore is still strictly better** — no migration, no OAuth work, no forced
+> re-login, no waiting on cold launches — better by a wide margin, not by the impossibility of
+> the alternative.
+>
+> *Limit, stated plainly: that OTA carries a changed `VITE_SUPABASE_URL` is verified
+> mechanically (static inlining → `dist` → the directory Capgo uploads), not by running an OTA.
+> Shipping a live bundle during an outage is not something an unattended session should do.*
 
 ---
 

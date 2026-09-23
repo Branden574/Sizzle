@@ -4079,3 +4079,108 @@ Unchanged from sessions 24–33. Re-stated only because none of it self-heals:
    push**, as all 34 have been. Upgrading off the free tier (Pro projects cannot be paused,
    and it removes the Fair Use restriction mechanism) and re-arming one alert channel are
    both your call, and together they are the difference between 2 minutes and 37 hours.
+
+
+## Incident 2026-09-21 — session 35 re-verify at 38h23m: condition unchanged, one real correction to the action sheet (§3)
+
+**State, re-verified before anything else.** `origin-drift.mjs` ran first (TD-27): local
+`HEAD d4c5395` vs origin `main 3aba027`, 7 files adrift — all reasoning below is against the
+origin copies in `.codex/origin-3aba027/`. `/health` **503**
+`{"status":"degraded","problems":["database-unreachable"],"commit":"3aba027"}` on two probes
+(`08:40:51Z`, `08:41:08Z`); `commit` equals current `origin/main`, so a fresh build with freshly
+injected env vars reproduces it — not a stale artifact and not an env-var miss. User-facing
+proof unchanged: `GET /feed/for-you?limit=3` → **500 `{"error":{"code":"db_error"}}`**.
+`getsizzle.app` → **200** (static frontend, as throughout). DNS via `.codex/dns-probe.mjs`:
+`supabase.co` answers `A=76.76.21.21` on all three resolvers while
+**`gsxoaurmsgqascxukony.supabase.co` and `db.gsxoaurmsgqascxukony.supabase.co` are `ENOTFOUND`
+(NXDOMAIN) on the system resolver, `1.1.1.1` and `8.8.8.8`** — parent zone up, every
+per-project record withdrawn. Still **Level D**: no repo change, rollback or redeploy can
+reinstate a withdrawn DNS record. Six most recent `sizzle` production deploys all **READY**
+(newest 56m — prior sessions' own docs-only log pushes), so there is no bad deploy to promote
+away from.
+
+**Pre-Resume precondition re-checked rather than assumed — the crons are still armed.** Runtime
+logs for the current production deployment, window `08:23:34Z`–`08:44:34Z` (21 min): **25
+`/internal/finalize-videos` + 26 `/internal/publish-scheduled`**, plus 1
+`rollup-hashtag-trends`. §1/§4 step 0 (`Disable Cron Jobs`) is therefore **still un-done** and
+the TD-34 trap will fire within 60 s of Resume. Nothing indicates the owner has acted.
+
+**The one new finding — §3 of the action sheet was wrong, in the expensive direction.** §3 told
+the owner that recreating under a new project ref "is a **native-rebuild-and-resubmit** event
+(App Store review)" and that "restoring the existing project is the only path that heals
+installed apps". Both claims fail against the artifacts §3 itself cites. Grepping the repo for
+the ref returns **exactly three hits, all of them the same `<link rel="preconnect">` line**
+(`apps/web/index.html:30`, `apps/web/ios/App/App/public/index.html:30`, and a
+`Debug-iphonesimulator` build product) — a latency hint, functionally inert. The *functional*
+URL is `import.meta.env.VITE_SUPABASE_URL` at `apps/web/src/lib/env.ts:7`, which Vite inlines
+into the JS bundle at build time; that bundle and `index.html` both live in `dist`, which is
+precisely what Capgo uploads. OTA is live on the shipped build (`@capgo/capacitor-updater`
+^8.51.0, `apps/web/package.json:43`; `capacitor.config.ts:46-55`, `autoUpdate: 'onLaunch'`,
+`defaultChannel: 'production'`), no native artifact pins the Supabase host (`Info.plist` ATS is
+generic `NSAllowsLocalNetworking`; no `allowNavigation`; the string "supabase" is in neither),
+and **Capgo's update check reaches Capgo Cloud, not Supabase, so the OTA channel is functional
+during this outage.** So installed iPhones can be repointed at a new ref in a rebuild + one
+`bundle upload`, landing at each user's next cold launch — **hours, not an Apple round-trip.**
+The real costs of that branch are data/Storage migration, OAuth redirect-URI updates in the
+Google and Apple consoles (Level D), Vercel env vars on both projects, and a **forced global
+re-login** (session 14's "sessions survive" finding covers retryable fetch errors, *not* a
+changed JWT issuer). Recorded as a dated correction inside §3, append-only per session 28's
+convention. **The recommendation does not change — Restore is still strictly better.** What
+changes is that the fallback is same-day rather than impossible, which matters only in the
+branch where Resume cannot be clicked; but that is exactly the branch in which an owner reading
+the uncorrected §3 would stop looking. *Stated limit:* the OTA-carries-the-new-URL step is
+verified mechanically, not by running an OTA — shipping a live bundle mid-outage is not an
+unattended act.
+
+**Checked against the sheet before writing it up**, per session 29's rule: §3 contained only the
+*forward* claim and session 31's *reverse* review-queue check; the cost of the fallback had
+never been audited. Sessions 13/18/19 audited cron windows, 23 the payment clocks, 14 the auth
+session, 15 the pause policy, 28/30 doc rot, 31 the Apple queue, 33 the gate re-test — none
+touched this.
+
+**Nothing shipped beyond docs.** TD-28/29/30/31/33/34/35 stay parked: unverifiable against a
+database whose hostname has no DNS record (CLAUDE.md hard rule 4), and an unverifiable API
+deploy perturbs the exact `/health` and cron signals being watched for recovery. `uptime.yml`
+stays muted (`.github/workflows/**` is minimum Level C and re-arming it overrides a deliberate
+human mute). No rollback — every recent deploy is READY and the last pre-outage deploy is
+15+ days old.
+
+**Secret check.** Per **TD-33** `npm run secrets:check` is structurally blind on the
+git-data-API push path (it reads bodies from the working tree; the uploaded blobs are built
+under gitignored `.codex/`), so a "clean" from it would be a no-op rather than a pass.
+Compensated as in sessions 18–34: both changed files scanned out-of-band for value-shaped
+credentials (prefix **plus** real-length tail, JWT triplets, `-----BEGIN`) — **clean**. Both
+are docs. No secret value was read into this log, printed, or committed. Branden's uncommitted
+work (`scripts/ops/sweep-prompt.md`, `tests/invariants/ops-tooling.test.mjs`, untracked
+`scripts/ops/origin-drift.mjs`) untouched per hard rule 11 and **not** stashed, per the stash
+trap.
+
+### For Branden
+
+Unchanged from sessions 24–34, and none of it self-heals:
+
+1. **The only fix, Level D:** Supabase dashboard → project `gsxoaurmsgqascxukony` →
+   **Resume / Restore**. **38h23m** down. Read the action sheet, not this log.
+2. **Before Resume:** Vercel → project **`sizzle`** (the API — naming is reversed) → Settings →
+   Cron Jobs → **`Disable Cron Jobs`**. Re-confirmed necessary this hour from runtime logs.
+3. **Today, Wednesday 09-23, is the cheap day for Stripe.** Auto-retry expires
+   `2026-09-24T18:23Z` (11:23 AM PDT Thursday) — ~33h37m left. Restore before it and the Stripe
+   half replays itself. Do **not** disable the Stripe webhook endpoint; a disabled destination
+   permanently prevents retries of queued events.
+4. **After restore:** app.revenuecat.com → Integrations → Webhooks → **Retry** each failed
+   `REFUND`/`CANCELLATION` since `2026-09-21T18:23Z`. Auto-retries expired
+   `2026-09-21T20:58Z` and restore will not replay them. Idempotent — do it before the next
+   payout run.
+5. **Do not ship an iOS build until the database is back** (§3's prohibition — nothing is in
+   Apple's queue, so there is no deadline, but a submission opened into an outage is a
+   guaranteed Guideline 2.1 rejection).
+6. **New this session, and it only matters if Resume fails:** §3 now carries a correction —
+   recreating under a new ref does **not** require an App Store resubmit. Installed apps can be
+   repointed by OTA the same day. Restore remains far better; you are simply not cornered if it
+   is unavailable.
+7. **The one that prevents a session 36:** sessions 1–35 have paged **nobody**. The channel
+   inventory is exhausted — Remote Control dark since before the outage, the `Uptime` email you
+   muted still `disabled_manually`, both connectors gated, a GitHub Issue rejected on purpose
+   because the repo is public. This entry is **pull, not push**. Upgrading off the free tier
+   (Pro projects cannot be paused) and re-arming one alert channel are the difference between
+   2 minutes and 38h23m.
