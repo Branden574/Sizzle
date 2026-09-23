@@ -1,7 +1,7 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
 **Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
-(11:23 AM PDT Mon 09-21). **33h07m as of 2026-09-23 03:30Z** — re-verified by session 30.
+(11:23 AM PDT Mon 09-21). **34h11m as of 2026-09-23 04:34Z** — re-verified by session 31.
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
 
 > **🛑 READ §4 STEP 0 BEFORE YOU CLICK RESUME.** Session 18 found that the first
@@ -10,7 +10,7 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > re-poll** — which silently converts TD-29's prescribed backfill into a no-op and makes
 > its counting query return `0`. One dashboard toggle before Resume avoids the whole mess.
 
-> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — ~38h53m of slack left (§2).**
+> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — ~37h49m of slack left (§2).**
 > Restore before it and the **Stripe** half self-heals with zero manual work. Missing it is *not*
 > a cliff — manual replay stays open to `2026-10-06` (dashboard) / `2026-10-21` (API). There is
 > real time; this is urgent, not frantic.
@@ -229,6 +229,31 @@ users' phones:
 So a new ref is not a config toggle — it is a **native-rebuild-and-resubmit** event
 (App Store review), on top of migrating data. Restoring the existing project is the only
 path that heals installed apps.
+
+> **Checked `2026-09-23T04:34Z` (session 31) — nothing is in Apple's review queue, so App
+> Store review is NOT a clock on this incident.** The paragraph above asks the forward
+> question (a new ref would *force* a resubmit); the sharper reverse question had never been
+> asked: **is a build sitting in review right now?** If one were, an Apple reviewer would open
+> Sizzle against a dead database — and because sign-in is Supabase Auth, whose host is exactly
+> the record that no longer resolves, the `review@getsizzle.app` demo account cannot
+> authenticate **at all**. That is an automatic **Guideline 2.1** rejection plus days of
+> requeue, landing on top of a live outage.
+>
+> **Verified read-only against the App Store Connect API** (GETs only; probes in
+> `.codex/asc-review-state.mjs` / `-state2.mjs`, which never print the key): the sole
+> `appStoreVersion` is **`1.0` `READY_FOR_SALE`**, and **all ten `reviewSubmissions` are
+> `COMPLETE`**, newest submitted `2026-07-28T17:45:34Z`. Nothing is `WAITING_FOR_REVIEW` or
+> `IN_REVIEW`. **There is no Apple-side deadline to race** — a negative result, and the useful
+> kind.
+>
+> **The prohibition it creates — do not ship an iOS build until §4 steps 1–3 pass.** There is
+> nothing to cancel and no rush, but a submission *opened* during the outage is a guaranteed
+> rejection. This guard is the paragraph you are reading: `asc-prepare-version.mjs:63-68`
+> keeps an `EDITABLE` set of
+> `PREPARE_FOR_SUBMISSION`/`DEVELOPER_REJECTED`/`REJECTED`/`METADATA_REJECTED`, so it will
+> not clobber a version already in review — but **nothing anywhere stops a brand-new
+> submission being opened into an outage**, and `npm run release:ios:full`
+> (`docs/app-store-auto-submit.md`) would do exactly that, hands-off.
 
 ---
 

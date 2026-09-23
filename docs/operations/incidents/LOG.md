@@ -3611,3 +3611,133 @@ Unchanged from sessions 24–29. Re-stated only because none of it self-heals:
    would advertise a live outage plus an open financial-webhook window). This entry is **pull,
    not push** — as all 30 have been. Upgrading off the free tier and re-arming one alert channel
    are both your call, and together they are the difference between 2 minutes and 33 hours.
+
+## 2026-09-22 — watchdog summon #30 (session 31): SEV-1 unchanged at 34h11m; App Store review ruled out as a clock
+
+**What fired.** `scripts/ops/watchdog.sh` at 21:30:20 PDT (`2026-09-23T04:30Z`):
+`API degraded (503): database-unreachable`, `commit a9ad616`. The 60-minute cooldown
+re-firing against an unchanged condition — the thirtieth summon from one outage.
+
+**Root cause — unchanged and already settled since session 1.** The Supabase project
+`gsxoaurmsgqascxukony` is unreachable at the DNS layer: the parent zone answers while every
+per-project record is withdrawn. This is a project-level pause/restrict/deprovision at the
+account level, not a platform fault, not a bad deploy, and not anything a repo change can
+touch. **The only fix is Level D (owner, Supabase dashboard).**
+
+**Re-verified independently this session (not carried forward):**
+
+- `/health` → **503 `database-unreachable`** at `04:31:44Z` and again at `04:34:43Z` — two
+  probes ~3 minutes apart, which is the anti-flap check, not a single blip. First probe took
+  **7.20s**, the signature of a connect stall rather than a fast DNS refusal at the edge.
+- `/feed/for-you?limit=3` → **500 `{"error":{"code":"db_error"}}`**. A real user path, not a
+  liveness probe — this is the honest proof of user impact.
+- DNS across **system + `1.1.1.1` + `8.8.8.8`**, all three agreeing: `supabase.co` →
+  `A 76.76.21.21` / `CNAME ENODATA` (name exists), while `gsxoaurmsgqascxukony.supabase.co`
+  **and** `db.gsxoaurmsgqascxukony.supabase.co` → **`ENOTFOUND` for both A and CNAME**.
+  Parent zone healthy, every per-project record gone.
+- Vercel project `sizzle`: recent Production deployments **all Ready**; `/health` serves
+  `a9ad616`, which is current origin `main`. The failure therefore reproduces on a brand-new
+  build with freshly injected env vars — that kills "stale artifact" and "env var never picked
+  up" in one shot. The hourly Ready deploys are prior sessions' own docs-only log pushes.
+- **No rollback performed, and none is appropriate.** There is no bad deploy to roll back
+  from (the last *pre-outage* production deploy was 15 days old), and promoting an older build
+  cannot restore a withdrawn DNS record. `node scripts/verify-deploy.mjs` is unusable by
+  construction here — its success criterion is a 200 `/health` — and this change is docs-only.
+
+### What this session contributed: the one surface with a clock that nobody had checked — and it is clear
+
+Sessions 13/18/19 applied *"what has a clock the outage has outrun?"* to the crons, 23 to
+payments, 14 to auth sessions, 15 to the project's own pause policy. The remaining unasked
+instance was **Apple's review queue**. The action sheet mentioned App Store review only in
+§3, and only in the *forward* direction (recreating the project under a new ref would force a
+native rebuild + resubmit). The reverse question is sharper: **is a build sitting in review
+right now?** If so, an Apple reviewer opens Sizzle against a dead database — and because
+sign-in is Supabase Auth, whose host is exactly the record that no longer resolves, the
+`review@getsizzle.app` demo account cannot authenticate at all. That is an automatic
+**Guideline 2.1** rejection plus days of requeue, landing on top of a live outage.
+
+**Answer: nothing is in the queue. Verified read-only against the App Store Connect API**
+(GETs only; probes kept in `.codex/asc-review-state.mjs` / `-state2.mjs`, which never print
+the key). The sole `appStoreVersion` is **`1.0` `READY_FOR_SALE`**, and **all ten
+`reviewSubmissions` are `COMPLETE`**, newest submitted `2026-07-28T17:45:34Z`. Nothing is
+`WAITING_FOR_REVIEW` or `IN_REVIEW`. **So App Store review is not a clock on this incident,
+and there is no Apple-side deadline to race.** A negative result, and the useful kind: it
+removes a worry rather than adding one, and it is the last surface the lens had not been
+pointed at.
+
+**It does convert into one prohibition, now written into §3 of the action sheet:** do not
+submit a build until §4 steps 1–3 pass. Verified in code rather than assumed —
+`asc-prepare-version.mjs:63-68`'s `EDITABLE` set is
+`PREPARE_FOR_SUBMISSION`/`DEVELOPER_REJECTED`/`REJECTED`/`METADATA_REJECTED`, so it will not
+clobber a version already in review, but **nothing anywhere stops a brand-new submission
+being opened into an outage**. `npm run release:ios:full` would do exactly that, hands-off.
+That guard did not exist before this entry.
+
+**Capability note, recorded because §7's inventory is about *push*.** The App Store Connect
+API key path works from an unattended session (ES256 JWT → authenticated GETs). This is *not*
+a new alert channel — ASC has no way to message the owner, and anything that did would be an
+outward-facing action requiring authorization. It is noted only so a later session knows this
+read path is available without re-deriving it, and does not mistake it for a hole in §7.
+
+**Clocks, as of `2026-09-23T04:34Z`.** Outage **34h11m**. Apple/RevenueCat auto-retries
+expired `2026-09-21T20:58Z` — **31h36m** ago, still requiring a manual dashboard Retry that
+restore will not perform. Stripe auto-retry slack **~37h49m** (`2026-09-24T18:23Z`), down from
+~38h53m at session 30; manual replay stays open to `2026-10-06` (dashboard) / `2026-10-21`
+(API). **Nothing newly crossed a threshold this hour, and no new failure mode appeared.**
+
+**Nothing else shipped.** TD-28/29/30/31/33/34/35 stay parked for the same reason as every
+prior session: unverifiable against a database with no DNS record (hard rule 4). `uptime.yml`
+stays muted (`.github/workflows/**` is minimum Level C; re-arming it would override a
+deliberate human mute). TD-23's `watchdog.sh` retry stays unshipped — launchd executes the
+repo file directly, so an unattended edit goes live at the next 5-min tick with no CI or
+deploy gate, and a bug there silently suppresses *real* alerts. Session 30's standing
+convention was obeyed: only the two live counters at the top of the action sheet were
+re-stamped, and the class-sweep was **not** repeated.
+
+**Secret check.** Per **TD-33** `npm run secrets:check` is structurally blind on the
+git-data-API push path (it reads bodies from the working tree; the uploaded blobs are built
+under gitignored `.codex/`), so a "clean" from it would be a no-op rather than a pass.
+Compensated as in sessions 18–30: both changed files scanned out-of-band for value-shaped
+credentials (prefix **plus** real-length tail, JWT triplets, `-----BEGIN`) — **clean**. Both
+are docs. The ASC probes read a `.p8` private key from outside the repo and **never print it**;
+the Key ID, Issuer and App ID that do appear in this incident's tooling are non-secret
+(they appear in dashboard URLs). No secret value was read into this log, logged or committed.
+
+**Working-tree note (TD-27).** `origin-drift.mjs` ran **first**, before any diagnosis: local
+`HEAD d4c5395` vs origin `main a9ad616`, 7 files adrift. Both edits were built on the origin
+copies in `.codex/origin-a9ad616/` and pushed through the GitHub git-data API. Branden's
+uncommitted work (`sweep-prompt.md`, `tests/invariants/ops-tooling.test.mjs`, untracked
+`scripts/ops/origin-drift.mjs`) untouched per hard rule 11 — and per the stash trap, those
+three were **not** stashed.
+
+### For Branden
+
+Unchanged from sessions 24–30. Re-stated only because none of it self-heals:
+
+1. **The only fix, Level D:** Supabase dashboard → project `gsxoaurmsgqascxukony` →
+   **Resume / Restore**. **34h11m** down. Read the action sheet, not this log.
+2. **Before Resume:** Vercel → project **`sizzle`** (the API — naming is reversed) → Settings →
+   Cron Jobs → **`Disable Cron Jobs`** (TD-34, the 60-second trap that would flip the whole
+   stranded video cohort to `status='error'` and make TD-29's backfill a silent no-op).
+3. **After restore:** app.revenuecat.com → Integrations → Webhooks → **Retry** each failed
+   `REFUND` / `CANCELLATION` since `2026-09-21T18:23Z`. Auto-retries expired
+   `2026-09-21T20:58Z` (**31h36m** ago) and restore will **not** replay them. Idempotent —
+   retry freely, and do it **before the next payout run**.
+4. **Stripe:** **~37h49m** of auto-retry slack left (`2026-09-24T18:23Z`). Missing it is **not**
+   a cliff — Resend stays open to `2026-10-06`, the API to `2026-10-21`. Do **not** disable the
+   endpoint (a disabled destination permanently prevents future retries of queued events).
+5. **New this session, and it is a "don't", not a "do":** **do not ship an iOS build until the
+   database is back.** Nothing is in Apple's queue right now (checked — all submissions
+   `COMPLETE`, version `1.0 READY_FOR_SALE`), so there is no deadline and nothing to cancel.
+   But a submission opened during the outage is a guaranteed **Guideline 2.1** rejection: the
+   reviewer's `review@getsizzle.app` sign-in goes to Supabase Auth, and that host does not
+   resolve. Restore first, verify §4 steps 1–3, then release.
+6. **The one that prevents a session 32:** the free tier's documented failure mode is
+   administrative suspension, and the alerting layer that should have caught it has no working
+   push path. **Sessions 1–31 have paged nobody**, and the channel inventory is exhausted
+   (Remote Control dark ~20 days since *before* the outage; the `Uptime` email you muted is
+   `disabled_manually`; a GitHub Issue is rejected on purpose because the repo is public and
+   would advertise a live outage plus an open financial-webhook window). This entry is **pull,
+   not push** — as all 31 have been. Upgrading off the free tier and re-arming one alert
+   channel are both your call, and together they are the difference between 2 minutes and 34
+   hours.
