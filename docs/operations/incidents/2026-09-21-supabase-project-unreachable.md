@@ -1,7 +1,7 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
 **Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
-(11:23 AM PDT Mon 09-21). **51h02m as of 2026-09-23T21:25:28Z** — re-verified by session 48 (watchdog).
+(11:23 AM PDT Mon 09-21). **52h07m as of 2026-09-23T22:30:34Z** — re-verified by session 49 (watchdog).
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
 
 > **🛑 READ §4 STEP 0 BEFORE YOU CLICK RESUME.** Session 18 found that the first
@@ -10,7 +10,7 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > re-poll** — which silently converts TD-29's prescribed backfill into a no-op and makes
 > its counting query return `0`. One dashboard toggle before Resume avoids the whole mess.
 
-> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — ~20h58m of slack left (§2).**
+> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — ~19h52m of slack left (§2).**
 > Restore before it and the **Stripe** half self-heals with zero manual work. Missing it is *not*
 > a cliff — manual replay stays open to `2026-10-06` (dashboard) / `2026-10-21` (API). There is
 > real time; this is urgent, not frantic.
@@ -355,6 +355,22 @@ path that heals installed apps.
 >    "sessions survive this outage" result does **not** extend to a ref change — that finding was
 >    about retryable fetch errors not clearing the session, not about a changed issuer.
 > 5. Users stay broken until their **next cold launch** (`autoUpdate: 'onLaunch'`).
+>
+> **Session 49 (`2026-09-23T22:30Z`) — the OAuth *credential* clock, checked and RULED OUT.**
+> Item 2 above covers the redirect **URIs**, which a ref change invalidates. The adjacent
+> question nobody had asked is whether the Apple **client secret** — an ES256 JWT with a hard
+> `exp`, unlike Google's non-expiring client secret — is itself near expiry, which would make
+> "Apple sign-in is broken" land as a *second* incident just as the owner finishes restoring.
+> **It is not.** `scripts/gen-apple-secret.mjs:17` mints `MAX_AGE_S = 15_776_999` (182.6 d,
+> just under Apple's 6-month ceiling) and the provider was wired on **2026-07-12** (`21653f3`,
+> the only commit to that script), so the secret runs to **~2027-01-11** — about 3.5 months of
+> headroom, unrelated to this outage. Two consequences worth stating plainly: the Resume trip is
+> **Resume only**, with no OAuth repair queued behind it; and in the new-ref branch the secret
+> **survives** a ref change untouched, because the JWT is bound to TEAM_ID + the Services ID
+> `app.sizzle.web`, not to the Supabase hostname — only the Services ID's Web Auth *Domain* and
+> *Return URL* need editing. That matters because the `.p8` behind it is **not re-downloadable**
+> (it lives in Branden's iCloud Drive as `AuthKey_6YSDQV3S4P.p8`), so a branch that did force a
+> re-mint would have a single point of failure — and this one does not.
 >
 > **Why this matters even though the recommendation is unchanged:** if Resume turns out to be
 > unavailable — deleted project, or a billing hold needing a human at Supabase — the uncorrected

@@ -5776,3 +5776,136 @@ kills "stale artifact" and "env var never picked up" in one shot, for the **48th
 building the tree, so the push could not silently clobber a concurrent session. Reinforces the
 standing note that this log's unbounded growth is itself the problem — **worth splitting into
 per-incident files once production is back**.
+
+## 2026-09-23 22:30Z — watchdog session 49 — SEV-1 unchanged, hour 52. One negative finding (the OAuth credential clock is clear).
+
+**Fired:** `API degraded (503): database-unreachable` at 15:27:41 local (`2026-09-23T22:27:41Z`),
+the same summon the prior 48 sessions answered. Raw body carried `commit: 7ba9856`.
+
+**Root cause — unchanged, and re-attested this hour, not recalled.** The Supabase project
+`gsxoaurmsgqascxukony` no longer resolves. `.codex/dns-probe.mjs` across three independent
+resolvers (system, `1.1.1.1`, `8.8.8.8`) agrees exactly:
+
+    supabase.co                          A=76.76.21.21   CNAME=ENODATA
+    gsxoaurmsgqascxukony.supabase.co     A=ENOTFOUND     CNAME=ENOTFOUND
+    db.gsxoaurmsgqascxukony.supabase.co  A=ENOTFOUND     CNAME=ENOTFOUND
+
+Parent zone healthy (`ENODATA` = the name exists, that record *type* does not); both per-project
+records **NXDOMAIN**. Three unrelated resolvers agreeing rules out a sandbox or host-side
+explanation. This is a withdrawn record — project-level pause/deprovision, not a platform fault.
+
+**User-facing corroboration, not just the probe endpoint.** `/feed/for-you?limit=3` → **HTTP 500**
+`{"error":{"code":"db_error"}}` after a **7.35 s** stall. `/health` → **503**,
+`problems:["database-unreachable"]`. Every non-DB subsystem still reports healthy
+(`cloudflareConfigured`, `push:"ok"`, `paymentsKeyMode:"live"`, `emailConfigured`,
+`sentryConfigured`) — the blast radius is exactly the database and nothing else.
+
+**"Bad deploy" stays dead as a hypothesis.** `vercel ls sizzle --yes`: every production
+deployment **● Ready**, newest **58m** old, an unbroken hourly cadence back past 9h. Those hourly
+builds are prior sessions' own docs-only log pushes (§5), and they double as the standing free
+control — the failure reproducing on brand-new builds with freshly injected env vars kills both
+"stale artifact" and "env var never picked up", now for the 49th time.
+
+**Lane: unchanged and unchangeable from here.** Every action that would end this is **Level D**
+(owner credentials / dashboard). Per ground rule 3 I checked rollback explicitly and it is again
+**not applicable** — there is no bad deploy to roll back; the newest READY build fails identically
+to the one from 9h ago because the dependency it calls has no DNS record.
+
+### The one new thing this session — a negative result, and the useful kind
+
+Session 40's rule says a pure re-verification is a legitimate deliverable and a manufactured
+finding is noise. Session 48 closed without leaving a stated evidence gap, so I checked for the
+one category that is cheap and still unaudited rather than inventing work: **"what else has a
+clock?" applied to the OAuth *credentials*.** Sessions 13/18/19 covered the crons, 14 the auth
+sessions, 15 the project's own pause clock, 23/35 both money rails, 31 Apple's review queue. The
+**Apple client secret** was never on that list, and it is the one credential in the stack with a
+hard expiry: Supabase's Apple provider takes an **ES256 JWT** (Google's client secret does not
+expire), so it silently stops working on a date.
+
+Why it would have mattered: had it been near expiry, "Sign in with Apple is broken" would surface
+as a **second incident** the moment the owner finished restoring — and the `.p8` needed to re-mint
+it (`AuthKey_6YSDQV3S4P.p8`) is **not re-downloadable from Apple**, so it is a single-point-of-
+failure credential.
+
+**It is clear.** `scripts/gen-apple-secret.mjs:17` → `MAX_AGE_S = 15_776_999` (182.6 days, just
+under Apple's 6-month ceiling); `git log` shows exactly one commit touching that script,
+**`21653f3`, 2026-07-12**, the commit that wired the provider. Earliest possible expiry is
+therefore **~2027-01-11** — roughly 3.5 months out and wholly unrelated to this outage.
+
+Two things follow, both now in §3 of the action sheet:
+
+1. **The Resume trip is Resume only.** No OAuth repair is queued behind it. Ruling a surface out
+   is what lets the owner stop carrying it.
+2. **In the new-ref fallback branch the secret survives untouched.** The JWT is bound to TEAM_ID
+   plus the Services ID `app.sizzle.web`, not to the Supabase hostname — so only the Services ID's
+   Web Auth **Domain** and **Return URL** need editing, which §3 item 2 already prescribes. The
+   branch does *not* force a re-mint, which is the outcome that would have depended on a
+   non-re-downloadable key file.
+
+**Also checked, also clean — the recovery *queries*, not just the prose.** Sessions 28/30 found
+that predictions and tone calibrations rot; the sharper version of that worry is a **SQL query**
+with a hardcoded range, because an owner pastes it verbatim and the damage is silent. §4 step 0's
+cohort-reconstruction query is **correctly anchored** to absolute outage-relative constants
+(`created_at >= '2026-09-21T12:23:07Z'` / `< '2026-09-21T18:23:07Z'`, `last_polled_at <`
+outage start) rather than to `now()`, so it stays true at any restore hour — the lower bound is
+outage-start-minus-6h precisely because the every-minute cron had already abandoned anything older
+before the outage began. It does not rot. Negative result, recorded so nobody re-opens it.
+
+**Angles rejected before spending calls** (session 40's rule): re-probing paused-vs-deleted (§5 —
+all three paths closed: connector gate, tokenless local MCP, revoked PAT); re-auditing crons
+(sessions 13/18/19 closed that set — TD-29 + TD-34 are the whole of it); re-probing the dead push
+channels (§7 is exhaustively verified); re-litigating TD-34's patch shape (session 48 settled it
+one hour ago — the error-guard is a silent no-op; only a symmetric lower bound closes it).
+
+**In-lane verification that does not need the dead dependency** (session 45's test):
+`node --test tests/invariants/ops-tooling.test.mjs` → **26/26 pass**, so TD-37's
+`staleHeadBail()` guard and the drift-check wiring are both still intact on this tree.
+
+**Counters re-stamped** (the only other action-sheet edit, per session 30's convention): elapsed
+**52h07m** as of `2026-09-23T22:30:34Z`; Stripe free-retry slack **19h52m**, expiring
+`2026-09-24T18:23Z` (11:23 AM PDT Thursday). Per the §7 convention I am not embedding a fresh
+prediction about working hours — sessions 37/46's dated stamps stand as history.
+
+**Working tree.** `scripts/ops/origin-drift.mjs` reported local `d4c5395` vs origin **`7ba9856`**,
+8 files. All four locally-dirty paths — `scripts/verify-deploy.mjs`,
+`tests/invariants/ops-tooling.test.mjs`, `scripts/ops/origin-drift.mjs`,
+`scripts/ops/sweep-prompt.md` — `diff`ed byte-identical against the origin mirror, i.e. the
+line-20 checkout repair and not human WIP, so per the stash trap they were left in place, neither
+stashed nor committed (hard-rule 11). This entry was written on the **origin** copy of `LOG.md`
+(5,778 lines), not the stale local one, which would have silently truncated 47 prior entries.
+
+**Security.** Nothing weakened, nothing shipped to an application surface, no auth/RLS/entitlement
+path touched. Read-only probes plus two documentation files.
+
+**Secrets.** Nothing staged — the git-data push path never stages, so `npm run secrets:check` would
+report a no-op "clean (0 files)" (TD-33). Compensated as in sessions 18–48: both files in this push
+were grepped for **value-shaped** credentials (`sbp_|sk_live|whsec_|eyJ[A-Za-z0-9_-]{10,}|` plus
+the BEGIN-block marker, each with a real-length tail). The only hits are the long-known
+**self-referential false positives** — the literal marker inside backticks in prior sessions' own
+secret-check paragraphs (expected, per session 40; inspect, don't panic). Note this session
+discusses an Apple key by **filename and Key ID only** (`AuthKey_6YSDQV3S4P.p8`, `6YSDQV3S4P`),
+both already in the repo's own docs; **no key material was read, printed or committed**, and the
+`.p8` was never opened.
+
+### For Branden — unchanged from sessions 24–48, and none of it self-heals
+
+1. **The only fix, Level D:** Supabase dashboard → project `gsxoaurmsgqascxukony` →
+   **Resume / Restore**. **52h07m** down. The dashboard also tells you *which* branch you are in
+   (paused / billing-restricted / deleted) — the one fact 49 sessions have not been able to get.
+2. **Before you click Resume:** Vercel → project **`sizzle`** (the API — the naming is reversed) →
+   Settings → Cron Jobs → **Disable Cron Jobs**. Ten seconds. Re-confirmed still undone at
+   `22:30Z`. There is no safe code-side substitute (session 48).
+3. **Stripe: 19h52m of free-retry slack.** Restore before `2026-09-24T18:23Z` and the Stripe half
+   replays itself. Not a cliff (manual replay runs to `2026-10-06` dashboard / `2026-10-21` API),
+   but it is the difference between free and tedious. Do **not** disable the Stripe webhook endpoint.
+4. **After restore:** app.revenuecat.com → Integrations → Webhooks → **Retry** each failed
+   `REFUND`/`CANCELLATION` since `2026-09-21T18:23Z`. Auto-retries expired `2026-09-21T20:58Z`
+   and restore will **not** replay them. Idempotent — do it before the next payout run.
+5. **Do not ship an iOS build until the database is back** (§3).
+6. **Items 3 and 4 are the only sources of truth for the money reconciliation** (TD-36).
+7. **Apple sign-in needs nothing from you** (new this session) — the client secret is good to
+   ~2027-01-11. One less thing on the restore trip.
+8. **49 sessions have now paged nobody.** Owner-side fixes that end this class of session:
+   **upgrade off the free tier** (Pro projects cannot be paused — it removes the failure mode
+   itself), **reconnect Remote Control**, and add `Bash(git fetch:*)` to `.claude/settings.json`
+   (TD-27). Then `gh workflow enable uptime.yml` **after** restore. TD-21 needs a PAT rotation.
