@@ -5051,3 +5051,92 @@ Unchanged from sessions 24–41 and none of it self-heals. In priority order:
    what it costs to leave open), and reconnecting Remote Control so `PushNotification` works.
    Then `gh workflow enable uptime.yml` **after** restore. 42 sessions have now paged **nobody**;
    this entry, like the 41 before it, reached you only because you came and looked.
+
+## Watchdog 2026-09-23T16:05Z (session 43) — SEV-1 unchanged at 45h52m; nothing new, nothing shipped
+
+**Fired:** `API degraded (503): database-unreachable`, watchdog 09:05:42 PDT. **Not a false
+alarm** — 503 with a JSON body is the real-outage class, not the HTTP-000 host blip class.
+**Not a new incident:** same root cause as the open SEV-1. Read
+`docs/operations/incidents/2026-09-21-supabase-project-unreachable.md`, not this entry.
+
+**Re-verified independently this session** (evidence, not inheritance):
+
+| Check | Result |
+|---|---|
+| `/health` ×5 | **503** `problems:["database-unreachable"]`, ~7.2s each (the DB-connect stall), commit `a2748ba` |
+| `/feed/for-you?limit=3` | **500 `db_error`** — a real user path, not just liveness |
+| `getsizzle.app` | **200** in 183ms — static frontend, no DB dependency; **not** evidence of recovery |
+| DNS ×3 resolvers | `<ref>.supabase.co` + `db.<ref>.supabase.co` → **ENOTFOUND** on system/1.1.1.1/8.8.8.8; apex `supabase.co` → **A 76.76.21.21** (matches session 41; the apex change is Supabase's, not ours) |
+| Vercel prod deploys | 9 hourly **READY**, newest 55m old — these are sessions' own doc pushes. **Rollback is not a candidate** (last pre-outage deploy was 15 days old, §5) |
+| `Uptime` workflow | still `disabled_manually`; last success `2026-09-21T17:54:46Z`, first failure `18:23:07Z` |
+
+**Cheap re-tests of three recorded blockers — all three reproduce, none moved.** Per §5's own
+lesson ("a predecessor's recorded 'I tried and it's gated' is worth one cheap re-test"):
+`mcp__claude_ai_Supabase__list_projects` → *"requested permissions … not granted"*;
+`mcp__supabase__list_tables` → *"Unauthorized. Please provide a valid access token … via
+`SUPABASE_ACCESS_TOKEN`"* (tokenless, not gated — TD-21 confirmed a 3rd time);
+`mcp__claude_ai_Gmail__search_threads` → permission-gated. **Paused-vs-restricted-vs-deleted
+remains unanswerable from inside a session**, so §1's branch table still has to be resolved by
+Branden at the dashboard.
+
+**Two measurements worth having, both confirming prior findings rather than adding to them.**
+(1) **Crons are still live** — `vercel crons ls --project sizzle` lists all five, and the runtime
+log window `15:53:17Z`–`16:13:17Z` holds 21 `finalize-videos` + 21 `publish-scheduled`
+invocations. **The TD-34 trap is armed and §4 step 0 has still not been done** — 8.5h after
+session 34 last confirmed it. §1 step 0 re-stamped accordingly. (2) **The runtime-log buffer is
+20.0 minutes deep** (55 rows, `15:53:17Z`–`16:13:17Z`), against session 36's ~21 min — so
+TD-36's evidence window is stable and still tiny, and **0 money/webhook rows appear in it**.
+That is consistent with TD-36, not a sign nothing is queued: dropped deliveries go locally
+invisible ~20 min after they happen. Stripe's and RevenueCat's dashboards remain the only record.
+TD-28's 200-vs-500 contrast reproduced again (both 1-min crons 200, `rollup-hashtag-trends` 500)
+— **settled, logged only as a control that the window is real.**
+
+**Nothing shipped, and that is the correct call, not an omission.** No Level A/B fix applies: the
+cause is entirely outside the repo. TD-28/29/34/35/36 all stay parked for the reason sessions
+13–42 recorded and this session re-checked — each is unverifiable against a dead DB, and the ship
+rule requires `scripts/verify-deploy.mjs` to see a 200 `/health`, which cannot happen while the
+SEV-1 is open. Shipping the TD-34 code fix was reconsidered specifically (it has a *pre-Resume*
+deadline, so there is a real argument for it) and **rejected**: it deploys the payments-adjacent
+API unverifiably mid-outage, whereas §4 step 0 mitigates the same trap completely with one
+dashboard toggle. `gh workflow enable uptime.yml` deliberately **not** run — `.github/workflows/**`
+is minimum Level C and it would override a deliberate human mute while re-firing into a void.
+
+**Clocks re-stamped:** outage **45h52m**; Stripe auto-retry **26h07m** left. It is **09:15 AM PDT
+Wednesday** — the last full working day on which the free Stripe replay path is still available.
+
+**Secret check.** `npm run secrets:check` → see push note below; per **TD-33** it is a structural
+no-op on this push path (it scans staged working-tree files while the git-data API uploads blobs).
+Compensated as in sessions 18–42: both changed files scanned out-of-band for value-shaped
+credentials (prefix **plus** real-length tail, JWT triplets, `-----BEGIN`) — **clean**. Both are
+docs. No secret value was read into this log, printed, or committed.
+
+### For Branden — unchanged from sessions 24–42, and none of it self-heals
+
+1. **The only fix, Level D:** Supabase dashboard → project `gsxoaurmsgqascxukony` →
+   **Resume / Restore**. **45h52m** down. The dashboard also tells you *which* branch you are in
+   (paused / restricted / deleted) — that is the one fact 43 sessions have not been able to get.
+2. **Before you click Resume:** Vercel → project **`sizzle`** (the API — naming is reversed) →
+   Settings → Cron Jobs → **Disable Cron Jobs**. Ten seconds. **Re-confirmed still undone this
+   session**; skipping it silently turns the stranded-video recovery into a no-op (§4 step 0).
+3. **Stripe: 26h07m of free-retry slack** (expires `2026-09-24T18:23Z`). Restore before it and the
+   Stripe half replays itself. Not a cliff — manual replay runs to `2026-10-06` (dashboard) /
+   `2026-10-21` (API). Do **not** disable the Stripe webhook endpoint; a disabled destination
+   permanently prevents retries of queued events.
+4. **After restore:** app.revenuecat.com → Integrations → Webhooks → **Retry** each failed
+   `REFUND`/`CANCELLATION` since `2026-09-21T18:23Z`. Auto-retries expired `2026-09-21T20:58Z`;
+   restore will not replay them. Idempotent — do it before the next payout run.
+5. **Do not ship an iOS build until the database is back** (§3).
+6. **Items 3 and 4 are the only sources of truth for the money reconciliation** (TD-36) — no local
+   record of the dropped events exists, and this session measured that window at **20 minutes**.
+7. **43 sessions have now paged nobody.** `PushNotification` re-tested this session — result
+   recorded at the end of this entry. The three owner-side fixes that end this class of session:
+   **upgrade off the free tier** (Pro projects cannot be paused — it removes the failure mode
+   itself), **reconnect Remote Control**, and `Bash(git fetch:*)` in `.claude/settings.json`
+   (TD-27). Then `gh workflow enable uptime.yml` **after** restore.
+
+**`PushNotification` re-tested at the close of this session — still dead**, verbatim:
+*"Mobile push not sent (Remote Control inactive)."* That is the **43rd** consecutive session
+with no working push path to you. The `telegram` plugin was **not** re-probed: §7 says *"no
+further unattended session should spend time on it"* after three reproductions, and that
+instruction was honored. **This entry, like the 42 before it, reached you only because you
+came and looked.**
