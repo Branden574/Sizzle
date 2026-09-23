@@ -5604,3 +5604,16 @@ reached you only because you came and looked.**
    **upgrade off the free tier** (Pro projects cannot be paused — it removes the failure mode
    itself), **reconnect Remote Control**, and add `Bash(git fetch:*)` to `.claude/settings.json`
    (TD-27). Then `gh workflow enable uptime.yml` **after** restore. TD-21 needs a PAT rotation.
+
+**Closing note — session 47, written after the calls it reports.**
+
+**Deploy verification closed out, and it doubles as a fifth negative probe.**
+`node scripts/verify-deploy.mjs --api --sha 0790e1b21fb06ae917945ea1bb4d6aab0cbc1ef3` →
+*"deployment: READY … health status: degraded (database-unreachable) — deployed but unhealthy"*,
+in seconds rather than the old 8-minute hang — TD-37's fix working on its second real outing, and
+the invocation used `--sha` exactly as that entry prescribes. `/health` at `20:25:38Z` then
+reported `commit: 0790e1b`, so the alias serves this commit: **503**, `database-unreachable`,
+7.36s stall. That is the correct terminal state for a docs-only push, and it is also the **free
+control** noted in §5 — the failure reproducing on a brand-new build with freshly injected
+environment variables kills "stale artifact" and "env var never picked up" in one shot, for the
+47th time.
