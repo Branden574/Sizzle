@@ -3189,3 +3189,94 @@ Unchanged from sessions 24–25. Re-stated only because none of it self-heals:
    returned **Remote Control inactive** (~20 days dark, since *before* the outage) — **sessions
    1–26 have paged nobody.** Upgrading the plan and re-arming one alert channel are both your
    call, and together they are the difference between 2 minutes and 29 hours.
+
+## 2026-09-22 — watchdog summon #26 (session 27): SEV-1 unchanged, hour 30 (30h03m)
+
+**Short by design, and that is the finding.** Summon fired `17:25:28 PDT` on the 60-minute
+cooldown against an unchanged condition. The diagnosis has been settled since session 1 and every
+follow-up sweep is closed (crons 13/18/19 · payments 23 · auth 14 · pause policy 15 · Stripe
+auto-disable 24 · telegram 25). This session re-verified independently, changed nothing, and
+invented nothing. **The artifact that matters is the action sheet
+(`2026-09-21-supabase-project-unreachable.md`), not this log.**
+
+**Re-verified independently — identical to sessions 25/26.**
+
+| probe | time (PDT) | result |
+|---|---|---|
+| `/health` | 17:25:44 | **503** `database-unreachable`, commit `7d5d182` |
+| `/health` | 17:26:36 | **503** `database-unreachable`, 7.34s, commit `7d5d182` |
+| `/feed/for-you?limit=3` | 17:26:2x | **500** `{"error":{"code":"db_error"}}`, 7.21s |
+| `getsizzle.app` | 17:26:1x | **200**, 0.11s |
+
+DNS unchanged and unambiguous across all three resolvers (system · 1.1.1.1 · 8.8.8.8), with **no
+`ETIMEOUT` noise this round** — a cleaner read than session 26 got: `supabase.co` →
+**A 76.76.21.21** (parent zone healthy) while `gsxoaurmsgqascxukony.supabase.co` *and*
+`db.<ref>.supabase.co` → **ENOTFOUND** (NXDOMAIN) on every resolver, both A and CNAME.
+Parent zone up + every per-project record withdrawn = project-level pause/deprovision, not a
+platform DNS fault. The multi-second stalls on both API probes are the DB-connect timeout, not an
+overloaded database.
+
+**Vercel is healthy and the fault is outside it — re-confirmed, not assumed.** `vercel ls sizzle`
+shows the six most recent Production deployments **all `● Ready`** (ages 43m · 55m · 2h · 3h · 4h ·
+5h). Those hourly builds are prior sessions' own docs-only log pushes, not rogue deploys — the
+known artifact. `/health` serving `7d5d182` (= current origin `main`, session 26's push) means the
+build/deploy path works and this failure reproduces on a brand-new build with freshly injected env
+vars, which kills "stale artifact" and "env var never picked up" for the 27th time. **No rollback
+was performed and none is appropriate**: there is no bad deploy to roll back to a good one, and
+promoting an older build would change nothing about a withdrawn DNS record.
+`verify-deploy.mjs` **not run** — it asserts a 200 `/health`, so it is unusable by construction
+during this outage, and this change is docs-only.
+
+**Clocks, restated with this session's arithmetic** (the only thing that actually moves):
+Apple/RevenueCat auto-retries expired `2026-09-21T20:58Z` — **27h28m ago**, still requiring a
+manual dashboard Retry that restore will not perform. Stripe auto-retry slack now
+**~41h55m** (`2026-09-24T18:23Z`), down from ~42h40m at session 26. Nothing newly crossed a
+threshold this hour; no new failure mode appeared.
+
+**Nothing shipped but this entry.** TD-28/29/30/31/33/34/35 all stay parked for the same reason
+as every prior session: unverifiable against a database with no DNS record (hard rule 4).
+`uptime.yml` stays muted (`.github/workflows/**` ≥ Level C, and re-arming it would override a
+deliberate human mute). TD-23's `watchdog.sh` retry stays unshipped — launchd executes the repo
+file directly, so an unattended edit goes live at the next 5-min tick with no CI or deploy gate,
+and a bug there silently suppresses *real* alerts.
+
+**Secret check.** Per **TD-33** `npm run secrets:check` is structurally blind on the git-data-API
+push path (it reads bodies from the working tree; the uploaded blobs are built under gitignored
+`.codex/`), so a "clean" from it would be a no-op rather than a pass. Compensated as in sessions
+18–26: both changed files scanned out-of-band for value-shaped credentials (prefix **plus**
+real-length tail, JWT triplets, `-----BEGIN`) — **clean**. Both are docs; no secret value was read,
+logged or committed.
+
+**Working-tree note (TD-27).** `origin-drift.mjs` ran **first**, before any diagnosis: local
+`HEAD d4c5395` vs origin `main 7d5d182`, 7 files adrift — local `LOG.md` is **427** lines against
+origin's **3,191**, so appending to the working copy would have destroyed **~2,764 lines** of this
+incident's history. Both edits were built on the origin copies in `.codex/origin-7d5d182/` and
+pushed through the GitHub git-data API. Branden's uncommitted work (`sweep-prompt.md`,
+`tests/invariants/ops-tooling.test.mjs`, untracked `scripts/ops/origin-drift.mjs`) untouched per
+hard rule 11 — and per the stash trap, those three are byte-identical to origin and were **not**
+stashed.
+
+### For Branden
+
+Unchanged from sessions 24–26. Re-stated only because none of it self-heals:
+
+1. **The only fix, Level D:** Supabase dashboard → project `gsxoaurmsgqascxukony` →
+   **Resume / Restore**. **30h03m** down. Read the action sheet, not this log.
+2. **Before Resume:** Vercel → project **`sizzle`** (the API — naming is reversed) → Settings →
+   Cron Jobs → **`Disable Cron Jobs`** (TD-34, the 60-second trap that would flip the whole
+   stranded video cohort to `status='error'` and make TD-29's backfill a silent no-op).
+3. **After restore:** app.revenuecat.com → Integrations → Webhooks → **Retry** each failed
+   `REFUND` / `CANCELLATION` since `2026-09-21T18:23Z`. Auto-retries expired `2026-09-21T20:58Z`
+   (**27h28m** ago) and restore will **not** replay them. Idempotent — retry freely, and do it
+   **before the next payout run**.
+4. **Stripe:** **~41h55m** of auto-retry slack left (`2026-09-24T18:23Z`). Do **not** disable the
+   endpoint; check it isn't already showing `disabled` before replaying.
+5. **The one that prevents a session 28:** the free tier's documented failure mode is
+   administrative suspension, and the alerting layer that should have caught it has no working
+   push path. `PushNotification` was attempted again as this session's closing step — **sessions
+   1–27 have paged nobody**, and the channel inventory is exhausted (Remote Control dark ~20 days
+   since *before* the outage; the `Uptime` email you muted is `disabled_manually`; a GitHub Issue
+   is rejected on purpose because the repo is public and would advertise a live outage plus an
+   open financial-webhook window). This entry is **pull, not push** — as all 27 have been.
+   Upgrading off the free tier and re-arming one alert channel are both your call, and together
+   they are the difference between 2 minutes and 30 hours.
