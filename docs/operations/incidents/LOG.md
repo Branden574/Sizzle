@@ -4693,3 +4693,137 @@ Unchanged from sessions 24–38. None of it self-heals:
    difference between 2 minutes and 42h37m. **Rotating the Supabase PAT (TD-21) is the third**:
    it is one owner-side credential, and it would let an unattended session answer
    paused-vs-deleted instead of guessing for 39 consecutive summons.
+
+## Incident 2026-09-23 06:59 PDT — watchdog summon #40: SEV-1 unchanged at 43h38m; re-verification only, no new finding (and that is the correct outcome)
+
+**What fired.** `scripts/ops/watchdog.sh` at `2026-09-23 06:59:31` local:
+`API degraded (503): database-unreachable`. Same signature as summons #1–#39.
+
+**Root cause — unchanged, re-verified rather than assumed.** Supabase project
+`gsxoaurmsgqascxukony` still has no DNS records. `.codex/dns-probe.mjs` this hour, all three
+resolvers agreeing:
+
+| name | system | 1.1.1.1 | 8.8.8.8 |
+|---|---|---|---|
+| `supabase.co` | `A=76.76.21.21`, CNAME **ENODATA** | same | same |
+| `gsxoaurmsgqascxukony.supabase.co` | **ENOTFOUND** | **ENOTFOUND** | **ENOTFOUND** |
+| `db.gsxoaurmsgqascxukony.supabase.co` | **ENOTFOUND** | **ENOTFOUND** | **ENOTFOUND** |
+
+Parent zone answers, every per-project record is NXDOMAIN, on three unrelated resolvers —
+positive proof the records were withdrawn, not a sandbox artifact and not a platform fault.
+Project-level pause/deprovision. **Level D: only the owner, from the Supabase dashboard, can
+fix this.**
+
+**Live facts re-verified this hour.**
+
+- `/health` → `503 {"status":"degraded","problems":["database-unreachable"]}` at `13:59:30Z`
+  (watchdog) and `13:59:48Z` (this session). `commit` still `5ba0a69` — session 39's docs push.
+- **User-facing proof, not a probe artifact:** `/feed/for-you?limit=3` → **`500
+  {"error":{"code":"db_error"}}`**. Confirmed from the other side in `vercel logs`, which
+  captured this exact request at `07:00:19.42` with `[db_error] TypeError: fetch failed`.
+- **Not a bad deploy — re-confirmed.** `vercel ls sizzle --yes`: nine Production deployments
+  listed, **all `● Ready`**, newest **59 m**, on the hourly cadence of these sessions' own
+  docs-only log pushes. **Rollback is not and never was a candidate** — there is no failed
+  deployment to promote away from, and no deployment of any age can reinstate a withdrawn DNS
+  record. Per the incident-response ground rule, rollback was considered and explicitly ruled
+  out on evidence, not skipped.
+- **The TD-34 trap is still armed.** `vercel logs` shows the crons running untouched:
+  `finalize-videos` `07:00:17` (200, 21 s), `publish-scheduled` `07:00:34` (200, 7 s),
+  `rollup-hashtag-trends` `07:00:11` (**500 in 5 ms**). That 5 ms is itself corroboration —
+  a DNS/connect fast-fail, not an overloaded database, which would burn seconds. §4 step 0
+  remains un-done and will fire within 60 s of Resume.
+
+**The clock.**
+
+- Outage duration: **43h38m** as of `2026-09-23T14:01:47Z` (started `2026-09-21T18:23:07Z`).
+- Stripe auto-retry expires `2026-09-24T18:23Z` — **~28h21m** of slack left.
+- It is **Wednesday 09-23, ~07:00 AM PDT** — still inside the cheap-Stripe day session 34
+  flagged and session 37 opened. Unchanged in kind from session 39, one hour further along.
+
+### What this session adds: nothing new — deliberately
+
+Session 39 closed its entry without leaving an open evidence gap, which removes the one
+category of work session 38 identified as legitimately available to a re-verify session (*"a
+predecessor's stated evidence gap is a labelled, pre-scoped task"*). I checked for one anyway
+and found none.
+
+Two candidate angles were considered and **dropped before spending calls on them**, recorded
+here so session 41 doesn't re-open them:
+
+1. **Vercel build-minute / quota exhaustion from the hourly docs pushes.** Plausible-sounding
+   second-order failure, but the arithmetic kills it: ~40 deployments × ~18 s ≈ 12 minutes of
+   build time across the whole incident. Not a risk. Rejected on numbers, not on vibes.
+2. **Cloudflare Stream retention as an outage-outrun clock** (the session 13/18 lens applied
+   to the provider side rather than the DB side). **Already covered** — §4 of the action sheet
+   states Cloudflare was up throughout and that the affected assets are `ready` on Cloudflare
+   right now, with only our DB record wrong. Caught by session 29's rule: grep the sheet
+   before writing anything up as new.
+
+**The finding is that there is no finding.** Sessions 13/18/19 closed the cron audit, 23 the
+payment clocks, 14 the auth session, 15 the pause policy, 28/30/33 doc rot and gate re-tests,
+31 the Apple queue, 35 the §3 fallback cost, 36 the Sentry capture gap, 38 the DNS
+re-attestation, 39 the memory-vs-sheet drift. On a 40-session incident where every surface has
+been audited, a session that manufactures a 41st "discovery" is producing noise that the next
+reader has to triage. The correct output is a dated re-verification with fresh evidence, two
+re-stamped counters, and an explicit statement that nothing changed — which is what this is.
+
+**Nothing shipped beyond docs.** TD-28/29/30/31/33/34/35/36 stay parked — unverifiable against
+a database whose hostname has no DNS record (CLAUDE.md hard rule 4), and an unverifiable API
+deploy would perturb the exact `/health` and cron signals being watched for recovery.
+`uptime.yml` stays muted (`.github/workflows/**` is minimum Level C; re-arming it unattended
+would override a deliberate human mute). **`node scripts/verify-deploy.mjs` was not run:** its
+success criterion is a 200 `/health`, so it cannot pass during a DB outage and would only hang
+— stated plainly rather than reported as a pass or a failure.
+
+**Push channel: still nothing.** `PushNotification` was called this session — before this
+sentence was written, per session 38's ordering rule — and returned verbatim **"Mobile push
+not sent (Remote Control inactive)."** Same as sessions 12–39. Sessions 1–40 have paged
+nobody. **This entry is pull, not push.**
+
+**Secret check.** Per **TD-33**, `npm run secrets:check` is structurally blind on the
+git-data-API push path (it reads bodies from the working tree; uploaded blobs are built under
+gitignored `.codex/`), so a "clean" from it would be a no-op rather than a pass. Compensated as
+in sessions 18–39: both changed files scanned out-of-band for value-shaped credentials (prefix
+**plus** a real-length tail, JWT triplets, `-----BEGIN`) — **clean**. Both are docs. No secret
+value was read into this log, printed, or committed. Branden's uncommitted work
+(`scripts/ops/sweep-prompt.md`, `tests/invariants/ops-tooling.test.mjs`, untracked
+`scripts/ops/origin-drift.mjs`) untouched per hard rule 11 and **not** stashed, per the stash
+trap — all three verified byte-identical to origin.
+
+**Session 30's absolute-timestamp convention obeyed:** only the two live counters were
+re-stamped (status line → `43h38m as of 2026-09-23T14:01:47Z`; Stripe banner → `~28h21m`).
+Nothing else in the sheet was rewritten.
+
+### For Branden
+
+Unchanged from sessions 24–39. None of it self-heals:
+
+1. **The only fix, Level D:** Supabase dashboard → project `gsxoaurmsgqascxukony` →
+   **Resume / Restore**. **43h38m** down. Read the action sheet
+   (`docs/operations/incidents/2026-09-21-supabase-project-unreachable.md`), not this log.
+2. **Before Resume:** Vercel → project **`sizzle`** (the API — naming is reversed) → Settings →
+   Cron Jobs → **`Disable Cron Jobs`**. Re-confirmed necessary this hour from runtime logs
+   (`finalize-videos` observed at `07:00:17` PDT returning 200 against a dead DB).
+3. **Today, Wednesday 09-23, is still the cheap day for Stripe.** Auto-retry expires
+   `2026-09-24T18:23Z` (11:23 AM PDT Thursday) — **~28h21m** left. Restore before it and the
+   Stripe half replays itself with zero manual work; slipping to Thursday means doing it by
+   hand. Not a cliff — manual replay stays open to `2026-10-06` (dashboard) / `2026-10-21`
+   (API) — but it is the difference between free and tedious. Do **not** disable the Stripe
+   webhook endpoint; a disabled destination permanently prevents retries of queued events.
+4. **After restore:** app.revenuecat.com → Integrations → Webhooks → **Retry** each failed
+   `REFUND`/`CANCELLATION` since `2026-09-21T18:23Z`. Auto-retries expired `2026-09-21T20:58Z`
+   and restore will not replay them. Idempotent — do it before the next payout run.
+5. **Do not ship an iOS build until the database is back** (§3's prohibition — nothing is in
+   Apple's queue, so there is no deadline, but a submission opened into an outage is a
+   guaranteed Guideline 2.1 rejection).
+6. **Steps 3 and 4 are the only sources of truth for the money reconciliation** (TD-36): there
+   is no local record of which webhook events were dropped. Sentry does not have them, and
+   Vercel's runtime-log buffer is only ~21 minutes deep because the crons saturate it.
+7. **The one that prevents a session 41:** sessions 1–40 have paged **nobody**. The channel
+   inventory is exhausted — the `Uptime` email you muted is still `disabled_manually`, both
+   connectors unusable, `osascript` sandbox-blocked, a GitHub Issue rejected on purpose because
+   the repo is public. Upgrading off the free tier (Pro projects cannot be paused) and
+   re-arming one alert channel — `gh workflow enable uptime.yml`, *after* the restore — are the
+   difference between 2 minutes and 43h38m. **Rotating the Supabase PAT (TD-21) is the third**:
+   it is one owner-side credential, and it would let an unattended session answer
+   paused-vs-deleted instead of guessing for 40 consecutive summons.
