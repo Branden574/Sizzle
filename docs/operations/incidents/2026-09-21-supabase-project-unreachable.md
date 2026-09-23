@@ -1,7 +1,7 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
 **Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
-(11:23 AM PDT Mon 09-21). **46h48m as of 2026-09-23T17:11:14Z** — re-verified by session 44 (watchdog).
+(11:23 AM PDT Mon 09-21). **48h54m as of 2026-09-23T19:17:05Z** — re-verified by session 46 (watchdog).
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
 
 > **🛑 READ §4 STEP 0 BEFORE YOU CLICK RESUME.** Session 18 found that the first
@@ -10,7 +10,7 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > re-poll** — which silently converts TD-29's prescribed backfill into a no-op and makes
 > its counting query return `0`. One dashboard toggle before Resume avoids the whole mess.
 
-> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — ~25h11m of slack left (§2).**
+> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — ~23h06m of slack left (§2).**
 > Restore before it and the **Stripe** half self-heals with zero manual work. Missing it is *not*
 > a cliff — manual replay stays open to `2026-10-06` (dashboard) / `2026-10-21` (API). There is
 > real time; this is urgent, not frantic.
@@ -19,6 +19,10 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > **Session 37 (`2026-09-23T10:54Z`): that day has now begun.** It is Wednesday morning PDT —
 > the cheap-path day is no longer approaching, it is the current one, and the next waking
 > window is the last that lands comfortably inside the Stripe budget.
+> **Session 46 (`2026-09-23T19:17Z`): that day is now past its midpoint** — 12:17 PM PDT
+> Wednesday, so roughly half of the last full working day has been spent. The action itself
+> is still ~2 minutes and the slack is still 23h; what has shrunk is the number of *waking*
+> hours left inside it, not the feasibility.
 
 > **🍎 NEW, session 23 — the Apple/RevenueCat half does NOT self-heal, and its window has
 > ALREADY CLOSED.** RevenueCat retries a failing webhook **5 times over 155 minutes total**,
@@ -30,8 +34,9 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > Apple clock" and §4 step 6. Good news, also session 23: the **grant** side is safe and
 > self-heals; nobody is charged without eventually getting their unlock (§2).
 
-This page exists because twenty-three unattended watchdog sessions have now diagnosed the same
-outage and appended well over 1,000 lines to `LOG.md`. The diagnosis is finished. This is
+This page exists because **forty-five** unattended watchdog sessions have now diagnosed the same
+outage and appended **5,400+ lines** to `LOG.md` (counts re-stamped session 46; the prose said
+"twenty-three" and "well over 1,000" and had decayed). The diagnosis is finished. This is
 the one-page action sheet. **Read this, not the log.**
 
 ---

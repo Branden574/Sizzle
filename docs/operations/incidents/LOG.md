@@ -5417,3 +5417,85 @@ very lesson TD-37 encodes, and the first push verified through the fixed script.
 no working push path. The `telegram` plugin was **not** re-probed (§7: no further unattended
 session should spend time on it, after three reproductions). **This entry, like the 44 before it,
 reached you only because you came and looked.**
+
+---
+
+## 2026-09-23 19:17Z — watchdog session 46 — SEV-1 unchanged, hour 49. No new findings.
+
+**Deliberately short.** The action sheet (`2026-09-21-supabase-project-unreachable.md`) says the
+diagnosis is finished, and it is. Sessions 1–45 have written 5,400+ lines about an outage that one
+owner-side dashboard click ends. Session 46 re-verified the state, re-stamped the decayed counters,
+and stopped. **Nothing below is new; if you are reading the log at all, read the action sheet instead.**
+
+**What fired.** `scripts/ops/watchdog.sh` at 12:15:02 PDT — API degraded (503),
+`problems:["database-unreachable"]`.
+
+**Re-verification (3 negative probes, this session).** `/health` on `sizzle-chi.vercel.app`:
+`19:15:00Z`, `19:15:19Z` (7.30s), `19:17:14Z` (7.35s) — all **503**, all
+`{"status":"degraded","problems":["database-unreachable"]}`, all `commit: bc7f083`. The ~7.3s stall
+is the DB-connect timeout, unchanged since session 3. Not a flap: this is hour 49 of a continuous
+outage, so the anti-flap rule does not apply.
+
+**Root cause re-confirmed, unchanged.** Node `dns.resolve4` this session:
+`supabase.co` → **A 76.76.21.21**; `gsxoaurmsgqascxukony.supabase.co` → **ENOTFOUND**;
+`db.gsxoaurmsgqascxukony.supabase.co` → **ENOTFOUND**. Byte-for-byte the state session 41 recorded
+(parent zone up, both per-project records withdrawn = account-level pause/restriction). **This is
+the settled §5 finding — the apex now answering `A` instead of `ENODATA` is Supabase's marketing
+zone, not our project.** No repo change, rollback or redeploy can touch it; the last pre-outage
+deploy is 17 days old, so rollback was never a candidate.
+
+**TD-34 trap still armed — the one cheap thing still undone.** `vercel crons ls --project sizzle`
+at `19:16Z` still lists all five paths (`finalize-videos` and `publish-scheduled` both `* * * * *`).
+Sessions 34, 43 and 44 each measured this; **session 46 makes it four.** `Disable Cron Jobs` on the
+Vercel `sizzle` project is ten seconds and must happen **before** Resume.
+
+**Clocks re-stamped (the only edits this session).** Elapsed **48h54m**; Stripe free-retry slack
+**23h06m** (expires `2026-09-24T18:23Z` = 11:23 AM PDT Thursday). Session 45 advanced `LOG.md` but
+left the action sheet's status line reading *"46h48m … session 44"*, and the Stripe banner reading
+*"~25h11m"* — both fixed. Also corrected the sheet's self-description, which still said "twenty-three
+sessions / well over 1,000 lines" (actual: 45 / 5,400+), and added a session-46 stamp noting the
+cheap-path Wednesday is now **past its midpoint** (12:17 PM PDT). Per session 30's standing
+convention these are the live counters that get re-stamped each session by design.
+
+**Lane discipline.** Everything that would end this is **Level D** (owner credentials / dashboard):
+Supabase Resume, the Vercel cron toggle, the RevenueCat Retry clicks, the PAT rotation (TD-21),
+`gh workflow enable uptime.yml` (`.github/workflows/**` is min Level C, and re-enabling now would
+override a deliberate human mute *and* fire into a muted void). Nothing was shipped, nothing was
+weakened, and no in-lane work was invented to look busy.
+
+**Secrets.** Nothing staged (the git-data push path never stages, so `npm run secrets:check` would
+report a no-op "clean (0 files)" — TD-33). Compensated as in sessions 18–45: the two files in this
+push were grepped directly for **value-shaped** credentials
+(`sbp_|sk_live|whsec_|eyJ[A-Za-z0-9_-]{10,}|-----BEGIN` with a real-length tail) — **0 hits**. Both
+are docs. No secret value was read into this log, printed, or committed.
+
+**Working tree.** `origin-drift.mjs` exited 3 (local `d4c5395` vs origin `bc7f083`, 8 files). All
+four locally-dirty paths were `diff`ed against the origin mirror and are **byte-identical** — they
+are the line-20 checkout repair, not human WIP, so per the stash trap they were left in place and
+neither stashed nor committed. This entry was written on the **origin** copy of `LOG.md`
+(5,419 lines), not the stale local one (427 lines), which would have truncated 44 prior entries.
+
+### For Branden — unchanged from sessions 24–45, and none of it self-heals
+
+1. **The only fix, Level D:** Supabase dashboard → project `gsxoaurmsgqascxukony` →
+   **Resume / Restore**. **48h54m** down. The dashboard also tells you *which* branch you are in
+   (paused / restricted / deleted) — the one fact 46 sessions have not been able to get.
+2. **Before you click Resume:** Vercel → project **`sizzle`** (the API — naming is reversed) →
+   Settings → Cron Jobs → **Disable Cron Jobs**. Ten seconds. Re-confirmed still undone at `19:16Z`.
+3. **Stripe: 23h06m of free-retry slack.** Restore before `2026-09-24T18:23Z` and the Stripe half
+   replays itself. Not a cliff (manual replay runs to `2026-10-06` dashboard / `2026-10-21` API),
+   but it is the difference between free and tedious. Do **not** disable the Stripe webhook endpoint.
+4. **After restore:** app.revenuecat.com → Integrations → Webhooks → **Retry** each failed
+   `REFUND`/`CANCELLATION` since `2026-09-21T18:23Z`. Auto-retries expired `2026-09-21T20:58Z`;
+   restore will **not** replay them. Idempotent — do it before the next payout run.
+5. **Do not ship an iOS build until the database is back** (§3).
+6. **Items 3 and 4 are the only sources of truth for the money reconciliation** (TD-36).
+7. **46 sessions have now paged nobody.** Owner-side fixes that end this class of session:
+   **upgrade off the free tier** (Pro projects cannot be paused — it removes the failure mode
+   itself), **reconnect Remote Control**, and add `Bash(git fetch:*)` to `.claude/settings.json`
+   (TD-27). Then `gh workflow enable uptime.yml` **after** restore. TD-21 needs a PAT rotation.
+
+**`PushNotification` re-tested before this sentence was written (session 38's ordering rule) —
+still dead**, verbatim: *"Mobile push not sent (Remote Control inactive)."* **46th** consecutive
+session with no working push path. `telegram` not re-probed (§7). **This entry, like the 45 before
+it, reached you only because you came and looked.**
