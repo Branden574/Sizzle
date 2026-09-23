@@ -3741,3 +3741,105 @@ Unchanged from sessions 24–30. Re-stated only because none of it self-heals:
    not push** — as all 31 have been. Upgrading off the free tier and re-arming one alert
    channel are both your call, and together they are the difference between 2 minutes and 34
    hours.
+
+## 2026-09-23 05:37Z — SEV-1 `2026-09-21` still open at 35h14m (session 32, summon #31)
+
+**Unchanged. No new failure mode, nothing newly crossed a threshold.** Watchdog re-fired on
+its 60-minute cooldown against the same condition. Per the action sheet's own instruction
+("the diagnosis is finished — read this, not the log"), this entry is deliberately short and
+re-derives nothing.
+
+**Re-verification (this session's own probes, not carried forward).**
+
+- `/health` → **503 `database-unreachable`** at `05:34:53Z` and again at `05:37:08Z` — two
+  probes **2m15s apart**, the anti-flap check. Both stalled **~7.3s** before answering, which
+  is a connect stall, not a fast edge refusal. Every other reported subsystem is green
+  (`cloudflareConfigured`, `moderationConfigured`, `push: ok`, `paymentsKeyMode: live`,
+  `emailConfigured`, `sentryConfigured`) — the DB is still the single fault.
+- **DNS unchanged.** `<ref>.supabase.co` does not resolve (curl exit 6, `HTTP 000`,
+  `time_namelookup` never completes). Calibrated against three controls resolving normally
+  from this host in the same minute: `supabase.com` **200** (`dns 0.003s`), `getsizzle.app`
+  **200**, `sizzle-chi.vercel.app` **503**. So this is the project record, not my resolver and
+  not a Supabase platform fault — the same project-level DNS withdrawal settled in §5.
+- **Not a bad deploy; rollback still not a candidate.** `/health` is serving commit
+  **`3153d1f`**, which *is* current `origin/main` (pushed `04:37:14Z` by session 31). A
+  brand-new build with freshly injected env vars reproduces the failure identically, and no
+  promotion of an older deployment can reinstate a withdrawn DNS record. `verify-deploy.mjs`
+  remains unusable by construction (it asserts a 200 `/health`); this change is docs-only.
+- **TD-21 unchanged.** The local `supabase` MCP server is reachable and tokenless —
+  `mcp__supabase__list_tables` returns *"Unauthorized. Please provide a valid access token …
+  via the `--access-token` flag or `SUPABASE_ACCESS_TOKEN`."* That independently re-confirms
+  session 25: the blocker is the revoked PAT, not a permission grant. Rotation is Level D.
+
+**One substantive addition — the only clock in the sheet that was never source-audited.**
+§2 line 82 asserts *"The DB is safe (restore window is **1 year**)"* bare, with no citation,
+while session 29 source-audited every *other* deadline in that section (all three Stripe
+windows, both RevenueCat figures) against the providers' live docs. This session tried to
+close that gap and **could not**: Supabase's docs are client-rendered so `curl` returns only
+the JS shell, the `.md` suffix trick that worked for `docs.stripe.com` **404s** on
+`supabase.com/docs`, and both `WebFetch` and `mcp__supabase__search_docs` are
+**permission-gated unattended**. So the figure is neither confirmed nor contradicted — it is
+simply **unverified**, and it is recorded as such in §5 rather than left looking settled.
+
+**This is a note, not an alarm.** Nothing observed suggests the data is at risk, the claim is
+probably right, and it changes no action or priority: the fix, the order of steps, and the
+money deadlines are all unaffected. It matters only because it is the number that makes this
+incident "urgent, with room" rather than "the data is on a clock", so it should not be
+load-bearing *and* uncited. **Branden resolves it for free** — the dashboard states the
+restore terms authoritatively on the project page he must open anyway to click Resume.
+
+**Nothing else shipped.** TD-28/29/30/31/33/34/35 stay parked for the same reason as every
+prior session: unverifiable against a database with no DNS record (hard rule 4). `uptime.yml`
+stays muted (`.github/workflows/**` is minimum Level C; re-arming it would override a
+deliberate human mute). TD-23's `watchdog.sh` retry stays unshipped — launchd runs the repo
+file directly, so an unattended edit goes live at the next tick with no CI or deploy gate.
+Session 30's standing convention obeyed: only the two live counters were re-stamped, and the
+doc-rot class sweep was **not** repeated. Session 25's instruction was obeyed: **no** time was
+spent on the `telegram` plugin.
+
+**Secret check.** Per **TD-33** `npm run secrets:check` is structurally blind on the
+git-data-API push path (it reads bodies from the working tree; the uploaded blobs are built
+under gitignored `.codex/`), so a "clean" from it would be a no-op rather than a pass.
+Compensated as in sessions 18–31: both changed files scanned out-of-band for value-shaped
+credentials (prefix **plus** real-length tail, JWT triplets, `-----BEGIN`) — **clean**. Both
+are docs. No secret value was read into this log, printed or committed.
+
+**Working-tree note (TD-27).** `origin-drift.mjs` ran **first**, before any diagnosis: local
+`HEAD d4c5395` vs origin `main 3153d1f`, 7 files adrift (local main is now 21 days stale).
+Both edits were built on the origin copies in `.codex/origin-3153d1f/` and pushed through the
+GitHub git-data API. Branden's uncommitted work (`sweep-prompt.md`,
+`tests/invariants/ops-tooling.test.mjs`, untracked `scripts/ops/origin-drift.mjs`) untouched
+per hard rule 11 — and per the stash trap, those three were **not** stashed.
+
+### For Branden
+
+Unchanged from sessions 24–31. Re-stated only because none of it self-heals:
+
+1. **The only fix, Level D:** Supabase dashboard → project `gsxoaurmsgqascxukony` →
+   **Resume / Restore**. **35h14m** down. Read the action sheet, not this log.
+2. **Before Resume:** Vercel → project **`sizzle`** (the API — naming is reversed) → Settings →
+   Cron Jobs → **`Disable Cron Jobs`** (TD-34, the 60-second trap that would flip the whole
+   stranded video cohort to `status='error'` and make TD-29's backfill a silent no-op).
+3. **After restore:** app.revenuecat.com → Integrations → Webhooks → **Retry** each failed
+   `REFUND` / `CANCELLATION` since `2026-09-21T18:23Z`. Auto-retries expired
+   `2026-09-21T20:58Z` (**32h39m** ago) and restore will **not** replay them. Idempotent —
+   retry freely, and do it **before the next payout run**.
+4. **Stripe:** **~36h46m** of auto-retry slack left (`2026-09-24T18:23Z`). Missing it is **not**
+   a cliff — Resend stays open to `2026-10-06`, the API to `2026-10-21`. Do **not** disable the
+   endpoint (a disabled destination permanently prevents future retries of queued events).
+5. **Do not ship an iOS build until the database is back** (session 31). Nothing is in Apple's
+   queue, so there is no deadline and nothing to cancel — but a submission *opened* during the
+   outage is a guaranteed **Guideline 2.1** rejection, because the reviewer's
+   `review@getsizzle.app` sign-in goes to Supabase Auth and that host does not resolve.
+6. **While you are on the project page anyway** (new, this session): glance at the stated
+   **restore/retention terms** and correct §2's uncited *"restore window is 1 year"* if it
+   differs. Ten seconds, and it retires the last unsourced number in the sheet.
+7. **The one that prevents a session 33:** the free tier's documented failure mode is
+   administrative suspension, and the alerting layer that should have caught it has no working
+   push path. **Sessions 1–32 have paged nobody**, and the channel inventory is exhausted
+   (Remote Control dark ~20 days since *before* the outage; the `Uptime` email you muted is
+   `disabled_manually`; a GitHub Issue is rejected on purpose because the repo is public and
+   would advertise a live outage plus an open financial-webhook window). This entry is **pull,
+   not push** — as all 32 have been. Upgrading off the free tier and re-arming one alert
+   channel are both your call, and together they are the difference between 2 minutes and 35
+   hours.
