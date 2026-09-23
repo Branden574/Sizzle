@@ -4184,3 +4184,109 @@ Unchanged from sessions 24–34, and none of it self-heals:
    because the repo is public. This entry is **pull, not push**. Upgrading off the free tier
    (Pro projects cannot be paused) and re-arming one alert channel are the difference between
    2 minutes and 38h23m.
+
+## Incident 2026-09-21 — session 36 re-verify at 39h25m: condition unchanged; the money webhooks never reach Sentry (TD-36)
+
+**State, re-verified before anything else.** `origin-drift.mjs` ran first (TD-27): local
+`HEAD d4c5395` vs origin `main 4821b8d`, 7 files adrift — everything below is reasoned against
+the origin copies in `.codex/origin-4821b8d/`. `/health` **503**
+`{"status":"degraded","problems":["database-unreachable"],"commit":"4821b8d"}` on two probes
+`09:45:50Z` and `09:48:45Z` (plus the watchdog's own at `09:44:59Z`); `commit` equals current
+`origin/main`, so a fresh build with freshly injected env vars still reproduces it — not a stale
+artifact, not an env-var miss. User-facing proof unchanged: `GET /feed/for-you?limit=3` → **500
+`{"error":{"code":"db_error"}}`**. `getsizzle.app` → **200** (static frontend, as throughout).
+DNS via `.codex/dns-probe.mjs`: `supabase.co` answers `A=76.76.21.21` on all three resolvers
+while **`gsxoaurmsgqascxukony.supabase.co` and `db.gsxoaurmsgqascxukony.supabase.co` are
+`ENOTFOUND` (NXDOMAIN) on the system resolver, `1.1.1.1` and `8.8.8.8`** — parent zone up, every
+per-project record withdrawn. Still **Level D**: no repo change, rollback or redeploy reinstates a
+withdrawn DNS record. All 14 most recent `sizzle` production deploys **READY** (newest 59m — prior
+sessions' own docs-only log pushes), so there is no bad deploy to promote away from.
+
+**Pre-Resume precondition re-checked, not assumed — the crons are still armed.** Runtime logs for
+the current production deployment, window `09:25:17Z`–`09:45:55Z` (20.6 min, 60 rows): **24
+`/internal/finalize-videos` + 24 `/internal/publish-scheduled`**, 3 `rollup-hashtag-trends`, 7
+`/health`, 2 `/feed/for-you`. §1/§4 step 0 (`Disable Cron Jobs`) is therefore **still un-done** and
+the TD-34 trap will fire within 60 s of Resume. Nothing indicates the owner has acted.
+
+**The new finding — TD-36: the two money webhooks are the only 5xx paths in the API that never
+reach Sentry.** The question this session asked was whether `/health`'s `sentryConfigured: true`
+means the outage's dropped webhook deliveries are sitting in Sentry, recoverable after restore.
+**It does not.** Sentry capture is driven *only* by `app.onError` (`app.ts:64` →
+`lib/errors.ts:25-42`), and Hono's `onError` fires on a **thrown** error. Both money webhooks
+**catch and `return`** rather than throw — Stripe `monetize.ts:1193-1196`, RevenueCat `:816-818`,
+`:828-829`, `:833-834`, `:848-849` — so the hook is never reached, and no response-level
+middleware inspects status (`app.ts:31-65`). The intent stopped one branch short: `recoverFromCreator`
+calls `captureException` at `:780` under a comment naming it "the one path that loses money
+silently" (`:773-774`). **This is TD-5's defect class** — closed for `internal.ts`'s cron branches
+on 2026-08-07, but TD-5's scope was `internal.ts`, and `monetize.ts` was never in it.
+
+**The cost is measured, not theorised, and it is why §2 says "exposure size is unknown".** The sole
+record of a dropped delivery is the handler's `console.error` in Vercel runtime logs, and that
+buffer held **~21 minutes** this session (60 rows over 20.6 min; 48 of them the two every-minute
+crons at ~120 rows/hour). So each dropped money event became locally unrecoverable ~21 minutes
+after it happened — the earliest ~39 hours ago. **Operational consequence, now written into §2:**
+the Stripe `delivery_success=false` sweep and the RevenueCat dashboard Retry are the **only**
+sources of truth, not a backup for a local record — nobody should plan to reconcile from Sentry or
+Vercel logs afterwards. It also gives §1 step 0 a **second independent justification**: disabling
+the crons stops them evicting the log buffer, widening the capture window from ~21 min to hours.
+
+**Checked against the sheet and the register before writing it up**, per session 29's rule: `grep`
+for `sentry|captureException|observab` across the action sheet returns **nothing**, and the TD
+register's three `monetize` hits are TD-22 (constant-time `CRON_SECRET`), TD-30 (non-idempotent
+`sendWelcomeDm`) and TD-35 (RevenueCat retry budget) — none touch the capture gap. TD-5 covers the
+same defect class but explicitly scoped to `internal.ts` and is marked mostly-done since 2026-08-07.
+
+**Nothing shipped beyond docs.** TD-36 joins TD-28/29/30/31/33/34/35 in the parked set, and is
+**Level C** rather than Level B: `apps/api/src/routes/monetize.ts` is on the autonomy-policy
+security-sensitive path list and CLAUDE.md rule 4 treats it as financial-record code. Like the
+rest it is unverifiable against a database whose hostname has no DNS record (hard rule 4), and an
+unverifiable API deploy perturbs the exact `/health` and cron signals being watched for recovery.
+`uptime.yml` stays muted (`.github/workflows/**` is minimum Level C and re-arming it would
+override a deliberate human mute). No rollback — every recent deploy is READY and the last
+pre-outage deploy is 15+ days old. `node scripts/verify-deploy.mjs` was **not** run: its success
+criterion is a 200 `/health`, so it cannot pass during a DB outage and would only hang.
+
+**Secret check.** Per **TD-33** `npm run secrets:check` is structurally blind on the git-data-API
+push path (it reads bodies from the working tree; the uploaded blobs are built under gitignored
+`.codex/`), so a "clean" from it would be a no-op rather than a pass. Compensated as in sessions
+18–35: all three changed files scanned out-of-band for value-shaped credentials (prefix **plus**
+real-length tail, JWT triplets, `-----BEGIN`) — **clean**. All three are docs. No secret value was
+read into this log, printed, or committed. Branden's uncommitted work
+(`scripts/ops/sweep-prompt.md`, `tests/invariants/ops-tooling.test.mjs`, untracked
+`scripts/ops/origin-drift.mjs`) untouched per hard rule 11 and **not** stashed, per the stash trap.
+
+**Session 30's absolute-timestamp convention obeyed:** only the two live counters were re-stamped
+(status line → `39h25m as of 2026-09-23T09:48:45Z`; Stripe banner → `~32h35m`).
+
+### For Branden
+
+Unchanged from sessions 24–35 except item 6. None of it self-heals:
+
+1. **The only fix, Level D:** Supabase dashboard → project `gsxoaurmsgqascxukony` →
+   **Resume / Restore**. **39h25m** down. Read the action sheet, not this log.
+2. **Before Resume:** Vercel → project **`sizzle`** (the API — naming is reversed) → Settings →
+   Cron Jobs → **`Disable Cron Jobs`**. Re-confirmed necessary this hour from runtime logs, and it
+   now has a second payoff (item 6).
+3. **Today, Wednesday 09-23, is the cheap day for Stripe.** Auto-retry expires
+   `2026-09-24T18:23Z` (11:23 AM PDT Thursday) — ~32h35m left. Restore before it and the Stripe
+   half replays itself. Do **not** disable the Stripe webhook endpoint; a disabled destination
+   permanently prevents retries of queued events.
+4. **After restore:** app.revenuecat.com → Integrations → Webhooks → **Retry** each failed
+   `REFUND`/`CANCELLATION` since `2026-09-21T18:23Z`. Auto-retries expired `2026-09-21T20:58Z`
+   and restore will not replay them. Idempotent — do it before the next payout run.
+5. **Do not ship an iOS build until the database is back** (§3's prohibition — nothing is in
+   Apple's queue, so there is no deadline, but a submission opened into an outage is a guaranteed
+   Guideline 2.1 rejection).
+6. **New this session, and it changes how you reconcile the money:** there is **no local record**
+   of which webhook events were dropped. Sentry does not have them (TD-36 — the two money webhook
+   handlers never reach the capture hook), and Vercel's runtime-log buffer is only ~21 minutes
+   deep because the crons saturate it. So steps 3 and 4 are the **only** sources of truth — the
+   Stripe `delivery_success=false` sweep and the RevenueCat Retry list. Plan to do them properly;
+   there is nothing to fall back on afterwards.
+7. **The one that prevents a session 37:** sessions 1–36 have paged **nobody**. `PushNotification`
+   was attempted again this session and again returned **Remote Control inactive**. The channel
+   inventory is exhausted — the `Uptime` email you muted is still `disabled_manually`, both
+   connectors gated, `osascript` sandbox-blocked, a GitHub Issue rejected on purpose because the
+   repo is public. This entry is **pull, not push**. Upgrading off the free tier (Pro projects
+   cannot be paused) and re-arming one alert channel are the difference between 2 minutes and
+   39h25m.

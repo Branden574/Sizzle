@@ -1,7 +1,7 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
 **Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
-(11:23 AM PDT Mon 09-21). **38h23m as of 2026-09-23T08:46:21Z** — re-verified by session 35.
+(11:23 AM PDT Mon 09-21). **39h25m as of 2026-09-23T09:48:45Z** — re-verified by session 36.
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
 
 > **🛑 READ §4 STEP 0 BEFORE YOU CLICK RESUME.** Session 18 found that the first
@@ -10,7 +10,7 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > re-poll** — which silently converts TD-29's prescribed backfill into a no-op and makes
 > its counting query return `0`. One dashboard toggle before Resume avoids the whole mess.
 
-> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — ~33h37m of slack left (§2).**
+> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — ~32h35m of slack left (§2).**
 > Restore before it and the **Stripe** half self-heals with zero manual work. Missing it is *not*
 > a cliff — manual replay stays open to `2026-10-06` (dashboard) / `2026-10-21` (API). There is
 > real time; this is urgent, not frantic.
@@ -132,6 +132,34 @@ undelivered events (from the first failure `2026-09-21T18:23:07Z`) expire first:
 **Honest limit:** the *number* of affected events is unverifiable from an unattended
 session — it needs either the DB or the live Stripe key (Level D). Mechanism and deadlines
 are verified; **exposure size is unknown.**
+
+> **Session 36 (2026-09-23) — WHY it is unknown, and why no later session can recover it
+> locally. There is no second copy of the evidence: the provider dashboards are the ONLY
+> record.** `/health` reports `sentryConfigured: true`, which makes it natural to assume the
+> dropped webhook deliveries are sitting in Sentry and can be reconciled from there after
+> restore. **They are not.** Sentry capture in the API is driven *only* by `app.onError`
+> (`app.ts:64` → `lib/errors.ts:25-42`), and Hono's `onError` fires on a **thrown** error —
+> but **both money webhook handlers catch their failures and `return` a 500 instead of
+> throwing**: Stripe at `monetize.ts:1193-1196` (`catch { console.error(…); return
+> c.json(…, 500) }`) and RevenueCat at `:816-818`, `:828-829`, `:833-834`, `:848-849` (four
+> `return c.json({code:'retry'}, 500)` branches). No middleware inspects response status, so
+> the capture hook is never reached. The author clearly knew to do it — `recoverFromCreator`
+> calls `captureException` explicitly at `:780` — it just stopped at that one branch.
+> **Filed as TD-36.**
+>
+> The consequence is a *measured* evidence window, not a theoretical one. The only record of
+> a dropped delivery is the handler's `console.error` line in Vercel's runtime logs, and that
+> buffer currently holds **~21 minutes** (60 rows spanning `09:25:17Z`–`09:45:55Z`, measured
+> this session) because the two every-minute crons generate ~120 rows/hour and 48 of those 60
+> rows were `finalize-videos` + `publish-scheduled`. So each dropped money event became
+> locally invisible about 21 minutes after it happened — the earliest of them ~39 hours ago.
+>
+> **What this changes for you:** nothing about the fix, but it makes §2's Stripe
+> `delivery_success=false` sweep and §4 step 6's RevenueCat dashboard Retry **load-bearing
+> rather than belt-and-braces.** Do not plan to reconcile from Sentry or from Vercel logs
+> afterwards — neither has the data. It is also a second, independent reason to do §1 step 0
+> (`Disable Cron Jobs`): besides disarming the TD-34 trap, it stops the crons evicting the
+> runtime-log buffer, which widens the capture window from ~21 minutes to hours.
 
 ### The Apple clock (TD-35) — 2h35m, not 3 days, and it expired `2026-09-21T20:58Z`
 
@@ -520,6 +548,16 @@ its events only come back if you press Retry.
   job, so revocation survives an outage longer than the provider's retry budget — the same
   at-least-once discipline the Stripe path gets for free from a 3-day window. Not shipped
   mid-outage, same reason as TD-28/29/30/31/33/34.
+- **TD-36 (NEW, session 36)** — **the two money webhook handlers are the only 5xx paths in
+  the API that never reach Sentry**, because they `return c.json(…, 500)` instead of throwing,
+  and `app.onError` (the sole capture hook) fires only on a throw. So the single most
+  valuable failure signal in the system degrades to a `console.error` in a Vercel log buffer
+  that this outage measured at **~21 minutes** deep. This is TD-5's defect class — which was
+  closed for `internal.ts`'s cron branches back on 2026-08-07 — still live in
+  `monetize.ts`. Fix is ~2 lines per branch (`await captureException(err, {...})` alongside
+  the existing `console.error`), but `routes/monetize.ts` is on the autonomy-policy
+  security-sensitive list ⇒ **Level C**, and it is unverifiable against a dead DB, so it is
+  parked with the rest. Written up in §2's "Honest limit" block.
 - **Systemic (recommend, Level C):** a live App Store app runs its production database on a
   **pausable** tier with **no managed backups** (free tier self-serves `db dump`). Pro
   projects cannot be paused. *"Upgrade to Pro" is the real control here* — it removes both
