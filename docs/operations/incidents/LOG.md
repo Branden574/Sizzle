@@ -5909,3 +5909,27 @@ both already in the repo's own docs; **no key material was read, printed or comm
    **upgrade off the free tier** (Pro projects cannot be paused — it removes the failure mode
    itself), **reconnect Remote Control**, and add `Bash(git fetch:*)` to `.claude/settings.json`
    (TD-27). Then `gh workflow enable uptime.yml` **after** restore. TD-21 needs a PAT rotation.
+
+### Closing note — session 49, written after the calls it reports
+
+**Deploy verified, and it is the fifth negative probe.**
+`node scripts/verify-deploy.mjs --api --sha fcc659812461b2b0a9b9d4c234d63e64bc380c9b` →
+*"deployment: READY … health status: degraded (database-unreachable) — deployed but unhealthy"*,
+returning in seconds rather than hanging. That is TD-37's fix on its fourth real outing, invoked
+with `--sha` exactly as that entry prescribes. It is also the correct terminal state for a
+docs-only push, and the **free control** fires for the 49th time: a brand-new build with freshly
+injected environment variables fails identically, so neither a stale artifact nor an unpicked-up
+env var is in play.
+
+**The push used the blob-first path** (session 46's fix) and needed it — `LOG.md` is now
+**608,921 bytes**, and a two-file inline-content tree would have blown the limit outright. Full
+40-char SHAs throughout, and the script re-asserted the parent still pointed at `7ba9856` before
+building the tree, so the push could not silently clobber a concurrent session. The standing note
+stands: this log's unbounded growth is itself a problem — **split it into per-incident files once
+production is back.**
+
+**`PushNotification` was called before this paragraph was written**, and is **still dead**,
+verbatim: *"Mobile push not sent (Remote Control inactive)."* That is the **49th** consecutive
+session with no working push path. `telegram` was not re-probed (§7 — the channel inventory is
+exhaustively verified and complete). **This entry, like the 48 before it, reached you only because
+you came and looked.**
