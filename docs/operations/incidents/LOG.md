@@ -4944,3 +4944,110 @@ Unchanged from sessions 24–40. None of it self-heals. In priority order:
    (Pro projects cannot be paused — this removes the failure mode itself), **`gh workflow enable
    uptime.yml`** *after* restore, and **rotate the Supabase PAT (TD-21)** so an unattended
    session can answer paused-vs-deleted instead of guessing for a 41st time.
+
+## Daily sweep 2026-09-23 (session 42) — the 09-23 checklist run; SEV-1 unchanged at 44h57m
+
+**What is actually new here is items 3/4/6, not the incident.** Sessions 32–41 were watchdog
+re-verifies that deliberately skipped the sweep checklist; the last full pass was **2026-09-22**.
+So this entry is a *sweep* record with a short incident re-verify attached, not a 42nd
+re-derivation of a root cause that has been settled since session ~12. For the incident itself
+read `docs/operations/incidents/2026-09-21-supabase-project-unreachable.md`, not this log.
+
+**Item 4 — `npm audit`, and TD-27 paying for itself with a measured delta.** This is the
+finding of the hour. Local `main` is **56 commits** behind origin (`d4c5395` vs `8eb371c`;
+every one of those commits is a sweep/watchdog doc push). Auditing the two lockfiles side by
+side:
+
+| tree | result |
+|---|---|
+| working tree (stale `d4c5395`) | **4 vulnerabilities — 2 moderate, 2 high** |
+| origin `8eb371c` (the truth) | **3 vulnerabilities — 2 moderate, 1 high** |
+
+The difference is **`@xmldom/xmldom` 0.9.10, rated HIGH** — an advisory that was **fixed on
+origin 20 days ago**, on 2026-09-03, when the sweep merged Dependabot PR #7 to 0.9.12 (lockfile
+delta confirmed: `gh api …/compare/d4c5395...8eb371c` shows the `@xmldom/xmldom` 0.9.10→0.9.12
+bump as the *only* package-lock change across all 56 commits). Had this sweep audited the
+working tree, it would have reported a phantom HIGH and plausibly spent its one in-lane ship
+re-fixing it. That is **the exact failure TD-27 was filed for on 2026-09-04 — same package,
+same shape, now with the delta quantified rather than described.** `scripts/ops/origin-drift.mjs`
+(sweep step 0) flagged the lockfile as check-corrupting before any audit ran, and the audit was
+taken against `.codex/origin-8eb371c/` as it instructed. TD-27 updated with the measurement; the
+close condition is unchanged and still one line of owner config (`Bash(git fetch:*)`).
+
+**Real advisory state (origin tree): 3, all previously triaged, none new since 09-22.**
+`esbuild` ≤0.24.2 moderate + `vite` ≤6.4.2 high (dev-server scope, fix is semver-major —
+**TD-18**, Dependabot PR #6) and `hono` ≤4.13.4 moderate, three advisories (**TD-31**,
+Dependabot PR #8). Nothing in-lane: every available fix is either major or blocked below.
+
+**Item 3 — 3 open dependency PRs, all correctly still held; no new ones.** #8 `hono`
+4.13.0→4.13.5 (CI-green, non-major, clears all three hono advisories) stays held for the reason
+recorded on the PR on 09-22 and in TD-31: merging **deploys the API**, and the sweep ship rule
+requires `scripts/verify-deploy.mjs` afterwards, whose success criterion is a 200 `/health` —
+which returns 503 `database-unreachable` regardless of this bump. The change is **unverifiable
+by construction** while the SEV-1 is open (hard rule 4), so it is queued as the first
+post-restore deploy. #6 (esbuild+vite) and #3 (`@hono/node-server` 2.x) are majors → owner lane
+(TD-18). All three already carry hold comments; no duplicate comment added this sweep.
+
+**Items 1/2/5/5b.** `/health` **503** `problems:["database-unreachable"]`, twice, ~7.3s each
+(the DB-connect stall), serving commit `8eb371c` — so the GitHub→Vercel deploy webhook is alive
+and session 41's push promoted. `/feed/for-you?limit=3` → **500 `db_error`** (a real user path,
+not just liveness). `getsizzle.app` → **200** in 236ms; the static frontend has no DB dependency
+and this is not evidence of recovery. `cronAges`, `stuckVideoBacklog` and `parkedMediaDeletions`
+are all `null`, so **item 5 is unmeasurable, not clean** — the same is true of 5b's Supabase
+advisors. CI: last 5 runs on `main` are 4× `success` + 1 `cancelled`, the cancellation being
+run 35857629633 superseded by a back-to-back push 42s later, not a failure. **Secret-scanning
+alerts: `[]`** — the one item 5b check that *could* run, and it is clean. `npm run test:invariants`
+**38/38**.
+
+**Item 6 — flag drift: the register is accurate; nothing opened, nothing closed.** Nothing has
+shipped since 09-22 except docs, so no entry became stale. TD-18/TD-31 match the audit output
+exactly, TD-33 predicted this sweep's own secret-gate no-op (below), and TD-27 already records —
+from 2026-09-06 — that the three `scripts/ops/` + `tests/invariants/` files showing as locally
+dirty are **byte-identical to origin** and are the sweep's own already-pushed work, not human
+WIP. Re-verified by hash this session (sha256 prefixes match on all three). Worth correcting
+because sessions 18–41 each described them as *"Branden's uncommitted work … not stashed per the
+stash trap"*; the preservation instinct was right, the attribution was not, and there is in fact
+no human work at risk in this tree.
+
+**SEV-1 re-verify — unchanged, 44h57m.** `gsxoaurmsgqascxukony.supabase.co` and
+`db.<ref>.supabase.co` → **ENOTFOUND** on 1.1.1.1, with controls passing in the same run
+(`supabase.com` → A 216.150.1.193, `aws-0-us-east-1.pooler.supabase.com` → 3 A records), so
+this is the project's records being gone, not a resolver problem. Stripe auto-retry expires
+`2026-09-24T18:23Z` — **27h02m** left. `PushNotification` re-tested, dead, verbatim:
+*"Mobile push not sent (Remote Control inactive)."* The `telegram` plugin skills were re-probed
+before §7's "no further unattended session should spend time on it" was read — they still fail
+to load and the plugin directory is still sandbox-blocked, a third reproduction; honoring the
+instruction, no further time spent.
+
+**Secret check.** `npm run secrets:check` → `clean (0 file(s) scanned, staged)` — per **TD-33**
+that is a structural **no-op on this push path**, not a pass, because it reads staged working-tree
+files while the git-data API uploads blobs built under gitignored `.codex/`. Compensated as in
+sessions 18–41: all three changed files scanned out-of-band for value-shaped credentials (prefix
+**plus** a real-length tail, JWT triplets, `-----BEGIN`) — **clean**. All three are docs. No
+secret value was read into this log, printed, or committed.
+
+### For Branden
+
+Unchanged from sessions 24–41 and none of it self-heals. In priority order:
+
+1. **The only fix, Level D:** Supabase dashboard → project `gsxoaurmsgqascxukony` →
+   **Resume / Restore**. **44h57m** down.
+2. **Before you click Resume:** Vercel → project **`sizzle`** (the API — the naming is reversed)
+   → Settings → Cron Jobs → **Disable Cron Jobs**. Ten seconds; skipping it silently converts
+   the stranded-video recovery into a no-op (§4 step 0).
+3. **Stripe: 27h02m of free-retry slack left** (expires `2026-09-24T18:23Z`). Restore before it
+   and the Stripe half replays itself. Not a cliff — manual replay stays open to `2026-10-06`
+   (dashboard) / `2026-10-21` (API) — but it is the difference between free and tedious. Do
+   **not** disable the Stripe webhook endpoint; a disabled destination permanently prevents
+   retries of queued events.
+4. **After restore:** app.revenuecat.com → Integrations → Webhooks → **Retry** each failed
+   `REFUND`/`CANCELLATION` since `2026-09-21T18:23Z`. Auto-retries expired 09-21T20:58Z and
+   restore will not replay them. Idempotent; do it before the next payout run.
+5. **Do not ship an iOS build until the database is back** (§3).
+6. **Steps 3 and 4 are the only sources of truth for the money reconciliation** (TD-36) — no
+   local record of the dropped events exists.
+7. **Two one-line config fixes that would end this class of session**, both owner-only:
+   `Bash(git fetch:*)` in `.claude/settings.json` (closes TD-27 — today's phantom-HIGH delta is
+   what it costs to leave open), and reconnecting Remote Control so `PushNotification` works.
+   Then `gh workflow enable uptime.yml` **after** restore. 42 sessions have now paged **nobody**;
+   this entry, like the 41 before it, reached you only because you came and looked.
