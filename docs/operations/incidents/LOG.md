@@ -4549,3 +4549,147 @@ Unchanged from sessions 24–37. None of it self-heals:
    repo is public. This entry is **pull, not push**. Upgrading off the free tier (Pro projects
    cannot be paused) and re-arming one alert channel — `gh workflow enable uptime.yml`, *after*
    the restore — are the difference between 2 minutes and 41h35m.
+
+## Incident 2026-09-23 05:56 PDT — watchdog summon #39: SEV-1 unchanged at 42h37m; a settled finding re-derived, and the memory bug that caused it
+
+**What fired.** `scripts/ops/watchdog.sh` at `2026-09-23 05:56:36` local:
+`API degraded (503): database-unreachable`. Same signature as summons #1–#38.
+
+**Root cause — unchanged, re-verified not assumed.** Supabase project
+`gsxoaurmsgqascxukony` has no DNS records. `.codex/dns-probe.mjs` this hour, all three
+resolvers agreeing:
+
+| name | system | 1.1.1.1 | 8.8.8.8 |
+|---|---|---|---|
+| `supabase.co` | `A=76.76.21.21`, CNAME **ENODATA** | same | same |
+| `gsxoaurmsgqascxukony.supabase.co` | **ENOTFOUND** | **ENOTFOUND** | **ENOTFOUND** |
+| `db.gsxoaurmsgqascxukony.supabase.co` | **ENOTFOUND** | **ENOTFOUND** | **ENOTFOUND** |
+
+Parent zone answers, every per-project record is NXDOMAIN, on three unrelated resolvers —
+positive proof of withdrawal, not a sandbox artifact, not a platform fault. Project-level
+pause/deprovision. **Level D: only the owner, from the Supabase dashboard, can fix this.**
+
+**Live facts re-verified this hour.**
+
+- `/health` → `503 {"status":"degraded","problems":["database-unreachable"]}`, probed three
+  times (`12:56:34Z`, `12:58:49Z`, `13:00:16Z`). Not a blip; not transient.
+- **User-facing proof, not just a probe artifact:** `/feed/for-you?limit=3` → **`500
+  {"error":{"code":"db_error"}}`** in 7.3 s. Real users hitting the feed are failing.
+- **Not a bad deploy — re-confirmed.** `vercel ls sizzle --yes`: all Production deployments
+  `● Ready`, newest **59 m**. The hourly cadence is these sessions' own docs-only log pushes.
+  **Rollback is not and never was a candidate** — there is no bad deployment to promote away
+  from, and promoting an older one cannot reinstate a withdrawn DNS record.
+- **The TD-34 trap is still armed.** `vercel logs -p sizzle` shows `/internal/finalize-videos`
+  on an unbroken 60-second cadence — `12:54:17Z`, `12:55:17Z`, `12:56:17Z`, `12:57:17Z`,
+  `12:58:17Z` — each returning `200` in ~21 s against a dead DB, with `publish-scheduled`
+  interleaved at ~7 s, plus a captured `[db_error] TypeError: fetch failed`. **Nothing has
+  disabled the crons.** §4 step 0 remains un-done and will fire within 60 s of Resume.
+
+**The clock.**
+
+- Outage duration: **42h37m** as of `2026-09-23T13:00:16Z` (started `2026-09-21T18:23:07Z`).
+- Stripe auto-retry expires `2026-09-24T18:23Z` — **~29h23m** of slack left.
+- It is **Wednesday 09-23, ~06:00 AM PDT** — still the cheap-Stripe day, the last full
+  working day on which the free replay path is available.
+
+### The one thing this session adds — and it is a process fix, not a discovery
+
+**I re-derived a finding that session 25 had already closed, and the cause is a bug in the
+agent memory file rather than in the action sheet.** Spending it out, because the next
+session will otherwise pay the same three calls:
+
+The local `supabase` MCP server *connected* this session, which looked like a state change
+worth one probe — the prize being paused-vs-deleted, the incident's one open question.
+`mcp__supabase__get_project_url` returned a **permission** denial; but
+`.claude/settings.json:36-39` turned out to allowlist four `mcp__supabase__` tools
+(`execute_sql`, `list_tables`, `get_logs`, `get_advisors`), so the gate is **per-tool, not
+connector-level** — I had simply picked an un-allowlisted one. Calling the allowlisted
+`mcp__supabase__get_advisors` then ran with no prompt and returned a **server-side** error:
+*"Unauthorized. Please provide a valid access token to the MCP server via the
+`--access-token` flag or `SUPABASE_ACCESS_TOKEN`."*
+
+That is real and correct — **and §5 of the action sheet already records it verbatim, found by
+session 25**, including the same error string and the same conclusion (TD-21 is blocked on a
+**PAT rotation**, not a permission grant; rotation is Level D). Nothing about the incident
+changed.
+
+**Why it happened:** the agent memory `sizzle-watchdog-false-alarms.md` — which is what a
+fresh session reads *first*, before the action sheet — carried the pre-session-25 summary
+(*"local `supabase` MCP gated"*) in its **"Don't re-derive"** list. The stale, less precise
+claim sat in the higher-traffic document, so it read as settled-and-closed while the sheet's
+refinement went unseen. Memory corrected this session to match §5.
+
+**Generalised lesson, and the reason it is worth logging rather than quietly fixing:** on a
+long incident, *the index rots faster than the record*. The action sheet is append-only and
+has stayed accurate for 39 sessions; the memory file is a hand-maintained summary of it, and
+every refinement that lands in the sheet without being back-propagated to memory becomes a
+trap that costs the *next* session real calls — while looking like diligence. Sibling of
+session 28's doc-rot rule (predictions rot first) and session 29's (grep the sheet before
+claiming a find): **when the sheet and the memory disagree, the sheet wins, and the fix is to
+repair the memory in the same session you noticed.**
+
+**Nothing else was investigated, on purpose.** Sessions 13/18/19 closed the cron audit, 23 the
+payment clocks, 14 the auth session, 15 the pause policy, 28/30/33 doc rot and gate re-tests,
+31 the Apple queue, 35 the §3 fallback cost, 36 the Sentry capture gap (TD-36), 38 the DNS
+re-attestation. Re-litigating any of those is invented work.
+
+**Nothing shipped beyond docs.** TD-28/29/30/31/33/34/35/36 stay parked — unverifiable against
+a database whose hostname has no DNS record (CLAUDE.md hard rule 4), and an unverifiable API
+deploy perturbs the exact `/health` and cron signals being watched for recovery. `uptime.yml`
+stays muted (`.github/workflows/**` is minimum Level C; re-arming it would override a
+deliberate human mute). **`node scripts/verify-deploy.mjs` was not run:** its success criterion
+is a 200 `/health`, so it cannot pass during a DB outage and would only hang — stated plainly
+rather than reported as a failure.
+
+**Push channel: still nothing.** `PushNotification` was called this session, before this
+sentence was written, and returned verbatim **"Mobile push not sent (Remote Control
+inactive)."** — same as sessions 12–38, now **22 days** dead. Sessions 1–39 have paged nobody.
+This entry is **pull, not push**.
+
+**Secret check.** Per **TD-33**, `npm run secrets:check` is structurally blind on the
+git-data-API push path (it reads bodies from the working tree; uploaded blobs are built under
+gitignored `.codex/`), so a "clean" from it would be a no-op rather than a pass. Compensated as
+in sessions 18–38: both changed files scanned out-of-band for value-shaped credentials (prefix
+**plus** real-length tail, JWT triplets, `-----BEGIN`) — **clean**. Both are docs. No secret
+value was read into this log, printed, or committed. Branden's uncommitted work
+(`scripts/ops/sweep-prompt.md`, `tests/invariants/ops-tooling.test.mjs`, untracked
+`scripts/ops/origin-drift.mjs`) untouched per hard rule 11 and **not** stashed, per the stash
+trap.
+
+**Session 30's absolute-timestamp convention obeyed:** only the two live counters were
+re-stamped (status line → `42h37m as of 2026-09-23T13:00:16Z`; Stripe banner → `~29h23m`).
+Nothing else in the sheet was rewritten.
+
+### For Branden
+
+Unchanged from sessions 24–38. None of it self-heals:
+
+1. **The only fix, Level D:** Supabase dashboard → project `gsxoaurmsgqascxukony` →
+   **Resume / Restore**. **42h37m** down. Read the action sheet
+   (`docs/operations/incidents/2026-09-21-supabase-project-unreachable.md`), not this log.
+2. **Before Resume:** Vercel → project **`sizzle`** (the API — naming is reversed) → Settings →
+   Cron Jobs → **`Disable Cron Jobs`**. Re-confirmed necessary this hour from runtime logs
+   (five `finalize-videos` ticks observed `12:54:17Z`–`12:58:17Z`, all 200 against a dead DB).
+3. **Today, Wednesday 09-23, is the cheap day for Stripe.** Auto-retry expires
+   `2026-09-24T18:23Z` (11:23 AM PDT Thursday) — **~29h23m** left. Restore before it and the
+   Stripe half replays itself with zero manual work; slipping to Thursday means doing it by
+   hand. Not a cliff — manual replay stays open to `2026-10-06` (dashboard) / `2026-10-21`
+   (API) — but it is the difference between free and tedious. Do **not** disable the Stripe
+   webhook endpoint; a disabled destination permanently prevents retries of queued events.
+4. **After restore:** app.revenuecat.com → Integrations → Webhooks → **Retry** each failed
+   `REFUND`/`CANCELLATION` since `2026-09-21T18:23Z`. Auto-retries expired `2026-09-21T20:58Z`
+   and restore will not replay them. Idempotent — do it before the next payout run.
+5. **Do not ship an iOS build until the database is back** (§3's prohibition — nothing is in
+   Apple's queue, so there is no deadline, but a submission opened into an outage is a
+   guaranteed Guideline 2.1 rejection).
+6. **Steps 3 and 4 are the only sources of truth for the money reconciliation** (TD-36): there
+   is no local record of which webhook events were dropped. Sentry does not have them, and
+   Vercel's runtime-log buffer is only ~21 minutes deep because the crons saturate it.
+7. **The one that prevents a session 40:** sessions 1–39 have paged **nobody**. The channel
+   inventory is exhausted — the `Uptime` email you muted is still `disabled_manually`, both
+   connectors unusable, `osascript` sandbox-blocked, a GitHub Issue rejected on purpose because
+   the repo is public. Upgrading off the free tier (Pro projects cannot be paused) and
+   re-arming one alert channel — `gh workflow enable uptime.yml`, *after* the restore — are the
+   difference between 2 minutes and 42h37m. **Rotating the Supabase PAT (TD-21) is the third**:
+   it is one owner-side credential, and it would let an unattended session answer
+   paused-vs-deleted instead of guessing for 39 consecutive summons.
