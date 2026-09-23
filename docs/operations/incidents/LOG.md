@@ -5242,3 +5242,39 @@ metadata only.
    in `.claude/settings.json` (TD-27). Then `gh workflow enable uptime.yml` **after** restore.
    **TD-21 additionally needs a Supabase PAT rotation, not a permission grant** — this session
    proved the old token was revoked on 2026-08-10 as the resolution of the 08-07 leak.
+
+**Deploy verification closed out (and a reusable TD-27 finding).** The docs push promoted:
+`node scripts/verify-deploy.mjs --api --sha d0d09e96cfbad02ed2e0bc91410dbdc1a2a8c928` →
+*"deployment: READY … health status: degraded (database-unreachable) — deployed but unhealthy"*,
+and `/health` at `17:19:08Z` reports `commit: d0d09e9`, so the alias serves this commit. A new
+prod deployment on `sizzle` reached **READY in 20s**, so the GitHub→Vercel webhook is alive.
+"Deployed but unhealthy" is the correct and expected terminal state here — the push was docs-only
+and cannot affect the DB.
+
+**The finding worth carrying forward: `verify-deploy.mjs` with no `--sha` is unusable on the TD-27
+git-data push path, and it hangs rather than failing.** The script polls Vercel for a deployment
+carrying **local `HEAD`'s** SHA, but on this path local `HEAD` is frozen at `d4c5395` while the
+commit that actually shipped is `d0d09e9` — so it waits for a deployment that can never exist. It
+consumed a 180s budget and produced **no output at all** before being killed (the progress line
+only prints once polling resolves). **Always pass `--sha <full 40-char pushed SHA>`** after a
+git-data-API push. This is a third distinct way TD-27's missing `git fetch` costs a session real
+time, alongside the corrupted-findings and 404-trap failure modes already recorded — and it is an
+argument for either defaulting the script to `origin/main` or having it refuse to poll for a SHA
+that origin does not contain.
+
+**Recovery re-checked twice, ~11 minutes apart, both negative:** `/health` 503 at `17:08:21Z` and
+again at `17:19:08Z` (7.34s stall), with the project's DNS still `ENOTFOUND` on 1.1.1.1 at the
+later timestamp. Not a transient.
+
+**`PushNotification` re-tested at the close of this session — still dead**, verbatim:
+*"Mobile push not sent (Remote Control inactive)."* That is the **44th** consecutive session with
+no working push path. The `telegram` plugin was **not** re-probed (§7: no further unattended
+session should spend time on it, after three reproductions). **This entry, like the 43 before it,
+reached you only because you came and looked.**
+
+**Working tree left clean and correct.** Per the TD-27 stash trap, the three files showing dirty
+(`scripts/ops/sweep-prompt.md`, `tests/invariants/ops-tooling.test.mjs`,
+`scripts/ops/origin-drift.mjs`) were `diff`ed against the origin mirror and are **byte-identical**
+— they are the checkout repair, not human WIP, so they were left in place and **not** stashed.
+Everything this session authored lives under gitignored `.codex/`, so there was nothing to stash
+and no uncommitted human work was touched.
