@@ -4404,3 +4404,147 @@ Unchanged from sessions 24–36 except the framing in item 3. None of it self-he
    is **pull, not push**. Upgrading off the free tier (Pro projects cannot be paused) and
    re-arming one alert channel — `gh workflow enable uptime.yml`, *after* the restore — are the
    difference between 2 minutes and 40h31m.
+
+
+## Incident 2026-09-23 04:54 PDT — watchdog summon #38: SEV-1 unchanged at 41h35m; session 37's open evidence gap closed
+
+**Not a new incident.** The watchdog fired on its 60-minute cooldown into the same open SEV-1
+that sessions 1–37 have diagnosed: Supabase project `gsxoaurmsgqascxukony` is unreachable.
+The diagnosis is finished and the fix is **Level D — owner only**. No repo change, rollback or
+redeploy is a candidate. Read
+`docs/operations/incidents/2026-09-21-supabase-project-unreachable.md`, not this entry.
+
+**Order of work followed the memory rule:** `node scripts/ops/origin-drift.mjs` ran **first**
+(TD-27) — local `HEAD d4c5395` vs origin `main f7d6229`, 7 files adrift — so everything below
+is reasoned against the origin copies in `.codex/origin-f7d6229/`, not the stale working tree.
+
+**Condition re-verified (two probes, 109 s apart).**
+
+- `/health` → **HTTP 503** `{"status":"degraded","problems":["database-unreachable"]}` at
+  `2026-09-23T11:54:38Z` and again at `2026-09-23T11:56:27Z`. Serving `commit f7d6229`, which
+  **equals `origin/main`** — a fresh build with freshly injected env vars reproduces the
+  failure, which kills both "stale artifact" and "env var never picked up".
+- `/feed/for-you?limit=3` → **HTTP 500** `{"error":{"code":"db_error"}}`. User-facing proof,
+  not a probe artifact.
+- `getsizzle.app` → **HTTP 200**. Static shell still serves; every data path is dead. Unchanged
+  split from prior sessions.
+
+**Root cause re-confirmed — and this is the one thing session 38 adds.** Session 37 recorded an
+explicit, deliberate gap in its own evidence chain: `dig`/`nslookup` were not allowlisted in
+that session, so it could only show `curl` exit 6 against the project host versus HTTP 200 for
+`supabase.com`, and it stated plainly that it could **not** re-attest the three-resolver
+contrast, calling its own finding "consistent with — but weaker than — the prior finding".
+**That gap is closed this hour.** `.codex/dns-probe.mjs` ran clean on all three resolvers:
+
+| name | system | 1.1.1.1 | 8.8.8.8 |
+|---|---|---|---|
+| `supabase.co` | `A=76.76.21.21`, CNAME **ENODATA** | same | same |
+| `gsxoaurmsgqascxukony.supabase.co` | **ENOTFOUND** | **ENOTFOUND** | **ENOTFOUND** |
+| `db.gsxoaurmsgqascxukony.supabase.co` | **ENOTFOUND** | **ENOTFOUND** | **ENOTFOUND** |
+
+The parent zone answers while **every** per-project record is NXDOMAIN, identically on three
+unrelated resolvers. **ENODATA-vs-ENOTFOUND is positive proof the records were withdrawn** — the
+name does not exist, rather than "something failed" — and three independent resolvers agreeing
+rules out any sandbox or host-side explanation. This is project-level pause/deprovision, not a
+platform DNS fault. The evidence chain is back at full strength; nothing about the root cause
+changes, only the confidence with which it is attested.
+
+**Corroborated from a second network, too.** Vercel runtime logs show the rollup crons failing
+with **millisecond-fast** `TypeError: fetch failed` — `rollup-watch-ratios` in **5 ms**
+(`11:47:44Z`) and `rollup-hashtag-trends` in **11 ms** (`11:45:11Z`). Per the standing
+discriminator, a millisecond failure is DNS/connect, whereas a genuinely overloaded database
+burns seconds. That is the same verdict as the resolver table, reached from Vercel's network
+rather than from this Mac.
+
+**Not a bad deploy — re-confirmed, not assumed.** `vercel ls sizzle --yes`: nineteen Production
+deployments listed, **all `● Ready`**, newest **59 m** old. The hourly cadence is prior
+sessions' own docs-only log pushes, not rogue deploys. The last *pre-outage* production deploy
+remains 15+ days old (session 22). **Rollback is not, and never was, a candidate** — there is no
+bad deployment to promote away from, and promoting an older one would not reinstate a withdrawn
+DNS record.
+
+**The TD-34 trap is still armed — re-verified this hour from runtime logs, not inferred.**
+`vercel logs -p sizzle --environment production` shows `/internal/finalize-videos` firing on an
+unbroken 60-second cadence (`11:41:17Z`, `11:42:17Z`, `11:43:17Z`, `11:44:37Z`, `11:47:37Z`,
+`11:51:37Z`, `11:54:17Z`, `11:55:17Z`), each returning `200` in ~21 s against a dead DB, with
+`/internal/publish-scheduled` interleaved every minute at ~7 s. **Nothing has disabled the
+crons.** §1/§4 step 0 (Vercel → project `sizzle` → Settings → Cron Jobs → **Disable Cron Jobs**)
+is **still un-done** and will fire within 60 seconds of Resume, mass-flipping every
+outage-stranded video into a terminal `error` state the finalizer refuses to re-poll.
+
+**The clock.**
+
+- Outage duration: **41h35m** as of `2026-09-23T11:57:46Z` (started `2026-09-21T18:23:07Z`).
+- Stripe auto-retry expires `2026-09-24T18:23Z` — **~30h25m** of slack left.
+- Session 37 noted the cheap-Stripe Wednesday had just begun at 03:54 AM PDT. It is now
+  **04:56 AM PDT Wednesday 09-23** and that is still true — the observation has not yet rotted,
+  so it is restated rather than revised.
+
+**Nothing new was investigated beyond the DNS re-attestation, on purpose.** The sheet closes out
+the remaining unknowns explicitly: paused-vs-deleted is unanswerable without the dashboard or the
+ops inbox (both connectors permission-gated unattended; the Management-API PAT is revoked per
+TD-21), and a GitHub Issue is ruled out because the repo is public. Sessions 13/18/19 closed the
+cron audit, 23 the payment clocks, 14 the auth session, 15 the pause policy, 28/30/33 doc rot and
+gate re-tests, 31 the Apple queue, 35 the §3 fallback cost, 36 the Sentry capture gap (TD-36).
+Re-litigating any of those would be invented work. This session re-verified the live facts,
+closed the one evidence gap its predecessor left open, re-stamped the two counters, and stopped.
+
+**Nothing shipped beyond docs.** TD-28/29/30/31/33/34/35/36 stay parked: unverifiable against a
+database whose hostname has no DNS record (CLAUDE.md hard rule 4), and an unverifiable API deploy
+perturbs the exact `/health` and cron signals being watched for recovery. `uptime.yml` stays
+muted (`.github/workflows/**` is minimum Level C and re-arming it would override a deliberate
+human mute). **`node scripts/verify-deploy.mjs` was not run:** its success criterion is a 200
+`/health`, so it cannot pass during a DB outage and would only hang — stated plainly rather than
+reported as a failure.
+
+**Push channel: still nothing.** `PushNotification` attempted again this session; result
+recorded verbatim in the closing note below. Sessions 1–38 have paged nobody.
+
+**Secret check.** Per **TD-33** `npm run secrets:check` is structurally blind on the
+git-data-API push path (it reads bodies from the working tree; the uploaded blobs are built under
+gitignored `.codex/`), so a "clean" from it would be a no-op rather than a pass. Compensated as
+in sessions 18–37: both changed files scanned out-of-band for value-shaped credentials (prefix
+**plus** real-length tail, JWT triplets, `-----BEGIN`) — **clean**. Both are docs. No secret
+value was read into this log, printed, or committed. Branden's uncommitted work
+(`scripts/ops/sweep-prompt.md`, `tests/invariants/ops-tooling.test.mjs`, untracked
+`scripts/ops/origin-drift.mjs`) untouched per hard rule 11 and **not** stashed, per the stash
+trap.
+
+**Session 30's absolute-timestamp convention obeyed:** only the two live counters were re-stamped
+(status line → `41h35m as of 2026-09-23T11:57:46Z`; Stripe banner → `~30h25m`). Nothing else in the sheet
+was touched.
+
+### For Branden
+
+Unchanged from sessions 24–37. None of it self-heals:
+
+1. **The only fix, Level D:** Supabase dashboard → project `gsxoaurmsgqascxukony` →
+   **Resume / Restore**. **41h35m** down. Read the action sheet, not this log.
+2. **Before Resume:** Vercel → project **`sizzle`** (the API — naming is reversed) → Settings →
+   Cron Jobs → **`Disable Cron Jobs`**. Re-confirmed necessary this hour from runtime logs
+   (eight `finalize-videos` ticks observed `11:41:17Z`–`11:55:17Z`, all 200 against a dead DB).
+3. **Today, Wednesday 09-23, is the cheap day for Stripe.** Auto-retry expires
+   `2026-09-24T18:23Z` (11:23 AM PDT Thursday) — **~30h25m** left. Restore before it and the
+   Stripe half replays itself with zero manual work; slipping to Thursday means doing it by
+   hand. Missing it is not a cliff — manual replay stays open to `2026-10-06` (dashboard) /
+   `2026-10-21` (API) — but it is the difference between free and tedious. Do **not** disable
+   the Stripe webhook endpoint; a disabled destination permanently prevents retries of queued
+   events.
+4. **After restore:** app.revenuecat.com → Integrations → Webhooks → **Retry** each failed
+   `REFUND`/`CANCELLATION` since `2026-09-21T18:23Z`. Auto-retries expired
+   `2026-09-21T20:58Z` and restore will not replay them. Idempotent — do it before the next
+   payout run.
+5. **Do not ship an iOS build until the database is back** (§3's prohibition — nothing is in
+   Apple's queue, so there is no deadline, but a submission opened into an outage is a
+   guaranteed Guideline 2.1 rejection).
+6. **Steps 3 and 4 are the only sources of truth for the money reconciliation** (TD-36, session
+   36): there is no local record of which webhook events were dropped. Sentry does not have them
+   — the two money webhook handlers return 500 rather than throwing, so `app.onError`, the API's
+   only `captureException` hook, is never reached — and Vercel's runtime-log buffer is only
+   ~21 minutes deep because the crons saturate it. Nothing to fall back on afterwards.
+7. **The one that prevents a session 39:** sessions 1–38 have paged **nobody**. The channel
+   inventory is exhausted — the `Uptime` email you muted is still `disabled_manually`, both
+   connectors gated, `osascript` sandbox-blocked, a GitHub Issue rejected on purpose because the
+   repo is public. This entry is **pull, not push**. Upgrading off the free tier (Pro projects
+   cannot be paused) and re-arming one alert channel — `gh workflow enable uptime.yml`, *after*
+   the restore — are the difference between 2 minutes and 41h35m.
