@@ -1,7 +1,7 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
 **Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
-(11:23 AM PDT Mon 09-21). **52h07m as of 2026-09-23T22:30:34Z** — re-verified by session 49 (watchdog).
+(11:23 AM PDT Mon 09-21). **53h16m as of 2026-09-23T23:39:11Z** — re-verified by session 50 (watchdog).
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
 
 > **🛑 READ §4 STEP 0 BEFORE YOU CLICK RESUME.** Session 18 found that the first
@@ -10,7 +10,7 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > re-poll** — which silently converts TD-29's prescribed backfill into a no-op and makes
 > its counting query return `0`. One dashboard toggle before Resume avoids the whole mess.
 
-> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — ~19h52m of slack left (§2).**
+> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — ~18h43m of slack left (§2).**
 > Restore before it and the **Stripe** half self-heals with zero manual work. Missing it is *not*
 > a cliff — manual replay stays open to `2026-10-06` (dashboard) / `2026-10-21` (API). There is
 > real time; this is urgent, not frantic.
@@ -33,6 +33,21 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > **Retry** button, and it is now a *manual* step that restore does not cover — see §2 "The
 > Apple clock" and §4 step 6. Good news, also session 23: the **grant** side is safe and
 > self-heals; nobody is charged without eventually getting their unlock (§2).
+
+> **👥 NEW, session 50 — what your users are actually seeing.** Forty-nine sessions audited
+> money clocks, crons, credentials and Apple's queue; none checked the surface the users are
+> on. **Nobody is hitting a crash, a white screen or an infinite spinner.** Boot always
+> completes — `bootProgress.ts:38` arms an 8-second failsafe and `Feed.tsx:56-58` calls
+> `markBootReady()` on the *error* path too, so the launch bar never parks. The feed then
+> renders a clean error card with a working **Try again** button (`Feed.tsx:89-90`), and
+> sign-in sets an error and clears `busy` rather than hanging (`useAuth.ts:185-186`).
+> **The caveat is the copy.** That card reads *"Can't load the feed — **Check your
+> connection** and try again"* (`Feed.tsx:164-165`), so for 53h every user has been told
+> **their own phone is at fault**; the sign-in screen shows the raw auth-js string (a bare
+> network-failure message, `useAuth.ts:186`). Filed as **TD-38** and deliberately **not
+> shipped** — it is cosmetic, it restores nothing, and it cannot be verified unattended
+> without a browser. It changes your *calibration*, not the fix: the app is degrading
+> gracefully, and the misattribution is what is quietly costing you reviews and support mail.
 
 This page exists because **forty-seven** unattended watchdog sessions have now diagnosed the same
 outage and appended **5,600+ lines** to `LOG.md` (counts re-stamped session 48; the prose said

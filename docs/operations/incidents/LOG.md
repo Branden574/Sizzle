@@ -5933,3 +5933,156 @@ verbatim: *"Mobile push not sent (Remote Control inactive)."* That is the **49th
 session with no working push path. `telegram` was not re-probed (§7 — the channel inventory is
 exhaustively verified and complete). **This entry, like the 48 before it, reached you only because
 you came and looked.**
+
+---
+
+## 2026-09-23 23:39Z — watchdog session 50 — SEV-1 unchanged, hour 53. One new finding (the user-visible surface — TD-38).
+
+**What fired.** `scripts/ops/watchdog.sh` at 2026-09-23 16:31:07 PDT: `API degraded (503):
+database-unreachable`, with the `/health` body attached. Per the triage rule this is the
+*real-outage* class, not the `HTTP 000` host-blip class — and it is the same SEV-1 opened
+`2026-09-21T18:23:07Z`. Summon #49 against an unchanged condition; the 60-minute cooldown
+re-fires on a condition nobody has been able to clear.
+
+**Root cause — re-attested this hour, not recalled.** Supabase project
+`gsxoaurmsgqascxukony` has had its DNS records withdrawn. `.codex/dns-probe.mjs` across
+**three independent resolvers** (system, `1.1.1.1`, `8.8.8.8`), all agreeing:
+
+- `supabase.co` → `A=76.76.21.21`, `CNAME=ENODATA` — the parent zone is healthy.
+- `gsxoaurmsgqascxukony.supabase.co` → **`ENOTFOUND`** (NXDOMAIN) on both record types.
+- `db.gsxoaurmsgqascxukony.supabase.co` → **`ENOTFOUND`** on both.
+
+Parent zone up + *every* per-project record gone = project-level pause/deprovision, not a
+platform DNS fault. `ENODATA` vs `ENOTFOUND` is positive proof the record was withdrawn
+rather than "a lookup failed", and three unrelated resolvers agreeing kills the sandbox
+explanation. **Level D — no repo change, rollback or redeploy can touch it.**
+
+**Live evidence this session.**
+
+| Probe | Result |
+|---|---|
+| `/health` | `503` `{"status":"degraded","problems":["database-unreachable"],"commit":"006fbc3"}`, 8.58s |
+| `/feed/for-you?limit=3` (real user path) | **`500` `{"error":{"code":"db_error"}}`**, 7.31s |
+| `getsizzle.app` | `200`, 0.51s, 4,567 bytes — the static shell serves fine |
+| `vercel ls sizzle` | 14 production deployments, **all `● Ready`**, newest 1h — bad-deploy ruled out |
+| `node --test tests/invariants/ops-tooling.test.mjs` | **26/26 pass** |
+
+The hourly READY deploys are prior sessions' own docs-only log pushes, as always — and they
+are a free control: a brand-new build with freshly injected env vars fails identically, so
+neither a stale artifact nor an unpicked-up env var is in play. Fiftieth confirmation.
+
+One note on the first probe: `curl` returned `HTTP 000` after a 20s timeout, then `503`
+in 8.58s on the retry. That is the host-side blip class landing *on top of* a real outage —
+worth recording because it is exactly the ambiguity TD-23's retry would resolve.
+
+### The new finding — what your users have actually been seeing for 53 hours (TD-38)
+
+Session 49 closed with no stated evidence gap, which removes the one category of work
+session 38 licensed. Rather than manufacture a 50th finding (session 40's rule), I checked
+whether any *class* of surface was still unaudited — and one is. Forty-nine sessions audited
+money clocks, crons, auth sessions, the project's pause clock, Apple's review queue and the
+OAuth credentials. **Nobody checked the surface the users are on.** It is cheap (curl + source
+read, no browser needed), it needs nothing from the dead database, and it is not in the action
+sheet: grepping it for `user-visible|frontend|white screen|maintenance` returns exactly one
+hit, and that one is about the reviewer demo account.
+
+**The reassuring half — the app degrades gracefully. No crash, no white screen, no hang.**
+
+- **Boot cannot stall.** `apps/web/src/lib/bootProgress.ts:38` arms an 8-second failsafe
+  (`window.setTimeout(markBootReady, 8000)`) so the launch bar always completes, and
+  `apps/web/src/components/Feed.tsx:56-58` calls `markBootReady()` when the feed stops
+  loading — **including when it errored**, not only when it succeeded.
+- **The feed shows a real error state with a working retry.** `Feed.tsx:89-90` renders
+  `FeedError` with `onRetry={() => active.refetch()}` and a live `retrying` spinner.
+- **Sign-in does not hang.** `apps/web/src/auth/useAuth.ts:185-186` sets the error and
+  clears `busy`, so the button returns rather than spinning forever.
+
+**The defect — the copy blames the user.** `Feed.tsx:164-165` reads *"Can't load the feed /
+**Check your connection** and try again — your recipes are waiting."* For 53 hours every user
+who opened Sizzle has been told **their own phone is broken** during a server-side outage.
+The sign-in path is worse in a smaller way: it renders `error.message` raw, so a DNS/connect
+failure surfaces the bare `@supabase/auth-js` retryable-fetch string rather than branded copy.
+
+**Filed as TD-38 (P3, web / incident UX), and deliberately NOT shipped.** It fails session
+45's in-lane test in the way that matters: it is a *cosmetic* change that restores nothing,
+and verifying it means seeing it in a browser and the simulator, which no unattended session
+can do (there is no browser path here). The fix is also already half-built — the app has
+`useOnlineStatus.ts:4` wrapping `navigator.onLine`, so the copy can branch on
+offline-vs-server-down without new machinery. Do it after restore, alongside TD-29/TD-34.
+
+**Why this belongs in the owner's hands and not just a register:** it is the only finding in
+53 hours that changes the *human* cost estimate. The money clocks say what restore will cost;
+this says what the wait is costing — churn and support mail from users who think they're the
+problem. It is now a block near the top of the action sheet.
+
+**Angles rejected before spending calls** (session 40's rule): re-probing paused-vs-deleted
+(§5 — all three paths closed: connector gate, tokenless local MCP, revoked PAT); re-auditing
+the crons (13/18/19 closed that set — TD-29 + TD-34 are the whole of it); re-probing the dead
+push channels (§7 is exhaustively verified and complete); the `telegram` plugin (the sheet
+explicitly says no further unattended session should spend time on it); re-litigating TD-34's
+patch shape (session 48 settled it — the error-guard is a silent no-op).
+
+**Doc-rot check** (sessions 28/30): the Stripe banner's calendar prose still resolves
+correctly — it is 4:39 PM PDT Wednesday 09-23, so session 37's "that day has now begun" and
+session 46's "past its midpoint" both read true as dated history. No correction needed, and
+per the §7 convention I embedded no fresh prediction of my own.
+
+**Counters re-stamped** (the standing convention): elapsed **53h16m** as of
+`2026-09-23T23:39:11Z`; Stripe free-retry slack **18h43m**, expiring `2026-09-24T18:23Z`.
+
+**Working tree.** `node scripts/ops/origin-drift.mjs` reported local `d4c5395` vs origin
+**`006fbc3`**, 8 files. All four locally-dirty paths — `scripts/verify-deploy.mjs`,
+`tests/invariants/ops-tooling.test.mjs`, `scripts/ops/sweep-prompt.md`,
+`scripts/ops/origin-drift.mjs` — `diff`ed **byte-identical** against the origin mirror,
+i.e. the line-20 checkout repair and not human WIP, so per the stash trap they were left in
+place, neither stashed nor committed (hard-rule 11). This entry was written on the **origin**
+copy of `LOG.md` (5,935 lines); using the stale local copy would have silently truncated the
+prior entries.
+
+**Security.** Nothing weakened. No auth, RLS, entitlement, moderation or payment path touched;
+nothing shipped to an application surface. Read-only probes plus three documentation files.
+
+**Secrets.** Nothing staged — the git-data push path never stages, so `npm run secrets:check`
+would report a no-op "clean (0 files)" (TD-33). Compensated as in sessions 18–49: every file in
+this push was grepped for **value-shaped** credentials (`sbp_|sk_live|whsec_|eyJ[A-Za-z0-9_-]{10,}`
+plus the BEGIN-block marker, each with a real-length tail). The only hits are the long-known
+self-referential false positives — the literal marker inside backticks in prior sessions' own
+secret-check paragraphs (expected, per session 40; inspect, don't panic).
+
+### For Branden — unchanged from sessions 24–49, and none of it self-heals
+
+1. **The only fix, Level D:** Supabase dashboard → project `gsxoaurmsgqascxukony` →
+   **Resume / Restore**. **53h16m** down. The dashboard also tells you *which* branch you are
+   in (paused / billing-restricted / deleted) — the one fact 50 sessions could not get.
+2. **Before you click Resume:** Vercel → project **`sizzle`** (the API — the naming is
+   reversed) → Settings → Cron Jobs → **Disable Cron Jobs**. Ten seconds. Re-confirmed still
+   undone at `23:39Z`. There is no safe code-side substitute (session 48).
+3. **Stripe: 18h43m of free-retry slack.** Restore before `2026-09-24T18:23Z` and the Stripe
+   half replays itself. Not a cliff (manual replay runs to `2026-10-06` dashboard /
+   `2026-10-21` API), but it is the difference between free and tedious. Do **not** disable
+   the Stripe webhook endpoint.
+4. **After restore:** app.revenuecat.com → Integrations → Webhooks → **Retry** each failed
+   `REFUND`/`CANCELLATION` since `2026-09-21T18:23Z`. Auto-retries expired
+   `2026-09-21T20:58Z` and restore will **not** replay them. Idempotent — do it before the
+   next payout run.
+5. **Do not ship an iOS build until the database is back** (§3).
+6. **Items 3 and 4 are the only sources of truth for the money reconciliation** (TD-36).
+7. **Your users are not seeing a crash — they are seeing "check your connection"** (new this
+   session, TD-38). The app degrades gracefully; the copy misattributes the outage to them.
+   Nothing for you to do now, but it is why the support mail reads the way it does.
+8. **50 sessions have now paged nobody.** Owner-side fixes that end this class of session:
+   **upgrade off the free tier** (Pro projects cannot be paused — it removes the failure mode
+   itself), **reconnect Remote Control**, and add `Bash(git fetch:*)` to
+   `.claude/settings.json` (TD-27). Then `gh workflow enable uptime.yml` **after** restore.
+   TD-21 needs a PAT rotation.
+
+### Closing note — session 50, written after the calls it reports
+
+**`PushNotification` was called before this paragraph was written**, and is **still dead**,
+verbatim: *"Mobile push not sent (Remote Control inactive)."* That is the **50th** consecutive
+session with no working push path. `telegram` was not re-probed (§7 — the channel inventory is
+exhaustively verified and complete). **This entry, like the 49 before it, reached you only
+because you came and looked.**
+
+**The standing note stands:** `LOG.md` is past 600 KB and its unbounded growth is itself a
+problem — **split it into per-incident files once production is back.**
