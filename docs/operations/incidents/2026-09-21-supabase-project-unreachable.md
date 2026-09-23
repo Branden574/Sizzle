@@ -1,7 +1,7 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
 **Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
-(11:23 AM PDT Mon 09-21). **36h16m as of 2026-09-23 06:39Z** — re-verified by session 33.
+(11:23 AM PDT Mon 09-21). **37h20m as of 2026-09-23 07:43Z** — re-verified by session 34.
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
 
 > **🛑 READ §4 STEP 0 BEFORE YOU CLICK RESUME.** Session 18 found that the first
@@ -10,10 +10,12 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > re-poll** — which silently converts TD-29's prescribed backfill into a no-op and makes
 > its counting query return `0`. One dashboard toggle before Resume avoids the whole mess.
 
-> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — ~35h44m of slack left (§2).**
+> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — ~34h39m of slack left (§2).**
 > Restore before it and the **Stripe** half self-heals with zero manual work. Missing it is *not*
 > a cliff — manual replay stays open to `2026-10-06` (dashboard) / `2026-10-21` (API). There is
 > real time; this is urgent, not frantic.
+> **In calendar terms (session 34):** that expiry is **11:23 AM PDT Thursday 09-24**, so
+> **Wednesday 09-23 is the last full working day on which the cheap path is still available.**
 
 > **🍎 NEW, session 23 — the Apple/RevenueCat half does NOT self-heal, and its window has
 > ALREADY CLOSED.** RevenueCat retries a failing webhook **5 times over 155 minutes total**,
@@ -36,7 +38,11 @@ the one-page action sheet. **Read this, not the log.**
 0. **First, disable the crons** — Vercel → project **`sizzle`** (the API; naming is
    reversed) → Settings → Cron Jobs → click **Disable Cron Jobs**. No deploy needed.
    This is a 10-second toggle that buys you an unhurried capture window; see §4 step 0
-   for why it matters and what to do if you forget.
+   for why it matters and what to do if you forget. **Confirmed still required as of
+   `2026-09-23T07:43Z`** — session 34 pulled the API's runtime logs and the crons are
+   demonstrably live (21 `finalize-videos` + 22 `publish-scheduled` invocations in the
+   21 minutes `07:22:34Z`–`07:43:34Z`), so the TD-34 trap is armed and nothing has
+   disabled it.
 
    > **Corrected session 19 — the control is project-wide, not per-cron.** Sessions 18's
    > wording ("disable `/internal/finalize-videos`") implies a per-cron switch. Vercel's
@@ -427,6 +433,11 @@ its events only come back if you press Retry.
   destructure `const { data } = …` without checking `error`, so a failed run reports success
   at the HTTP-status layer. Level B PR, deliberately **not** shipped mid-outage (unverifiable
   against a dead DB, and it perturbs the signals being watched for recovery).
+  **Observed in production, not just read out of the code** — every runtime-log window since
+  the 02:12Z session shows `publish-scheduled` and `finalize-videos` returning **200**
+  against a database with no DNS record while `rollup-hashtag-trends`, which *does* check
+  `error` (`:355-360`), returns **500** in the same window; re-confirmed `2026-09-23T07:43Z`
+  (session 34). **This is settled — do not log the 200-vs-500 contrast as a new finding.**
 - **TD-29 (NEW, session 13)** — `finalize-videos` silently abandons work after a >6h
   outage: `internal.ts:61-74` floors the sweep at `created_at >= now-6h`, and nothing else
   re-drives a stuck asset (Stream webhooks skipped `:54`; client poll caps ~10 min). Any

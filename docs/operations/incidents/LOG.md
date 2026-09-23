@@ -3954,3 +3954,128 @@ self-heals:
    not push** — as all 33 have been. Upgrading off the free tier and re-arming one alert
    channel are both your call, and together they are the difference between 2 minutes and 36
    hours.
+
+## 2026-09-23 07:43Z — SEV-1 `2026-09-21` still open at 37h20m (session 34, summon #33)
+
+**Re-verification only. Nothing new was found, nothing shipped, and that is the correct
+outcome** — the diagnosis has been finished since session 23 and the action sheet
+(`2026-09-21-supabase-project-unreachable.md`) is the artifact that matters. This entry
+exists to timestamp the condition and to record two things a future session should not
+re-derive.
+
+**Condition — unchanged, verified four independent ways.**
+
+- `/health` → **503** `{"status":"degraded","problems":["database-unreachable"]}`, two probes
+  at `07:39:27Z` and `07:38:55Z`, each stalling **~7.2 s** on connect. `commit: 6a75db3` =
+  current `origin/main`, so this is a *fresh* build reproducing it, not a stale artifact.
+- DNS — `gsxoaurmsgqascxukony.supabase.co` and `db.gsxoaurmsgqascxukony.supabase.co` both
+  **NXDOMAIN** on the system resolver, `1.1.1.1` and `8.8.8.8` (4 of 4 lookups). Parent zone
+  `supabase.co` resolves normally (`76.76.21.21`). Per-project records withdrawn, zone up —
+  the §5 root cause, unchanged.
+- Vercel — the six most recent production deployments of project `sizzle` are all **READY**
+  (newest 1 h old). `Uptime` workflow still `disabled_manually`; last failing run remains
+  `35638029940` at `2026-09-21T18:23:07Z`, last green `35634994369` at `17:54:46Z`.
+- `getsizzle.app` serves **200** (static shell only — the API behind it is dead).
+
+**Three inherited blockers re-tested, per session 33's lesson. All three reproduce exactly;
+do not spend a fourth session on them.**
+
+| Path | Result this session |
+|---|---|
+| `mcp__claude_ai_Gmail__search_threads` | `requested permissions … not granted` — still connector-gated. The ops inbox still holds the paused-vs-restricted answer and is still unreachable unattended. |
+| `mcp__claude_ai_Supabase__list_projects` | `requested permissions … not granted` — unchanged. |
+| `mcp__supabase__get_advisors` (local, tokenless) | `Unauthorized. Please provide a valid access token … SUPABASE_ACCESS_TOKEN` — unchanged, and still TD-21's independent second confirmation. |
+| `api.supabase.com/v1/projects` direct | **401** — PAT still revoked (TD-21). |
+
+**Runtime logs — the TD-34 precondition is still armed, confirmed rather than assumed.**
+Pulled the current production deployment's logs (`dpl_3W2uwv5NyphKzGWwekJMnuswBqxb`). 50
+unique events over `07:22:34Z`–`07:43:34Z` (21 min):
+
+```
+  22 /internal/publish-scheduled      -> 200
+  21 /internal/finalize-videos        -> 200
+   5 /health                          -> 503
+   1 /internal/rollup-hashtag-trends  -> 500   [internal] ... { err: 'TypeError: fetch failed' }
+   1 /health/deep                     -> 404   (this session's own probe)
+```
+
+Two readings, both **re-confirmations, not discoveries**:
+
+1. **The crons have not been disabled.** `finalize-videos` is ticking every 60 s right now, so
+   §4 step 0 is still un-done and the TD-34 flip will fire within a minute of Resume. This is
+   a *state* check of a pre-Resume precondition — worth making, not worth re-making.
+2. **TD-28 reproduces, for the fourth logged time.** The two crons that destructure
+   `const { data } = …` without reading `error` (`internal.ts:67,251`) return **200** against
+   a database with no DNS record, while `rollup-hashtag-trends` — which *does* check `error`
+   (`:355-360`) — correctly returns **500**. I re-read both handlers to confirm the
+   attribution before writing this. **The 02:12Z session already recorded this exact
+   200-vs-500 contrast**; I nearly logged it as a new finding and caught it by grepping
+   `LOG.md` first. Future sessions: this is settled, filed as TD-28, and parked on purpose.
+
+Zero `responseStatusCode: 0` rows (consistent with every window since they cleared). No
+Stripe or RevenueCat webhook deliveries in the retained window — but 43 of 50 rows are the
+two every-minute crons, which saturate Vercel's retention cap, so **this is not a clean bill
+of health on webhook volume** and does not change §2's honest "exposure size is unknown".
+
+**The one genuinely new thing this hour is the calendar, not the system.** It is now
+**00:43 PDT Wednesday 09-23**. Stripe's automatic-retry window closes
+**`2026-09-24T18:23Z` = 11:23 AM PDT Thursday 09-24**, so **Wednesday 09-23 is the last full
+working day in which acting makes the Stripe half self-heal with zero manual work.** Missing
+it is still not a cliff — dashboard Resend runs to `2026-10-06`, the API to `2026-10-21` — but
+after Wednesday the cheap path is gone and reconciliation becomes per-event handwork on top of
+the Apple backlog that is *already* manual (TD-35, auto-retries expired `2026-09-21T20:58Z`).
+
+**Nothing shipped, and the reasons are unchanged.** TD-28/29/30/31/33/34/35 all stay parked:
+every one of them is unverifiable against a database whose hostname has no DNS record
+(CLAUDE.md hard rule 4), and an unverifiable API deploy perturbs the exact cron and `/health`
+signals being watched for recovery. `uptime.yml` stays muted — `.github/workflows/**` is
+minimum Level C and re-arming it would override a deliberate human mute *and* fire into a
+void while the DB is down. No rollback: the last pre-outage production deploy was 15 days old
+and every recent deploy is READY, so there is no bad deploy to promote away from, and no
+redeploy can reinstate a withdrawn DNS record. No time spent on the `telegram` plugin
+(session 25's standing instruction). Session 30's absolute-timestamp convention obeyed: only
+the two live counters were re-stamped.
+
+**Secret check.** Per **TD-33** `npm run secrets:check` is structurally blind on the
+git-data-API push path (it reads bodies from the working tree; the uploaded blobs are built
+under gitignored `.codex/`), so a "clean" from it would be a no-op rather than a pass.
+Compensated as in sessions 18–33: both changed files scanned out-of-band for value-shaped
+credentials (prefix **plus** real-length tail, JWT triplets, `-----BEGIN`) — **clean**. Both
+are docs. No secret value was read into this log, printed, or committed.
+
+**Working-tree note (TD-27).** `origin-drift.mjs` ran **first**, before any diagnosis: local
+`HEAD d4c5395` vs origin `main 6a75db3`, 7 files adrift. Both edits were built on the origin
+copies in `.codex/origin-6a75db3/` and pushed through the GitHub git-data API. Branden's
+uncommitted work (`scripts/ops/sweep-prompt.md`,
+`tests/invariants/ops-tooling.test.mjs`, untracked `scripts/ops/origin-drift.mjs`) untouched
+per hard rule 11 — and per the stash trap, those three were **not** stashed.
+
+### For Branden
+
+Unchanged from sessions 24–33. Re-stated only because none of it self-heals:
+
+1. **The only fix, Level D:** Supabase dashboard → project `gsxoaurmsgqascxukony` →
+   **Resume / Restore**. **37h20m** down. Read the action sheet, not this log.
+2. **Before Resume:** Vercel → project **`sizzle`** (the API — naming is reversed) → Settings →
+   Cron Jobs → **`Disable Cron Jobs`**. Confirmed still needed this hour: the runtime logs
+   above show `finalize-videos` running every 60 s, so the TD-34 trap is armed and will flip
+   the whole stranded-video cohort to terminal `status='error'` within a minute of Resume.
+3. **Wednesday 09-23 is the cheap day for Stripe.** Restore before
+   `2026-09-24T18:23Z` (11:23 AM PDT Thursday) and the Stripe half replays itself. Do **not**
+   disable the Stripe webhook endpoint — a disabled destination permanently prevents future
+   retries of queued events.
+4. **After restore:** app.revenuecat.com → Integrations → Webhooks → **Retry** each failed
+   `REFUND` / `CANCELLATION` since `2026-09-21T18:23Z`. Auto-retries expired
+   `2026-09-21T20:58Z` and restore will **not** replay them. Idempotent — retry freely, and do
+   it **before the next payout run**.
+5. **Do not ship an iOS build until the database is back.** Nothing is in Apple's queue
+   (session 31), so there is no deadline and nothing to cancel — but a submission *opened*
+   during the outage is a guaranteed **Guideline 2.1** rejection, because the reviewer's
+   `review@getsizzle.app` sign-in goes to Supabase Auth and that host does not resolve.
+6. **The one that prevents a session 35:** sessions 1–34 have paged **nobody**. The channel
+   inventory is exhausted and was re-confirmed this hour — Remote Control dark since before
+   the outage, the `Uptime` email you muted still `disabled_manually`, both connectors gated,
+   a GitHub Issue rejected on purpose because the repo is public. This entry is **pull, not
+   push**, as all 34 have been. Upgrading off the free tier (Pro projects cannot be paused,
+   and it removes the Fair Use restriction mechanism) and re-arming one alert channel are
+   both your call, and together they are the difference between 2 minutes and 37 hours.
