@@ -4827,3 +4827,120 @@ Unchanged from sessions 24–39. None of it self-heals:
    difference between 2 minutes and 43h38m. **Rotating the Supabase PAT (TD-21) is the third**:
    it is one owner-side credential, and it would let an unattended session answer
    paused-vs-deleted instead of guessing for 40 consecutive summons.
+
+---
+
+## Incident 2026-09-21 — session 41 (summon #41), 2026-09-23 08:06 PDT: SEV-1 unchanged at 44h43m; re-verification only, deliberately short
+
+**Condition: unchanged. Root cause: unchanged and already settled. No new finding, and that is
+again the correct outcome — see session 40's entry, which makes the same argument.** The
+diagnosis has been finished since session ~12; read
+`docs/operations/incidents/2026-09-21-supabase-project-unreachable.md`, not this log. This entry
+is kept deliberately short because the log is now 4,800+ lines across 41 summons and additional
+length has negative value to whoever finally reads it.
+
+**Verified this hour** (`2026-09-23T15:01Z`–`15:07Z`):
+
+- `GET /health` → **503**, `problems:["database-unreachable"]`, commit `01ddc2b`, **twice**,
+  ~7.2s each (the DB-connect stall). Not a blip.
+- `GET /feed/for-you?limit=3` → **500 `db_error`** — a real user path, not just liveness.
+- DNS: `gsxoaurmsgqascxukony.supabase.co` and `db.<ref>.supabase.co` → **ENOTFOUND** on the
+  system resolver, `1.1.1.1` and `8.8.8.8`. Unchanged.
+- `getsizzle.app` → **200** (static frontend serves; it has no DB dependency — this is not
+  evidence of recovery and never was).
+- **Not a bad deploy, re-confirmed.** `vercel ls sizzle --prod`: the last nine production
+  deployments are all `● Ready`, spaced ~1h apart, 16–20s builds — these sessions' own docs
+  pushes. Nothing to roll back; rollback was never a candidate (§5).
+- Runtime-log errors are `TypeError: fetch failed` on `rollup-hashtag-trends` /
+  `rollup-watch-ratios` — a *resolution* failure, consistent with NXDOMAIN, not auth or timeout.
+  Checked explicitly because a signal that pattern-matches a known failure can have a new cause.
+  It does not here.
+
+**§1 step 0 still required — crons are still live.** Pulled the API's runtime logs directly:
+across the buffer's full span `14:50:34Z`–`15:11:34Z`, **42 log rows each for
+`/internal/finalize-videos` and `/internal/publish-scheduled`** — two rows per invocation
+(`<--` and `-->`), so **~21 invocations each in 21 minutes**, exactly the every-minute cadence.
+All return 200 against a database with no DNS record (TD-28's false-green, which is settled —
+not re-logged as a finding). The TD-34 trap is armed and nothing has disarmed it.
+`finalize-videos` is burning **21s per tick** on the DB stall.
+
+**TD-36's buffer-depth measurement independently reproduced.** The same pull shows the log
+buffer holds **100 rows spanning exactly 21 minutes**, of which **84 (84%) are the two
+every-minute crons** — matching session 36's "~21 minutes deep, saturated by crons" to the
+minute, from a different hour. This is a *confirmation* of a settled finding, not a new one,
+and it is the second independent reason §1 step 0 is worth ten seconds: disabling the crons
+widens the forensic window from ~21 minutes to hours.
+
+**Two cheap re-tests run, per §5's own lesson ("a predecessor's recorded 'I tried and it's
+gated' is worth one cheap re-test"). Both reproduce — the inventory in §7 holds at session 41.**
+
+- `mcp__claude_ai_Supabase__list_projects` → *"requested permissions … not granted"*. Still
+  gated unattended. Worth the single call because this connector was observed working against a
+  **different** project in an unrelated session, which raised a real possibility the grant had
+  widened. It has not, for this one.
+- `mcp__claude_ai_Gmail__search_threads` (`from:supabase after:2026/09/20`) → same gate. This is
+  the one that would have paid best: the Supabase notification email names the pause reason and
+  would settle the paused-vs-restricted-vs-deleted branch in §1 that 41 sessions have been
+  unable to answer. Still closed.
+
+**One correction to the action sheet (§5), non-material by design.** `supabase.co` now returns
+**`A 76.76.21.21`** on both public resolvers where sessions ≤40 recorded `ENODATA`. The apex
+answer changed on Supabase's side; **the project records are still NXDOMAIN**, which is the
+load-bearing half, so no finding, branch or deadline moves. Written down only so the next
+session does not read the mismatch as a new signal — the same doc-rot class session 30 swept
+for. Session 30's absolute-timestamp convention otherwise obeyed: only the two live counters
+were re-stamped (status line → `44h43m as of 2026-09-23T15:06:26Z`; Stripe banner → `~27h16m`).
+
+**Clocks.** Outage **44h43m**. Stripe auto-retry expires `2026-09-24T18:23Z` — **27h16m** left,
+and it is now **08:06 AM PDT Wednesday 09-23**, so the full working day session 37 flagged as
+the cheap-path day is in progress with most of it still ahead. RevenueCat's budget expired
+`2026-09-21T20:58Z` and is still accruing manual cleanup (§4 step 6).
+
+**Secret check.** Per **TD-33** `npm run secrets:check` is structurally blind on the
+git-data-API push path (it reads bodies from the working tree; uploaded blobs are built under
+gitignored `.codex/`), so a "clean" from it would be a no-op rather than a pass. Compensated as
+in sessions 18–40: both changed files scanned out-of-band for value-shaped credentials (prefix
+**plus** a real-length tail, JWT triplets, `-----BEGIN`) — **clean**. Both are docs. No secret
+value was read into this log, printed, or committed. Branden's uncommitted work
+(`scripts/ops/sweep-prompt.md`, `tests/invariants/ops-tooling.test.mjs`, untracked
+`scripts/ops/origin-drift.mjs`) untouched per hard rule 11 and **not** stashed, per the stash
+trap.
+
+**TD-27 note — `origin-drift.mjs` earned its keep this hour.** Local `main` was 1 commit behind
+(`d4c5395` vs origin `01ddc2b`) and, more sharply, the local `docs/operations/incidents/LOG.md`
+is **427 lines / 161KB** against origin's **4,829 lines / 527KB**. Appending to the local copy
+and committing it would have **destroyed ~4,400 lines of this incident's history** — the exact
+corruption TD-27 predicts, now with a concrete blast radius rather than a hypothetical one.
+Both files edited from the origin copies in `.codex/origin-01ddc2b/` and pushed through the
+GitHub git-data API.
+
+### For Branden
+
+Unchanged from sessions 24–40. None of it self-heals. In priority order:
+
+1. **The only fix, Level D:** Supabase dashboard → project `gsxoaurmsgqascxukony` →
+   **Resume / Restore**. **44h43m** down.
+2. **Before you click Resume:** Vercel → project **`sizzle`** (the API — naming is reversed) →
+   Settings → Cron Jobs → **`Disable Cron Jobs`**. Re-confirmed necessary this hour from
+   runtime logs (crons observed firing through `15:02Z`). Ten seconds; skipping it silently
+   converts the stranded-video recovery into a no-op (§4 step 0).
+3. **Today, Wednesday 09-23, is the cheap day for Stripe** and most of it is still ahead.
+   Auto-retry expires `2026-09-24T18:23Z` — **27h16m**. Restore before it and the Stripe half
+   replays itself. Not a cliff (manual replay to `2026-10-06` dashboard / `2026-10-21` API) but
+   it is the difference between free and tedious. Do **not** disable the Stripe webhook
+   endpoint — a disabled destination permanently prevents retries of queued events.
+4. **After restore:** app.revenuecat.com → Integrations → Webhooks → **Retry** each failed
+   `REFUND`/`CANCELLATION` since `2026-09-21T18:23Z`. Auto-retries expired and restore will not
+   replay them. Idempotent — do it before the next payout run.
+5. **Do not ship an iOS build until the database is back** (§3).
+6. **Steps 3 and 4 are the only sources of truth for the money reconciliation** (TD-36) — no
+   local record of the dropped events exists.
+7. **The one that prevents a session 42:** 41 sessions have paged **nobody**. `PushNotification`
+   is still dead — re-tested this session, verbatim: *"Mobile push not sent (Remote Control
+   inactive)."* So this entry, like the forty before it, reached you only if you came and
+   looked. The `Uptime`
+   email you muted is still `disabled_manually`, both connectors gated, a GitHub Issue ruled out
+   because the repo is public. The three owner-side fixes are: **upgrade off the free tier**
+   (Pro projects cannot be paused — this removes the failure mode itself), **`gh workflow enable
+   uptime.yml`** *after* restore, and **rotate the Supabase PAT (TD-21)** so an unattended
+   session can answer paused-vs-deleted instead of guessing for a 41st time.

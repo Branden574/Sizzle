@@ -1,7 +1,7 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
 **Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
-(11:23 AM PDT Mon 09-21). **43h38m as of 2026-09-23T14:01:47Z** — re-verified by session 40.
+(11:23 AM PDT Mon 09-21). **44h43m as of 2026-09-23T15:06:26Z** — re-verified by session 41.
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
 
 > **🛑 READ §4 STEP 0 BEFORE YOU CLICK RESUME.** Session 18 found that the first
@@ -10,7 +10,7 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > re-poll** — which silently converts TD-29's prescribed backfill into a no-op and makes
 > its counting query return `0`. One dashboard toggle before Resume avoids the whole mess.
 
-> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — ~28h21m of slack left (§2).**
+> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — ~27h16m of slack left (§2).**
 > Restore before it and the **Stripe** half self-heals with zero manual work. Missing it is *not*
 > a cliff — manual replay stays open to `2026-10-06` (dashboard) / `2026-10-21` (API). There is
 > real time; this is urgent, not frantic.
@@ -472,9 +472,18 @@ its events only come back if you press Retry.
 ## 5. Already settled — don't re-derive these
 
 - **Root cause is project-level DNS withdrawal, not a platform fault.** All three resolvers
-  (system, `1.1.1.1`, `8.8.8.8`) agree: `supabase.co` → `ENODATA` (name exists), while
+  (system, `1.1.1.1`, `8.8.8.8`) agree: the parent zone `supabase.co` resolves, while
   `<ref>.supabase.co` *and* `db.<ref>.supabase.co` → `ENOTFOUND` (NXDOMAIN). Parent zone up +
   every per-project record gone = pause/deprovision at the account level.
+  - **Evidence refreshed session 41 (`2026-09-23T15:06Z`) — the apex answer changed; the
+    inference did not.** Sessions ≤40 recorded `supabase.co` → `ENODATA` ("name exists, no A
+    record"). It now returns **`A 76.76.21.21`** on both `1.1.1.1` and `8.8.8.8`. That is a
+    change on *Supabase's* side of the fence (an apex A record appearing on their marketing
+    zone), **not** a change in our project's status: `<ref>.supabase.co` and
+    `db.<ref>.supabase.co` are still NXDOMAIN on every resolver, which is the load-bearing
+    half. Recorded only so a future session that re-runs the check does not read the
+    `ENODATA`-vs-`A` mismatch as a new signal and spend time on it. **Nothing about the
+    diagnosis, the branch table in §1, or any deadline moves.**
 - **Not a bad deploy.** The last *pre-outage* production deploy was 15 days old. Rollback is
   not a candidate and never was. Hourly READY deploys since are these sessions' own docs-only
   log pushes.
