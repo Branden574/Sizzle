@@ -4497,8 +4497,9 @@ human mute). **`node scripts/verify-deploy.mjs` was not run:** its success crite
 `/health`, so it cannot pass during a DB outage and would only hang — stated plainly rather than
 reported as a failure.
 
-**Push channel: still nothing.** `PushNotification` attempted again this session; result
-recorded verbatim in the closing note below. Sessions 1–38 have paged nobody.
+**Push channel: still nothing.** `PushNotification` was attempted again this session and
+returned verbatim **"Mobile push not sent (Remote Control inactive)."** — the same result as
+sessions 12–37, now 21 days dead. Sessions 1–38 have paged nobody.
 
 **Secret check.** Per **TD-33** `npm run secrets:check` is structurally blind on the
 git-data-API push path (it reads bodies from the working tree; the uploaded blobs are built under
