@@ -5278,3 +5278,125 @@ reached you only because you came and looked.**
 — they are the checkout repair, not human WIP, so they were left in place and **not** stashed.
 Everything this session authored lives under gitignored `.codex/`, so there was nothing to stash
 and no uncommitted human work was touched.
+
+## Watchdog 2026-09-23T18:18Z (session 45) — SEV-1 unchanged at 47h55m; Stripe slack under 25h; shipped one Level A ops fix (TD-37)
+
+**Fired:** `API degraded (503): database-unreachable`, watchdog 11:12:21 PDT. **Not a false
+alarm** (503 + JSON body = the real-outage class, not the HTTP-000 host-blip class) and **not a
+new incident** — same root cause as the open SEV-1. Read
+`docs/operations/incidents/2026-09-21-supabase-project-unreachable.md`, not this entry.
+Session 44 closed 64 minutes earlier; this session re-verified rather than re-investigated,
+then spent its remaining budget on the one labelled, pre-scoped defect session 44 left behind.
+
+**Independently re-verified this session** (measured, not inherited):
+
+| Check | Result |
+|---|---|
+| `/health` ×3 | **503** `problems:["database-unreachable"]`, **7.21s / 7.42s** (the DB-connect stall), commit `9664bdf` — **== origin `main` HEAD**, so deploys are still promoting and the failure reproduces on the newest build with freshly injected env vars |
+| `/feed/for-you?limit=3` | **500 `db_error`** at `18:13Z` — a real user path, not just liveness |
+| DNS ×3 resolvers | `gsxoaurmsgqascxukony.supabase.co` **and** `db.<ref>.supabase.co` → **ENOTFOUND** on system / 1.1.1.1 / 8.8.8.8, while the control `supabase.co` → **A 76.76.21.21** with `CNAME=ENODATA` in the same run. Records withdrawn; not a resolver fault. |
+| Vercel prod deploy page (`sizzle`) | 8 deployments spanning `11:59Z`→now — the sessions' own hourly doc pushes; newest serves `9664bdf` |
+| `npm run test:invariants` | **44/44 pass** (38 before this session's 6 new tests) |
+
+**Recovery re-checked twice, ~6 minutes apart, both negative:** `/health` 503 at `18:12:41Z` and
+again at `18:19Z` (inside the `verify-deploy` probe), with DNS still `ENOTFOUND` on all three
+resolvers between them. Not a transient.
+
+**Rollback remains a non-candidate**, for the reason sessions 24–44 recorded: the failure is
+outside the repo. The project's DNS records do not exist, so no Vercel deployment — new or
+previous — can reach a database. The "rollback first" rule does not apply to a dependency
+deprovisioned or suspended upstream.
+
+### What shipped: TD-37 — `verify-deploy.mjs` stopped blaming the webhook for a stale HEAD
+
+Session 44 measured a defect and proposed its fix in prose, but **filed it nowhere** — it was not
+in the TD register (max was TD-36) and would have been lost. Per session 38's rule, a
+predecessor's labelled gap is pre-scoped work rather than invented work, so this session took it.
+
+**The defect.** `verify-deploy.mjs` defaults its target SHA to local `HEAD`. `git fetch` is not
+allowlisted unattended (TD-27), so on the git-data-API push path local HEAD stays frozen while a
+newer commit ships. The script then polls the **full 8-minute deadline per project** for a
+deployment that can never appear, and concludes `deployment: NOT FOUND after timeout — the git
+webhook likely missed the push`. **That verdict is false**: session 44 measured a new prod
+deployment reaching READY in 20s on the same project in the same window. A verification tool
+stating the wrong root cause confidently, during an open SEV-1, is worse than one that fails loudly.
+
+**The fix** (Level A — ops-only tooling, invoked from `scripts/ops/*-prompt.md`, **not** in CI,
+not a package script, no production effect; `scripts/verify-deploy.mjs` is not on the
+security-sensitive path list). New pure exported `staleHeadBail()` + `commitTimeIso()`. The
+discriminator is that the deployments page is sorted newest-first and only ever moves newer, so a
+commit older than *everything* on the page has no deployment there and never will. It bails
+**only when the SHA was defaulted from HEAD** — an explicit `--sha` may legitimately name an old
+commit being redeployed, and that path must keep polling. The timeout branch now enumerates the
+SHAs that *are* deployed and offers the webhook hypothesis only *after* the stale-HEAD one.
+
+**Verified on the real surface, both directions.** `node scripts/verify-deploy.mjs --api`
+(session 44's exact invocation) now exits in seconds with
+*"NOT POLLABLE — local HEAD `d4c5395` (2026-09-02T08:19:40-07:00) predates every deployment on the
+page (oldest 2026-09-23T11:59:09.241Z) … Re-run with `--sha`"*, where it previously hung 8 minutes.
+`--api --sha 9664bdf0c6c58fc284ce4a332685e3d1eb831451` still prints `deployment: READY` → probe
+HTTP 503 → `health status: degraded (database-unreachable) — deployed but unhealthy`: the normal
+path is unchanged. The TD-24 stale-token refresh also fired and recovered mid-run, so that fix is
+still live too.
+
+**Regression-guarded by 6 new tests, mutation-verified rather than assumed.** Deleting the
+`shaFromHead` guard from the implementation fails test 15 (44 → 43 pass); restoring it returns
+44/44. That is the same real-guard standard TD-8 and TD-24 were closed against.
+
+**Scope discipline:** this is the *only* thing shipped. TD-28/29/31/34/35/36 all stay parked for
+the reason sessions 13–44 recorded — each is unverifiable against a dead DB, and the ship rule
+requires `verify-deploy.mjs` to observe a 200 `/health`, impossible while this SEV-1 is open.
+TD-37 is the rare exception precisely because it touches **no application surface**: its
+correctness is fully established by unit tests plus two live runs of the script itself, neither of
+which needs a database. `gh workflow enable uptime.yml` deliberately **not** run
+(`.github/workflows/**` is minimum Level C, and it would override a deliberate human mute).
+
+**Clocks re-stamped:** outage **47h55m**. Stripe auto-retry **24h04m** left (expires
+`2026-09-24T18:23Z`). Local time **11:18 AM PDT Wednesday 2026-09-23** — today is the last full
+working day inside the free-replay window.
+
+**Secret check.** Per **TD-33** `npm run secrets:check` is a structural no-op on this push path
+(it reads *staged working-tree* files while the git-data API uploads blobs built under gitignored
+`.codex/`), so it was not treated as a pass. Compensated as in sessions 18–44: all four changed
+files scanned out-of-band for **value-shaped** credentials — `sbp_`/`sk_live`/`whsec_` with a
+real-length tail, JWT triplets, PEM headers. **Result: 0 value-shaped hits.** Two of the four
+files are docs; the two code files (`scripts/verify-deploy.mjs`, `tests/invariants/ops-tooling.test.mjs`)
+contain no credential material — the script reads the Vercel token from the CLI's auth file at
+runtime and that behaviour is unchanged. No secret value was read into this log, printed, or committed.
+
+### For Branden — unchanged from sessions 24–44, and none of it self-heals
+
+1. **The only fix, Level D:** Supabase dashboard → project `gsxoaurmsgqascxukony` →
+   **Resume / Restore**. **47h55m** down. The dashboard also tells you *which* branch you are in
+   (paused / restricted / deleted) — the one fact 45 sessions have not been able to get.
+2. **Before you click Resume:** Vercel → project **`sizzle`** (the API — the naming is reversed)
+   → Settings → Cron Jobs → **Disable Cron Jobs**. Ten seconds. Skipping it silently turns the
+   stranded-video recovery into a no-op (§4 step 0, the TD-34 trap).
+3. **Stripe: 24h04m of free-retry slack** (expires `2026-09-24T18:23Z`). Restore before it and the
+   Stripe half replays itself. Not a cliff — manual replay runs to `2026-10-06` (dashboard) /
+   `2026-10-21` (API) — but it is the difference between free and tedious. Do **not** disable the
+   Stripe webhook endpoint; a disabled destination permanently prevents retries of queued events.
+4. **After restore:** app.revenuecat.com → Integrations → Webhooks → **Retry** each failed
+   `REFUND`/`CANCELLATION` since `2026-09-21T18:23Z`. Auto-retries expired `2026-09-21T20:58Z`;
+   restore will **not** replay them. Idempotent — do it before the next payout run.
+5. **Do not ship an iOS build until the database is back** (§3).
+6. **Items 3 and 4 are the only sources of truth for the money reconciliation** (TD-36) — no local
+   record of the dropped events exists; the runtime-log window is ~20 minutes deep.
+7. **45 sessions have now paged nobody.** The three owner-side fixes that end this class of
+   session: **upgrade off the free tier** (Pro projects cannot be paused — it removes the failure
+   mode itself), **reconnect Remote Control** so `PushNotification` works, and `Bash(git fetch:*)`
+   in `.claude/settings.json` (TD-27). Then `gh workflow enable uptime.yml` **after** restore.
+   TD-21 additionally needs a Supabase **PAT rotation**, not a permission grant.
+
+**`PushNotification` re-tested at the close of this session — result recorded in the closing note
+below.** Order matters here (session 38's rule): the call is made before this sentence's verdict is
+written, never after. **This entry, like the 44 before it, reached you only because you came and
+looked.**
+
+**Working tree left clean and correct.** Per the TD-27 stash trap, the pre-existing dirty files
+(`scripts/ops/sweep-prompt.md`, `tests/invariants/ops-tooling.test.mjs`, `scripts/ops/origin-drift.mjs`)
+were `diff`ed against the origin mirror and are **byte-identical** to origin — they are the
+checkout repair, not human WIP, so they were left in place and **not** stashed. This session's own
+edits to `scripts/verify-deploy.mjs` and `tests/invariants/ops-tooling.test.mjs` were made on a
+base confirmed current against the origin mirror (neither file had drifted) and are included in
+this push, so the working tree matches what shipped.

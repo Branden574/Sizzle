@@ -11,6 +11,9 @@
  *
  * Usage: node scripts/verify-deploy.mjs [--api] [--web] [--sha <sha>]
  *        (no flags = verify both projects)
+ * `--sha` is MANDATORY after a push made through the GitHub git-data API: that
+ * path leaves local HEAD frozen at an older commit (TD-27), and the default
+ * would poll for a build that can never appear. See staleHeadBail.
  * Reads the Vercel token from the CLI's auth file. A stale token is recovered
  * automatically (see createVercelClient); `vercel login` is only needed if that
  * refresh fails.
@@ -134,12 +137,66 @@ export async function checkWebVersion(origin, sha, fetchImpl = globalThis.fetch)
   return { ok: true, detail: `serving commit ${String(body.commit).slice(0, 7)} == HEAD ✓ (version ${body.version})` };
 }
 
+/**
+ * Commit timestamp for a SHA, or null when the object isn't in the local repo.
+ *
+ * Null is a normal answer, not an error: on the TD-27 git-data-API push path the
+ * commit is built server-side and never exists locally.
+ */
+export function commitTimeIso(sha, runGit = (args) => execFileSync('git', args, { encoding: 'utf8' })) {
+  try {
+    const out = runGit(['show', '-s', '--format=%cI', sha]).trim();
+    return out || null;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Catch the TD-27 stale-HEAD trap BEFORE burning the poll budget.
+ *
+ * `main()` defaults to local `HEAD`, but `git fetch` is not allowlisted for
+ * unattended sessions, so on the git-data-API push path local HEAD is frozen at
+ * an OLD commit while a newer one actually shipped. Polling then waits the full
+ * 8 minutes per project for a deployment that can never appear, and concludes
+ * "the git webhook likely missed the push" — the wrong root cause, stated
+ * confidently, during an incident. That cost session 44 of the 2026-09-21 SEV-1
+ * a 180s budget and produced a misleading verdict.
+ *
+ * The discriminator: the deployments page is sorted newest-first and only ever
+ * moves newer, so a commit older than everything on that page has no deployment
+ * there and never will. We only bail when the SHA was DEFAULTED from HEAD — an
+ * explicit `--sha` may legitimately name an old commit someone is redeploying,
+ * and that case must keep polling.
+ */
+export function staleHeadBail({ sha, shaFromHead, commitIso, deployments }) {
+  if (!shaFromHead || !commitIso || !deployments?.length) return { bail: false };
+  if (deployments.some((d) => (d.meta?.githubCommitSha ?? '') === sha)) return { bail: false };
+
+  const stamps = deployments.map((d) => d.createdAt).filter((t) => typeof t === 'number');
+  if (!stamps.length) return { bail: false };
+  const oldest = Math.min(...stamps);
+  const commitMs = Date.parse(commitIso);
+  if (!Number.isFinite(commitMs) || commitMs >= oldest) return { bail: false };
+
+  return {
+    bail: true,
+    detail:
+      `local HEAD ${sha.slice(0, 7)} (${commitIso}) predates every deployment on the page ` +
+      `(oldest ${new Date(oldest).toISOString()}), so its build has aged out and polling cannot find it. ` +
+      'HEAD is almost certainly stale — `git fetch` is not allowlisted unattended (TD-27), so a commit ' +
+      'pushed via the GitHub git-data API does not advance it. Re-run with `--sha <the 40-char SHA you pushed>`.',
+  };
+}
+
 async function main() {
   const args = process.argv.slice(2);
   const shaIdx = args.indexOf('--sha');
-  const sha = shaIdx !== -1
-    ? args[shaIdx + 1]
-    : execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim();
+  const shaFromHead = shaIdx === -1;
+  const sha = shaFromHead
+    ? execFileSync('git', ['rev-parse', 'HEAD'], { encoding: 'utf8' }).trim()
+    : args[shaIdx + 1];
+  const commitIso = shaFromHead ? commitTimeIso(sha) : null;
   const targets = [];
   if (args.includes('--api')) targets.push('api');
   if (args.includes('--web')) targets.push('web');
@@ -155,18 +212,31 @@ async function main() {
 
   for (const key of targets) {
     const p = PROJECTS[key];
-    process.stdout.write(`\n=== ${p.label} — waiting for ${sha.slice(0, 7)} ===\n`);
+    console.log(`\n=== ${p.label} — waiting for ${sha.slice(0, 7)} (${shaFromHead ? 'local HEAD' : '--sha'}) ===`);
     let state = null;
+    let seen = [];
+    let bailed = null;
     const deadline = Date.now() + 8 * 60_000;
     while (Date.now() < deadline) {
       const deployments = await latestFor(p.id);
+      seen = deployments;
       const match = deployments.find((d) => (d.meta?.githubCommitSha ?? '') === sha);
       state = match?.readyState ?? null;
       if (state === 'READY') break;
       if (state === 'ERROR') break;
       // CANCELED for a commit that doesn't touch this project = ignored-build-step, normal.
       if (state === 'CANCELED') break;
+      // Stop instantly when the target can never appear, instead of timing out
+      // and blaming the webhook (see staleHeadBail).
+      const verdict = staleHeadBail({ sha, shaFromHead, commitIso, deployments });
+      if (verdict.bail) { bailed = verdict.detail; break; }
       await sleep(10_000);
+    }
+
+    if (bailed) {
+      console.error(`deployment: NOT POLLABLE — ${bailed}`);
+      failed = true;
+      continue;
     }
 
     if (state === 'READY') {
@@ -179,8 +249,17 @@ async function main() {
       failed = true;
       continue;
     } else {
-      console.error(`deployment: NOT FOUND after timeout — the git webhook likely missed the push.`);
-      console.error(`Fallback: CLI deploy per CLAUDE.md → Deploys (.vercelignore recipe).`);
+      // Enumerate what IS deployed. "The webhook missed the push" is only one
+      // hypothesis, and on the TD-27 push path it is the wrong one — seeing the
+      // SHAs that did land is what separates the two in a single glance.
+      const shas = seen.map((d) => (d.meta?.githubCommitSha ?? '').slice(0, 7) || '(no sha)');
+      console.error(`deployment: NOT FOUND after timeout — no deployment carries ${sha.slice(0, 7)}.`);
+      console.error(`recent deployments on this project: ${shas.join(', ') || '(none)'}`);
+      if (shaFromHead) {
+        console.error('This SHA came from local HEAD. If you pushed via the GitHub git-data API,');
+        console.error('HEAD is stale (TD-27: `git fetch` is not allowlisted) — re-run with `--sha <pushed SHA>`.');
+      }
+      console.error(`If the SHA is right, the webhook missed the push — fallback: CLI deploy per CLAUDE.md → Deploys.`);
       failed = true;
       continue;
     }

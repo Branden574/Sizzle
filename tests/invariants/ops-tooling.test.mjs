@@ -11,7 +11,7 @@ import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
 import { classifyDrift, driftReport, mirrorPathFor } from '../../scripts/ops/origin-drift.mjs';
-import { checkWebVersion, createVercelClient } from '../../scripts/verify-deploy.mjs';
+import { checkWebVersion, commitTimeIso, createVercelClient, staleHeadBail } from '../../scripts/verify-deploy.mjs';
 
 /** Minimal stand-in for a fetch Response, enough for the client's ok/status/json use. */
 const response = (status, body) => ({ ok: status >= 200 && status < 300, status, json: async () => body });
@@ -139,6 +139,65 @@ test('the web build emits version.json — the check above has something to read
   assert.ok(rule, 'version.json needs an explicit header rule');
   const cacheControl = rule.headers.find((h) => h.key === 'Cache-Control')?.value ?? '';
   assert.match(cacheControl, /no-store/, 'a cached version.json would report the PREVIOUS build as live');
+});
+
+/*
+ * The TD-27 stale-HEAD trap in verify-deploy itself (TD-37).
+ *
+ * Session 44 of the 2026-09-21 SEV-1 ran `verify-deploy.mjs` with no `--sha` after a
+ * git-data-API push. Local HEAD was frozen at an older commit, so the script polled for
+ * a deployment that could never exist, burned its whole budget, and then reported "the
+ * git webhook likely missed the push" — a confident, wrong root cause during an incident
+ * (the webhook was fine; a new deployment had reached READY in 20s).
+ */
+const OLD_HEAD = 'e'.repeat(40);
+const deployedAt = (iso, sha) => ({ createdAt: Date.parse(iso), meta: sha ? { githubCommitSha: sha } : {} });
+const PAGE = [deployedAt('2026-09-23T17:00:00Z', 'f'.repeat(40)), deployedAt('2026-09-23T16:00:00Z', 'a'.repeat(40))];
+
+test('verify-deploy bails instantly when local HEAD predates every deployment on the page', () => {
+  const v = staleHeadBail({
+    sha: OLD_HEAD, shaFromHead: true, commitIso: '2026-09-04T12:00:00Z', deployments: PAGE,
+  });
+  assert.equal(v.bail, true, 'polling for an aged-out commit can never succeed — fail fast instead');
+  assert.match(v.detail, /--sha/, 'the message must name the actual remedy');
+  assert.match(v.detail, /TD-27/, 'and the actual cause, not the webhook');
+});
+
+test('verify-deploy keeps polling when the SHA was passed explicitly — a deliberate redeploy is legal', () => {
+  const v = staleHeadBail({
+    sha: OLD_HEAD, shaFromHead: false, commitIso: '2026-09-04T12:00:00Z', deployments: PAGE,
+  });
+  assert.equal(v.bail, false, '`--sha` means the operator knows which commit they want');
+});
+
+test('verify-deploy does not bail on a commit newer than the oldest deployment — the build may still be queued', () => {
+  const v = staleHeadBail({
+    sha: OLD_HEAD, shaFromHead: true, commitIso: '2026-09-23T16:30:00Z', deployments: PAGE,
+  });
+  assert.equal(v.bail, false, 'a just-pushed commit legitimately has no deployment yet');
+});
+
+test('verify-deploy never bails when the SHA is already on the page', () => {
+  const v = staleHeadBail({
+    sha: 'a'.repeat(40), shaFromHead: true, commitIso: '2026-09-01T00:00:00Z', deployments: PAGE,
+  });
+  assert.equal(v.bail, false, 'the deployment exists — the normal path must handle it');
+});
+
+test('verify-deploy cannot bail without evidence — no deployments, no timestamps, or no local commit', () => {
+  const base = { sha: OLD_HEAD, shaFromHead: true, commitIso: '2026-09-04T12:00:00Z' };
+  assert.equal(staleHeadBail({ ...base, deployments: [] }).bail, false, 'an empty page proves nothing');
+  assert.equal(staleHeadBail({ ...base, deployments: [{ meta: {} }] }).bail, false, 'no createdAt ⇒ no comparison');
+  assert.equal(
+    staleHeadBail({ ...base, commitIso: null, deployments: PAGE }).bail, false,
+    'a commit absent from the local repo has no timestamp to judge — never guess',
+  );
+});
+
+test('commitTimeIso returns null instead of throwing when the commit is not in the local repo', () => {
+  assert.equal(commitTimeIso('deadbeef', () => { throw new Error('bad object'); }), null);
+  assert.equal(commitTimeIso('deadbeef', () => '  \n'), null, 'empty output is absence, not a timestamp');
+  assert.equal(commitTimeIso('deadbeef', () => '2026-09-04T12:00:00Z\n'), '2026-09-04T12:00:00Z');
 });
 
 /* ---------- origin-drift (TD-27): the sweep must notice a stale working tree ---------- */
