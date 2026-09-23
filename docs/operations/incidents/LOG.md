@@ -3385,3 +3385,115 @@ Unchanged from sessions 24–27. Re-stated only because none of it self-heals:
    advertise a live outage plus an open financial-webhook window). This entry is **pull, not
    push** — as all 28 have been. Upgrading off the free tier and re-arming one alert channel are
    both your call, and together they are the difference between 2 minutes and 31 hours.
+
+## 2026-09-22 — watchdog summon #28 (session 29): SEV-1 unchanged at 32h06m
+
+**What fired.** `scripts/ops/watchdog.sh` at 19:26:27 PDT: `API degraded (503):
+database-unreachable`. The 60-minute cooldown re-firing against a condition that has not
+changed since `2026-09-21T18:23:07Z`. Per the triage rule this is the *real*-outage class
+(a 503 with a JSON body), not the host-side `HTTP 000` class — correctly summoned, nothing
+new to detect.
+
+**Root cause — unchanged, not re-derived.** The Supabase project `gsxoaurmsgqascxukony` has
+no DNS record. Established session 1; all follow-up sweeps are closed (crons 13/18/19,
+payments 23, auth 14, pause policy 15, Stripe auto-disable 24, telegram 25, doc rot 28).
+This session invented no new investigation.
+
+**Evidence, this hour.** `/health` **503 `database-unreachable`** at `02:26:43Z` and again
+at `02:29:22Z` (two probes, three minutes apart — the anti-flap check; it is not a blip).
+`/feed/for-you?limit=3` → **500**, the user-facing proof rather than a probe artifact. DNS
+across **system + 1.1.1.1 + 8.8.8.8**, identical on all three: `supabase.co` → `A
+76.76.21.21` / `CNAME ENODATA`, while `<ref>.supabase.co` and `db.<ref>.supabase.co` are
+**`ENOTFOUND` for both A and CNAME on every resolver**. Parent zone healthy, every
+per-project record withdrawn — positive proof of withdrawal, and three unrelated resolvers
+agreeing rules out a sandbox artifact.
+
+**Vercel re-confirmed healthy.** `vercel ls sizzle` → the most recent Production deployments
+all `● Ready` (58m · 2h · 3h · 3h · 4h · 5h …); the hourly builds are prior sessions' own
+docs-only log pushes, the known artifact. `/health` serving `d7e7cf7` (= current origin
+`main`) means this failure reproduces on a brand-new build with freshly injected env vars,
+killing "stale artifact" and "env var never picked up" for the 29th time. **No rollback
+performed and none is appropriate** — there is no bad deploy to roll back *from*, and
+promoting an older build cannot restore a withdrawn DNS record. `verify-deploy.mjs` **not
+run**: it asserts a 200 `/health`, so it is unusable by construction during this outage, and
+this change is docs-only.
+
+**What this session actually contributed: a source audit of the money tables.** The action
+sheet's §2 is the part of this incident an owner will act on under time pressure, and its
+numbers have been carried forward across many sessions without re-checking. They were
+re-fetched from the providers' live docs this hour and **all of them hold**:
+`docs.stripe.com/webhooks.md` confirms auto-retry *"for up to three days … in live mode"*,
+Dashboard **Resend** *"for up to 15 days after the event creation"*, and CLI `stripe events
+resend` *"up to 30 days"*; `api/events/list.md` confirms List Events goes back **30 days**;
+`webhooks/process-undelivered-events.md` documents the `delivery_success=false` sweep that
+the 30-day row depends on. RevenueCat's `integrations/webhooks` page confirms **5 retries at
+5/10/20/40/80 minutes** (= the 155-minute budget) and a manual **Retry** with **no stated
+deadline**. `webhooks.md` still carries **no endpoint auto-disable policy**, re-confirming
+session 24 from source — which matters because a disabled destination *"prevents future
+retries of that event"*, so an auto-disable would have silently collapsed the 3-day window;
+there is no such mechanism. The §2 tables are therefore trustworthy as written, and a dated
+note saying so was added to the sheet. **Generalised lesson: on a long incident, the numbers
+an owner will act on are worth re-verifying against their source periodically — not because
+they were wrong, but because "still correct on day 2" is itself a finding, and the cheapest
+time to catch provider-side drift is before the recovery procedure runs.**
+
+**One thing checked and deliberately NOT written up as new.** The Stripe docs' manual-retry
+windows initially looked like an unrecorded correction to a "~40h cliff" framing — but §2
+already documents all three layers (3d / 15d / 30d) and §2's Apple table already records
+RevenueCat's manual Retry as having "no documented deadline", with a hand-reconciliation
+fallback in §4 step 6 if the dashboard no longer lists the events. Verified before claiming;
+the sheet was already right.
+
+**Clocks.** Outage **32h06m**. Apple/RevenueCat auto-retries expired `2026-09-21T20:58Z` —
+**29h31m ago**, still requiring a manual dashboard Retry that restore will not perform.
+Stripe auto-retry slack **~39h53m** (`2026-09-24T18:23Z`), down from ~40h57m at session 28;
+manual replay stays open to `2026-10-06` (dashboard) / `2026-10-21` (API). Nothing newly
+crossed a threshold this hour; no new failure mode appeared.
+
+**Nothing else shipped.** TD-28/29/30/31/33/34/35 stay parked for the same reason as every
+prior session: unverifiable against a database with no DNS record (hard rule 4). `uptime.yml`
+stays muted (`.github/workflows/**` ≥ Level C; re-arming it would override a deliberate human
+mute). TD-23's `watchdog.sh` retry stays unshipped — launchd executes the repo file directly,
+so an unattended edit goes live at the next 5-min tick with no CI or deploy gate, and a bug
+there silently suppresses *real* alerts.
+
+**Secret check.** Per **TD-33** `npm run secrets:check` is structurally blind on the
+git-data-API push path (it reads bodies from the working tree; the uploaded blobs are built
+under gitignored `.codex/`), so a "clean" from it would be a no-op rather than a pass.
+Compensated as in sessions 18–28: both changed files scanned out-of-band for value-shaped
+credentials (prefix **plus** real-length tail, JWT triplets, `-----BEGIN`) — **clean**. Both
+are docs; no secret value was read, logged or committed.
+
+**Working-tree note (TD-27).** `origin-drift.mjs` ran **first**, before any diagnosis: local
+`HEAD d4c5395` vs origin `main d7e7cf7`, 7 files adrift. Both edits were built on the origin
+copies in `.codex/origin-d7e7cf7/` and pushed through the GitHub git-data API. Branden's
+uncommitted work (`sweep-prompt.md`, `tests/invariants/ops-tooling.test.mjs`, untracked
+`scripts/ops/origin-drift.mjs`) untouched per hard rule 11 — and per the stash trap, those
+three were **not** stashed.
+
+### For Branden
+
+Unchanged from sessions 24–28. Re-stated only because none of it self-heals:
+
+1. **The only fix, Level D:** Supabase dashboard → project `gsxoaurmsgqascxukony` →
+   **Resume / Restore**. **32h06m** down. Read the action sheet, not this log.
+2. **Before Resume:** Vercel → project **`sizzle`** (the API — naming is reversed) → Settings →
+   Cron Jobs → **`Disable Cron Jobs`** (TD-34, the 60-second trap that would flip the whole
+   stranded video cohort to `status='error'` and make TD-29's backfill a silent no-op).
+3. **After restore:** app.revenuecat.com → Integrations → Webhooks → **Retry** each failed
+   `REFUND` / `CANCELLATION` since `2026-09-21T18:23Z`. Auto-retries expired
+   `2026-09-21T20:58Z` (**29h31m** ago) and restore will **not** replay them. Idempotent —
+   retry freely, and do it **before the next payout run**.
+4. **Stripe:** **~39h53m** of auto-retry slack left (`2026-09-24T18:23Z`), and re-verified
+   against Stripe's live docs this hour: missing it is **not** a cliff — Resend stays open to
+   `2026-10-06`, the API to `2026-10-21`. Do **not** disable the endpoint (a disabled
+   destination permanently prevents future retries of queued events).
+5. **The one that prevents a session 30:** the free tier's documented failure mode is
+   administrative suspension, and the alerting layer that should have caught it has no working
+   push path. **Sessions 1–29 have paged nobody**, and the channel inventory is exhausted
+   (Remote Control dark ~20 days since *before* the outage; the `Uptime` email you muted is
+   `disabled_manually`; a GitHub Issue is rejected on purpose because the repo is public and
+   would advertise a live outage plus an open financial-webhook window). This entry is **pull,
+   not push** — as all 29 have been. Upgrading off the free tier and re-arming one alert
+   channel are both your call, and together they are the difference between 2 minutes and 32
+   hours.

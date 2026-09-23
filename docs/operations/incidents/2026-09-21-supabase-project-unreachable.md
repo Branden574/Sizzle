@@ -1,7 +1,7 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
 **Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
-(11:23 AM PDT Mon 09-21). **31h03m as of 2026-09-23 01:26Z** — re-verified by session 28.
+(11:23 AM PDT Mon 09-21). **32h06m as of 2026-09-23 02:29Z** — re-verified by session 29.
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
 
 > **🛑 READ §4 STEP 0 BEFORE YOU CLICK RESUME.** Session 18 found that the first
@@ -10,7 +10,7 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > re-poll** — which silently converts TD-29's prescribed backfill into a no-op and makes
 > its counting query return `0`. One dashboard toggle before Resume avoids the whole mess.
 
-> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — ~40h57m of slack left (§2).**
+> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — ~39h53m of slack left (§2).**
 > Restore before it and the **Stripe** half self-heals with zero manual work. Missing it is *not*
 > a cliff — manual replay stays open to `2026-10-06` (dashboard) / `2026-10-21` (API). There is
 > real time; this is urgent, not frantic.
@@ -88,6 +88,18 @@ undelivered events (from the first failure `2026-09-21T18:23:07Z`) expire first:
 | **`2026-09-24T18:23Z`** | Stripe's automatic webhook retries (*"up to three days"*, live mode) | **Restore before this and the money self-heals with zero manual work.** |
 | `2026-10-06T18:23Z` | Dashboard per-event **`Resend`** button (15 days) | Recovery needs **no secret key** — open the event in the Stripe dashboard and click Resend. This is the owner path. |
 | `2026-10-21T18:23Z` | CLI `stripe events resend` + List Events API (30 days) | Last resort; needs `sk_live`. **After it, loss is permanent.** |
+
+> **Source-audited 2026-09-23 (session 29).** Every figure in the table above and in the
+> Apple table below was re-fetched from the providers' own current docs this hour, not carried
+> forward from an earlier session: `docs.stripe.com/webhooks.md` → *"up to three days … in live
+> mode"*, Dashboard **Resend** *"up to 15 days after the event creation"*, CLI `stripe events
+> resend` *"up to 30 days"*; `docs.stripe.com/api/events/list.md` → List Events goes back
+> **30 days**, and `webhooks/process-undelivered-events.md` documents the
+> `delivery_success=false` reconciliation sweep that backs the 30-day row. RevenueCat's
+> `integrations/webhooks` page confirms **5 retries at 5/10/20/40/80 min** and a manual
+> **Retry** with **no stated deadline**. `webhooks.md` still contains **no** endpoint
+> auto-disable policy — re-confirming session 24 from source, so nothing can cut the 3-day
+> window short on its own. **All three Stripe deadlines and both Apple figures hold as written.**
 
 **Verified mechanism** (all in `apps/api/src/routes/monetize.ts`):
 
