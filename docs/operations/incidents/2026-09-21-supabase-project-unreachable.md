@@ -1,7 +1,7 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
 **Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
-(11:23 AM PDT Mon 09-21). **30h03m as of 2026-09-23 00:26Z** — re-verified by session 27.
+(11:23 AM PDT Mon 09-21). **31h03m as of 2026-09-23 01:26Z** — re-verified by session 28.
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
 
 > **🛑 READ §4 STEP 0 BEFORE YOU CLICK RESUME.** Session 18 found that the first
@@ -10,7 +10,7 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > re-poll** — which silently converts TD-29's prescribed backfill into a no-op and makes
 > its counting query return `0`. One dashboard toggle before Resume avoids the whole mess.
 
-> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — ~41h55m of slack left (§2).**
+> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — ~40h57m of slack left (§2).**
 > Restore before it and the **Stripe** half self-heals with zero manual work. Missing it is *not*
 > a cliff — manual replay stays open to `2026-10-06` (dashboard) / `2026-10-21` (API). There is
 > real time; this is urgent, not frantic.
@@ -429,6 +429,18 @@ gap is real and is what this section is about. But the escalating *"still zero o
 refrain in eleven LOG entries is miscalibrated for the current moment: the last stretch is
 overnight, the next realistic action window is Tuesday morning PDT, and the money deadline
 still has **56h** of slack. Urgent, with room.
+
+**Correction, session 28 (2026-09-23 01:26Z) — that calibration has expired; read the paragraph
+above as a session-12 artifact, not as current guidance.** Its two load-bearing claims are now
+falsified by the clock: the "next realistic action window" it pointed at (**Tuesday morning
+PDT**) has come *and gone* — it is now Tuesday **evening** (18:26 PDT 09-22) — and the money
+slack it quoted as **56h** is down to **~40h57m** on the Stripe side. More importantly the
+paragraph predates session 23, which found a **second** money clock that does not behave like
+Stripe's: the Apple/RevenueCat retry budget **expired `2026-09-21T20:58Z`, 28h28m ago**, and
+restore will not replay it (§2, §4 step 6). So the honest current framing is **not** "urgent,
+with room" — one deadline has already been missed and is accruing manual cleanup, while the
+other is inside two days. The *tone* correction session 12 made was right for session 12; do not
+carry it forward as a reason to treat hour 31 as relaxed.
 
 ### The one follow-up that makes the next SEV-1 different
 

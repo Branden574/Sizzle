@@ -3280,3 +3280,108 @@ Unchanged from sessions 24–26. Re-stated only because none of it self-heals:
    open financial-webhook window). This entry is **pull, not push** — as all 27 have been.
    Upgrading off the free tier and re-arming one alert channel are both your call, and together
    they are the difference between 2 minutes and 30 hours.
+
+## 2026-09-22 — watchdog summon #27 (session 28): SEV-1 unchanged, 31h03m
+
+**Re-verify only, by design.** Summon fired `18:26:11 PDT` on the 60-minute cooldown against an
+unchanged condition. The diagnosis has been settled since session 1 and every follow-up sweep is
+closed (crons 13/18/19 · payments 23 · auth 14 · pause policy 15 · Stripe auto-disable 24 ·
+telegram 25). This session re-verified independently, invented no new investigation, and shipped
+one substantive documentation correction (below). **The artifact that matters is the action sheet
+(`2026-09-21-supabase-project-unreachable.md`), not this log.**
+
+**Re-verified independently — identical to sessions 25/26/27.**
+
+| probe | time (UTC) | result |
+|---|---|---|
+| `/health` (watchdog) | 01:26:09 | **503** `database-unreachable`, commit `9819202` |
+| `/health` (this session) | 01:26:27 | **503** `database-unreachable`, commit `9819202` |
+| `/feed/for-you?limit=3` | ~01:28 | **500** `{"error":{"code":"db_error"}}`, 7.25s |
+| `getsizzle.app` | ~01:28 | **200**, 0.096s |
+
+DNS unchanged and unambiguous across all three resolvers (system · 1.1.1.1 · 8.8.8.8), with no
+`ETIMEOUT` noise: `supabase.co` → **A 76.76.21.21** (parent zone healthy) while
+`gsxoaurmsgqascxukony.supabase.co` *and* `db.<ref>.supabase.co` → **ENOTFOUND** (NXDOMAIN) on
+every resolver, for both A and CNAME. Parent zone up + every per-project record withdrawn =
+project-level pause/deprovision, not a platform DNS fault. The ~7s stalls on both API probes are
+the DB-connect timeout, not an overloaded database.
+
+**Vercel is healthy and the fault is outside it — re-confirmed, not assumed.** `vercel ls sizzle`
+shows the fourteen most recent Production deployments **all `● Ready`** (ages 58m · 2h · 2h · 3h ·
+4h · 5h · 6h · 7h · 8h · 9h · 10h ×4). Those hourly builds are prior sessions' own docs-only log
+pushes, not rogue deploys — the known artifact. `/health` serving `9819202` (= current origin
+`main`, session 27's push) means the build/deploy path works and this failure reproduces on a
+brand-new build with freshly injected env vars, which kills "stale artifact" and "env var never
+picked up" for the 28th time. **No rollback was performed and none is appropriate**: there is no
+bad deploy to roll back *from*, and promoting an older build cannot restore a withdrawn DNS
+record. `verify-deploy.mjs` **not run** — it asserts a 200 `/health`, so it is unusable by
+construction during this outage, and this change is docs-only.
+
+**Clocks, restated with this session's arithmetic** (the only thing that actually moves):
+Apple/RevenueCat auto-retries expired `2026-09-21T20:58Z` — **28h28m ago**, still requiring a
+manual dashboard Retry that restore will not perform. Stripe auto-retry slack now **~40h57m**
+(`2026-09-24T18:23Z`), down from ~41h55m at session 27. Nothing newly crossed a threshold this
+hour; no new failure mode appeared.
+
+**The one thing this session changed: §7's calibration paragraph had gone stale in a way that
+understates the situation.** Not a new investigation — a correction to guidance already on the
+page. The session-12 paragraph closes with *"the next realistic action window is Tuesday morning
+PDT, and the money deadline still has 56h of slack. Urgent, with room."* Both halves are now
+falsified: it **is** Tuesday, and the evening of it (18:26 PDT) — that window opened and closed
+with no owner action — and the Stripe figure it quotes has decayed from 56h to ~40h57m. The
+paragraph also **predates session 23**, so it silently excludes the second money clock, which
+already expired 28h28m ago and does **not** self-heal on restore. An owner landing on §7 cold
+would read "urgent, with room" and calibrate low. Fixed by appending a dated correction rather
+than rewriting the original (the historical read is worth preserving, and the page is
+append-only in spirit): the original paragraph stands, marked as a session-12 artifact, with the
+current framing stated underneath. Header duration and Stripe slack refreshed to this hour in
+the same edit. **Generalised lesson worth carrying: a long incident's own documentation acquires
+expiry dates — a tone calibration written at hour 15 becomes misinformation at hour 31, and
+predictions embedded in prose ("the next action window is X") are the first thing to rot.**
+
+**Nothing else shipped.** TD-28/29/30/31/33/34/35 all stay parked for the same reason as every
+prior session: unverifiable against a database with no DNS record (hard rule 4). `uptime.yml`
+stays muted (`.github/workflows/**` ≥ Level C, and re-arming it would override a deliberate human
+mute). TD-23's `watchdog.sh` retry stays unshipped — launchd executes the repo file directly, so
+an unattended edit goes live at the next 5-min tick with no CI or deploy gate, and a bug there
+silently suppresses *real* alerts.
+
+**Secret check.** Per **TD-33** `npm run secrets:check` is structurally blind on the git-data-API
+push path (it reads bodies from the working tree; the uploaded blobs are built under gitignored
+`.codex/`), so a "clean" from it would be a no-op rather than a pass. Compensated as in sessions
+18–27: both changed files scanned out-of-band for value-shaped credentials (prefix **plus**
+real-length tail, JWT triplets, `-----BEGIN`) — **clean**. Both are docs; no secret value was
+read, logged or committed.
+
+**Working-tree note (TD-27).** `origin-drift.mjs` ran **first**, before any diagnosis: local
+`HEAD d4c5395` vs origin `main 9819202`, 7 files adrift — local `LOG.md` is **427** lines against
+origin's **3,282**, so appending to the working copy would have destroyed **~2,855 lines** of this
+incident's history. Both edits were built on the origin copies in `.codex/origin-9819202/` and
+pushed through the GitHub git-data API. Branden's uncommitted work (`sweep-prompt.md`,
+`tests/invariants/ops-tooling.test.mjs`, untracked `scripts/ops/origin-drift.mjs`) untouched per
+hard rule 11 — and per the stash trap, those three are byte-identical to origin and were **not**
+stashed.
+
+### For Branden
+
+Unchanged from sessions 24–27. Re-stated only because none of it self-heals:
+
+1. **The only fix, Level D:** Supabase dashboard → project `gsxoaurmsgqascxukony` →
+   **Resume / Restore**. **31h03m** down. Read the action sheet, not this log.
+2. **Before Resume:** Vercel → project **`sizzle`** (the API — naming is reversed) → Settings →
+   Cron Jobs → **`Disable Cron Jobs`** (TD-34, the 60-second trap that would flip the whole
+   stranded video cohort to `status='error'` and make TD-29's backfill a silent no-op).
+3. **After restore:** app.revenuecat.com → Integrations → Webhooks → **Retry** each failed
+   `REFUND` / `CANCELLATION` since `2026-09-21T18:23Z`. Auto-retries expired `2026-09-21T20:58Z`
+   (**28h28m** ago) and restore will **not** replay them. Idempotent — retry freely, and do it
+   **before the next payout run**.
+4. **Stripe:** **~40h57m** of auto-retry slack left (`2026-09-24T18:23Z`). Do **not** disable the
+   endpoint; check it isn't already showing `disabled` before replaying.
+5. **The one that prevents a session 29:** the free tier's documented failure mode is
+   administrative suspension, and the alerting layer that should have caught it has no working
+   push path. **Sessions 1–28 have paged nobody**, and the channel inventory is exhausted (Remote
+   Control dark ~20 days since *before* the outage; the `Uptime` email you muted is
+   `disabled_manually`; a GitHub Issue is rejected on purpose because the repo is public and would
+   advertise a live outage plus an open financial-webhook window). This entry is **pull, not
+   push** — as all 28 have been. Upgrading off the free tier and re-arming one alert channel are
+   both your call, and together they are the difference between 2 minutes and 31 hours.
