@@ -5400,3 +5400,20 @@ checkout repair, not human WIP, so they were left in place and **not** stashed. 
 edits to `scripts/verify-deploy.mjs` and `tests/invariants/ops-tooling.test.mjs` were made on a
 base confirmed current against the origin mirror (neither file had drifted) and are included in
 this push, so the working tree matches what shipped.
+
+**Closing note — session 45, written after the calls it reports.**
+
+**Deploy verification closed out.** The docs+tooling push promoted:
+`node scripts/verify-deploy.mjs --api --sha 803b18cabccecc59f715f6ad4a4d37f2c3d4a5da` →
+*"deployment: READY … health status: degraded (database-unreachable) — deployed but unhealthy"*,
+and `/health` at `18:21:08Z` reports `commit: 803b18c`, so the alias serves this commit. That is
+the correct terminal state: the push touched only docs, `scripts/verify-deploy.mjs` and its tests,
+none of which can affect the DB. It doubles as a **third negative recovery probe** (503,
+7.37s stall) ~8 minutes after the first at `18:12:41Z`. Note the invocation used `--sha` — the
+very lesson TD-37 encodes, and the first push verified through the fixed script.
+
+**`PushNotification` re-tested at the close of this session — still dead**, verbatim:
+*"Mobile push not sent (Remote Control inactive)."* That is the **45th** consecutive session with
+no working push path. The `telegram` plugin was **not** re-probed (§7: no further unattended
+session should spend time on it, after three reproductions). **This entry, like the 44 before it,
+reached you only because you came and looked.**
