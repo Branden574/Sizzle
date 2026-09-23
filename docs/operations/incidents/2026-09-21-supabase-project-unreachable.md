@@ -1,7 +1,7 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
 **Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
-(11:23 AM PDT Mon 09-21). **35h14m as of 2026-09-23 05:37Z** — re-verified by session 32.
+(11:23 AM PDT Mon 09-21). **36h16m as of 2026-09-23 06:39Z** — re-verified by session 33.
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
 
 > **🛑 READ §4 STEP 0 BEFORE YOU CLICK RESUME.** Session 18 found that the first
@@ -10,7 +10,7 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > re-poll** — which silently converts TD-29's prescribed backfill into a no-op and makes
 > its counting query return `0`. One dashboard toggle before Resume avoids the whole mess.
 
-> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — ~36h46m of slack left (§2).**
+> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — ~35h44m of slack left (§2).**
 > Restore before it and the **Stripe** half self-heals with zero manual work. Missing it is *not*
 > a cliff — manual replay stays open to `2026-10-06` (dashboard) / `2026-10-21` (API). There is
 > real time; this is urgent, not frantic.
@@ -79,7 +79,14 @@ free-tier quota that Fair Use restricts.
 
 ## 2. The money clock — this is the part with a deadline
 
-The DB is safe (restore window is **1 year**). **Stripe is not** — but it has **three**
+The DB is safe — restore window **1 year**, **source-audited session 33**:
+`supabase.com/docs/guides/platform/free-project-pausing.md` (fetched as raw markdown,
+`HTTP 200`) — *"You can restore a paused project for up to 1 year after it was paused"*,
+and *"The project will return to its previous state, including data and configurations."*
+**Read the caveat before relying on it:** that page governs the **Paused** branch *only* —
+it says nothing about billing suspension or deletion, so the 1-year guarantee is proven for
+the branch §1 treats as most likely, **not** for all three. Check which branch the dashboard
+actually shows (§1 step 2). **Stripe is not** — but it has **three**
 recovery layers, not one. Each window is counted from *event creation*, so the oldest
 undelivered events (from the first failure `2026-09-21T18:23:07Z`) expire first:
 
@@ -397,19 +404,22 @@ its events only come back if you press Retry.
     away, not blocked on a permission grant that would also have to be negotiated.
 - **Cron `responseStatusCode: 0` rows are noise** — timing jitter from the ~7s DB-connect
   stall crossing the invocation budget. Their absence is *not* recovery.
-- **NOT settled, and the only one — §2's `restore window is **1 year**` is uncited**
-  (session 32). Session 29 source-audited every other deadline in §2 against the providers'
-  live docs (all three Stripe windows, both RevenueCat figures); this one figure never was.
-  Session 32 tried to close the gap and **could not**: `supabase.com/docs` is client-rendered
-  so `curl` returns only the JS shell, the `.md` suffix that worked on `docs.stripe.com`
-  **404s** there, and `WebFetch` + `mcp__supabase__search_docs` are both **permission-gated
-  unattended**. It is therefore **unverified — neither confirmed nor contradicted.** Nothing
-  observed suggests the data is at risk and **no action or priority changes**; it is flagged
-  only because it is the number that makes this incident "urgent, with room" rather than "the
-  data is on a clock", and that should not be load-bearing *and* uncited. **Resolved for free
-  by the owner:** the dashboard states the restore terms on the project page he must open
-  anyway to click Resume (§1 / §4 step 1). Do not spend another unattended session on it —
-  every remaining path is gated.
+- **SETTLED session 33 — §2's `restore window is **1 year**` is now cited.** Session 32
+  left this as the sheet's one unsourced number and recorded the cause as "the `.md` suffix
+  **404s** on `supabase.com/docs`". **That blocker was wrong.**
+  `curl -s https://supabase.com/docs/guides/platform/free-project-pausing.md` returns
+  **`HTTP 200`, 2,582 bytes of raw markdown** — the same §8 gate-bypass session 15 already
+  used on this exact path. The page states *"You can restore a paused project for up to 1 year
+  after it was paused"* and *"will return to its previous state, including data and
+  configurations"*; its "Restore window" heading still carries the stale legacy anchor
+  `#90-day-window-to-restore`, but the prose says 1 year. §2 now quotes it.
+  **The narrowing matters more than the confirmation:** the page governs the **Paused** branch
+  only and is silent on billing suspension and deletion, so the guarantee does not cover all
+  three branches — and paused-vs-suspended-vs-deleted is still unanswerable unattended. No
+  action or priority changed.
+  *Lesson for the next session: a predecessor's recorded "I tried and it's gated" is worth one
+  cheap re-test before you inherit it as fact — this one cost a single `curl` and retired the
+  last open item in §5.*
 
 ## 6. Open follow-ups (after recovery, not during)
 
