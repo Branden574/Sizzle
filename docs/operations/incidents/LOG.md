@@ -6385,3 +6385,65 @@ cause is external to everything this repo can deploy.
 then report a false "the git webhook likely missed the push" (session 45 / TD-37). Promotion was confirmed by
 the stronger direct method instead — `vercel ls sizzle` READY plus the `/health.commit` flip above. Saying so
 plainly rather than claiming a green verify.
+
+## 2026-09-24 04:46Z — watchdog session 55 — SEV-1 unchanged, hour 58. Pure re-verification; no new finding, by design.
+
+**Deliberately short.** `LOG.md` is 6,387 lines and sessions 52/53/54 each closed with "no new finding". A
+55th essay restating a finished diagnosis is a cost to the person who has to read it, not a contribution. The
+action sheet is `docs/operations/incidents/2026-09-21-supabase-project-unreachable.md` §1 — **read that, not
+this.**
+
+**What fired.** Watchdog at 2026-09-23 21:42:50 local: `API degraded (503): database-unreachable`. Same
+signature as the 54 prior summons.
+
+**Re-verified still down (4 independent checks, this hour).**
+1. `/health` probed twice (`04:43:11Z`, `04:43:19Z`) — both `status: degraded`, `problems:
+   ["database-unreachable"]`, `commit: e1b7280`.
+2. **DNS is still withdrawn.** `gsxoaurmsgqascxukony.supabase.co` → curl exit 6 (could not resolve);
+   control `https://supabase.com/` → **200** on the same resolver in the same minute. This reproduces §5's
+   load-bearing NXDOMAIN finding rather than discovering it — parent zone up, project record gone.
+3. **Vercel is healthy and is not the cause.** `vercel ls sizzle` shows every production deployment
+   `● Ready` (latest 59m old, 17s build). There is no bad deploy to roll back; rollback is the wrong lever
+   here and was not attempted.
+4. `gh api git/refs/heads/main` → `e1b7280`, matching `/health.commit` — production is serving current
+   origin. Nothing is stuck mid-deploy.
+
+**The one re-confirmation with decision value: §1 step 0 is STILL required, 58h in.** `vercel crons ls
+--project sizzle` still lists all five paths with `/internal/finalize-videos` and `/internal/publish-scheduled`
+both at `* * * * *`. The TD-34 trap remains armed, so **Disable Cron Jobs still has to happen before Resume**.
+Sessions 34/43/44 measured this at hours ~46–49; it is unchanged at hour 58.
+
+**Stripe cheap path — 13h36m left, and the remaining slack is now almost entirely one morning.** Expiry
+`2026-09-24T18:23Z` = 11:23 AM PDT Thursday. At the time of writing it is **9:46 PM PDT Wednesday**, so what
+is left is tonight plus Thursday morning. Per session 51's closed calendar chain this is a **cost increase,
+not a cliff** — manual replay stays open to `2026-10-06` (dashboard, no secret key needed) / `2026-10-21`
+(API). The chain was **not** extended further; sessions 28/30 established that calibration prose rots first,
+and only the two counters were re-stamped.
+
+**Supabase MCP re-tested and still unavailable.** Both connectors surfaced this session
+(`mcp__claude_ai_Supabase__*` and a `supabase` server) and **both are permission-gated unattended** — the
+calls returned "requested permissions … but you haven't granted it yet". So the newly-visible second server is
+**not** a new capability; TD-21 is unchanged. Worth recording because the tool list looked like a change and
+is not.
+
+**What I did NOT do.** No new audit surface (sessions 13–50 exhausted that lens; session 54 named the risk of
+a manufactured finding). No patch — TD-28/29/33/34/35/36/38 all either need the dead DB to verify or sit on
+the push path itself. **TD-38 specifically left unshipped**, re-affirming session 50: the "Check your
+connection" copy misattributes the outage to the user's phone, but it restores nothing, cannot be verified on
+a real surface unattended, and shipping cosmetic churn mid-SEV-1 is not an improvement on session 50's call.
+Nothing was weakened to restore green; no security-sensitive path touched; `uptime.yml` left
+`disabled_manually` (re-enabling is Level C and would override a deliberate human mute).
+
+**Escalation attempted before this paragraph was written** (session 38's ordering rule). Result recorded
+verbatim below in the shipped commit.
+
+**Still open — owner-only (Level D), ~2 minutes.** Order: **disable Vercel cron jobs on project `sizzle` →
+Resume the Supabase project → §4 steps 1–4 verify → step 6 manual RevenueCat Retry (restore does not replay
+it) → `gh workflow enable uptime.yml`.**
+
+**Shipped:** this entry plus the two re-stamped counters, pushed through the GitHub git-data API (TD-27: local
+`main` is stale at `d4c5395` behind origin `e1b7280`; `git fetch`/`pull` are not allowlisted unattended, so
+both files were edited on the origin mirror in `.codex/origin-e1b7280/`, never on the stale working copy).
+Content scanned out-of-band for credential-shaped strings before push, because `secrets:check` is structurally
+blind on this path (TD-33). `scripts/verify-deploy.mjs` again **not** used as the gate — it requires a 200
+`/health`, impossible while the DB is down, and would emit a false webhook-missed verdict (TD-37).
