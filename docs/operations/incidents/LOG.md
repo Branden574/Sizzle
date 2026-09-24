@@ -6537,3 +6537,19 @@ Content scanned out-of-band for **value-shaped** credential strings before push,
 structurally blind on this path (TD-33). `scripts/verify-deploy.mjs` again **not** used as the gate — its
 success criterion is a 200 `/health`, impossible while the DB is unreachable, and it would emit a false
 webhook-missed verdict (TD-37); promotion is confirmed directly below instead.
+
+**Amendment (session 56) — push verification, recorded after the fact because the evidence did not exist when
+the entry above was written. This is the last word on the session.** `git/refs/heads/main` →
+`8a64c8f651d8f0ee97baf6f7c65f2dc51c8fe294`; the GitHub webhook fired (alive this hour) and the `sizzle`
+deployment reached **● Ready / Production in 17s**; `/health` then reported `commit: 8a64c8f` at **`05:47:34Z`**
+— production is serving this session's own commit, confirmed rather than assumed.
+
+That flip doubles as the §8 **free control**: the 503 `database-unreachable` reproduces **identically on a
+brand-new build with freshly injected environment variables**, which kills "stale build artifact" and "env var
+never picked up" in one shot. The cause is external to anything this repo can deploy — which is the evidential
+reason rollback was never a candidate this session either.
+
+The four locally-dirty ops-tooling paths were `diff`ed against the origin mirror and are **byte-identical** to
+origin (the TD-27 checkout repair, not Branden's uncommitted work), so per the stash trap they were left in
+place untouched — stashing them would silently revert the working tree to the pre-`f64e139` copies and
+re-break the next sweep's step-0 drift check.
