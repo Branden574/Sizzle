@@ -8684,3 +8684,41 @@ endpoint), plus the DNS record underneath both. Nothing recovered and nothing wa
 5. **TD-21** — rotate the Supabase PAT and expose it as `SUPABASE_ACCESS_TOKEN`; that one token
    restores the agent DB path and would have made paths 1–2 above answer this question directly.
 6. **`ffmpeg-static` CI single point of failure** — filed session 69, needs Branden's call.
+
+**Closing note — session 73 verdicts (written after the calls, not before; session 38's ordering trap).**
+
+- **Push:** `639d265` (git-data API, blob-first, fast-forward onto `105361d`). The parent guard was
+  armed with the full `105361dc43a3…` and origin had not moved, so the ref advanced cleanly.
+- **Secret scan:** the **value-shaped** gate — `(sbp_|sk_live_|sk_test_|whsec_|rk_live_)[A-Za-z0-9]{8,}`,
+  `eyJ[A-Za-z0-9_-]{20,}`, and `-----BEGIN … PRIVATE KEY-----` — returned **0 hits** across both
+  pushed blobs (`LOG.md` 811,271 chars; the action sheet 52,412). `npm run secrets:check` also ran
+  and reported *"clean (0 file(s) scanned, staged)"* — the documented **no-op** on the git-data-API
+  path (**TD-33**), not a pass. The value-shaped scan on the exact blob strings is the real gate, and
+  it is the one that passed.
+- **`verify-deploy.mjs --api --sha 639d265…`:** `deployment: READY` · probe
+  `https://sizzle-chi.vercel.app/health` → **HTTP 503** · `health status: degraded
+  (database-unreachable) — deployed but unhealthy`. That is the tool's documented *"degraded is still
+  deployed"* branch (`verify-deploy.mjs:290-295`), **not** a failed SHA check. Explicit `--sha` was
+  passed per **TD-37**, since a SHA defaulted from the stale local `HEAD` makes the tool bail as
+  not-pollable.
+- **The free control (session 36's item 6), re-run and re-confirmed:** `/health.commit` flipped to
+  **`639d265`** at `2026-09-24T23:23:55Z` and the response *still* reads
+  `database-unreachable`. A brand-new build with freshly injected env vars failing the same way kills
+  **"stale artifact"** and **"env var never picked up"** in one shot, at zero extra cost.
+- **`PushNotification`:** `Mobile push not sent (Remote Control inactive).` Called with the outage
+  summary and the two-click fix. Still dead at hour **76h58m** — ~18 days before the outage began,
+  plus its full duration. **No automated push signal of any kind has reached Branden since `18:27Z`
+  on 09-21.** `LOG.md` and the action sheet remain **pull** channels nobody is prompted to open;
+  §7's channel inventory is exhaustively verified — do not hunt for a new one.
+- **Working tree:** the four dirty ops-tooling paths (`scripts/ops/sweep-prompt.md`,
+  `scripts/ops/origin-drift.mjs`, `scripts/verify-deploy.mjs`,
+  `tests/invariants/ops-tooling.test.mjs`) were byte-compared against the `105361d` mirror and are
+  **byte-identical** to it — TD-27 checkout-repair artifacts that read as dirty only against the
+  stale `d4c5395` HEAD. Nothing stashed, reverted or committed for them (the session-21 stash trap).
+  CLAUDE.md rule 11 preserved.
+
+**Net for session 73: nothing changed.** The database is still unreachable, the fix is still the two
+owner-side clicks in §1, and no agent-side lane is open. The one genuinely new thing attempted was
+re-testing the **Gmail** connector — the only path that would name Paused vs Restricted vs Deleted
+and so pick Branden's branch — and it is still permission-gated. That question remains the single
+highest-value unknown, and **TD-21's token rotation is what unlocks it**.
