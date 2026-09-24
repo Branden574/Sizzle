@@ -7005,3 +7005,12 @@ finalizer refuses to re-poll) **→ ② Resume / un-restrict Supabase project `g
 ③ §4 steps 1–4 verify → ④ §4 step 6, the manual RevenueCat Retry** (restore does **not** replay it)
 **→ ⑤ `gh workflow enable uptime.yml`.** Do ① and ② before **11:23 AM PDT** and the Stripe half
 costs nothing.
+
+**Amendment (session 61, `2026-09-24T11:03Z`) — push verified, both projects promoted.**
+`ebaf0d7` is origin `main` head and `node scripts/verify-deploy.mjs --sha ebaf0d71399b01c5f110f098b662062330ce9f2c`
+reports **READY on both** Vercel projects: `sizzle` (API) READY with `/health` **503**
+`database-unreachable` — deployed-but-unhealthy, which is the correct reading of TD-37 rather than a
+webhook failure — and `sizzle-api` (frontend) READY, `getsizzle.app` **200** serving commit
+`ebaf0d7` (version 1.0.101). The GitHub webhook is **not** dead this hour; nothing about the
+incident changed. Note for the next session: a bare `verify-deploy.mjs` cannot see a git-data-API
+push (local HEAD stays `d4c5395`) and now says so explicitly — pass `--sha <40-char SHA>`.
