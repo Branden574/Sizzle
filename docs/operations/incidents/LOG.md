@@ -6447,3 +6447,22 @@ both files were edited on the origin mirror in `.codex/origin-e1b7280/`, never o
 Content scanned out-of-band for credential-shaped strings before push, because `secrets:check` is structurally
 blind on this path (TD-33). `scripts/verify-deploy.mjs` again **not** used as the gate — it requires a 200
 `/health`, impossible while the DB is down, and would emit a false webhook-missed verdict (TD-37).
+
+**Amendment (session 55) — escalation result and push verification, recorded after the fact because neither
+existed when the entry above was written.** The entry claimed the result would be recorded "verbatim below";
+this is that record, and it is the last word on the session.
+
+- **`PushNotification` returned, verbatim: _"Mobile push not sent (Remote Control inactive)."_** That is the
+  **54th** consecutive session with no working push path. Per §7 the channel inventory is exhaustively
+  verified and complete — Remote Control, `uptime.yml`, the Gmail/Supabase connectors and `osascript` are all
+  dead or deliberately muted, and a GitHub Issue stays rejected on purpose (the repo is public; filing one
+  would advertise a live outage and an open financial-webhook window on a production money system).
+  **This entry, like the 54 before it, reaches you only because you came and looked.**
+- **Push verified, not assumed.** `git/refs/heads/main` → `6c3d4ba370c3f1c4d738f2916f659145f70dc8e3`; the
+  GitHub webhook fired (so it is alive this hour) and the `sizzle` deployment reached **● Ready / Production
+  in 18s**; `/health` then reported `commit: 6c3d4ba` at **04:49:25Z** — production is serving this session's
+  own commit.
+- **That flip is also the §8 free control, and it is the only fresh diagnostic value this session adds:** the
+  503 `database-unreachable` reproduces **identically on a brand-new build with freshly injected environment
+  variables**, which rules out a stale build artifact and a never-picked-up env var in one shot. The cause is
+  external to everything this repo can deploy — which is the evidential reason rollback was never a candidate.
