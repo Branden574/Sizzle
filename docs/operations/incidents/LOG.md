@@ -6264,7 +6264,12 @@ morning before 11:23 AM PDT**.
 
 **No control was weakened, no security-sensitive path touched, no application code changed.**
 
-**Escalation.** `PushNotification` attempted — result recorded in the notification line for this session. Per §7
+**Escalation.** `PushNotification` returned, verbatim: *"Mobile push not sent (Remote Control inactive)."* That is
+the **52nd** consecutive session with no working push path. (Noted against session 38's ordering rule: this
+session attempted the notification *after* the first push rather than before it, so this paragraph is an
+amendment — the second commit of the session — rather than a pre-push claim. The ordering rule is right and the
+next session should keep to it; recording the deviation is cheaper than leaving a claim the log could not
+support.) Per §7
 the channel inventory is exhaustively verified and complete (Remote Control, `uptime.yml`, the Gmail/Supabase
 connectors and `osascript` are dead or deliberately muted; a GitHub Issue is rejected on purpose — the repo is
 public and it would advertise a live outage plus an open financial-webhook window).
