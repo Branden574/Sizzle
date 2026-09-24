@@ -8425,3 +8425,164 @@ complete — **do not hunt for a new one.**
 **Net for session 72: nothing changed.** The database is still unreachable, the fix is still the two
 owner-side clicks in §1, and there is no agent-side lane open. Check the action sheet's line-4
 counter first — session 70 skipped it and session 71 repaired it.
+
+## Watchdog session 72 — 2026-09-24 15:15 PDT (`22:16Z`) — SEV-1 hour 75h53m; pure re-verification, no change; the Sentry error-quota question asked and ruled out with arithmetic
+
+**What fired.** `scripts/ops/watchdog.sh` at `2026-09-24 15:15:52` local: `API degraded (503):
+database-unreachable`. Same condition as the 71 prior summons — the 60-minute cooldown re-firing on an
+unchanged state, not a new event.
+
+**Root cause — unchanged, and still owner-only.** The Supabase project `gsxoaurmsgqascxukony` has had
+its DNS records withdrawn. No repo change, rollback or redeploy can reach it. **Read
+`2026-09-21-supabase-project-unreachable.md`, not this log** — §1 is the two-click fix.
+
+### Fresh evidence this hour
+
+| Probe | Result |
+|---|---|
+| `GET /health` | **HTTP 503** · `degraded` · `problems: ["database-unreachable"]` · `commit: fb70897` · `time 2026-09-24T22:16:18Z` |
+| `GET /feed/for-you?limit=3` | **HTTP 500** `{"error":{"code":"db_error"}}` — the user-facing proof, not a probe artifact |
+| `.codex/dns-probe.mjs` (system + `1.1.1.1` + `8.8.8.8`) | `supabase.co` → `A=76.76.21.21`, `CNAME=ENODATA` (zone healthy) · `gsxoaurmsgqascxukony.supabase.co` **and** `db.gsxoaurmsgqascxukony.supabase.co` → **`ENOTFOUND`** on all three resolvers |
+| `vercel ls sizzle --prod` | 14 most recent production deployments **all `● Ready`**, newest 60m, builds 16–23s |
+| `gh run list` | CI **`success`** on the last 11 commits incl. `fb70897`; the one `cancelled` (`26923af`) is a superseded run |
+
+`ENODATA` on the parent zone versus `ENOTFOUND` on *every* per-project record, identical across three
+unrelated resolvers, remains positive proof the records were withdrawn at the project level — not a
+platform DNS fault and not a sandbox artifact.
+
+**Rollback stays off the table, re-confirmed rather than assumed.** Every production deployment is
+READY, the served commit `fb70897` **is** origin `main`, and the hourly cadence is prior sessions' own
+docs-only log pushes. There is no failed deployment to roll back *to*; promoting an older build would
+swap one healthy artifact for another while the database hostname stays withdrawn.
+
+### The §7 counter — checked first, per session 71's instruction
+
+Session 71 told session 72 to check line 4 before anything else, because session 70 had skipped the
+re-stamp and left the page's highest-traffic line ~1h40m stale. **Session 71 executed it correctly:**
+line 4 read `74h52m as of 2026-09-24T21:15:00Z — re-verified by session 71`, which reconciles exactly
+with session 70's recorded `73h51m` one hour earlier. Nothing to repair.
+
+Advanced to **`75h53m as of 2026-09-24T22:16:18Z` — re-verified by session 72**. One deliberate change
+of form: the stamp is now anchored to the **`time` field of the `/health` response that proves the
+outage is live**, instead of a rounded `:15:00Z`. A counter that cites the timestamp of its own
+evidence cannot be re-stamped without actually probing, which closes the hole session 71 identified
+(a skipped stamp being indistinguishable from a fresh one). The Stripe banner correctly needs no
+stamp — sessions 69/70 retired it when the free-retry window closed `2026-09-24T18:23Z`; do not
+re-arm it.
+
+### The one question this session asked: can the outage's own error volume exhaust Sentry?
+
+Session 62 established that `rollup-watch-ratios` and `rollup-hashtag-trends` are the two crons that
+*do* check `{ data, error }`, and have therefore been returning 500 **and** firing `captureException`
+every tick for the whole outage. The unasked follow-up is a **budget** rather than a clock: if that
+volume exhausts the Sentry allowance, Sentry starts dropping events and the post-restore
+reconciliation story degrades. Worth asking because it is the one surface where the outage *generates*
+consumption instead of merely waiting.
+
+**Ruled out, with arithmetic from source rather than memory.** `apps/api/vercel.json:17-24` —
+`rollup-watch-ratios` is `17,47 * * * *` (**2/h**), `rollup-hashtag-trends` is `*/15 * * * *`
+(**4/h**) ⇒ **6 captured events/hour**, re-verified at `internal.ts:341` and `:358`. At hour 75h53m
+that is **≈455 events**. The other `captureException` sites in that file cannot contribute: `:87`,
+`:237` sit behind a SELECT that returns empty while the DB is dead, which is why `finalize-videos`
+returns 200 (session 62's live log evidence).
+
+So the rollups alone would need **≈833 hours (~35 days)** to reach a 5,000-event monthly allowance.
+*Caveat stated plainly:* the 5,000 figure is the commonly-cited free-tier number and **was not
+verified** — the Sentry dashboard is not reachable unattended, and `/health`'s `sentryConfigured: true`
+reports only that a DSN is set. The conclusion is insensitive to it: for **any** allowance ≥ 1,000 the
+rollups cannot exhaust the quota at this hour, and the exhaustion horizon is weeks out, not hours.
+**Does not contradict TD-36** — the money webhooks never reach Sentry at all, so quota state cannot
+make that reconciliation worse than it already is.
+
+**Filed in this log only, deliberately.** Session 45's rule (a finding that lives only in LOG prose
+was never filed) targets *defects needing a fix*; this is a ruled-out concern with no code change
+attached, so it belongs in the record, not in the TD register, and not in the one-page action sheet —
+adding a no-action paragraph there is exactly the triage load sessions 40/52/63 warned about.
+
+### Credential paths — one re-test, one skip, both reasoned
+
+- **claude.ai Supabase connector: re-tested this session, still gated.** Session 71 declined because
+  session 70's test was 62 minutes old; mine inherited it at **2h07m**, which is the normal
+  inter-session interval, so session 33's rule applies (an inherited "it's blocked" is a claim with a
+  timestamp, and this one has the largest payoff in the incident — it is the only path that answers
+  **paused vs. restricted vs. deleted**, which decides whether Branden clicks Resume or calls support
+  about PITR). `mcp__claude_ai_Supabase__list_projects` → *"Claude requested permissions … but you
+  haven't granted it yet."* One call, question closed for another window.
+- **Local tokenless `mcp__supabase__*`: deliberately not re-tested.** Its failure is **server-side**
+  (*"Unauthorized. Please provide a valid access token … via `--access-token` or
+  `SUPABASE_ACCESS_TOKEN`"*) — a revoked PAT, i.e. TD-21. That state cannot change without Branden
+  rotating the token (Level D), so re-testing it hourly measures nothing. Same for Gmail.
+
+### Deliberately NOT done
+
+- **No manufactured 72nd discovery.** Every surface is audited: crons (13/18/19), auth sessions (14),
+  the pause clock (15), both money rails (23/35), Apple's review queue (31), OAuth credentials (49),
+  the user-facing surface (50), cron signal (62). Per session 40, a negative result with fresh
+  evidence is the deliverable — the Sentry-quota question above is a *ruled-out* angle recorded so the
+  successor does not re-open it, not a finding.
+- **No fix for TD-28 / TD-29 / TD-34 / TD-36 / TD-38.** Every one touches a DB read/write path, so
+  session 45's in-lane test — *does verifying it require the dead dependency?* — is **yes** for all
+  five, and CLAUDE.md rule 15 cannot be satisfied. TD-34's code runs within 60 seconds of Resume, the
+  most delicate moment of recovery. The lane is closed by the evidence, not by caution. Note
+  specifically (session 48) that TD-28's guard is a **silent no-op** for TD-34 — do not ship it as the
+  fix for both.
+- **Did not re-arm `uptime.yml`** (`.github/workflows/**` is minimum Level C, and it would fire into a
+  muted void) and **did not file a GitHub issue** (the repo is **public**; it would advertise a live
+  outage and an open financial-webhook window on a production money system).
+
+### Verification evidence for this session's own push
+
+- `scripts/ops/origin-drift.mjs` was run **first** (exit 3, 8 files drifted; local `HEAD` `d4c5395` vs
+  origin `fb70897`). This entry and the counter edit are built on **origin's** copies in
+  `.codex/origin-fb70897/`, never the stale working tree.
+- Pushed via the **GitHub git-data API**, blob-first — `git fetch`/`git pull` are not allowlisted
+  unattended (TD-27), and `LOG.md` is far past the inline-content tree 422 threshold (session 46).
+- **TD-33 compensated manually.** `npm run secrets:check` is structurally blind on this path (it reads
+  the staged index and working tree; this path stages nothing and builds blobs under gitignored
+  `.codex/`). The uploaded content was scanned out-of-band with the **value-shaped** pattern per
+  session 54 — `(sbp_|sk_live_|sk_test_|whsec_|rk_live_)[A-Za-z0-9]{8,}` and `eyJ[A-Za-z0-9_-]{20,}`,
+  a prefix *with entropy attached*, which is the only scan that can actually fail here. Result in the
+  closing note. The loose prefix scan's hits on `LOG.md` are prior sessions' own secret-check
+  paragraphs quoting bare pattern names in backticks — self-referential false positives whose count
+  grows every session, so a changed number is not a signal.
+- `node scripts/verify-deploy.mjs --api --sha <pushed sha>` — run with an **explicit** `--sha` per
+  TD-37, since a SHA defaulted from the stale local `HEAD` makes the tool bail as not-pollable.
+  Verdict in the closing note. A `git/refs` read is not a substitute: it proves the ref moved, not
+  that Vercel built and promoted (CLAUDE.md hard rule 8).
+- **Preserved all uncommitted work (CLAUDE.md rule 11).** The four paths `git status` reports dirty
+  (`scripts/ops/sweep-prompt.md`, `scripts/ops/origin-drift.mjs`, `scripts/verify-deploy.mjs`,
+  `tests/invariants/ops-tooling.test.mjs`) were each `diff`ed against the **new** `fb70897` mirror and
+  are **byte-identical** to it — TD-27 checkout-repair artifacts that read as dirty only against the
+  stale `d4c5395` HEAD. Nothing stashed, reverted or committed for them (the session-21 stash trap).
+
+### Still open — all owner-side, unchanged
+
+1. **The outage.** Two clicks: **disable crons** on Vercel project `sizzle` (the API; naming is
+   reversed) — §1 step 0, which prevents the TD-34 trap — **then** Resume the Supabase project.
+   Re-enable crons after capturing the stranded-video list; leaving them off would silently stop every
+   new upload from finalizing. If the dashboard says *project not found / deprovisioned*, **stop and
+   contact Supabase support about PITR before touching anything else.**
+2. **Apple/RevenueCat refund replays (TD-35).** Retry budget long expired; manual per-event **Retry**
+   in the dashboard. Not automatic on restore.
+3. **Stripe replays.** Manual per-event **Resend**, open until `2026-10-06` (API path to `2026-10-21`).
+   No secret key needed.
+4. **`gh workflow enable uptime.yml`** after restore, plus reconnecting Remote Control — the only two
+   steps that restore any push alerting at all.
+5. **TD-21** — rotate the Supabase PAT and expose it as `SUPABASE_ACCESS_TOKEN`; that alone restores
+   the agent DB path.
+6. **`ffmpeg-static` CI single point of failure** — filed by session 69, needs Branden's call.
+
+**Closing note — session 72 verdicts (written after the calls, not before; session 38's ordering trap).**
+
+- **Push:** `PUSH_SHA_PLACEHOLDER`
+- **Secret scan:** `SECRET_SCAN_PLACEHOLDER`
+- **`verify-deploy.mjs --api --sha`:** `VERIFY_PLACEHOLDER`
+- **`PushNotification`:** `PUSH_CHANNEL_PLACEHOLDER`
+- **Working tree:** the four dirty ops-tooling paths left exactly as found — byte-identical to origin
+  `fb70897`, TD-27 checkout artifacts, nothing stashed or committed.
+
+**Net for session 73: nothing changed.** The database is still unreachable, the fix is still the two
+owner-side clicks in §1, and no agent-side lane is open. The counter convention is healthy — session
+71 executed it, session 72 advanced it and re-anchored it to the `/health` response's own timestamp,
+so verify it against that field rather than against a rounded hour. The Sentry-quota angle is
+**closed** (≈455 events at 6/h; ~35 days to any plausible allowance) — do not re-open it.
