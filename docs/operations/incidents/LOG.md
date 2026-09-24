@@ -8401,3 +8401,27 @@ complete — **do not hunt for a new one.**
    the agent DB path.
 6. **`ffmpeg-static` CI single point of failure** — filed by session 69, needs Branden's call
    (lockfile/`package.json` change on a live repo).
+
+**Closing note — session 71 verdicts (written after the calls, not before).**
+
+- **Push:** `e665bcc` (git-data API, blob-first, fast-forward onto `1f628c3`).
+- **Secret scan:** the **value-shaped** scan — `(sbp_|sk_live_|sk_test_|whsec_|rk_live_)[A-Za-z0-9]{8,}`
+  and `eyJ[A-Za-z0-9_-]{20,}` — returned **0 hits** on both pushed files. The loose prefix scan
+  returned **42 lines** on `LOG.md` (41 at session 54), all prior sessions' own secret-check
+  paragraphs quoting bare pattern names in backticks; the count grows every session, so a changed
+  number is not a signal. `npm run secrets:check` was also run and reported *"clean (0 file(s)
+  scanned, staged)"* — the documented **no-op** on this path (TD-33), not a pass. The grep above is
+  the real gate.
+- **`node scripts/verify-deploy.mjs --api --sha e665bcc`:** `deployment: READY` · probe
+  `https://sizzle-chi.vercel.app/health` → `HTTP 503` · `health status: degraded
+  (database-unreachable) — deployed but unhealthy`. Exit 0, in seconds. This is the tool's documented
+  *"degraded is still deployed"* branch (`verify-deploy.mjs:290-295`), **not** a failed SHA check —
+  re-confirming session 68's correction that the script works fine during a DB outage.
+- **`PushNotification`:** `Mobile push not sent (Remote Control inactive).` Dead, as it has been
+  since ~18 days before the outage.
+- **Working tree:** the four dirty ops-tooling paths were left exactly as found — byte-identical to
+  origin, TD-27 checkout artifacts, nothing stashed or committed.
+
+**Net for session 72: nothing changed.** The database is still unreachable, the fix is still the two
+owner-side clicks in §1, and there is no agent-side lane open. Check the action sheet's line-4
+counter first — session 70 skipped it and session 71 repaired it.
