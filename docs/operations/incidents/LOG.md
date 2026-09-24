@@ -6209,3 +6209,75 @@ restore will not replay → `gh workflow enable uptime.yml`.**
 **Shipped:** this entry + the two re-stamped counters, pushed via the git-data API (TD-27: local `main` is
 stale at `d4c5395`; `git fetch` is not allowlisted unattended). Content scanned out-of-band for
 credential-shaped strings before push, because `secrets:check` is structurally blind on this path (TD-33).
+
+## 2026-09-24 02:45Z — watchdog session 53 — SEV-1 unchanged, hour 56. Pure re-verification; no new finding, by design.
+
+**What fired.** `scripts/ops/watchdog.sh` at 2026-09-23 19:37:43 PDT: `API degraded (503): database-unreachable`.
+Same summons as the previous 52 sessions.
+
+**Root cause — already established, re-attested not recalled.** Project-level DNS withdrawal for Supabase
+project `gsxoaurmsgqascxukony`. Both `gsxoaurmsgqascxukony.supabase.co` and `db.gsxoaurmsgqascxukony.supabase.co`
+resolve **ENOTFOUND** this session, while the parent zone `supabase.co` answers **A 76.76.21.21** — parent up,
+every per-project record withdrawn = pause/restrict/deprovision at the account level, not a platform DNS fault.
+Independently corroborated by timing: a direct PostgREST probe failed at `dns=0.000000s` (resolution never left
+the stub) whereas `supabase.com` and `getsizzle.app` resolved in 0.0027s / 0.0047s and both returned **200**.
+So the local network path and DNS are healthy; only this project's hostname is gone.
+**Owner action is the ONLY fix (Level D) — no repo change, rollback or redeploy reaches a withdrawn DNS record.**
+
+**Evidence this hour (health probed three times, minutes apart).** `/health` **503**
+`problems:["database-unreachable"]` with `stuckVideoBacklog`/`parkedMediaDeletions`/`cronAges` all `null` at
+**02:37:42Z** (the watchdog's own capture), **02:38:05Z** and **02:39:48Z (7.29s)** — the documented DB-connect
+stall, steady, not a flap. Real user path `/feed/for-you?limit=3` → **500 `{"error":{"code":"db_error"}}`** in
+7.23s, so this is user-facing failure rather than a probe artifact. `getsizzle.app` → **200** (static frontend
+healthy; the app degrades gracefully per TD-38).
+
+**Anti-flap check, explicitly: this is NOT the transient class.** Two probes minutes apart both returned a 503
+**with a JSON body**, which is the real-incident signature, not the host-side `HTTP 000` blip class. Recovery was
+never observed, so the false-alarm path does not apply.
+
+**Not a deploy, and no rogue deploy — the commit moved, and it is accounted for.** `/health` reports
+`commit 2f5bb53`, which differs from the `9ccfcf9` session 52 recorded one hour earlier. That is **not** drift:
+`git/refs/heads/main` on origin is now `2f5bb536e971bdd49a99088235f58e490c9e30d6`, and its subject is
+*"ops: incident session 52 — SEV-1 unchanged at hour 55…"* — i.e. the deployed commit **is** session 52's own
+log append, which redeployed the API as expected. Deployed SHA == origin `main`. Rollback remains a non-candidate
+(§5).
+
+**Counters re-stamped (the only doc change, per §7's standing convention).** Status line → **56h21m as of
+`2026-09-24T02:45:00Z`**; Stripe banner → **~15h38m of slack left**. The session-34 calendar chain was
+deliberately **not** extended for the second consecutive session, for the reason session 52 gave: a fourth
+consecutive calendar paragraph adds owner triage load and zero information. The window is unchanged and already
+stated on the page — the cheap Stripe path now lives entirely in **tonight (Wed evening PDT)** or **Thursday
+morning before 11:23 AM PDT**.
+
+**What I did NOT do, and why — so session 54 does not re-open it.**
+1. **Did not open a new audit surface.** Sessions 13/18/19 (crons), 14 (auth sessions), 15 (pause clock), 23/35
+   (both money rails), 31 (Apple's review queue), 49 (OAuth credential clock) and 50 (the user-facing surface)
+   exhausted the "what else has a clock?" lens. Sessions 40, 51 and 52 shipped deliberate negative results;
+   manufacturing a 53rd finding would be noise the owner must triage.
+2. **Did not ship any patch.** All open follow-ups (TD-28/29/33/34/35/36/38) stay parked: each either needs the
+   dead DB to verify (failing session 45's in-lane test) or is tooling on the very push path this session must
+   use. TD-34's obvious fix was already shown by session 48 not to intersect the failure.
+3. **Did not touch the muted alerting.** `uptime.yml` stays `disabled_manually`; re-enabling touches
+   `.github/workflows/**` (minimum Level C) and would override a human mute.
+4. **Did not stash, commit or revert the four dirty working-tree paths.** Per session 52 they are byte-identical
+   to origin — the TD-27 checkout repair, not Branden's uncommitted work (CLAUDE.md rule 11).
+
+**No control was weakened, no security-sensitive path touched, no application code changed.**
+
+**Escalation.** `PushNotification` attempted — result recorded in the notification line for this session. Per §7
+the channel inventory is exhaustively verified and complete (Remote Control, `uptime.yml`, the Gmail/Supabase
+connectors and `osascript` are dead or deliberately muted; a GitHub Issue is rejected on purpose — the repo is
+public and it would advertise a live outage plus an open financial-webhook window).
+
+**Still open — the fix is owner-only (Level D).** §1 of
+`docs/operations/incidents/2026-09-21-supabase-project-unreachable.md` is the two-minute action sheet.
+**§4 step 0 must be read before clicking Resume** (the 60-second `finalize-videos` trap, TD-34, which silently
+turns TD-29's backfill into a no-op and makes its counting query return a false `0`). Order: **disable Vercel
+cron jobs on project `sizzle` → Resume → §4 steps 1-4 verify → step 6 is the manual Apple/RevenueCat Retry that
+restore will not replay → `gh workflow enable uptime.yml`.**
+
+**Shipped:** this entry + the two re-stamped counters, pushed via the GitHub git-data API (TD-27: local `main` is
+stale at `d4c5395`, 1 commit behind origin `2f5bb53`; `git fetch` is not allowlisted unattended, so both files
+were edited on the origin mirror in `.codex/origin-2f5bb53/`, never on the stale working copy). Content scanned
+out-of-band for credential-shaped strings before push, because `secrets:check` is structurally blind on this path
+(TD-33).
