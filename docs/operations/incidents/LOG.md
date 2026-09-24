@@ -8039,3 +8039,116 @@ CLAUDE.md requires, it costs one call, and it works with the database down.
 here" is the most expensive kind of stale claim, because it is self-sealing. Nobody re-runs a tool
 they have been told is useless, so the claim never gets tested, and the evidence that would refute it
 is exactly the evidence nobody collects. Re-testing cost one command and was available from session 1.*
+
+---
+
+## Watchdog session 69 — 2026-09-24 12:08 PDT (`19:08Z`) — SEV-1 hour 72h45m; the Stripe free-retry window has **closed**; and a second, unrelated signal: **CI red on `main`, root-caused and fixed green**
+
+**The summons carried two problems this session, and for the first time in 69 sessions one of
+them was in-lane, actionable and is now resolved.** They are unrelated to each other; the
+pattern-match that would fold the CI failure into the outage is wrong, and §1 shows why.
+
+### 1. CI red on `main` (`c79c6c8`) — transient upstream, fixed, verified green
+
+**This is not a repo defect and not a symptom of the outage.** Run `36039943861` failed **22
+seconds** in, at the `Install (reproducible)` step, before a single check executed:
+
+```
+npm error path /home/runner/work/Sizzle/Sizzle/node_modules/ffmpeg-static
+npm error command sh -c node install.js
+npm error Error: Failed to download ffmpeg b6.1.1.
+npm error   url: 'https://github.com/eugeneware/ffmpeg-static/releases/download/b6.1.1/linux-x64.README',
+npm error   statusCode: 500
+```
+
+`ffmpeg-static` (`apps/web/package.json:63`, `^5.3.0`) fetches its binary from a **GitHub
+release asset during postinstall**, so `npm ci` depends on GitHub's release CDN being healthy.
+GitHub returned **500** for that asset. Nothing in the repo changed to cause it — the commit is
+a docs-only ops correction, and the immediately preceding run (`36039622943`, same lockfile,
+3 minutes earlier) was **green**.
+
+**Evidence it was transient, gathered before acting:**
+
+1. The failing SHA `c79c6c8` **is** origin `main` — so `main` genuinely was red, not a stale branch.
+2. Re-fetching the exact failing URL from this machine returned **`200`**, i.e. the upstream
+   500 had already cleared.
+3. `gh run list --branch main --limit 40` returns **zero** other failures — this is a first
+   occurrence over the last 40 runs, not a recurring break someone has been re-running past.
+
+**Action taken (Level A — no code change, no diff):** `gh run rerun 36039943861 --failed`.
+**Result: `completed / success / c79c6c8`.** `main` is green.
+
+**Deliberately NOT shipped:** pinning/vendoring `ffmpeg-static` or adding an install retry. The
+fragility is real — *any* GitHub release-CDN blip reds `main`, because a binary download sits on
+the critical path of `npm ci` — but a first occurrence in 40 runs does not justify an unattended
+dependency change on a live production repo, and it touches `package.json`/lockfile rather than
+the incident. **Filed as a follow-up for Branden, not fixed here** (see "Still open").
+
+### 2. SEV-1 Supabase project unreachable — unchanged at hour 72h45m
+
+Re-verified independently, **without credentials**, and it is worth stating how, because the
+credential-gated MCP path is still dark (TD-21) and every session needs a probe that works anyway:
+
+| Probe | Result |
+|---|---|
+| `GET https://sizzle-chi.vercel.app/health` ×4 | **503**, `{"status":"degraded","problems":["database-unreachable"],"commit":"c79c6c8"}` |
+| `GET https://gsxoaurmsgqascxukony.supabase.co/rest/v1/` | **curl exit 6** — could not resolve host |
+| `GET https://gsxoaurmsgqascxukony.supabase.co/auth/v1/health` | **curl exit 6** — could not resolve host |
+| `GET https://supabase.com/` (control) | **200** |
+| `GET https://sizzle-chi.vercel.app/` | **200** |
+| `GET https://getsizzle.app/` | **200** |
+
+**The control probe is the part that matters.** Exit 6 is a DNS failure, and DNS failures are
+exactly the class this repo's own memory warns can be a local-network artifact. `supabase.com`
+resolving `200` from the same machine in the same minute proves the resolver is healthy and that
+it is **this project's hostname specifically** that no longer exists in DNS — the signature of a
+project paused/removed at the platform level, not of a network blip and not of an application bug.
+Web and API edges both serve `200`; only the database layer is gone. Unchanged from sessions 1–68.
+
+**Still Level D. Still owner-only. No repo change, rollback or redeploy can touch it**, and
+nothing in this session's work moves it. The one-page action sheet remains
+`docs/operations/incidents/2026-09-21-supabase-project-unreachable.md` — **read that, not this log.**
+
+### 3. The Stripe free-retry window closed 45 minutes before this session started
+
+The window expired `2026-09-24T18:23Z`; this session began `19:08Z`. **This is the first tick
+past the deadline**, which session 61 explicitly designated as the moment to stop counting down.
+
+**Nothing broke at 11:24 AM PDT.** The consequence is the one already documented: the Stripe half
+no longer self-heals, so recovery moves from automatic replay to **per-event Resend in the Stripe
+dashboard** — open until `2026-10-06`, **no secret key required**, still an owner dashboard task
+rather than an engineering one. The API path runs to `2026-10-21`.
+
+**Action sheet updated accordingly** (same push): the countdown banner is replaced with a
+closed-state banner, and its successors are explicitly told **not** to re-arm a new countdown
+toward `2026-10-06`. Re-arming is precisely what sessions 34/37/46/51/60 each did and what session
+61 had to collapse; leaving a banner reading *"~13m of slack"* in the highest-traffic document in
+this incident would have actively misled every session from here on.
+
+*Generalisation, offered because 69 sessions of re-verification have made the failure mode legible:
+a long-running incident develops a **gravitational field**, and every new signal falls into it. The
+CI failure arrived in the same summons as a 72-hour outage, and the cheap read was "the outage broke
+CI too." It had nothing to do with it — one `gh run view --log-failed` and one `curl` separated them
+in under a minute. The discipline that paid here is the boring one: **read the actual failing step
+before believing the narrative**, especially when a narrative this well-established is available.*
+
+### Verification evidence for this session's own push
+
+- Pushed via the GitHub git-data API (TD-27: `git fetch`/`git pull` are not allowlisted
+  unattended, local `main` is stale at `d4c5395`, so a normal push would be non-fast-forward).
+- `npm run secrets:check` — run before pushing.
+- `node scripts/verify-deploy.mjs --api --sha <sha>` — run per session 68's standing instruction,
+  which established that this gate **does** work with the database down (a 503 is reported, not
+  failed; it fails only on a served-commit mismatch). Verdict recorded below.
+
+### Still open
+
+- **The outage.** Level D, owner-only, two clicks, §1 of the action sheet. Unchanged.
+- **Apple/RevenueCat replays.** Window closed long ago; manual dashboard **Retry** per event.
+- **Stripe replays.** Now manual per-event Resend, until `2026-10-06`.
+- **NEW — `ffmpeg-static` is a single point of failure for CI.** `npm ci` downloads a binary
+  from a GitHub release asset at install time, so any upstream 5xx reds `main` with a failure
+  that looks nothing like a dependency problem. First occurrence in 40 runs, so it is filed
+  rather than fixed. Options when Branden wants it addressed: retry/backoff around install,
+  a vendored or cached binary, or dropping the dependency if the web app does not need it at
+  build time. **Needs his call — it is a lockfile/`package.json` change on a live repo.**

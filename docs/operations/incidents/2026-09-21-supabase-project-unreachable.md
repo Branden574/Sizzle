@@ -1,7 +1,7 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
 **Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
-(11:23 AM PDT Mon 09-21). **71h47m as of 2026-09-24T18:10:00Z** — re-verified by session 68 (watchdog).
+(11:23 AM PDT Mon 09-21). **72h52m as of 2026-09-24T19:15:00Z** — re-verified by session 69 (watchdog).
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
 
 > **🛑 READ §4 STEP 0 BEFORE YOU CLICK RESUME.** Session 18 found that the first
@@ -10,27 +10,23 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > re-poll** — which silently converts TD-29's prescribed backfill into a no-op and makes
 > its counting query return `0`. One dashboard toggle before Resume avoids the whole mess.
 
-> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` = 11:23 AM PDT **this morning** — ~13m of
-> slack as of `2026-09-24T18:10Z` (§2). **This is the LAST watchdog tick inside the window** —
-> the next one (~`19:05Z`) lands after it has closed. Session 69+: stop counting down, and read
-> the "Missing it is a cost increase, not a cliff" sentence below as the operative one.**
-> Restore before it and the **Stripe** half self-heals with
-> zero manual work, because the handlers are idempotent and the queued events replay themselves.
-> **Two clicks:** disable crons on Vercel project `sizzle` (§1 step 0), then Resume the Supabase
-> project. **Missing it is a cost increase, not a cliff** — per-event **Resend** in the Stripe
-> dashboard stays open to `2026-10-06` and needs **no secret key**; the API path runs to
-> `2026-10-21`. Nothing breaks further at 11:24 AM; the Stripe work just stops being automatic.
+> **⏳ CLOSED — the Stripe free-retry window expired `2026-09-24T18:23Z` (11:23 AM PDT today).**
+> Session 69 (`19:08Z`) is the first tick past it, so the countdown this banner carried for
+> sessions 34–68 is now **retired**, exactly as the session-61 text instructed its successors to
+> do. **Nothing broke at 11:24 AM.** The operative sentence is the one that was always here:
+> *missing it is a cost increase, not a cliff.* All that changed is that the **Stripe** half no
+> longer self-heals on its own.
 >
-> *Compressed session 61 (`2026-09-24T10:57Z`), and one correction. Sessions 34/37/46/51/60 each
-> appended a calendar link to this banner tracking "the last full working day"; all five have now
-> resolved to the single fact stated above — you are inside the final free-path window — so the
-> superseded chain was collapsed rather than extended a sixth time (full text preserved in
-> `LOG.md`, which is append-only). **The correction:** session 60 wrote that its own summary was
-> "almost certainly the last written while the free path is open," reasoning that the next tick
-> (~3:53 AM PDT) was still overnight. That is wrong — the watchdog fires on a **60-minute**
-> cooldown, so roughly **seven more** re-verifications land between 3:53 and 11:23 AM PDT, and
-> this is one of them. No deadline moves; do not read session 60 as "no further checks are
-> coming."*
+> **Restoring the database is still the whole fix, and still two clicks** — disable crons on
+> Vercel project `sizzle` (§1 step 0), then Resume the Supabase project.
+>
+> **What recovering Stripe costs now instead:** per-event **Resend** from the Stripe dashboard,
+> which stays open until `2026-10-06` and needs **no secret key** — so it is still an owner-only
+> dashboard task, not an engineering one. The API path runs to `2026-10-21`. The work is simply
+> manual and per-event now rather than automatic, and the pile grows for every day the project
+> stays paused. **Do not derive a new countdown from this paragraph** — the next real date is
+> `2026-10-06`, it is two weeks out, and re-arming a ticking banner is what sessions 34/37/46/51/60
+> each did before it had to be collapsed.
 
 > **🍎 NEW, session 23 — the Apple/RevenueCat half does NOT self-heal, and its window has
 > ALREADY CLOSED.** RevenueCat retries a failing webhook **5 times over 155 minutes total**,
