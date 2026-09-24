@@ -6634,3 +6634,77 @@ The four locally-dirty ops-tooling paths (`scripts/ops/sweep-prompt.md`, `script
 mirror and are **byte-identical** to origin (the TD-27 checkout repair, not Branden's uncommitted work), so per
 the stash trap they were left in place untouched — stashing them would silently revert the working tree to the
 pre-`f64e139` copies and re-break the next sweep's step-0 drift check.
+
+## 2026-09-24 07:49Z — watchdog session 58 — SEV-1 unchanged, hour 61. Re-verification only; the Stripe cheap path is now in its FINAL window (expires today).
+
+**Read the action sheet, not this.** `docs/operations/incidents/2026-09-21-supabase-project-unreachable.md` §1
+is the ~2-minute owner action. Session 57 closed leaving no open evidence gap, so per the standing rule
+(sessions 40/54/55/56/57) this session ships fresh evidence and deliberately adds no 58th "finding."
+
+**What fired.** Watchdog at 2026-09-24 00:47:12 local: `API degraded (503): database-unreachable`. 58th
+summons, identical signature.
+
+**Re-verified still down — five independent checks this hour.**
+
+1. `/health` → 503 `database-unreachable` at `07:47:11Z` (watchdog), `07:47:29Z` and `07:49:36Z`. Probes
+   minutes apart with no recovery between them: **not** the HTTP-000 host-side-blip class, and the anti-flap
+   double-verification rule is satisfied.
+2. **Real users are failing, not just the probe.** `/feed/for-you?limit=3` → **500
+   `{"error":{"code":"db_error","message":"Something went wrong"}}`**.
+3. **DNS still withdrawn, with a live control.** `gsxoaurmsgqascxukony.supabase.co` → `curl(6)` "could not
+   resolve host" on both `/rest/v1/` and `/auth/v1/health`. Calibration in the same minutes: `supabase.com`
+   **200** (`dns 0.003s`) and `getsizzle.app` **200** (`dns 0.004s`) — the resolver is healthy and the parent
+   zone is up, so the missing record is project-level state, not a sandbox or platform DNS fault.
+4. **Vercel is healthy; rollback remains the wrong lever.** `vercel ls sizzle` — every production deployment
+   `● Ready` (latest 59m old, 18s build). There is no bad deploy to promote away from, and nothing this repo
+   can deploy touches the cause. Evaluated and rejected on this evidence, not on habit.
+5. `gh api …/commits/main` → `93e6456f3fe95d124ad53a71203162986200fa53`, matching `/health.commit` `93e6456`
+   — production is serving current origin. Nothing is stuck mid-deploy.
+
+**§4 step 0 is STILL required, 61h in.** `vercel crons ls --project sizzle` still lists all five paths, with
+`/internal/finalize-videos` and `/internal/publish-scheduled` both at `* * * * *`. The TD-34 trap remains
+armed ⇒ **Disable Cron Jobs before you click Resume.**
+
+**The one thing that is materially different this hour: the Stripe cheap path is in its last window.** Not a
+new finding — the resolution of the calendar chain the sheet has tracked since session 34. Session 51 narrowed
+the remaining slack to exactly two windows, "tonight (Wed evening PDT) **or** Thursday morning before 11:23 AM
+PDT." The first of those is now spent; **this is the second and final one.** Expiry `2026-09-24T18:23Z` is
+**10h33m** out and falls **today**. Restore before it and the Stripe half self-heals with zero manual work;
+after it, that half joins Apple's in the manual-replay column — still open to `2026-10-06` (dashboard) /
+`2026-10-21` (API), so this remains **a cost increase, not a cliff**. Counters re-stamped accordingly (elapsed
+**61h26m**, slack **10h33m**); per sessions 51–52 no prose was added to the closed calendar chain.
+
+**TD-21 — one attempt, still blocked, now on a newly-visible path.** A `supabase` MCP server appeared in this
+session's tool inventory, which no prior session had available, so it was worth exactly one probe:
+`mcp__supabase__get_project_url` → **permission-gated** (not granted to the agent). Same wall, new door; TD-21
+is unchanged and the Management API still cannot tell us which dashboard branch (Paused / Restricted /
+deprovisioned) this is. `create_project` **is** exposed on that server and was deliberately **not** called —
+§3 is explicit that a new project must never be created.
+
+**Escalation attempted, result verbatim: `PushNotification` → _"Mobile push not sent (Remote Control
+inactive)."_** That is the **57th** consecutive session with no working push path. Per §7 the channel inventory
+is exhaustively verified and complete; a GitHub Issue stays rejected on purpose (public repo — filing one would
+advertise a live outage and an open financial-webhook window on a production money system). **This entry, like
+the 57 before it, reaches you only because you came and looked.**
+
+**What I did NOT do.** No new audit surface — sessions 13–50 exhausted that lens and session 57 left no stated
+evidence gap. No patch: TD-28/29/33/34/35/36/38 each either need the dead DB to verify or sit on the push path
+itself. Nothing was weakened to restore green; no security-sensitive path touched; `uptime.yml` left
+`disabled_manually` (re-enabling is Level C and would override a deliberate human mute).
+
+**Still open — owner-only (Level D), ~2 minutes.** Order: **disable Vercel cron jobs on project `sizzle` →
+Resume the Supabase project → §4 steps 1–4 verify → step 6 manual RevenueCat Retry (restore does not replay it)
+→ `gh workflow enable uptime.yml`.**
+
+**Shipped:** this entry plus the two re-stamped counters, pushed through the GitHub git-data API (TD-27: local
+`main` is stale at `d4c5395`, behind origin `93e6456`; `git fetch`/`pull` are not allowlisted unattended, so
+both files were edited on the origin mirror in `.codex/origin-93e6456/`, never on the stale working copy).
+Content scanned out-of-band for **value-shaped** credential strings before push, because `secrets:check` is
+structurally blind on this path (TD-33). `scripts/verify-deploy.mjs` again **not** used as the gate — its
+success criterion is a 200 `/health`, impossible while the DB is unreachable, and it would emit a false
+webhook-missed verdict (TD-37); promotion is confirmed by amendment below instead.
+
+The four locally-dirty ops-tooling paths (`scripts/ops/sweep-prompt.md`, `scripts/verify-deploy.mjs`,
+`tests/invariants/ops-tooling.test.mjs`, `scripts/ops/origin-drift.mjs`) were left untouched per the stash
+trap — they are the TD-27 checkout repair, not Branden's uncommitted work, and stashing them would revert the
+working tree to the pre-`f64e139` copies and re-break the next sweep's step-0 drift check.
