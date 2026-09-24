@@ -8229,10 +8229,10 @@ Supabase support about PITR before touching anything else.**
 ### Alerting: `PushNotification` re-tested this session
 
 §7 records this channel as dead since ~18 days before the outage (Remote Control inactive), which is
-the finding that actually explains 73 hours of elapsed time. It was exercised again this session; the
-delivery result is recorded in the session's closing output. **If it is still inactive, then as of
-hour 73h51m there has been no automated push signal of any kind from production to Branden since
-`18:27Z` on 09-21** — only pull-channel files nobody is prompted to open. Re-arming `uptime.yml` and
+the finding that actually explains 73 hours of elapsed time. It was exercised again this session and
+**returned `Mobile push not sent (Remote Control inactive)` — still dead at hour 73h51m**, i.e. ~18
+days before the outage plus the full 74 hours of it. It is now measured, not inferred: **there has
+been no automated push signal of any kind from production to Branden since `18:27Z` on 09-21** — only pull-channel files nobody is prompted to open. Re-arming `uptime.yml` and
 reconnecting Remote Control after restore remains the follow-up that makes the next SEV-1 different.
 
 ### Verification evidence for this session's own push
