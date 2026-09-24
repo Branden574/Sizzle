@@ -6420,11 +6420,20 @@ not a cliff** — manual replay stays open to `2026-10-06` (dashboard, no secret
 (API). The chain was **not** extended further; sessions 28/30 established that calibration prose rots first,
 and only the two counters were re-stamped.
 
-**Supabase MCP re-tested and still unavailable.** Both connectors surfaced this session
-(`mcp__claude_ai_Supabase__*` and a `supabase` server) and **both are permission-gated unattended** — the
-calls returned "requested permissions … but you haven't granted it yet". So the newly-visible second server is
-**not** a new capability; TD-21 is unchanged. Worth recording because the tool list looked like a change and
-is not.
+**Supabase MCP re-tested and still unavailable — and the two failure modes are different, which matters for
+TD-21.** Both connectors surfaced this session (`mcp__claude_ai_Supabase__*` and the `.mcp.json`-backed
+`supabase` server), so the tool list *looked* like new capability. It is not, but the reason splits:
+
+- `mcp__supabase__list_tables` — **allowlisted, so it actually ran**, and returned
+  `Unauthorized. Please provide a valid access token…`. This is the **revoked PAT**, re-confirmed live at
+  hour 58.
+- `mcp__supabase__get_project_url` and `mcp__claude_ai_Supabase__list_projects` — **not** in
+  `.claude/settings.json` `permissions.allow`, so they were permission-denied before reaching Supabase.
+
+**Do not read this as "grant the connector permissions and DB checks come back."** The allowlisted call
+proves the credential itself is dead, so **TD-21 needs a token rotation, not a permission grant** — consistent
+with the 09-21 finding that the Management API returns 401 to a well-formed PAT, which predates this outage
+by a month and is therefore *not* evidence of an outage-related account suspension. TD-21 unchanged.
 
 **What I did NOT do.** No new audit surface (sessions 13–50 exhausted that lens; session 54 named the risk of
 a manufactured finding). No patch — TD-28/29/33/34/35/36/38 all either need the dead DB to verify or sit on
