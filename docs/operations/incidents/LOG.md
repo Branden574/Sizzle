@@ -8574,10 +8574,29 @@ adding a no-action paragraph there is exactly the triage load sessions 40/52/63 
 
 **Closing note — session 72 verdicts (written after the calls, not before; session 38's ordering trap).**
 
-- **Push:** `PUSH_SHA_PLACEHOLDER`
-- **Secret scan:** `SECRET_SCAN_PLACEHOLDER`
-- **`verify-deploy.mjs --api --sha`:** `VERIFY_PLACEHOLDER`
-- **`PushNotification`:** `PUSH_CHANNEL_PLACEHOLDER`
+- **Push:** ``2cbae9b` (git-data API, blob-first, fast-forward onto `fb70897`). The push script's parent
+  guard earned its keep: a first run with a hand-written full SHA aborted with *"origin main moved"*
+  rather than force-updating the ref — the short SHA matched, so origin had **not** moved and the
+  re-run used the real `fb70897fd1ce…`.`
+- **Secret scan:** `the **value-shaped** scan — `(sbp_|sk_live_|sk_test_|whsec_|rk_live_)[A-Za-z0-9]{8,}`
+  and `eyJ[A-Za-z0-9_-]{20,}` — returned **0 hits** on both pushed files. The loose prefix scan
+  returned **44 lines** on `LOG.md` (42 at session 71, 41 at session 54), all prior sessions' own
+  secret-check paragraphs quoting bare pattern names in backticks; the count grows every session
+  *because this paragraph exists*, so a changed number is not a signal. `npm run secrets:check` also
+  ran and reported *"clean (0 file(s) scanned, staged)"* — the documented **no-op** on this path
+  (TD-33), not a pass. The value-shaped grep is the real gate.`
+- **`verify-deploy.mjs --api --sha`:** ``deployment: READY` · probe `https://sizzle-chi.vercel.app/health` → **HTTP 503** ·
+  `health status: degraded (database-unreachable) — deployed but unhealthy`. Exit 0, in seconds —
+  the tool's documented *"degraded is still deployed"* branch (`verify-deploy.mjs:290-295`), **not** a
+  failed SHA check. **Plus the free control (session 36's item 6):** `/health.commit` flipped to
+  `2cbae9b` at `2026-09-24T22:23:51Z`, so a **brand-new build with freshly injected env vars** still
+  reports `database-unreachable` — which kills "stale artifact" and "env var never picked up" in one
+  shot, without costing an extra call.`
+- **`PushNotification`:** ``Mobile push not sent (Remote Control inactive).` Called with the outage summary and
+  the two-click fix. Still dead at hour 75h53m — ~18 days before the outage began, plus its full
+  duration. **No automated push signal of any kind has reached Branden since `18:27Z` on 09-21.**
+  `LOG.md` and the action sheet remain **pull** channels nobody is prompted to open; §7's channel
+  inventory is exhaustively verified — do not hunt for a new one.`
 - **Working tree:** the four dirty ops-tooling paths left exactly as found — byte-identical to origin
   `fb70897`, TD-27 checkout artifacts, nothing stashed or committed.
 
