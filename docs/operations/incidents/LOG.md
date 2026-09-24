@@ -8268,3 +8268,136 @@ reconnecting Remote Control after restore remains the follow-up that makes the n
    the agent DB path (confirmed a third time above).
 6. **`ffmpeg-static` CI single point of failure** — filed by session 69, needs Branden's call
    (lockfile/`package.json` change on a live repo).
+
+---
+
+## Watchdog session 71 — 2026-09-24 14:11 PDT (`21:11Z`) — SEV-1 hour 74h52m; pure re-verification, no new finding; re-stamped the action sheet's live counter, which session 70 left at session 69's value
+
+**What fired:** `scripts/ops/watchdog.sh` at 14:11:40 PDT on `API degraded (503):
+database-unreachable` — the 60-minute cooldown re-firing on an unchanged condition, 62 minutes
+after session 70.
+
+**Triage class:** a 503 **with a JSON body**, which project memory calibrates as the real-failure
+class rather than the HTTP-000 host-side-blip class. Worked as a live incident; it is still live.
+
+**Root cause: unchanged and already settled.** Supabase project `gsxoaurmsgqascxukony` has no DNS
+record. Platform-level pause/deprovision at the account level. **Level D — owner-only. No repo
+change, rollback or redeploy can touch it.** Action sheet:
+`docs/operations/incidents/2026-09-21-supabase-project-unreachable.md` — **read that, not this log.**
+
+### Fresh evidence (independent, credential-free)
+
+| Probe | Result |
+|---|---|
+| `GET /health` @ `21:11:56Z` | **503** `{"status":"degraded","problems":["database-unreachable"],"commit":"1f628c3"}` |
+| `GET /health` @ `21:13:47Z` (2m later) | **503**, identical — persistent, not a blip |
+| `GET /feed/for-you?limit=3` (real user path) | **500** — a user-facing failure, not merely a probe artifact |
+| `GET https://getsizzle.app/` (frontend) | **200** — the edge serves; only the database layer is absent |
+| `.codex/dns-probe.mjs` — 3 resolvers | below |
+
+DNS, **identical on system + `1.1.1.1` + `8.8.8.8`**:
+
+- `supabase.co` → `A=76.76.21.21`, `CNAME=ENODATA` (parent zone healthy)
+- `gsxoaurmsgqascxukony.supabase.co` → `A=ENOTFOUND`, `CNAME=ENOTFOUND`
+- `db.gsxoaurmsgqascxukony.supabase.co` → `A=ENOTFOUND`, `CNAME=ENOTFOUND`
+
+`ENODATA` (name exists, no record of that type) on the parent versus `ENOTFOUND` (NXDOMAIN) on both
+per-project records, agreeing across three unrelated resolvers, is *positive* proof the records were
+withdrawn — and kills the local-resolver/sandbox explanation outright. Parent zone up + every
+per-project record gone = project-level pause/deprovision, not a platform DNS fault.
+
+**Not a bad deploy; rollback stays off the table — re-confirmed, not assumed.** `vercel ls sizzle
+--prod` → the 12 most recent production deployments **all `● Ready`**, newest 55m old, builds
+16–23s. Those are prior sessions' hourly docs-only log pushes (§5), not application changes. There
+is no failed or recent code deployment to roll back *to*, and the served commit `1f628c3` **is**
+origin `main`. Rolling back would swap one healthy build for another while the database hostname
+stays withdrawn.
+
+### The one change this session makes: the sheet's live counter had rotted
+
+§7's standing convention is that each session re-stamps the **two live counters** at the top of the
+action sheet. **Session 70 re-stamped neither.** The status line still read *`72h52m as of
+2026-09-24T19:15:00Z` — re-verified by session 69*, while session 70's own log entry recorded
+`73h51m`. So the sheet's single highest-traffic line — the one an owner skims first under pressure —
+was **~1h40m stale and attributed to the wrong session**, understating a worsening incident.
+
+Re-stamped to **`74h52m as of 2026-09-24T21:15:00Z` — re-verified by session 71**. The second
+counter (the Stripe banner) correctly needed no stamp: sessions 69/70 **retired** it when the
+free-retry window closed at `2026-09-24T18:23Z`, and §7 explicitly instructs successors not to
+re-arm that countdown.
+
+This is sessions 28/30's lesson recurring in exactly its predicted form — *embedded counters and
+tone calibrations rot first*. The addition worth carrying: **the convention only works if each
+session actually executes it. One skipped stamp puts a stale number in the highest-traffic position
+on the page**, and the next reader has no way to tell it was skipped rather than re-verified. If you
+are session 72, check line 4 before you check anything else.
+
+### Deliberately NOT done
+
+- **No new "finding".** Session 70 closed without leaving a stated evidence gap, and every surface is
+  audited: crons (13/18/19), auth sessions (14), the pause clock (15), both money rails (23/35),
+  Apple's review queue (31), OAuth credentials (49), the user-facing surface (50), cron signal (62).
+  Per session 40's rule, a manufactured 71st discovery is noise the next reader must triage.
+  **A negative result with fresh evidence is the deliverable here, chosen deliberately.**
+- **Did not re-test the three credential paths.** Session 70 re-tested all three **62 minutes ago**
+  (claude.ai Supabase connector, Gmail, local tokenless `mcp__supabase__*`) and published the result
+  for successors to inherit "for another window". Session 33's re-test-a-gate rule targets *inherited*
+  claims with old timestamps, not hour-old ones. Paused-vs-restricted-vs-deleted therefore remains
+  unanswerable unattended — §1's branch table still has to be read at the dashboard.
+- **No fix for TD-28 / TD-29 / TD-34 / TD-36 / TD-38.** Each touches a DB read/write path that cannot
+  be integration-tested while the database is unreachable (session 45's in-lane test — *does verifying
+  it require the dead dependency?* — is yes for every one). TD-34's executes within 60 seconds of
+  Resume, the most delicate moment of recovery. CLAUDE.md rule 15 cannot be satisfied, so the lane is
+  closed by the evidence, not by caution.
+- **Did not re-arm `uptime.yml`** (`.github/workflows/**` is minimum Level C, and it would fire into a
+  muted void while the DB is down) and **did not file a GitHub issue** (the repo is **public** — it
+  would advertise a live outage and an open financial-webhook window on a production money system).
+
+### Alerting: `PushNotification` re-tested, still dead
+
+Called this session, before this paragraph was written (session 38's ordering trap). Verbatim result:
+**`Mobile push not sent (Remote Control inactive).`** Still dead at hour 74h52m — ~18 days before the
+outage began, plus its full duration. **There has still been no automated push signal of any kind
+from production to Branden since `18:27Z` on 09-21.** `LOG.md` and the action sheet remain pull
+channels that nobody is prompted to open. §7's channel inventory is exhaustively verified and
+complete — **do not hunt for a new one.**
+
+### Verification evidence for this session's own push
+
+- Pushed via the **GitHub git-data API**, blob-first: `git fetch`/`git pull` are not allowlisted
+  unattended (TD-27), local `main` is stale at `d4c5395` vs origin `1f628c3`, and `LOG.md` is far past
+  the size where an inline-content tree POST 422s (session 46).
+- `scripts/ops/origin-drift.mjs` was run **first** (exit 3, 8 files drifted). This entry and the sheet
+  edit are built on **origin's** copies in `.codex/origin-1f628c3/`, not the stale working tree.
+- **TD-33 compensated manually.** `npm run secrets:check` is structurally blind on this push path (it
+  reads the staged index and working tree; this path stages nothing and builds blobs under gitignored
+  `.codex/`). The exact content uploaded was scanned out-of-band with the **value-shaped** pattern per
+  session 54 — `(sbp_|sk_live_|sk_test_|whsec_|rk_live_)[A-Za-z0-9]{8,}` and `eyJ[A-Za-z0-9_-]{20,}`,
+  i.e. a prefix *with entropy attached* — which is the only scan that can actually fail here. Result
+  recorded in the closing note. The loose prefix scan's hits on `LOG.md` are prior sessions' own
+  secret-check paragraphs quoting bare pattern names in backticks; those are self-referential false
+  positives, and their count grows every session, so it is not a signal.
+- `node scripts/verify-deploy.mjs --api --sha <pushed sha>` — run with an **explicit** `--sha` per
+  TD-37, since a defaulted stale HEAD makes the tool bail as not-pollable. Verdict in the closing note.
+- **Preserved all uncommitted work (CLAUDE.md rule 11).** The four files `git status` reports dirty
+  (`scripts/ops/sweep-prompt.md`, `scripts/ops/origin-drift.mjs`, `scripts/verify-deploy.mjs`,
+  `tests/invariants/ops-tooling.test.mjs`) were each `diff`ed against the origin mirror and are
+  **byte-identical to it** — TD-27 checkout-repair artifacts that read as dirty only against the stale
+  `d4c5395` HEAD. Nothing was stashed, reverted or committed for them (the session-21 stash trap).
+
+### Still open — all owner-side, unchanged
+
+1. **The outage.** Two clicks: disable crons on Vercel project `sizzle` (§1 step 0 — prevents the
+   TD-34 trap), **then** Resume the Supabase project. Re-enable crons after capturing the
+   stranded-video list; leaving them off would silently stop every new upload from finalizing.
+   If the dashboard says *project not found / deprovisioned*, **stop and contact Supabase support
+   about PITR before touching anything else.**
+2. **Apple/RevenueCat refund replays (TD-35).** Retry budget long expired; manual per-event **Retry**
+   in the dashboard. Not automatic on restore.
+3. **Stripe replays.** Manual per-event **Resend**, open until `2026-10-06`. No secret key needed.
+4. **`gh workflow enable uptime.yml`** after restore, plus reconnecting Remote Control — the only two
+   steps that restore any push alerting at all.
+5. **TD-21** — rotate the Supabase PAT and expose it as `SUPABASE_ACCESS_TOKEN`; that alone restores
+   the agent DB path.
+6. **`ffmpeg-static` CI single point of failure** — filed by session 69, needs Branden's call
+   (lockfile/`package.json` change on a live repo).
