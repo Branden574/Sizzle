@@ -1,7 +1,7 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
 **Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
-(11:23 AM PDT Mon 09-21). **64h34m as of 2026-09-24T10:57:18Z** — re-verified by session 61 (watchdog).
+(11:23 AM PDT Mon 09-21). **65h34m as of 2026-09-24T11:57:32Z** — re-verified by session 62 (watchdog).
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
 
 > **🛑 READ §4 STEP 0 BEFORE YOU CLICK RESUME.** Session 18 found that the first
@@ -10,8 +10,8 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > re-poll** — which silently converts TD-29's prescribed backfill into a no-op and makes
 > its counting query return `0`. One dashboard toggle before Resume avoids the whole mess.
 
-> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` = 11:23 AM PDT **this morning** — ~7h25m of
-> slack as of `2026-09-24T10:57Z` (§2).** Restore before it and the **Stripe** half self-heals with
+> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` = 11:23 AM PDT **this morning** — ~6h26m of
+> slack as of `2026-09-24T11:57Z` (§2).** Restore before it and the **Stripe** half self-heals with
 > zero manual work, because the handlers are idempotent and the queued events replay themselves.
 > **Two clicks:** disable crons on Vercel project `sizzle` (§1 step 0), then Resume the Supabase
 > project. **Missing it is a cost increase, not a cliff** — per-event **Resend** in the Stripe

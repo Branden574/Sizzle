@@ -7032,3 +7032,120 @@ false-positive forever, because the log documents the very patterns it is scanne
 that always fires is a guard that gets skipped. This is TD-33 from the other side: `secrets:check`
 is structurally blind here (it scanned **0** staged files this session), so the out-of-band scan is
 the only real gate and it has to be precise enough to trust.
+
+## Watchdog session 62 — 2026-09-24 04:54 PDT (`11:55Z`) — SEV-1 hour 65; re-verification plus one real finding: TD-28 is over-scoped and the cron layer is NOT blind
+
+**Fired:** `scripts/ops/watchdog.sh` at 04:54:59 PDT — `API degraded (503): database-unreachable`.
+**Same incident as 2026-09-21.** Root cause unchanged and external: the Supabase project
+`gsxoaurmsgqascxukony` is absent from DNS, so **no repo change, rollback or redeploy can reach it**
+(rollback was never a candidate — there is no bad deployment on either side). The fix is **Level D**,
+owner-only, ~2 minutes of clicking. Read
+`docs/operations/incidents/2026-09-21-supabase-project-unreachable.md`, not this log.
+
+**Elapsed 65h34m** as of `2026-09-24T11:57:32Z`. **Stripe free-retry slack 6h26m**, expiring
+`2026-09-24T18:23:07Z` = **11:23 AM PDT this morning**.
+
+**Seven independent checks, all consistent with the standing diagnosis.**
+① `/health` → **503**, `problems:["database-unreachable"]`, all three DB gauges `null`
+(`stuckVideoBacklog` / `parkedMediaDeletions` / `cronAges`), `commit cb8ae7b`.
+② Served commit `cb8ae7b` **==** origin `main` head `cb8ae7b` — no rogue deploy, no drift.
+③ A real user path: `GET /feed/for-you?limit=3` → **500** `{"error":{"code":"db_error"}}`, and the
+runtime log for that exact request reads `[db_error] TypeError: fetch failed` after 7s.
+④ DNS across **three** resolvers (system, `1.1.1.1`, `8.8.8.8`): `<ref>.supabase.co` **and**
+`db.<ref>.supabase.co` → **ENOTFOUND** on all three, while `api.supabase.com` resolves
+(`104.18.42.230`, `172.64.145.26`) and the apex `supabase.co` → `A 76.76.21.21`. Supabase's own
+infrastructure is reachable; only our per-project records are gone.
+⑤ Vercel project `sizzle` — twelve most-recent production deploys all **Ready**, newest 54m old;
+every one is a prior session's docs-only log push.
+⑥ Web frontend `getsizzle.app` → **200** (static shell fine; only the API's DB calls fail).
+⑦ `git log` on origin — every commit since the outage is a watchdog session's own log push.
+**Zero owner action of any kind, now 65 hours in.**
+
+**§1 step 0 still not done, measured rather than assumed.** `vercel crons ls --project sizzle` still
+lists all five paths, and the runtime log shows `finalize-videos` (21s) and `publish-scheduled` (7s)
+firing every single minute, each returning **200** against a database with no DNS record. The
+**TD-34 trap remains armed** ~71h after session 18 found it, and disabling the crons is still the
+cheapest outstanding action on the page.
+
+**Both gated diagnostic paths re-tested, both still gated** (so §1's branch table stays unanswerable
+from inside a session): `mcp__claude_ai_Supabase__list_projects` → *"requested permissions … not
+granted"*, and the claude.ai **Gmail** connector `search_threads` → same. The Supabase notification
+email that would settle paused-vs-restricted-vs-deleted is still unreadable unattended.
+
+### The finding: TD-28 is over-scoped by 40%, and its "no signal at all" conclusion is wrong
+
+Sessions 3–6 observed `finalize-videos` and `publish-scheduled` logging 200 against a dead DB and
+TD-28 generalised that to *"**Every** `/internal/*` cron returns HTTP 200."* It then cited `:344`
+and `:361` — **the two rollups** — as instances of the `data`-only destructure. This session pulled
+the runtime log far enough to notice that the rollups were doing the opposite of what the register
+claimed, and verified it at source (`apps/api/src/routes/internal.ts`, not in the TD-27 drift set,
+so the local copy is current):
+
+| Handler | Pattern | Live result this session |
+|---|---|---|
+| `finalize-videos` `:67`,`:103`,`:110` | `const { data: pending }` — no `error` check | **200** ✗ |
+| `publish-scheduled` `:251` | `const { data: due }` | **200** ✗ |
+| `save-nudges` `:280`,`:296-298` | `const { data: saves }` | **200** ✗ |
+| `rollup-watch-ratios` `:337-344` | `const { data, error }` → `captureException` → **500** | **500** ✓ |
+| `rollup-hashtag-trends` `:354-361` | same | **500** ✓ |
+
+Production evidence, same log window as checks ①–③:
+`[internal] rollup-watch-ratios failed { err: 'TypeError: fetch failed' }` → **500** in 5ms, and
+`[internal] rollup-hashtag-trends failed { err: 'TypeError: fetch failed' }` → **500** in 12ms.
+Note the error text: `supabase-js` still resolved these to `{ data: null, error }` rather than
+throwing, exactly as TD-28's premise says — the *only* difference is that these two handlers
+**check `error`** and the other three do not. TD-28's mechanism was right; its scope was not.
+
+**Two consequences, both of which change post-restore work rather than the outage itself.**
+1. **The fix is three handlers, not five.** The two rollups are already the in-repo reference
+   implementation of TD-28's own prescribed remedy, so shipping the entry as filed would churn two
+   correct call sites. TD-28's remedy column now says to copy them rather than edit them.
+2. **"The cron dimension contributed no signal at all" is too strong** — and this is the part worth
+   Branden's attention. Those two rollups have been returning 500 **and** firing `captureException`
+   every 15 and 30 minutes for the entire 65-hour outage. So Vercel Cron's failure view for those
+   two paths, and Sentry, have been carrying a true failure signal the whole time; what is missing
+   is an *alert* wired to it, not the signal. That is a materially cheaper gap to close than
+   "instrument the blind cron layer," and it is a real candidate answer to the postmortem
+   template's *"what would have caught this earlier?"* — something 61 prior sessions recorded as
+   unanswered. It does **not** contradict TD-36, which is specifically about the two money webhook
+   handlers never reaching Sentry; that remains true and unchanged.
+
+**Lane note, stated plainly because the file is on the security-sensitive list.**
+`docs/engineering/technical-debt.md` falls under `docs/engineering/**` ⇒ nominally minimum Level C.
+The edit shipped here is a **pure factual correction to a register entry** with zero production
+effect, verified both at source and against live runtime logs, and it is the document Branden will
+read when planning post-restore work — leaving a known-false claim in it causes wrong work. Judged
+small, fully verified and safer than waiting, per the incident-response lane rule. Nothing about the
+remedy's risk level changed: TD-28 remains open, P2, Level B, and still **deliberately unshipped**
+during the SEV-1 for the unchanged reason that it cannot be verified against a database with no DNS
+record (CLAUDE.md hard rule 4). If Branden disagrees with the register edit, it is one revert.
+
+**Nothing else shipped, deliberately.** Every other parked item stays parked for the reasons already
+recorded: TD-29/34/36 are unverifiable against a dead DB and TD-36 is additionally Level C
+(`routes/monetize.ts`); TD-38 (the feed error card blaming the user's own connection) restores
+nothing and cannot be verified unattended without a browser; `gh workflow enable uptime.yml` would
+override a deliberate human mute and `.github/workflows/**` is minimum Level C. **No security
+control was touched, weakened or worked around**, and `create_project` was again deliberately
+**not** called (§3: never create a new project).
+
+**Shipped:** this entry, the re-stamped counters in
+`docs/operations/incidents/2026-09-21-supabase-project-unreachable.md` (elapsed 65h34m, Stripe slack
+6h26m), and the five-part TD-28 correction in `docs/engineering/technical-debt.md` — pushed through
+the GitHub git-data API per **TD-27**, since local `main` is stale at `d4c5395`, behind origin
+`cb8ae7b`, and `git fetch`/`pull` are not allowlisted unattended. All three files were edited on the
+origin mirror in `.codex/origin-cb8ae7b/` and **never** on the stale working copy. `npm run
+secrets:check` was run, plus an out-of-band **value-shaped** scan of the pushed blobs (per session
+61's ops note — bare prefixes false-positive forever on this log, which quotes the pattern list).
+`scripts/verify-deploy.mjs` is used for **deployment-state evidence only, not as the ship gate**:
+its success criterion is a 200 `/health`, unreachable while the DB is down, so it would emit a false
+"webhook missed" verdict (TD-37); pass `--sha <40-char SHA>` since a git-data-API push leaves local
+HEAD at `d4c5395`. The four locally-dirty ops-tooling paths were left untouched per the stash trap.
+
+**Still open — owner-only (Level D), unchanged order.** **① disable Vercel cron jobs on project
+`sizzle`** (Settings → Cron Jobs → *Disable Cron Jobs* — disarms the TD-34 trap where the first
+`finalize-videos` tick within 60s of restore mass-flips stranded videos to a terminal `error` the
+finalizer refuses to re-poll) **→ ② Resume / un-restrict Supabase project `gsxoaurmsgqascxukony`**
+(read the dashboard's reason first, follow §1's branch table; **never create a new project**) **→
+③ §4 steps 1–4 verify → ④ §4 step 6, the manual RevenueCat Retry** (restore does **not** replay it)
+**→ ⑤ `gh workflow enable uptime.yml`.** Do ① and ② before **11:23 AM PDT** and the Stripe half
+costs nothing.
