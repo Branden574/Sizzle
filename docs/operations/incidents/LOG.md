@@ -7165,3 +7165,104 @@ production to Branden, and reconnecting Remote Control belongs on the post-resto
 `gh workflow enable uptime.yml`. **This is why the 11:23 AM PDT Stripe deadline is very likely to
 pass unseen** unless Branden happens to open a terminal or this repo — session 62 has no channel
 that reaches him, and it is the last thing any unattended session can do about it.
+
+---
+
+## 2026-09-24 — watchdog session 63 — SEV-1 Supabase project unreachable (day 3, re-verification)
+
+**Fired:** watchdog `2026-09-24T05:55:14` PDT — `API degraded (503): database-unreachable`, the
+same condition on the same 60-minute cooldown. **Root cause unchanged and unchangeable from inside
+a session:** the per-project DNS records for Supabase project `gsxoaurmsgqascxukony` are still
+withdrawn. Level D (owner, Supabase dashboard). No repo change, rollback or redeploy can touch it,
+and none was attempted.
+
+**No new finding, deliberately — this is a pure re-verification.** Per the standing rule from
+session 40: once every surface is audited, a manufactured 63rd finding is noise the next reader
+must triage. Fresh evidence and the two re-stamped counters are the deliverable.
+
+### Seven independent checks, all consistent with the standing diagnosis
+
+① `/health` → **503**, `problems:["database-unreachable"]`, all three DB gauges `null`
+(`stuckVideoBacklog` / `parkedMediaDeletions` / `cronAges`), `commit 7a5b8b1`. Probe took **7.24s**
+— a connect stall, not a fast failure at the edge.
+② Served commit `7a5b8b1` **==** origin `main` head `7a5b8b1` — no rogue deploy, no drift.
+③ A real user path: `GET /feed/for-you?limit=3` → **500** `{"error":{"code":"db_error"}}` in
+**7.23s**. Live users are failing, not just the probe.
+④ DNS across **three** resolvers (system, `1.1.1.1`, `8.8.8.8`): `gsxoaurmsgqascxukony.supabase.co`
+**and** `db.gsxoaurmsgqascxukony.supabase.co` → **ENOTFOUND** (A *and* CNAME) on all three, while
+the apex `supabase.co` → **`A 76.76.21.21`** with **`CNAME ENODATA`**. The ENODATA-vs-ENOTFOUND
+split across three unrelated resolvers is positive proof the per-project records were withdrawn,
+not a sandbox or host-side artifact; Supabase's own infrastructure is reachable.
+⑤ `vercel ls sizzle --yes` — twelve most-recent production deploys all **Ready**, newest **53m**
+old, build times 16–22s; every one is a prior session's docs-only log push. "Bad deploy" stays dead.
+⑥ Web frontend `getsizzle.app` → **200 in 0.089s** (static shell fine; only the API's DB calls fail).
+⑦ `vercel crons ls --project sizzle` — **all five paths still listed**. §1 step 0 is still not done.
+
+**Zero owner action of any kind, now 66h34m in.** The **TD-34 trap remains armed**, and disabling
+the crons is still the cheapest outstanding action on the page.
+
+### Two angles killed before spending calls (recorded so a successor doesn't re-open them)
+
+1. **"Does the banner's single `2026-09-24T18:23Z` date understate the remaining Stripe budget?"**
+   Events created *later* in the outage carry their own 3-day budget, so the one date looked like it
+   might be an oversimplification worth correcting. **It is not a find — §2 already says it**, in the
+   sentence introducing the table: *"Each window is counted from event creation, so the oldest
+   undelivered events (from the first failure `2026-09-21T18:23:07Z`) expire first."* Grepped the
+   sheet before writing it up, per session 29's rule; the prior sessions had it covered.
+2. **A predecessor evidence gap to close** (session 38's rule — the one category of work a
+   re-verify session can always add). **None exists:** session 62 closed with its push verified on
+   both projects and its `PushNotification` result recorded verbatim, leaving nothing flagged
+   unverified.
+
+### Working tree
+
+The four locally-dirty ops-tooling paths (`scripts/verify-deploy.mjs`,
+`tests/invariants/ops-tooling.test.mjs`, `scripts/ops/sweep-prompt.md`, `scripts/ops/origin-drift.mjs`)
+were re-`diff`ed against the origin mirror this session and are **byte-identical** to it —
+re-confirming session 52: they are the TD-27 stale-checkout artifact, **not** Branden's uncommitted
+work. Left untouched per the stash trap (CLAUDE.md rule 11 is satisfied; there is nothing of his to
+preserve, and touching them would risk real loss for zero gain).
+
+### Nothing else shipped, deliberately
+
+Every parked item stays parked for the reasons already recorded: TD-29/34/36 are unverifiable
+against a database with no DNS record (CLAUDE.md hard rule 4) and TD-36 is additionally Level C
+(`routes/monetize.ts`); TD-28's remedy fails the same test and, per session 48, the patch that
+suggests itself does **not** intersect TD-34; TD-38 restores nothing and cannot be verified
+unattended without a browser; `gh workflow enable uptime.yml` would override a deliberate human mute
+and `.github/workflows/**` is minimum Level C. **No security control was touched, weakened or worked
+around**, and `create_project` was again deliberately **not** called (§3: never create a new project).
+
+**Shipped:** this entry and the two re-stamped live counters in
+`docs/operations/incidents/2026-09-21-supabase-project-unreachable.md` (elapsed 66h34m, Stripe slack
+5h25m) — and nothing else, per §7's convention that a session edits only those two counters and adds
+no calendar prose. Pushed through the GitHub git-data API per **TD-27**, since local `main` is stale
+at `d4c5395`, behind origin `7a5b8b1`, and `git fetch`/`pull` are not allowlisted unattended. Both
+files were edited on the origin mirror in `.codex/origin-7a5b8b1/` and **never** on the stale working
+copy. `npm run secrets:check` was run, plus the out-of-band **value-shaped** scan of the pushed blobs
+(bare prefixes false-positive forever on this log, which quotes the pattern list — gate only on the
+value-shaped scan). `scripts/verify-deploy.mjs` is used for **deployment-state evidence only, not as
+the ship gate**: its success criterion is a 200 `/health`, unreachable while the DB is down, so it
+would emit a false "webhook missed" verdict (TD-37); pass `--sha <40-char SHA>`.
+
+**Push channel:** `PushNotification` returned *"Mobile push not sent (Remote Control inactive)"* —
+identical to session 12 and every session since, so the phone channel has now been dead **21 days**,
+still predating the outage. §7 stands unamended: since `18:27Z` on 09-21 there is **no working
+automated push path** from production to Branden. This log and the action sheet are **pull, not
+push**.
+
+**The Stripe free-retry window closes during this watch.** `2026-09-24T18:23Z` = **11:23 AM PDT**,
+**5h25m** out as of `2026-09-24T12:57Z`. At the 60-minute cooldown roughly **five more**
+re-verifications land before it. To be plain about what that deadline is and is not: missing it is a
+**cost increase, not a cliff** — the dashboard per-event **Resend** path stays open to `2026-10-06`
+and needs no secret key. Nothing breaks further at 11:24 AM; the Stripe work just stops being
+automatic.
+
+**Still open — owner-only (Level D), unchanged order.** **① disable Vercel cron jobs on project
+`sizzle`** (Settings → Cron Jobs → *Disable Cron Jobs* — disarms the TD-34 trap where the first
+`finalize-videos` tick within 60s of restore mass-flips stranded videos to a terminal `error` the
+finalizer refuses to re-poll) **→ ② Resume / un-restrict Supabase project `gsxoaurmsgqascxukony`**
+(read the dashboard's reason first, follow §1's branch table; **never create a new project**) **→
+③ §4 steps 1–4 verify → ④ §4 step 6, the manual RevenueCat Retry** (restore does **not** replay it)
+**→ ⑤ `gh workflow enable uptime.yml`, and reconnect Remote Control.** Do ① and ② before
+**11:23 AM PDT** and the Stripe half costs nothing.
