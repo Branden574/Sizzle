@@ -7843,3 +7843,13 @@ first, follow §1's branch table; **never create a new project**) → **③ §4 
 step 6, the manual RevenueCat Retry** (restore does **not** replay it) → **⑤ re-enable the crons,
 `gh workflow enable uptime.yml`, and reconnect Remote Control.** Do ① and ② before **11:23 AM PDT**
 and the Stripe half costs nothing.
+
+**Push channel result (session 67), closing the forward-reference above.** `PushNotification` →
+*"Mobile push not sent (Remote Control inactive)."* Verbatim identical to session 12 and every
+session since — **21+ days dead, still predating the outage**. §7 stands unamended: since `18:27Z`
+on 09-21 there has been no working automated push path from production to Branden, so this log and
+the action sheet remain **pull, not push**. Reconnecting Remote Control stays step ⑤.
+
+**Push verified, not assumed.** `git/refs/heads/main` → `26923af500d4c65067c3756c205e54fe3e7b9b49`
+(parent pinned to `2b67014`, so a concurrent push would have failed the ref update rather than
+clobbered it). `scripts/verify-deploy.mjs` was deliberately not used as the gate — **TD-37**.
