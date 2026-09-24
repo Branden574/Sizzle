@@ -7383,3 +7383,110 @@ only — see the session-64 block, no CLI or agent path exists) → **② Resume
 new project**) → **③ §4 steps 1–4 verify** → **④ §4 step 6, the manual RevenueCat Retry** (restore does
 **not** replay it) → **⑤ re-enable the crons, `gh workflow enable uptime.yml`, and reconnect Remote
 Control.** Do ① and ② before **11:23 AM PDT** and the Stripe half costs nothing.
+
+## Watchdog session 65 — 2026-09-24 08:08 PDT (`15:08Z`) — SEV-1 hour 68; pure re-verification, no new finding, by design
+
+**What fired.** `scripts/ops/watchdog.sh` at 07:59:39 PDT: `API degraded (503): database-unreachable`.
+Same signature as sessions 1–64. Per the calibration in project memory a 503 **with a JSON body** is
+*not* the host-side-blip class (5 of 6 `HTTP 000` summons), so it was worked as live rather than as
+flap — correctly: it is the same open SEV-1, now in its **69th hour**.
+
+**Root cause — unchanged, external, Level D.** Supabase project `gsxoaurmsgqascxukony` has had its
+per-project DNS records withdrawn. No repo change, rollback, redeploy or OTA can reach them. The fix
+is the owner reading the dashboard's reason, then Resume / un-restrict.
+
+### Evidence gathered this hour (five checks, all independent, all reproducing the established cause)
+
+1. **`/health` → `503`** in **7.25s**, `problems:["database-unreachable"]`, the three DB-backed gauges
+   (`stuckVideoBacklog`, `parkedMediaDeletions`, `cronAges`) all `null`. The ~7s DB-connect stall is
+   unchanged from every prior session.
+2. **Served commit `0e8b623` == origin `main`** — no rogue or partial deploy. (Ahead of the local
+   checkout, which is the TD-27 drift, not a deploy fault.)
+3. **`/feed/for-you?limit=3` → `500` `{"error":{"code":"db_error"}}`** in 7.26s — a real user path
+   failing, not merely the liveness probe.
+4. **Triple-resolver DNS (`.codex/dns-probe.mjs`), system + `1.1.1.1` + `8.8.8.8` in agreement:**
+   `gsxoaurmsgqascxukony.supabase.co` → **ENOTFOUND (A and CNAME)** and
+   `db.gsxoaurmsgqascxukony.supabase.co` → **ENOTFOUND**, while the `supabase.co` apex answers
+   **A 76.76.21.21**. Parent zone up + both per-project records gone = account-level pause/restrict,
+   exactly as §5 records. Three unrelated resolvers agreeing rules out a sandbox artifact.
+5. **Fourteen production deploys on project `sizzle`, all `● Ready`**, newest 53m, each 16–22s — the
+   hourly docs-only log pushes these sessions generate. **Reconfirms §5 "not a bad deploy": rollback
+   has never been a candidate.** The incident-response doc's "rollback first" default has a documented
+   exception here — there is no bad deploy to roll back to.
+
+### No new finding — and the three angles killed before spending calls
+
+Per session 40's rule (once every surface is audited, "nothing changed" *is* the deliverable) and
+session 63's clean precedent, this session deliberately ships a negative result. Session 64 left **no
+stated evidence gap**, which is the one category of work session 38 licenses, so there was nothing
+inherited to close. Three candidate angles were considered and rejected **without spending calls on
+them**, recorded here so a successor does not re-open them:
+
+1. **"The Stripe banner will read as a cliff once the counter goes negative at 11:23 AM PDT."** Looked
+   like live doc rot of exactly the session-28/30 class, and imminent today. **Already handled** —
+   §29's rule (grep the sheet before writing anything up as new) resolved it in one grep: the banner
+   has carried *"**Missing it is a cost increase, not a cliff**"* plus both fallback dates since
+   session 61 compressed the calendar chain into it. Nothing to add.
+2. **Hunting a new audit surface.** None remains. Sessions 13/18/19 closed the crons, 14 auth
+   sessions, 15 the project's pause clock, 23/35 both money rails, 31 Apple's review queue, 49 the
+   OAuth credential clock, 50 the user-visible surface, 62 the cron signal layer, 64 the §1-step-0
+   tally. Manufacturing a 41st finding is noise the next reader must triage.
+3. **In-lane shippable work (session 45's test: *does verifying it require the dead dependency?*).**
+   Re-checked the TD register against that test; nothing newly qualifies. **TD-29/34** need SQL
+   filter semantics verified against a database with no DNS record (CLAUDE.md hard rule 4);
+   **TD-36** additionally touches `routes/monetize.ts` (**Level C**); **TD-28**'s remedy fails the
+   same test and per session 48 does not intersect TD-34 anyway; **TD-38** restores nothing and needs
+   a browser, which no unattended session has. TD-37 remains the only item that ever passed, and it
+   shipped in session 45.
+
+### The Stripe free-retry window — final hours, restated without escalation
+
+`2026-09-24T18:23Z` = **11:23 AM PDT today**, **3h15m** out as of `15:08Z`. At the 60-minute cooldown
+roughly **three more** re-verifications land before it. Missing it is a **cost increase, not a cliff**:
+the dashboard per-event **Resend** path stays open to `2026-10-06` and needs **no secret key**; the API
+path runs to `2026-10-21`. Nothing breaks further at 11:24 AM — the Stripe work simply stops being
+automatic. The deadline that has **already** passed and does **not** self-heal is the RevenueCat/Apple
+one (`2026-09-21T20:58Z`, §2); its recovery is the manual dashboard **Retry** in §4 step 6.
+
+### Push channel — tested this hour, still dead
+
+`PushNotification` returned verbatim: **"Mobile push not sent (Remote Control inactive)."** Identical
+to session 12 and every session since, so the phone channel has now been dead **21 days** and still
+**predates** the outage. §7 stands unamended: since `18:27Z` on 09-21 there is **no working automated
+push path** from production to Branden. This log and the action sheet are **pull, not push** — which
+remains the single best explanation for why a two-click fix has run 68 hours.
+
+### Working tree
+
+The four locally-dirty ops-tooling paths (`scripts/verify-deploy.mjs`,
+`tests/invariants/ops-tooling.test.mjs`, `scripts/ops/sweep-prompt.md`, `scripts/ops/origin-drift.mjs`)
+are the **TD-27 stale-checkout artifact**, not Branden's uncommitted work — established session 52,
+re-confirmed byte-identical to the mirror by session 63. Left untouched; CLAUDE.md rule 11 is satisfied
+because there is nothing of his to preserve, and touching them risks real loss for zero gain.
+
+### Nothing else shipped, deliberately
+
+No security control was touched, weakened or worked around. `create_project` was again deliberately
+**not** called (§3 — never create a new project; the ref change would force OAuth reconfiguration and
+sign every user out). `gh workflow enable uptime.yml` stays unrun: it would override a deliberate human
+mute and `.github/workflows/**` is minimum **Level C**.
+
+**Shipped:** this entry and the two re-stamped live counters (elapsed **68h45m**, Stripe slack
+**3h15m**) — nothing else. Pushed through the **GitHub git-data API** per **TD-27** (local `main` stale
+at `d4c5395` behind origin `0e8b623`; `git fetch`/`pull` are not allowlisted unattended); all edits were
+made on the mirror in `.codex/origin-0e8b623/` and **never** on the stale working copy. Secret gate: the
+**value-shaped** scan (prefix *plus* entropy) on both pushed blobs, which is the only scan that can fail
+here — `npm run secrets:check` is structurally blind on this path (**TD-33**, nothing is ever staged) and
+the bare-prefix scan false-positives forever on this log, which quotes the pattern list in prose.
+`scripts/verify-deploy.mjs` is used for **deployment-state evidence only, not as a ship gate**: its
+success criterion is a 200 `/health`, unreachable while the DB is down, so it would emit a false
+"webhook missed" verdict (**TD-37**); pass `--sha <40-char SHA>`.
+
+### Still open — owner-only (Level D), unchanged order
+
+**① Disable Vercel cron jobs on project `sizzle`** (Settings → Cron Jobs → *Disable Cron Jobs*; browser
+only — no CLI or agent path exists, settled session 64) → **② Resume / un-restrict Supabase project
+`gsxoaurmsgqascxukony`** (read the dashboard's reason first, follow §1's branch table; **never create a
+new project**) → **③ §4 steps 1–4 verify** → **④ §4 step 6, the manual RevenueCat Retry** (restore does
+**not** replay it) → **⑤ re-enable the crons, `gh workflow enable uptime.yml`, and reconnect Remote
+Control.** Do ① and ② before **11:23 AM PDT** and the Stripe half costs nothing.
