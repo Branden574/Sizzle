@@ -7977,3 +7977,65 @@ new project**) → **③ §4 steps 1–4 verify** → **④ §4 step 6, the manu
 **not** replay it) → **⑤ re-enable the crons, `gh workflow enable uptime.yml`, and reconnect Remote
 Control.** The Stripe free-retry window closed at `18:23Z`; ① and ② are exactly as urgent as before,
 but the Stripe half now needs the §4 `delivery_success=false` sweep instead of replaying itself.
+
+### Session 68 addendum — **CORRECTION: `verify-deploy.mjs` DOES work during this outage. 60+ sessions skipped the prescribed ship gate on a false claim.**
+
+**The claim, as carried in `LOG.md`, the action sheet and the project-memory index:**
+
+> "`node scripts/verify-deploy.mjs` **cannot pass during a DB outage** — its success criterion is a
+> 200 `/health`, so it just hangs. Confirm READY with `vercel ls sizzle --yes` and say plainly that
+> verify-deploy was not usable."
+
+**It is wrong.** Run this session against the session-68 push:
+
+```
+$ node scripts/verify-deploy.mjs --api --sha 468f22673eb56324e82d7f1768c65fc2428fbddd
+=== sizzle (API) — waiting for 468f226 (--sha) ===
+deployment: READY
+probe https://sizzle-chi.vercel.app/health: HTTP 503
+health status: degraded (database-unreachable) — deployed but unhealthy
+$ echo $?
+0
+```
+
+**Exit 0. It passed, in seconds, with the database down.** The script has an explicit branch for
+exactly this case (`scripts/verify-deploy.mjs:291-295`):
+
+> `} else if (key === 'api' && res.status === 503) {`
+> `  // Degraded is still "deployed" — report the problems without failing the SHA check.`
+
+It fails only if the **served commit** doesn't match the requested SHA. A 503 is reported, not failed.
+
+**This was never true during this incident.** The 503 branch is present at commit `a1d05bf`
+(**2026-08-23**), a **month before** the outage began — verified by reading the blob at that ref, not
+inferred. So every session from 1 onward could have run the real gate.
+
+**Where the false claim most likely came from — and why it survived.** It is a conflation with
+**TD-37**, the *separate* defect session 45 fixed on 09-23: run **without** `--sha`, the script
+defaulted its target to local `HEAD`, which **TD-27** keeps permanently stale, so it polled its full
+8-minute budget for a deployment that could never exist and then printed *"the git webhook likely
+missed the push"*. That is a **stale-SHA** failure, not a **503** failure. Session 45 fixed it
+(`staleHeadBail()`) and correctly wrote "always pass `--sha` after a git-data push" — but the older
+"200 `/health` success criterion" sentence was never retracted, and was copied forward verbatim into
+every subsequent entry and into the memory index.
+
+**What it cost.** CLAUDE.md hard rule 8 is *"verify every deploy actually promoted — never assume a
+push went live."* `verify-deploy.mjs` is the tool that discharges it. For 60+ sessions we substituted
+a `git/refs/heads/main` read, which proves the **ref moved** and proves nothing about whether Vercel
+built or promoted anything — strictly weaker evidence, on a repo whose deploy webhook has
+**silently died before** (CLAUDE.md → Deploys). No harm landed, because the hourly docs pushes did
+deploy; but the gate was open the whole time and nobody was checking it.
+
+**Fixed in both places this session**, per session 39's index-rot rule (repair the index in the same
+session, or it re-bills every successor): this addendum in the append-only log, and the
+`sizzle-watchdog-false-alarms` memory entry, whose "Off-Mac evidence" item 5 carried the false claim
+in the higher-traffic document.
+
+**Standing instruction from here: after a git-data push, run
+`node scripts/verify-deploy.mjs --api --sha <full-sha>` and record its verdict.** It is the ship gate
+CLAUDE.md requires, it costs one call, and it works with the database down.
+
+*Generalised — the sharpest version of session 33's rule yet: an inherited "the tool doesn't work
+here" is the most expensive kind of stale claim, because it is self-sealing. Nobody re-runs a tool
+they have been told is useless, so the claim never gets tested, and the evidence that would refute it
+is exactly the evidence nobody collects. Re-testing cost one command and was available from session 1.*
