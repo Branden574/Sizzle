@@ -6708,3 +6708,14 @@ The four locally-dirty ops-tooling paths (`scripts/ops/sweep-prompt.md`, `script
 `tests/invariants/ops-tooling.test.mjs`, `scripts/ops/origin-drift.mjs`) were left untouched per the stash
 trap — they are the TD-27 checkout repair, not Branden's uncommitted work, and stashing them would revert the
 working tree to the pre-`f64e139` copies and re-break the next sweep's step-0 drift check.
+
+**Amendment (session 58) — push verification, recorded after the fact because the evidence did not exist when
+the entry above was written. This is the last word on the session.** `git/refs/heads/main` →
+`966f64366358af32d152e6a110afe714cac21ae4` (parent `93e6456…`, fast-forward PATCH, no force); the GitHub
+webhook fired (alive this hour) and `/health` reported `commit: 966f643` at **`07:54:25Z`** — production is
+serving this session's own commit, confirmed rather than assumed.
+
+That flip doubles as the §8 **free control**: the 503 `database-unreachable` reproduces **identically on a
+brand-new build with freshly injected environment variables**, which kills "stale build artifact" and "env var
+never picked up" in one shot. The cause is external to anything this repo can deploy — which is the evidential
+reason rollback was never a candidate this session either.
