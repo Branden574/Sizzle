@@ -6809,3 +6809,109 @@ That flip doubles as the §8 **free control**: the 503 `database-unreachable` re
 brand-new build with freshly injected environment variables**, which kills "stale build artifact" and "env var
 never picked up" in one shot. The cause is external to anything this repo can deploy — which is the evidential
 reason rollback was never a candidate this session either.
+
+## Watchdog session 60 — 2026-09-24 02:51 PDT — SEV-1 hour 63, re-verification only; **the Stripe free-retry window closes TODAY in 8h29m**
+
+**What fired.** `scripts/ops/watchdog.sh` at `2026-09-24 02:51:22` PDT: `API degraded (503):
+database-unreachable`. Raw body carried `commit a98e2ae`, `paymentsKeyMode: live`, and the three
+DB-backed gauges null (`stuckVideoBacklog` / `parkedMediaDeletions` / `cronAges`) — the signature of
+a live API with no database behind it, not of a bad build.
+
+**This is NOT the `000` false-alarm class.** Per the watchdog-false-alarm calibration, an HTTP `000`
+summons is usually a host-side blip (5 of 6 historically); a **503 with a JSON body** is the API
+answering correctly about a real dependency failure. Six independent checks this session, all
+agreeing, no ambiguity to resolve:
+
+1. `/health` → **HTTP 503**, `status: degraded`, `problems: ["database-unreachable"]` (re-probed,
+   stable, 7.2s first response).
+2. **DNS is the proximate failure.** `gsxoaurmsgqascxukony.supabase.co` → **`ENOTFOUND`** on both A
+   and CNAME lookups, confirmed **twice** several minutes apart, while controls `supabase.com`
+   (`216.150.1.193`) and `api.supabase.com` (`104.18.42.230`, `172.64.145.26`) resolve normally. The
+   parent zone is healthy; only the per-project record is absent. `curl` agrees independently —
+   **exit 6 (couldn't resolve host)**, `time_namelookup 0.000000`, i.e. the request never left the
+   machine. This is DNS-record *absence*, which is how Supabase represents a project that is paused,
+   restricted, or deprovisioned — it is not a network flake, not TLS, not a timeout.
+3. **Both Vercel production deployments are `READY`** and serving origin HEAD
+   (`verify-deploy.mjs --sha a98e2ae0490…`): project `sizzle` (API) READY → `/health` 503; project
+   `sizzle-api` (frontend) READY → `getsizzle.app` **HTTP 200**, serving `a98e2ae` == HEAD, version
+   1.0.101. The web tier is entirely healthy.
+4. **Origin == served commit.** `origin/main` = `a98e2ae0490cafc7f3bc6809ebc0f396f9258534`
+   (= session 59's own commit), identical to the `commit` field `/health` reports. No rogue deploy,
+   no drifted build.
+5. **`--sha` was required to poll at all**, which independently re-confirms TD-27: local `HEAD`
+   `d4c5395` (2026-09-02) predates every deployment on the page, so step 0 (`scripts/ops/origin-drift.mjs`)
+   ran first and all reasoning below is against the origin mirror `.codex/origin-a98e2ae/`.
+6. **Gmail connector re-tested and still permission-gated** — `search_threads` for the Supabase
+   notification around 2026-09-21 18:00Z returned "Claude requested permissions … but you haven't
+   granted it yet". Worth re-testing because §1's branch table is decided by that email and the
+   connector's availability has varied between sessions; it is still shut. **The ops inbox remains
+   the fastest way for Branden to learn *which* branch this is, and no agent can read it.**
+
+**Root cause — unchanged, and re-derived rather than inherited.** The Supabase project
+`gsxoaurmsgqascxukony` is gone from DNS, so `apps/api` cannot open a connection to Postgres, so the
+health check's DB probe fails and the route reports `degraded`. Every layer this repository controls
+is verifiably correct: the code is the reviewed HEAD, both builds are READY, the frontend serves 200,
+and session 59 already proved the 503 reproduces on a **brand-new build with freshly injected env
+vars** — which kills "stale artifact" and "env var not picked up" outright. **No repository change,
+rollback, redeploy or OTA can fix this**, and rollback was never a candidate: there is no bad
+deployment to roll back *to* or *from*. The fix is a dashboard action on a third-party console,
+**Level D — owner only**.
+
+**No new finding, by design** (standing rule since session 40). Sessions 13–50 exhausted the
+diagnostic lens; session 59 left no stated evidence gap; TD-28/29/33/34/35/36/38 each either need the
+dead DB to verify or sit on the push path this session depends on. **Nothing was weakened to restore
+green**, no security-sensitive path touched, `create_project` again deliberately **not** called
+(§3: never create a new project). TD-38's misleading *"Check your connection"* copy stays unshipped
+for the same reason sessions 50+ held it — cosmetic, unverifiable unattended without a browser, and
+it restores nothing.
+
+### The one thing that makes session 60 different: the cheap path expires during today's waking hours
+
+Counters re-stamped at probe time `2026-09-24T09:53:48Z`:
+
+| Clock | Value |
+|---|---|
+| Outage elapsed | **63h30m** (since `2026-09-21T18:23:07Z`) |
+| **Stripe automatic retries** | **8h29m left — expires `2026-09-24T18:23Z` = 11:23 AM PDT TODAY** |
+| Stripe dashboard `Resend` | 12 days left (`2026-10-06T18:23Z`) |
+| Stripe API/CLI resend | 27 days left (`2026-10-21T18:23Z`) |
+| Apple / RevenueCat auto-retry | **expired `2026-09-21T20:58Z`** — manual dashboard **Retry** only (§4 step 6) |
+
+**This session ran at 2:53 AM PDT, which means it is almost certainly the last watchdog tick before
+that deadline that Branden will see while it still matters.** The next 60-minute cooldown tick lands
+~3:53 AM PDT, still overnight. In practical terms there is **exactly one waking window left** —
+roughly 7:00–11:23 AM PDT this morning — in which restoring the project makes the entire Stripe half
+self-heal with **zero** manual work, because the handlers are idempotent and the queued events replay
+themselves.
+
+**Missing it is a cost increase, not a cliff, and should not cause panic at 11:24 AM.** The dashboard
+`Resend` path stays open 12 more days and needs **no secret key** — it is per-event clicking in the
+Stripe dashboard rather than automatic replay. What is genuinely lost at 11:23 is *free and
+automatic*; what remains is *manual and free-ish*. The Apple/RevenueCat half is already past its
+window regardless and needs the manual **Retry** either way, so the deadline changes the Stripe work
+only.
+
+**Shipped:** this entry plus the re-stamped counters in
+`docs/operations/incidents/2026-09-21-supabase-project-unreachable.md`, pushed through the GitHub
+git-data API (TD-27 — local `main` is stale at `d4c5395`, behind origin `a98e2ae`; `git fetch`/`pull`
+are not allowlisted unattended, so both files were edited on the origin mirror in
+`.codex/origin-a98e2ae/`, never on the stale working copy). Content scanned out-of-band for
+value-shaped credential strings before push, because `secrets:check` is structurally blind on this
+path (TD-33). `scripts/verify-deploy.mjs` was used for **deployment-state** evidence only, **not** as
+the ship gate — its success criterion is a 200 `/health`, unreachable while the DB is down, so it
+would emit a false webhook-missed verdict (TD-37); promotion is confirmed by amendment below instead.
+
+The four locally-dirty ops-tooling paths (`scripts/ops/sweep-prompt.md`, `scripts/verify-deploy.mjs`,
+`tests/invariants/ops-tooling.test.mjs`, `scripts/ops/origin-drift.mjs`) were left untouched per the
+stash trap — they are the TD-27 checkout repair, not Branden's uncommitted work, and stashing them
+would revert the working tree to the pre-`f64e139` copies and re-break the next session's step-0
+drift check.
+
+**Still open — owner-only (Level D), ~2 minutes of clicking.** Unchanged order:
+**① disable Vercel cron jobs on project `sizzle`** (Settings → Cron Jobs → *Disable Cron Jobs*; this
+disarms the TD-34 trap where the first `finalize-videos` tick within 60s of restore mass-flips
+stranded videos to a terminal `error` state the finalizer refuses to re-poll) **→ ② Resume /
+un-restrict the Supabase project** `gsxoaurmsgqascxukony` (read the dashboard's reason first and
+follow §1's branch table; **never create a new project**) **→ ③ §4 steps 1–4 verify → ④ §4 step 6
+manual RevenueCat Retry** (restore does not replay it) **→ ⑤ `gh workflow enable uptime.yml`.**
+Do ① and ② before **11:23 AM PDT** and the Stripe half costs nothing.

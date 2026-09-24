@@ -1,7 +1,7 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
 **Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
-(11:23 AM PDT Mon 09-21). **62h27m as of 2026-09-24T08:50:08Z** — re-verified by session 59 (watchdog).
+(11:23 AM PDT Mon 09-21). **63h30m as of 2026-09-24T09:53:48Z** — re-verified by session 60 (watchdog).
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
 
 > **🛑 READ §4 STEP 0 BEFORE YOU CLICK RESUME.** Session 18 found that the first
@@ -10,7 +10,7 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > re-poll** — which silently converts TD-29's prescribed backfill into a no-op and makes
 > its counting query return `0`. One dashboard toggle before Resume avoids the whole mess.
 
-> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — ~9h32m of slack left, and that expiry is TODAY (§2).**
+> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — ~8h29m of slack left, and that expiry is TODAY (§2).**
 > Restore before it and the **Stripe** half self-heals with zero manual work. Missing it is *not*
 > a cliff — manual replay stays open to `2026-10-06` (dashboard) / `2026-10-21` (API). There is
 > real time; this is urgent, not frantic.
@@ -29,6 +29,14 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > windows: **tonight (Wed evening PDT)** or **Thursday morning before 11:23 AM PDT**. After that the
 > Stripe half stops self-healing and joins Apple’s in the manual-replay column (§2 — still open to
 > `2026-10-06` dashboard / `2026-10-21` API, so this is a cost increase, not a cliff).
+> **Session 60 (`2026-09-24T09:53Z`) — the chain ends here: of those two windows the first is spent
+> and the second is the one you are in.** It is 2:53 AM PDT Thursday with **8h29m** of slack, so the
+> only remaining hours are **this morning, roughly 7:00–11:23 AM PDT**. The watchdog's next tick
+> (~3:53 AM PDT) is still overnight, which makes this almost certainly the last summary written while
+> the free path is open. Two clicks — disable crons on Vercel project `sizzle`, then Resume the
+> Supabase project — before **11:23 AM PDT** and the Stripe half replays itself for free. After that
+> nothing breaks further; the work just becomes manual per-event **Resend** in the Stripe dashboard
+> (no secret key needed, 12 days left).
 
 > **🍎 NEW, session 23 — the Apple/RevenueCat half does NOT self-heal, and its window has
 > ALREADY CLOSED.** RevenueCat retries a failing webhook **5 times over 155 minutes total**,
