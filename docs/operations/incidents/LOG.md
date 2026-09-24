@@ -7149,3 +7149,19 @@ finalizer refuses to re-poll) **→ ② Resume / un-restrict Supabase project `g
 ③ §4 steps 1–4 verify → ④ §4 step 6, the manual RevenueCat Retry** (restore does **not** replay it)
 **→ ⑤ `gh workflow enable uptime.yml`.** Do ① and ② before **11:23 AM PDT** and the Stripe half
 costs nothing.
+
+**Amendment (session 62, `2026-09-24T12:04Z`) — push verified, both projects promoted, and the `PushNotification` result §7 asks every session to record.**
+`7c0fb8f` is origin `main` head and `node scripts/verify-deploy.mjs --sha 7c0fb8f8d5e3d884286e6dcdc7a8cb8621738670`
+reports **READY on both** Vercel projects: `sizzle` (API) READY with `/health` **503**
+`database-unreachable` — deployed-but-unhealthy, the correct TD-37 reading rather than a webhook
+failure — and `sizzle-api` (frontend) READY, `getsizzle.app` **200** serving commit `7c0fb8f`
+(version 1.0.101). The GitHub webhook is **not** dead this hour; nothing about the incident changed.
+
+**Push channel:** `PushNotification` returned *"Mobile push not sent (Remote Control inactive)"* —
+identical to session 12 and every session since, so the phone channel has now been dead **21 days**,
+still predating the outage. The desktop notification fires into a terminal nobody is sitting at.
+§7 stands unamended: since `18:27Z` on 09-21 there is **no working automated push path** from
+production to Branden, and reconnecting Remote Control belongs on the post-restore list next to
+`gh workflow enable uptime.yml`. **This is why the 11:23 AM PDT Stripe deadline is very likely to
+pass unseen** unless Branden happens to open a terminal or this repo — session 62 has no channel
+that reaches him, and it is the last thing any unattended session can do about it.
