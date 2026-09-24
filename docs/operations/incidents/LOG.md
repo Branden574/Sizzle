@@ -7014,3 +7014,21 @@ webhook failure — and `sizzle-api` (frontend) READY, `getsizzle.app` **200** s
 `ebaf0d7` (version 1.0.101). The GitHub webhook is **not** dead this hour; nothing about the
 incident changed. Note for the next session: a bare `verify-deploy.mjs` cannot see a git-data-API
 push (local HEAD stays `d4c5395`) and now says so explicitly — pass `--sha <40-char SHA>`.
+
+**Amendment 2 (session 61, `2026-09-24T11:05Z`) — the `PushNotification` result §7 asks every
+session to record, and one ops note.** Attempted at end of session: *"Mobile push not sent (Remote
+Control inactive)."* — identical to session 12 and every session since, so the phone channel has now
+been dead **21 days**, still predating the outage. The desktop notification fires into a terminal
+nobody is sitting at. §7 stands unamended: since `18:27Z` on 09-21 there is **no working automated
+push path** from production to Branden, and reconnecting Remote Control belongs on the post-restore
+list next to `gh workflow enable uptime.yml`.
+
+*Ops note for future sessions doing a git-data-API push.* The pre-push secret scan must use
+**value-shaped** patterns (`sk_live_[A-Za-z0-9]{8,}`), not bare prefixes (`sk_live_`). This session
+tripped its own guard on `LOG.md`: one bare `sk_live_` and 31 `-----BEGIN` hits, **all 31 of them
+prior sessions quoting the pattern list inside backticks in their own scan notes**, with zero
+value-shaped matches and zero real PEM bodies. A bare-prefix guard on this file is now guaranteed to
+false-positive forever, because the log documents the very patterns it is scanned for — and a guard
+that always fires is a guard that gets skipped. This is TD-33 from the other side: `secrets:check`
+is structurally blind here (it scanned **0** staged files this session), so the out-of-band scan is
+the only real gate and it has to be precise enough to trust.
