@@ -8605,3 +8605,82 @@ owner-side clicks in §1, and no agent-side lane is open. The counter convention
 71 executed it, session 72 advanced it and re-anchored it to the `/health` response's own timestamp,
 so verify it against that field rather than against a rounded hour. The Sentry-quota angle is
 **closed** (≈455 events at 6/h; ~35 days to any plausible allowance) — do not re-open it.
+
+---
+
+## Watchdog session 73 — 2026-09-24 16:18 PDT (`23:21Z`) — SEV-1 hour 76h58m; pure re-verification, no change; all three credential paths re-tested and still dark
+
+**What fired.** `scripts/ops/watchdog.sh` at `2026-09-24 16:17:49` local, on the same signal as the
+previous 20 ticks: `API degraded (503): database-unreachable`. Not a blip and not the HTTP-000
+host-side class — a 503 with a well-formed JSON body is the *server* answering that it cannot reach
+Postgres, which is the documented real-SEV-1 shape.
+
+**Root cause — unchanged, and not re-derived.** This is the open incident
+`docs/operations/incidents/2026-09-21-supabase-project-unreachable.md`: Supabase project
+`gsxoaurmsgqascxukony` has had its per-project DNS records withdrawn (pause / restriction /
+deprovision at the account level). Started `2026-09-21T18:23:07Z`; **76h58m** as of this tick's
+`/health.time` (`2026-09-24T23:21:08.753Z`). §5 of the action sheet is settled — nothing in it was
+re-litigated here.
+
+**Evidence gathered this session (all first-hand, not inherited).**
+
+- `/health` → **HTTP 503**, `status:"degraded"`, `problems:["database-unreachable"]`, `commit:105361d`.
+  Sampled twice: `23:18:06Z` and `23:21:08Z`. The watchdog's own capture at `23:17:47Z` is a third.
+- DNS `gsxoaurmsgqascxukony.supabase.co` → **`ENOTFOUND`**, via the action sheet's own §4 step-1
+  `dns.resolve4` probe. Re-run at the end of the session: still `ENOTFOUND`. This is the load-bearing
+  record and it has not come back.
+- Real user path, not just liveness: `GET /feed/for-you?limit=3` → **HTTP 500**
+  `{"error":{"code":"db_error"}}`. The outage is user-visible, not merely a health-endpoint opinion.
+- `https://getsizzle.app/` → **HTTP 200**. The static frontend shell still serves; it is a dead app
+  behind it. Worth stating because "the site loads" is the misleading signal a human spot-check hits.
+- CI on `main` — **green**, 6/6 most recent runs `success`. Session 69's CI fix is holding; no second
+  incident is layered on this one.
+
+**The three credential paths, re-tested rather than inherited** (§5's explicit lesson: a predecessor's
+"I tried and it's gated" is worth one cheap re-test). All three are still dark, and each fails in its
+own distinct way, which is itself the diagnostic:
+
+1. **claude.ai Supabase connector** → `Claude requested permissions to use
+   mcp__claude_ai_Supabase__get_project, but you haven't granted it yet.` Permission-gated; a
+   non-interactive session cannot grant it. Note `mcp__claude_ai_Supabase__restore_project` **exists**
+   as a tool — the blocker is the grant, not the absence of a restore API.
+2. **Local `supabase` MCP server** → `Unauthorized. Please provide a valid access token … via the
+   --access-token flag or SUPABASE_ACCESS_TOKEN.` Tokenless, not permission-gated — the independent
+   second confirmation of **TD-21** (the PAT is revoked; rotation is Level D).
+3. **claude.ai Gmail connector** → permission not granted. This is the one that would have *answered*
+   the open question (the Supabase notification email names Paused vs Restricted vs Deleted, which
+   picks Branden's branch in §1). It remains unreachable, so **paused-vs-deleted is still unanswerable
+   from inside a session** — unchanged from §5.
+
+**What I did NOT do, and why.** No fix was shipped, because there is no agent-side lane:
+
+- **Not a bad deploy → rollback is not a candidate.** The last pre-outage production deploy was 15
+  days old (§5); every deployment since is these sessions' own docs-only pushes. `/health.commit` is
+  `105361d`, a *current* build, and it still reports `database-unreachable` — which independently
+  kills both "stale artifact" and "env var never picked up".
+- **§1 step 0 (disable crons) is structurally owner-only** — settled session 64 and the tally closed
+  at seventeen. CLI `57.0.0` exposes `crons add|list|run` and no `disable`; Vercel documents only the
+  dashboard button. Recorded here as state, **not** as an agent-actionable omission.
+- **The fix itself is Level D.** Restoring the Supabase project is an owner dashboard action. Per the
+  incident-response doc, nothing in this repo — no patch, rollback or redeploy — can reach it.
+
+**Anti-flap check.** Explicitly not a false alarm: the condition was verified present at three
+separate timestamps spanning ~3.5 minutes, on two independent surfaces (`/health` and the live feed
+endpoint), plus the DNS record underneath both. Nothing recovered and nothing was invented.
+
+### Still open — all owner-side, unchanged from session 72
+
+1. **The outage.** Two clicks, in this order: **disable crons** on Vercel project `sizzle` (the API —
+   naming is reversed) per §1 step 0, which defuses the TD-34 60-second trap; **then Resume** the
+   Supabase project. Re-enable crons once the stranded-video list is captured — leaving them off
+   silently stops every new upload from finalizing. If the dashboard reads *project not found /
+   deprovisioned*, **stop and contact Supabase support about PITR before touching anything.**
+2. **Apple/RevenueCat refund replays (TD-35).** Retry budget long expired; manual per-event **Retry**.
+   Does not self-heal on restore.
+3. **Stripe replays.** Manual per-event **Resend**, dashboard open until `2026-10-06`. No secret key
+   needed. The free-retry window closed `2026-09-24T18:23Z` — a cost increase, not a cliff.
+4. **`gh workflow enable uptime.yml`** after restore, plus reconnecting Remote Control — together the
+   only path that restores any push alerting at all.
+5. **TD-21** — rotate the Supabase PAT and expose it as `SUPABASE_ACCESS_TOKEN`; that one token
+   restores the agent DB path and would have made paths 1–2 above answer this question directly.
+6. **`ffmpeg-static` CI single point of failure** — filed session 69, needs Branden's call.
