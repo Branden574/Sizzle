@@ -7853,3 +7853,127 @@ the action sheet remain **pull, not push**. Reconnecting Remote Control stays st
 **Push verified, not assumed.** `git/refs/heads/main` → `26923af500d4c65067c3756c205e54fe3e7b9b49`
 (parent pinned to `2b67014`, so a concurrent push would have failed the ref update rather than
 clobbered it). `scripts/verify-deploy.mjs` was deliberately not used as the gate — **TD-37**.
+
+## Watchdog session 68 — 2026-09-24 11:07 PDT (`18:07Z`) — SEV-1 hour 71h47m; the last tick inside the Stripe free-retry window
+
+**What fired.** `scripts/ops/watchdog.sh` at 11:07:34 PDT (`18:07:34Z`): `API degraded (503):
+database-unreachable`. Same signature as sessions 1–67. Per the project-memory calibration a 503
+**with a JSON body** is *not* the host-side-blip class (5 of 6 `HTTP 000` summons), so it was worked
+as live rather than as flap — correctly: it is the same open SEV-1, now into its fourth calendar day.
+
+**Root cause — unchanged, external, Level D.** Supabase project `gsxoaurmsgqascxukony` has had its
+per-project DNS records withdrawn. No repo change, rollback, redeploy or OTA can reach them. The fix
+is the owner reading the dashboard's reason, then Resume / un-restrict.
+
+### Evidence gathered this hour (six checks, all independent, all reproducing the established cause)
+
+1. **`/health` → `503`** in **7.26s**, `problems:["database-unreachable"]`, the three DB-backed gauges
+   (`stuckVideoBacklog`, `parkedMediaDeletions`, `cronAges`) all `null`. The watchdog's own capture at
+   `18:07:32Z` and an independent re-probe at `18:07:50Z` are identical. The ~7s DB-connect stall is
+   unchanged from every prior session.
+2. **No new failure is layered on top.** Every non-DB field of the health body is healthy in the same
+   response: `cloudflareConfigured:true`, `moderationConfigured:true`, `push:"ok"`,
+   `payments:"stripe"`, `paymentsKeyMode:"live"`, `emailConfigured:true`, `sentryConfigured:true`.
+   `database-unreachable` is the **sole** problem — still a single-fault incident, not a compounding one.
+3. **Served commit `5d6d456` == origin `main`** (`scripts/ops/origin-drift.mjs`, run first per TD-27,
+   reports origin `main` = `5d6d456`; `/health.commit` = `5d6d456`) — no rogue or partial deploy.
+   Ahead of the local checkout, which is TD-27 drift, not a deploy fault.
+4. **`/feed/for-you?limit=3` → `500` `{"error":{"code":"db_error"}}`** in 7.32s — a real user path
+   failing, not merely the liveness probe.
+5. **DNS, triple-resolver attestation** (`.codex/dns-probe.mjs`; Node's `dns` module needs no
+   allowlist). **system, `1.1.1.1` and `8.8.8.8` agree exactly**: `supabase.co` → **A 76.76.21.21**,
+   `CNAME=ENODATA` (name exists, no record of that type), while `gsxoaurmsgqascxukony.supabase.co`
+   and `db.gsxoaurmsgqascxukony.supabase.co` → **ENOTFOUND** (NXDOMAIN) on **both** record types.
+   `ENODATA`-vs-`ENOTFOUND` is *positive* proof the per-project records were **withdrawn**, not that
+   "something failed"; three unrelated resolvers agreeing kills the sandbox explanation outright.
+   Parent zone up + *every* per-project record gone = **project-level pause/deprovision**, per §5.
+6. **Fourteen production deploys on project `sizzle`, all `● Ready`**, newest 59m, each 16–22s,
+   roughly hourly — the docs-only log pushes these sessions generate. **Reconfirms §5 "not a bad
+   deploy": rollback has never been a candidate.** The incident-response doc's "rollback first"
+   default has a documented exception here — there is no bad deploy to roll back *to*.
+
+### The one genuine state change this hour: the Stripe free-retry window closes at `18:23Z`
+
+This session **is** the "roughly ONE more watchdog tick (~`18:05Z`)" that session 67's banner
+predicted. At `18:10Z` there were **13 minutes** of slack left, and at the 60-minute cooldown the
+next re-verification (~`19:05Z`) is the **first one outside** the free window. Both live counters
+were re-stamped accordingly, and the banner's countdown was replaced with a terminal statement
+rather than a fourth decrementing number — per §7's standing convention and sessions 28/30's rule
+that countdown prose rots into misinformation the moment it is overtaken.
+
+**For session 69 and after: stop counting down, and do not read this as a cliff.** Nothing breaks at
+11:24 AM PDT. The Stripe half simply stops being *automatic*: per-event **Resend** in the Stripe
+dashboard stays open to `2026-10-06` and needs **no secret key**, and the API path runs to
+`2026-10-21` (§2, re-verified against Stripe's docs by session 29 and unamended since). What changes
+is only that restore no longer replays the queued events by itself — the `delivery_success=false`
+sweep in §4 becomes required rather than optional.
+
+The deadline that **already** passed and does **not** self-heal remains the RevenueCat/Apple one
+(`2026-09-21T20:58Z`, §2, TD-35). Its recovery is the manual dashboard **Retry** in §4 step 6, and it
+is still the item most likely to be forgotten because restore appears to fix everything.
+
+### No new finding — and the angles killed before spending calls
+
+Per session 40's rule ("nothing changed" *is* the deliverable once every surface is audited) and the
+clean precedent of sessions 63/65/66, this session ships a negative result plus the boundary crossing
+above. Session 67 left **no stated evidence gap**, so nothing was inherited to close (session 38's
+licensed work). Two angles were killed *before* spending calls:
+
+1. **Hunting a 41st audit surface** — the list is exhausted (crons 13/18/19, auth sessions 14, the
+   project's own pause clock 15, both money rails 23/35, Apple's review queue 31, OAuth credentials
+   49, the user-facing surface 50, the cron signal layer 62). A manufactured finding is triage load
+   for the next reader, per session 40.
+2. **Re-probing the Supabase MCP** — session 66 re-tested it one hour ago (`Unauthorized … valid
+   access token`, i.e. **tokenless**, not permission-gated). Session 33's "re-test an inherited
+   'it's blocked' once" licenses *one* cheap re-test, not an hourly one; TD-21 is unchanged and still
+   one owner-side PAT rotation away from giving an agent a DB path.
+
+No in-lane shippable work newly qualifies under session 45's test (*does verifying it require the
+dead dependency?*): **TD-28/29/34** need SQL semantics checked against a database with no DNS record
+(CLAUDE.md hard rule 4); **TD-30/36** are additionally **Level C** (payments); **TD-38** restores
+nothing and needs a browser; **TD-33** stays held because it edits the very push path this log
+travels on while that path is the only channel to Branden.
+
+### Push channel — attempted this session, result recorded verbatim
+
+`PushNotification` → *"Mobile push not sent (Remote Control inactive)."* Verbatim identical to
+session 12 and every session since — the phone channel has now been dead **21+ days** and still
+**predates** the outage (it died `18:27Z` on 09-21's timeline, i.e. before the first summons). §7
+stands unamended: there is **no working automated push path from production to Branden**, so this log
+and the action sheet remain **pull, not push**. That remains the single best explanation for why a
+two-click fix has run 71+ hours. Reconnecting Remote Control stays owner step ⑤.
+
+### Working tree
+
+The four locally-dirty ops-tooling paths (`scripts/verify-deploy.mjs`,
+`tests/invariants/ops-tooling.test.mjs`, `scripts/ops/sweep-prompt.md`, `scripts/ops/origin-drift.mjs`)
+are the **TD-27 stale-checkout artifact**, not Branden's uncommitted work — established session 52,
+re-confirmed byte-identical to the mirror by sessions 63/66. Left untouched; CLAUDE.md rule 11 is
+satisfied because there is nothing of his to preserve, and touching them risks real loss for zero gain.
+
+### Nothing else shipped, deliberately
+
+No security control was touched, weakened or worked around. `create_project` was again deliberately
+**not** called (§3 — never create a new project; the ref change would force OAuth reconfiguration and
+sign every user out). `gh workflow enable uptime.yml` stays unrun (Level C + deliberate human mute).
+
+**Shipped:** this entry and the two re-stamped live counters (elapsed **71h47m**; the Stripe banner
+converted from a countdown to its terminal statement) — nothing else. Pushed through the **GitHub
+git-data API** per **TD-27** (local `main` stale at `d4c5395` behind origin `5d6d456`; `git fetch`/`pull`
+are not allowlisted unattended); all edits were made on the mirror in `.codex/origin-5d6d456/` and
+**never** on the stale working copy. Secret gate: the **value-shaped** scan (prefix *plus* entropy
+tail, JWT, PRIVATE KEY blocks) on both pushed blobs, which is the only scan that can fail here —
+`npm run secrets:check` is structurally blind on this path (**TD-33**, nothing is ever staged) and the
+bare-prefix scan false-positives forever on this log, which quotes the pattern list in prose.
+`scripts/verify-deploy.mjs` was **not** used as a ship gate: its success criterion is a 200 `/health`,
+unreachable while the DB is down, so it would emit a false "webhook missed" verdict (**TD-37**).
+
+### Still open — owner-only (Level D), unchanged order
+
+**① Disable Vercel cron jobs on project `sizzle`** (Settings → Cron Jobs → *Disable Cron Jobs*; browser
+only — no CLI or agent path exists, settled session 64) → **② Resume / un-restrict Supabase project
+`gsxoaurmsgqascxukony`** (read the dashboard's reason first, follow §1's branch table; **never create a
+new project**) → **③ §4 steps 1–4 verify** → **④ §4 step 6, the manual RevenueCat Retry** (restore does
+**not** replay it) → **⑤ re-enable the crons, `gh workflow enable uptime.yml`, and reconnect Remote
+Control.** The Stripe free-retry window closed at `18:23Z`; ① and ② are exactly as urgent as before,
+but the Stripe half now needs the §4 `delivery_success=false` sweep instead of replaying itself.

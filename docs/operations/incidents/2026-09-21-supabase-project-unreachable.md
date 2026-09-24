@@ -1,7 +1,7 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
 **Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
-(11:23 AM PDT Mon 09-21). **70h45m as of 2026-09-24T17:07:44Z** — re-verified by session 67 (watchdog).
+(11:23 AM PDT Mon 09-21). **71h47m as of 2026-09-24T18:10:00Z** — re-verified by session 68 (watchdog).
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
 
 > **🛑 READ §4 STEP 0 BEFORE YOU CLICK RESUME.** Session 18 found that the first
@@ -10,8 +10,10 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > re-poll** — which silently converts TD-29's prescribed backfill into a no-op and makes
 > its counting query return `0`. One dashboard toggle before Resume avoids the whole mess.
 
-> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` = 11:23 AM PDT **this morning** — ~1h15m of
-> slack as of `2026-09-24T17:08Z` (§2). Roughly ONE more watchdog tick (~`18:05Z`) lands before it.**
+> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` = 11:23 AM PDT **this morning** — ~13m of
+> slack as of `2026-09-24T18:10Z` (§2). **This is the LAST watchdog tick inside the window** —
+> the next one (~`19:05Z`) lands after it has closed. Session 69+: stop counting down, and read
+> the "Missing it is a cost increase, not a cliff" sentence below as the operative one.**
 > Restore before it and the **Stripe** half self-heals with
 > zero manual work, because the handlers are idempotent and the queued events replay themselves.
 > **Two clicks:** disable crons on Vercel project `sizzle` (§1 step 0), then Resume the Supabase
