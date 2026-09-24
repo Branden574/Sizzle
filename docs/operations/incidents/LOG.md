@@ -6139,3 +6139,73 @@ reached him.
 `main` is 56+ commits stale at `d4c5395`; `git fetch` is not allowlisted unattended). Content scanned for
 credential-shaped strings out-of-band before push, because `secrets:check` is structurally blind on this path
 (TD-33). Branden's uncommitted working-tree edits were left untouched (CLAUDE.md rule 11).
+
+## 2026-09-24 01:45Z — watchdog session 52 — SEV-1 unchanged, hour 55. Pure re-verification; no new finding, by design.
+
+**What fired.** `scripts/ops/watchdog.sh` at 2026-09-23 18:35:11 PDT: `API degraded (503): database-unreachable`.
+Triaged as the real-outage class, not the HTTP-000 host-blip class (TD-23): a 503 carrying a JSON body means the
+API answered, so nothing is host-side. Worked as a live incident, not an anti-flap check.
+
+**Root cause — unchanged, re-attested this hour rather than recalled.** Supabase project
+`gsxoaurmsgqascxukony` still has no DNS record. Triple-resolver probe (`.codex/dns-probe.mjs`):
+`gsxoaurmsgqascxukony.supabase.co` and `db.gsxoaurmsgqascxukony.supabase.co` → **ENOTFOUND (NXDOMAIN) on
+system, 1.1.1.1 and 8.8.8.8**, while the parent zone `supabase.co` → **A 76.76.21.21** on all three and
+`CNAME=ENODATA`. Parent zone up + *every* per-project record withdrawn = pause or deprovision at the account
+level, not a platform DNS fault. **Owner action is the only fix; no repo change, rollback or redeploy reaches it.**
+
+**Evidence this hour (independent signals, health probed twice minutes apart).** `/health` **503**
+`problems:["database-unreachable"]` with `stuckVideoBacklog`/`parkedMediaDeletions`/`cronAges` all `null`,
+at **01:35:28Z (7.18s)** and again at **01:37:04Z (7.22s)** — the documented DB-connect stall, steady. Real user
+path `/feed/for-you?limit=3` → **500 `{"error":{"code":"db_error"}}`** in 7.28s, so this is user-facing
+failure, not a probe artifact. `getsizzle.app` → **200 in 0.12s** (static frontend healthy; the app degrades
+gracefully per TD-38).
+
+**Not a deploy, and no rogue deploy.** `/health` reports `commit 9ccfcf9`, which equals
+`git/refs/heads/main` on origin (`9ccfcf9fb852988338459e8cf27288ff020b86e3`). `vercel ls sizzle` shows the
+newest Production deployment **● Ready, 1h old, 19s build** — session 51's own docs push, the expected artifact
+of the hourly log commits. Rollback remains a non-candidate (§5: the last pre-outage application deploy was
+15 days old, and an older API still cannot resolve a withdrawn DNS record).
+
+**Alerting still dark.** `gh workflow list --all` → `Uptime  disabled_manually`. Per §7 this stays muted
+deliberately: re-enabling touches `.github/workflows/**` (minimum Level C) and would override a human mute.
+
+**The one thing checked fresh this session: no owner work is at risk.** The working tree shows four dirty paths
+(`scripts/ops/sweep-prompt.md`, `scripts/verify-deploy.mjs`, `tests/invariants/ops-tooling.test.mjs`, and
+untracked `scripts/ops/origin-drift.mjs`). All four were `diff`ed against the origin mirror and are
+**byte-identical to origin** — they are the TD-27 checkout repair, not Branden's uncommitted work. So the stash
+trap was correctly avoided: nothing was stashed, committed or reverted (CLAUDE.md rule 11). Prior sessions
+asserted this from memory; it is verified here.
+
+**What I did NOT do, and why — recorded so the next session does not re-open it.**
+1. **Did not extend the session-34 calendar chain.** Session 51 closed it at 5:36 PM PDT Wednesday. Sessions
+   28/30 established that tone calibration and embedded predictions are the first prose to rot, and §7's
+   standing convention is that only the two live counters are re-stamped per session. A third consecutive
+   calendar paragraph would add triage load for the owner and zero information. **Only the two counters moved.**
+2. **Did not open a new audit surface.** Sessions 13/18/19 (crons), 14 (auth sessions), 15 (pause clock),
+   23/35 (both money rails), 31 (Apple's review queue), 49 (OAuth credential clock) and 50 (the user-facing
+   surface) exhausted the "what else has a clock?" lens; sessions 40 and 51 both shipped deliberate negative
+   results. Manufacturing a 52nd finding would be noise the owner must triage.
+3. **Did not ship TD-34's patch.** Session 48 showed the patch that suggests itself (TD-28's error guard) does
+   not intersect the failure, and verifying the SQL filter semantics requires the dead DB — it fails session
+   45's in-lane test. All open follow-ups (TD-28/29/33/34/35/36/38) stay parked for the same two reasons.
+
+**No control was weakened, no security-sensitive path touched, no application code changed.**
+
+**Escalation — called before this paragraph was written (session 38's ordering rule).**
+`PushNotification` returned, verbatim: *"Mobile push not sent (Remote Control inactive)."* That is the **51st**
+consecutive session with no working push path. Per §7 the channel inventory is exhaustively verified and
+complete — Remote Control, `uptime.yml`, the Gmail/Supabase connectors and `osascript` are all dead or
+deliberately muted, and a GitHub Issue is rejected on purpose (the repo is public; it would advertise a live
+outage and an open financial-webhook window). **This entry, like the 51 before it, reaches you only because you
+came and looked.**
+
+**Still open — the fix is owner-only (Level D).** §1 of
+`docs/operations/incidents/2026-09-21-supabase-project-unreachable.md` is the two-minute action sheet.
+**§4 step 0 must be read before clicking Resume** (the 60-second `finalize-videos` trap, TD-34, which silently
+turns TD-29's backfill into a no-op and makes its counting query return a false `0`). Order: **disable Vercel
+cron jobs on project `sizzle` → Resume → §4 steps 1-4 verify → step 6 is the manual Apple/RevenueCat Retry that
+restore will not replay → `gh workflow enable uptime.yml`.**
+
+**Shipped:** this entry + the two re-stamped counters, pushed via the git-data API (TD-27: local `main` is
+stale at `d4c5395`; `git fetch` is not allowlisted unattended). Content scanned out-of-band for
+credential-shaped strings before push, because `secrets:check` is structurally blind on this path (TD-33).
