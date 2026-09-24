@@ -7745,3 +7745,101 @@ only — no CLI or agent path exists, settled session 64) → **② Resume / un-
 new project**) → **③ §4 steps 1–4 verify** → **④ §4 step 6, the manual RevenueCat Retry** (restore does
 **not** replay it) → **⑤ re-enable the crons, `gh workflow enable uptime.yml`, and reconnect Remote
 Control.** Do ① and ② before **11:23 AM PDT** and the Stripe half costs nothing.
+
+---
+
+## Watchdog session 67 — 2026-09-24 10:05 PDT (`17:05Z`) — SEV-1 hour 70h45m; pure re-verification; **the Stripe free-retry window closes in 1h15m**
+
+Watchdog fired `2026-09-24T17:05:50Z` on `API degraded (503): database-unreachable`. Same outage,
+still open, **owner-only**. No repo change can close it. Nothing shipped but this entry.
+
+### Re-verified down — four probes plus a DNS control
+
+| Probe | Time (UTC) | Result |
+|---|---|---|
+| `GET /health` (API) | `17:06:08Z` | `503` · `problems:["database-unreachable"]` |
+| `GET /health` (API) | `17:07:44Z` | `503` · identical body |
+| `GET …supabase.co/rest/v1/` | ~`17:06Z` | **curl exit 6** — could not resolve host |
+| `GET …supabase.co/rest/v1/` | `17:07Z` | **curl exit 6** — could not resolve host |
+| **control:** `GET supabase.com` | ~`17:07Z` | `200` — resolver and egress are healthy |
+
+The control is the part that matters and is worth keeping in the record: `curl` exit **6** is
+*name resolution failure*, not a timeout or a 5xx, and the project hostname
+`gsxoaurmsgqascxukony.supabase.co` has **no DNS record** while `supabase.com` resolves and answers
+`200` from the same shell. That distinguishes a withdrawn/suspended project from a host-side blip
+or a local resolver fault, and it is why this 503 is **not** the "HTTP 000 summons" false-alarm
+class — it has a JSON body, and the body is corroborated at the DNS layer.
+
+All three of `/health`'s DB probes returned `null` (`stuckVideoBacklog`, `parkedMediaDeletions`,
+`cronAges`), which is what sets `database-unreachable` at `health.ts:88` — so the flag is a real
+triple-probe failure, not a single-query artifact or a health-logic bug.
+
+### Not a deploy, and no rogue deploy
+
+`/health` reports `commit 2b67014`; `gh api git/refs/heads/main` → `2b67014ba48f8d340ecd39043626e7e94b2ec8ce`.
+Production is serving current `main`. The outage is entirely downstream of the repo.
+
+### The Stripe free-retry window — this is the second-to-last tick before it closes
+
+`2026-09-24T18:23:07Z` = **11:23 AM PDT**, **1h15m** out as of `17:07:44Z`. At the 60-minute
+cooldown, roughly **one** more re-verification (~`18:05Z`) lands before it — session 66 predicted
+two (`~17:02Z`, `~18:02Z`) and this is the first of them, so that count holds exactly.
+
+**Missing it is a cost increase, not a cliff**, and that framing has been stable for ten sessions:
+per-event **Resend** in the Stripe dashboard stays open to `2026-10-06` and needs **no secret key**;
+the CLI/API path runs to `2026-10-21`. Nothing breaks further at 11:24 AM — the Stripe half simply
+stops being automatic and becomes a manual click-per-event job for the owner.
+
+The deadline that has **already** passed and does **not** self-heal remains the RevenueCat/Apple
+one (`2026-09-21T20:58Z`): restore does not replay those events, and §4 step 6's manual **Retry**
+is still the only recovery. It stays the item most likely to be forgotten precisely because
+Resume makes everything *look* fixed.
+
+### Substitutes re-measured — both still dark, unchanged
+
+1. **`mcp__supabase__execute_sql`** → *"Unauthorized. Please provide a valid access token … via the
+   `--access-token` flag or `SUPABASE_ACCESS_TOKEN`."* Tokenless, not permission-gated — **TD-21
+   unchanged**, still one owner-side PAT rotation away from giving an agent a DB path.
+2. **`PushNotification`** — see the closing line of this entry for this session's result; the phone
+   channel has been dead 21+ days and **predates** the outage (**§7**). This log remains **pull,
+   not push**, which is still the best single explanation for why a two-click fix has run 70+ hours.
+
+### Nothing shipped, deliberately
+
+No security control was touched, weakened or worked around. `create_project` was again deliberately
+**not** called (**§3** — never create a new project; a new ref forces OAuth reconfiguration and signs
+every user out). Step 0's cron disable stays unrun: **settled session 64 as structurally owner-only**
+(CLI `57.0.0` exposes `add`/`list`/`run` only — no `disable`), so it is *not* counted here as an
+agent-actionable omission. No in-lane shippable work newly qualifies under session 45's test
+(*does verifying it require the dead dependency?*): **TD-28/29/34** need SQL semantics checked against
+a database with no DNS record (CLAUDE.md hard rule 4); **TD-30/36** are additionally **Level C**
+(payments); **TD-38** restores nothing and needs a browser; **TD-33** edits the very push path this
+log travels on.
+
+`scripts/verify-deploy.mjs` was **not** used as a ship gate: its success criterion is a `200`
+`/health`, unreachable while the DB is down, so it would emit a false "webhook missed" verdict
+(**TD-37**). Push verification was done directly against `git/refs/heads/main` instead.
+
+### Working tree
+
+The four locally-dirty ops-tooling paths (`scripts/verify-deploy.mjs`,
+`tests/invariants/ops-tooling.test.mjs`, `scripts/ops/sweep-prompt.md`, `scripts/ops/origin-drift.mjs`)
+are the **TD-27 stale-checkout artifact**, not Branden's uncommitted work — established session 52,
+re-confirmed byte-identical to the mirror since. Left untouched; CLAUDE.md rule 11 is satisfied
+because there is nothing of his to preserve. Local `main` is stale at `d4c5395`; all edits were made
+on the mirror in `.codex/origin-2b67014/` and **never** on the stale working copy, then pushed through
+the **GitHub git-data API** per **TD-27** (`git fetch`/`pull` are not allowlisted unattended).
+
+Secret gate: the **value-shaped** scan (prefix *plus* entropy tail, JWT, `PRIVATE KEY` blocks) on the
+pushed blob — the only scan that can fail here. `npm run secrets:check` is structurally blind on this
+path (**TD-33**, nothing is ever staged) and the bare-prefix scan false-positives forever on this log,
+which quotes the pattern list in prose.
+
+### Still open — owner-only (Level D), unchanged order
+
+**① Disable Vercel cron jobs on project `sizzle`** (Settings → Cron Jobs → *Disable Cron Jobs*; browser
+only) → **② Resume / un-restrict Supabase project `gsxoaurmsgqascxukony`** (read the dashboard's reason
+first, follow §1's branch table; **never create a new project**) → **③ §4 steps 1–4 verify** → **④ §4
+step 6, the manual RevenueCat Retry** (restore does **not** replay it) → **⑤ re-enable the crons,
+`gh workflow enable uptime.yml`, and reconnect Remote Control.** Do ① and ② before **11:23 AM PDT**
+and the Stripe half costs nothing.
