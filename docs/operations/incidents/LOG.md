@@ -6367,3 +6367,21 @@ restore will not replay → `gh workflow enable uptime.yml`.**
 both files were edited on the origin mirror in `.codex/origin-4ee063b/`, never on the stale working copy).
 Content scanned out-of-band for credential-shaped strings before push, because `secrets:check` is structurally
 blind on this path (TD-33).
+
+**Push verified (amendment, session 54).** Recorded as a second commit because the evidence did not exist when
+the entry above was written; this is the last word on the session and needs no further amendment.
+`git/refs/heads/main` → `be58a0880bb70f216fdf983ca0378aa321029a9a`; the GitHub webhook fired (so it is alive
+this hour) and the `sizzle` deployment reached **● Ready / Production in 20s**; `/health` then reported
+`commit: be58a08` at **03:44:08Z**, i.e. production is serving this session's own commit — the deploy is
+confirmed promoted, not assumed.
+
+That flip doubles as the §8 **free control**, and it is the one piece of fresh diagnostic value this session
+adds: the 503 `database-unreachable` reproduces **identically on a brand-new build with freshly injected
+environment variables**, which rules out a stale build artifact and a never-picked-up env var in one shot. The
+cause is external to everything this repo can deploy.
+
+`node scripts/verify-deploy.mjs` was deliberately **not** used as the gate: its success criterion is a **200**
+`/health`, which cannot occur while the database is unreachable, so it would poll its full 8-minute budget and
+then report a false "the git webhook likely missed the push" (session 45 / TD-37). Promotion was confirmed by
+the stronger direct method instead — `vercel ls sizzle` READY plus the `/health.commit` flip above. Saying so
+plainly rather than claiming a green verify.
