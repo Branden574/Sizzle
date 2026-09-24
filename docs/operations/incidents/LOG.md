@@ -7490,3 +7490,145 @@ only — no CLI or agent path exists, settled session 64) → **② Resume / un-
 new project**) → **③ §4 steps 1–4 verify** → **④ §4 step 6, the manual RevenueCat Retry** (restore does
 **not** replay it) → **⑤ re-enable the crons, `gh workflow enable uptime.yml`, and reconnect Remote
 Control.** Do ① and ② before **11:23 AM PDT** and the Stripe half costs nothing.
+
+## Daily sweep 2026-09-24 — full checklist; SEV-1 unchanged at hour 69; no new advisories; TD-21's substitutes measured dark
+
+**Scope note.** This is the *sweep* channel, not the watchdog. Watchdog session 65 re-verified the
+incident 6 minutes before this run (`15:08Z`) and its counters are current — this entry deliberately
+does **not** re-derive the root cause, re-stamp the incident doc, or manufacture a 41st finding. For
+the incident read `docs/operations/incidents/2026-09-21-supabase-project-unreachable.md`. What is new
+here is items 4/5/6.
+
+**Step 0 (TD-27) — drifted, handled.** Local `HEAD` `d4c5395` (the 2026-09-02 sweep) vs origin
+`ded164d`: **8 files differ**. `scripts/ops/origin-drift.mjs` named each drifted file and the sweep
+check it corrupts, mirrored origin's copies to `.codex/origin-ded164d/`, and every check below plus
+every edit in this commit was taken against **that mirror**, never the working copy.
+
+### Item 1 — production: API down (unchanged), web fully healthy and current
+
+| surface | result |
+|---|---|
+| `GET /health` | **503 `degraded`**, `problems:["database-unreachable"]`, commit `ded164d` == origin `main` |
+| `stuckVideoBacklog` / `parkedMediaDeletions` / `cronAges` | all **`null`** — the DB probe fails first |
+| `GET https://getsizzle.app` | **200** in 0.62s |
+| `GET https://getsizzle.app/version.json` | **1.0.101**, commit `ded164dfab8e8dc…` == origin `main`, built `15:10:07Z`, `cache-control: no-store, max-age=0` |
+
+The frontend row is the one thing here worth stating positively, and it was checked rather than
+assumed: **the web deploy pipeline is completely healthy** — it built and promoted a fresh bundle four
+minutes before this sweep, it is serving the current commit, and the TD-8 `no-store` guard on
+`version.json` is intact. The outage is confined to the database dependency; nothing about deploys,
+the CDN, or the static surface is degraded. That also re-confirms §5 of the action sheet from a second
+angle: there is no bad deploy to roll back to on *either* project.
+
+### Item 2 — CI: green
+
+Five most recent `main` runs all `completed / success` (36018110684, 36010479718, 36010247382,
+36002613566, 35996632138) — every one a docs-only incident/sweep push. Workflow states: `CI` active,
+`CodeQL` active, `Dependabot Updates` active, **`Uptime` `disabled_manually`** (a deliberate human
+mute; re-enabling is step ⑤ of the owner runbook and was correctly not done here).
+
+### Item 3 — 3 open dependency PRs, all correctly still held, none new
+
+- **#8** `hono` 4.13.0→4.13.5 — CI-green, non-major, and it clears all three hono advisories. Held:
+  merging **deploys the API**, and the sweep ship rule requires `verify-deploy.mjs` afterwards, whose
+  success criterion is a 200 `/health` — which returns 503 regardless of this bump. **Unverifiable by
+  construction** while the SEV-1 is open (hard rule 4). Queued as the first post-restore deploy (TD-31).
+- **#6** (esbuild + vite) and **#3** (`@hono/node-server` 2.x) — majors, owner lane (TD-18).
+
+All three already carry hold comments (#8's dated 2026-09-22); **no duplicate comment added**, since a
+third identical note adds noise and no information.
+
+### Item 4 — `npm audit`: no new advisories, and TD-27's cost re-measured
+
+Origin tree: **3 vulnerabilities — 2 moderate, 1 high**, byte-identical to the 09-23 sweep's
+measurement. `esbuild` ≤0.24.2 moderate + `vite` ≤6.4.2 **high** (dev-server scope, fix is
+semver-major → **TD-18**/PR #6) and `hono` ≤4.13.4 moderate ×3 (**TD-31**/PR #8). **Nothing new since
+09-22, and nothing fixable in-lane** — every available fix is either major or blocked by the SEV-1.
+
+The stale working tree returns **4 (2 moderate, 2 high)**. The extra is `@xmldom/xmldom` 0.9.10
+**HIGH**, fixed on origin **2026-09-03**. A sweep auditing its own checkout would today report a HIGH
+that has been fixed for 21 days — the third measurement of the same phantom on the same package.
+TD-27 updated.
+
+### Item 5 / 5b — the DB-state checks are dark, and so is every substitute (the finding of this sweep)
+
+`mcp__supabase__get_advisors` returned the same `Unauthorized … --access-token flag or
+SUPABASE_ACCESS_TOKEN` it has since 2026-08-16 (TD-21 — the PAT is revoked, so the fix is a rotation,
+not a grant). That much is routine. What is **not** routine is that all three documented fallbacks
+failed too, and **for a different reason than the credential**:
+
+1. `/health`'s `parkedMediaDeletions` gauge — shipped 2026-08-19 specifically so the sweep would never
+   again need a DB path for item 5 — returns **`null`**, as do `stuckVideoBacklog` and `cronAges`.
+2. `scripts/ops/anon-boundary-probe.mjs`, the credential-free TD-7/TD-26 substitute that has stood in
+   for the advisor RLS lints on every blocked day since 08-17, **dies before its first assertion**:
+   `TypeError: fetch failed … getaddrinfo ENOTFOUND gsxoaurmsgqascxukony.supabase.co`.
+
+**The point is structural, and it is verified rather than inferred.** TD-21's mitigations were built
+for *credential* diversity — a service-role gauge, an anon black-box probe, and the MCP PAT are three
+different ways to authenticate. They are **not** dependency-diverse: **all three terminate at the same
+Supabase hostname**, so a single DNS withdrawal takes the primary and every fallback at once. This is
+the first sweep since 2026-08-19 on which item 5 is unanswerable — every prior blocked day still
+answered it — and items 5 and 5b are now *both* fully dark. Worth recording because it bounds what
+TD-21's close condition buys: **neither option (a) nor (c) would have helped today.** Only the restore
+re-lights these checks, and after the restore they must actually be re-run — the outage has left ~69
+hours during which no-one can say what `pending_media_deletions` or `video_assets` look like (which is
+exactly the state TD-29/TD-34 are about).
+
+**The one item-5b channel that is not Supabase-dependent was run and is clean:**
+`gh api repos/Branden574/Sizzle/secret-scanning/alerts?state=open` → **`[]`**, zero open alerts.
+
+### Item 6 — flag drift: register is accurate; three entries updated, none closed
+
+`docs/engineering/technical-debt.md` was read in full against the mirror. It is **current through
+watchdog session 65** and no entry was found stale or wrongly open — the SEV-1 sessions have kept it
+in good repair. Updated in place: **TD-21** (the substitutes-are-dark finding above), **TD-27** (the
+re-measured phantom-advisory delta), **TD-32** (the cadence has held three consecutive days —
+09-22/23/24 — while the *observability* half of the entry is untouched; had today's sweep silently not
+run, nothing would have said so). Nothing was closed: every open entry's close condition still
+requires either the database, a browser, a simulator, or an owner decision.
+
+One unrelated defect in the file itself was repaired in the same pass: **TD-26's row was missing its
+Status cell** (6 pipes in a 7-pipe table, dating to the 2026-08-21 sweep that filed and closed it), so
+the register rendered a **blank Status for a closed entry** — the one column a reader scans to tell
+open from done. Added `✅ closed 2026-08-21`; all **38** TD rows now well-formed. Cosmetic, but it was
+misreporting closure state in the exact table this sweep item exists to keep honest.
+
+### Nothing shipped as code, and the reason is narrower than "there is a SEV-1"
+
+Session 45's test — *does verifying it require the dead dependency?* — was applied to the whole
+register. TD-28/29/34 need SQL semantics checked against a database with no DNS record; TD-30/36 are
+additionally **Level C** (payments); TD-38 needs a browser; TD-22 is Level C by blast radius; TD-1
+needs the simulator. **TD-33 is the only item that passes the test** — it is Level B, `scripts/`-only,
+and its fix (scan the blob strings the git-data pusher is about to upload, instead of an always-empty
+`git diff --cached`) is verifiable offline with unit tests and no database.
+
+It is still **held**, for a sharper reason than the one recorded on the entry. TD-33 currently says the
+blocker is that "this session would have to use the very script it was editing." The real blocker is
+what that script currently *is*: with `PushNotification` dead since 2026-09-03 (§7) and `Uptime`
+muted, the git-data push path is the **sole functioning channel from production to Branden** for the
+duration of this incident. Editing the transport that the action sheet and this log travel on, while
+they are the only transport, risks the incident's communication channel to close a gap that CI's
+`--all` scan still covers post-push. Ship it as the second post-restore change, after PR #8.
+Compensating control used this sweep, unchanged from 09-22: the pushed blobs were scanned out-of-band
+for value-shaped credentials (prefix **plus** entropy tail, JWT, and PRIVATE KEY blocks) — clean.
+`npm run secrets:check` is structurally blind here (TD-33, nothing is ever staged) and the bare-prefix
+scan false-positives forever on this log, which quotes the pattern list in prose.
+
+`npm run test:invariants` — **44/44 green**.
+
+### For Branden — nothing new, and the order has not changed
+
+This sweep found **no new production risk**. The only thing that matters today is still the two owner
+clicks the action sheet has carried for 69 hours, and one of their deadlines is **this morning**:
+
+**① Disable Vercel cron jobs on project `sizzle`** (Settings → Cron Jobs → *Disable Cron Jobs* —
+browser only, settled session 64) → **② Resume / un-restrict Supabase project
+`gsxoaurmsgqascxukony`** (read the dashboard's reason first; **never create a new project**) →
+**③ §4 steps 1–4 verify** → **④ §4 step 6, the manual RevenueCat Retry** (restore does *not* replay
+it) → **⑤ re-enable the crons, `gh workflow enable uptime.yml`, reconnect Remote Control.**
+
+Doing ① and ② before **11:23 AM PDT today** (`2026-09-24T18:23Z`) keeps the Stripe half free and
+automatic. **Missing it is a cost increase, not a cliff** — the dashboard per-event **Resend** path
+stays open to 2026-10-06 and needs no secret key. Post-restore engineering queue, in order:
+**PR #8** (hono) → **TD-33** → **TD-29/TD-34** (the stranded-video cohort, which is the part of this
+incident that does *not* self-heal) → **TD-21 items 5/5b re-run**, which have now been dark for 69 hours.
