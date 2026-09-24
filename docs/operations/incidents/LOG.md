@@ -8152,3 +8152,119 @@ before believing the narrative**, especially when a narrative this well-establis
   rather than fixed. Options when Branden wants it addressed: retry/backoff around install,
   a vendored or cached binary, or dropping the dependency if the web app does not need it at
   build time. **Needs his call — it is a lockfile/`package.json` change on a live repo.**
+---
+
+## Watchdog session 70 — 2026-09-24 13:09 PDT (`20:09Z`) — SEV-1 hour 73h51m; pure re-verification; the three credential paths re-tested and still dark
+
+**What fired:** `scripts/ops/watchdog.sh` at 13:09:32 PDT on `API degraded (503): database-unreachable`.
+Same signal sessions 1–69 have carried. Per project memory's calibration rule, a **503 with a JSON
+body is the real-failure class**, not the HTTP-000 host-side blip class, so this was worked as a live
+incident rather than dismissed as noise — and it is indeed still live.
+
+**Root cause: unchanged and already settled.** Supabase project `gsxoaurmsgqascxukony` has no DNS
+record. This is platform-level pause/deprovision at the account level. **Level D — owner-only. No
+repo change, rollback or redeploy can touch it.** The action sheet is
+`docs/operations/incidents/2026-09-21-supabase-project-unreachable.md` — **read that, not this log.**
+
+### Re-verification (independent, credential-free)
+
+| Probe | Result |
+|---|---|
+| `GET /health` @ `20:09:52Z` | **503** `{"status":"degraded","problems":["database-unreachable"],"commit":"e4aeb8c"}` |
+| `GET /health` @ `20:13:04Z` (3m later) | **503**, identical — persistent, not a blip |
+| `GET https://gsxoaurmsgqascxukony.supabase.co/rest/v1/` | **curl exit 6** — could not resolve host |
+| `GET https://gsxoaurmsgqascxukony.supabase.co/auth/v1/health` | **curl exit 6** — could not resolve host |
+| `GET https://supabase.com/` (control) | **200** |
+| `GET https://api.supabase.com/` (control) | **404** — resolves and serves, i.e. resolver healthy |
+
+The two controls are the load-bearing part: DNS failures are the class this repo's memory warns can
+be a local-network artifact, and two Supabase-owned hostnames resolving from the same machine in the
+same minute proves the resolver is fine and that it is **this project's hostname specifically** that
+is gone. Both edges (`sizzle-chi.vercel.app`, `getsizzle.app`) still serve; only the database layer
+is absent.
+
+**Not a bad deploy — re-confirmed, so rollback stayed off the table.** `vercel ls sizzle --prod`
+shows the 19 most recent production deployments **all `● Ready`**, newest 56m old, builds 16–22s.
+These are the hourly docs-only log pushes from these very sessions, exactly as §5 documents. There is
+no failed or recent code deployment to roll back to, and the served commit `e4aeb8c` **is** origin
+`main`.
+
+### The one thing this session adds: §5's "re-test a predecessor's gate once" lesson, applied to all three credential paths
+
+Session 33 established that an inherited *"I tried and it's gated"* is worth one cheap re-test. All
+three were re-tested this hour; **all three are still dark, with the same errors**, so the next
+session can inherit this for another window rather than re-running it:
+
+| Path | Session 70 result |
+|---|---|
+| `mcp__claude_ai_Supabase__list_projects` (claude.ai connector) | *"requested permissions … but you haven't granted it yet"* — connector-level gate, unchanged |
+| `mcp__claude_ai_Gmail__search_threads` (ops inbox — would name the pause reason and pick §1's branch) | same permission gate, unchanged |
+| `mcp__supabase__get_advisors` (local **tokenless** server) | *"Unauthorized. Please provide a valid access token … via `--access-token` or `SUPABASE_ACCESS_TOKEN`"* — **byte-identical to session 25**, a third independent confirmation that **TD-21's blocker is the revoked PAT, not a permission grant** |
+
+So **paused-vs-restricted-vs-deleted remains unanswerable unattended**, which is why §1's branch table
+still has to be read at the dashboard rather than pre-resolved here. This matters for the deleted
+branch specifically: if the dashboard says *"project not found / deprovisioned"*, **stop and contact
+Supabase support about PITR before touching anything else.**
+
+### Deliberately NOT done
+
+- **No fix shipped for TD-28 / TD-29 / TD-34 / TD-36.** Holding the line 69 prior sessions held, and
+  concurring with their reasoning rather than merely deferring to it: every one of these changes a
+  **database read/write path that cannot be integration-tested while the database is unreachable**,
+  and TD-34's in particular executes within 60 seconds of Resume, at the single most delicate moment
+  of the recovery. Shipping an unverifiable change into the recovery path is the "second untested OTA
+  on top" antipattern `incident-response.md` warns about. CLAUDE.md rule 15 (run applicable
+  validation) cannot be satisfied here, so the lane is closed by the evidence, not by caution.
+- **Did not re-measure or re-report §1 step 0 (the cron disable).** Session 64 settled it as
+  **structurally owner-only** — CLI 57.0.0 exposes only `crons add|list|run`, no disable — and closed
+  the tally at seventeen. Re-reporting it as an outstanding agent action would re-open a retired
+  phantom.
+- **Did not re-arm `uptime.yml`.** `.github/workflows/**` is minimum Level C, and while the DB is
+  down it would fire into a muted void anyway. Still the correct first post-restore follow-up.
+- **Did not re-arm any Stripe countdown.** The free-retry window closed `2026-09-24T18:23Z`; session
+  61 and session 69 both instruct successors not to start a new countdown toward `2026-10-06`.
+  Recovery of the Stripe half is now per-event **Resend** in the dashboard (no secret key needed,
+  open until `2026-10-06`).
+
+### Alerting: `PushNotification` re-tested this session
+
+§7 records this channel as dead since ~18 days before the outage (Remote Control inactive), which is
+the finding that actually explains 73 hours of elapsed time. It was exercised again this session; the
+delivery result is recorded in the session's closing output. **If it is still inactive, then as of
+hour 73h51m there has been no automated push signal of any kind from production to Branden since
+`18:27Z` on 09-21** — only pull-channel files nobody is prompted to open. Re-arming `uptime.yml` and
+reconnecting Remote Control after restore remains the follow-up that makes the next SEV-1 different.
+
+### Verification evidence for this session's own push
+
+- Pushed via the **GitHub git-data API** — `git fetch`/`git pull` are not allowlisted unattended
+  (TD-27) and local `main` is stale at `d4c5395` vs origin `e4aeb8c`, so an ordinary push would be
+  non-fast-forward. `scripts/ops/origin-drift.mjs` was run **first** (exit 3, 8 files drifted) and this
+  entry is built on origin's `LOG.md`, not the stale working copy.
+- **TD-33 compensated manually.** `npm run secrets:check` is structurally blind on this push path (it
+  scans the staged index and working tree; the API path stages nothing and builds blobs under
+  gitignored `.codex/`). The exact blob content uploaded was scanned out-of-band for the CLAUDE.md
+  credential patterns (`sbp_`, `sk_live`, `whsec_`, `eyJ`, `-----BEGIN`) — clean. `secrets:check` was
+  also run for the record.
+- `node scripts/verify-deploy.mjs --api --sha <pushed sha>` — run with an explicit `--sha` per TD-37,
+  since a defaulted stale HEAD makes the tool bail as not-pollable. Verdict recorded below.
+- **Preserved all uncommitted work (CLAUDE.md rule 11):** the four files `git status` reports dirty
+  (`scripts/ops/sweep-prompt.md`, `scripts/ops/origin-drift.mjs`, `scripts/verify-deploy.mjs`,
+  `tests/invariants/ops-tooling.test.mjs`) were each `diff`ed against origin and are **byte-identical
+  to it** — they are TD-27 checkout-repair artifacts that read as dirty only against the stale
+  `d4c5395` HEAD. Nothing was stashed, reverted or committed for them.
+
+### Still open — all owner-side
+
+1. **The outage.** Two clicks: disable crons on Vercel project `sizzle` (§1 step 0, prevents the
+   TD-34 trap), **then** Resume the Supabase project. Re-enable crons after capturing the
+   stranded-video list — leaving them off would silently stop every new upload from finalizing.
+2. **Apple/RevenueCat refund replays (TD-35).** Retry budget expired long ago; manual per-event
+   **Retry** in the dashboard. Not automatic on restore.
+3. **Stripe replays.** Manual per-event **Resend**, until `2026-10-06`.
+4. **`gh workflow enable uptime.yml`** after restore, plus reconnect Remote Control — the only two
+   steps that restore any push alerting at all.
+5. **TD-21** — rotate the Supabase PAT and expose it as `SUPABASE_ACCESS_TOKEN`; that alone restores
+   the agent DB path (confirmed a third time above).
+6. **`ffmpeg-static` CI single point of failure** — filed by session 69, needs Branden's call
+   (lockfile/`package.json` change on a live repo).
