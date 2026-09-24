@@ -6915,3 +6915,93 @@ un-restrict the Supabase project** `gsxoaurmsgqascxukony` (read the dashboard's 
 follow §1's branch table; **never create a new project**) **→ ③ §4 steps 1–4 verify → ④ §4 step 6
 manual RevenueCat Retry** (restore does not replay it) **→ ⑤ `gh workflow enable uptime.yml`.**
 Do ① and ② before **11:23 AM PDT** and the Stripe half costs nothing.
+
+## Watchdog session 61 — 2026-09-24 03:54 PDT (`10:54Z`) — SEV-1 hour 64, re-verification only; no new finding, one correction to session 60
+
+**Fired:** `scripts/ops/watchdog.sh` at 03:54:01 PDT — `API degraded (503): database-unreachable`.
+**Same incident as 2026-09-21.** Root cause unchanged and external: the Supabase project
+`gsxoaurmsgqascxukony` is absent from DNS, so **no repo change, rollback or redeploy can reach it**
+(rollback was never a candidate — there is no bad deployment on either side). Fix is **Level D**,
+owner-only, ~2 minutes of clicking. Read
+`docs/operations/incidents/2026-09-21-supabase-project-unreachable.md`, not this log.
+
+**Elapsed 64h34m** as of `2026-09-24T10:57:18Z`. **Stripe free-retry slack 7h25m**, expiring
+`2026-09-24T18:23Z` = **11:23 AM PDT this morning**.
+
+**Seven independent checks, all consistent with the standing diagnosis.**
+① `/health` → **503**, `problems:["database-unreachable"]`, all three DB gauges `null`
+(`stuckVideoBacklog` / `parkedMediaDeletions` / `cronAges`), `commit edc77a2`.
+② Served commit `edc77a2` **==** origin `main` head — no rogue deploy, no drift between what is
+deployed and what is in git.
+③ A real user path, not just liveness: `GET /feed/for-you?limit=3` → **500**
+`{"error":{"code":"db_error"}}`, and the runtime log for that exact request reads
+`[db_error] TypeError: fetch failed` after 7s.
+④ DNS across **three** resolvers (system, `1.1.1.1`, `8.8.8.8`): `<ref>.supabase.co` **and**
+`db.<ref>.supabase.co` → **ENOTFOUND** on all three, while `api.supabase.com` resolves
+(`104.18.42.230`, `172.64.145.26`) and the apex `supabase.co` → `A 76.76.21.21`. Supabase's own
+infrastructure is reachable; only our per-project records are gone. (The apex `A`-vs-`ENODATA`
+difference from sessions ≤40 is session 41's already-recorded non-signal.)
+⑤ Vercel project `sizzle` — twelve most-recent production deploys all **Ready**, newest 60m old;
+every one of them is a prior session's docs-only log push, not a code deploy.
+⑥ Web frontend `getsizzle.app` → **200** (the static shell serves fine; it is the API's DB calls
+that fail, which is why §7's user-facing picture still holds).
+⑦ `git log` on origin — every commit since the outage is a watchdog session's own log push.
+**Zero owner action of any kind.**
+
+**§1 step 0 is still not done, measured rather than assumed.** `vercel crons ls --project sizzle`
+still lists all five paths, and the runtime log shows `finalize-videos` **and** `publish-scheduled`
+firing every single minute (03:53:34 / 03:54:17 / 03:54:34 / 03:55:17 / 03:55:34 / 03:56:17), each
+returning **200** against a database with no DNS record — TD-28's false-green heartbeat reproduced
+in production for the nth time, and confirmation that the **TD-34 trap remains armed** ~68h after
+session 18 found it. Disabling the crons is still the cheapest outstanding action on the page and
+now also widens the runtime-log capture window (TD-36).
+
+**Pager state re-checked:** `gh workflow list --all` → `Uptime` still **`disabled_manually`**.
+`PushNotification` attempted at end of session (result recorded below). The claude.ai **Gmail**
+connector was re-tested for the Supabase notification email that would settle
+paused-vs-restricted-vs-deleted — still **permission-gated** (`search_threads` denied), so §1's
+branch table remains unanswerable from inside a session, exactly as §5 records.
+
+**The one thing this session changed, and it is documentation hygiene, not a finding.** Session 60
+wrote that its summary was *"almost certainly the last written while the free path is open,"*
+reasoning that the next watchdog tick (~3:53 AM PDT) was still overnight. **That is wrong:** the
+watchdog runs on a 60-minute cooldown, so roughly **seven** more re-verifications land between
+3:53 and 11:23 AM PDT and this entry is the first of them. Left uncorrected it invites the reading
+that no further checks are coming. Fixed in the action sheet's Stripe banner, which was also
+**compressed**: sessions 34/37/46/51/60 each appended a calendar link tracking "the last full
+working day," and all five have now resolved to one fact — *you are inside the final free-path
+window, it closes 11:23 AM PDT* — so the 23-line superseded chain was collapsed to that statement
+instead of being extended a sixth time. This is session 30's standing anti-rot convention applied
+to the structure rather than to individual timestamps; the full superseded text stays in this log,
+which is append-only. **No deadline, branch, finding or priority moved.**
+
+**Nothing shipped beyond docs, deliberately.** Every parked item stays parked for the reasons
+already recorded: TD-28/29/34/36 are unverifiable against a dead DB and TD-36 is additionally
+Level C (`routes/monetize.ts`); TD-38 (the feed error card blaming the user's connection) restores
+nothing and cannot be verified unattended without a browser; `gh workflow enable uptime.yml` would
+override a deliberate human mute and `.github/workflows/**` is minimum Level C. No security control
+was touched, weakened, or worked around.
+
+**Shipped:** this entry plus the re-stamped/compressed counters in
+`docs/operations/incidents/2026-09-21-supabase-project-unreachable.md`, pushed through the GitHub
+git-data API per **TD-27** — local `main` is stale at `d4c5395`, behind origin `edc77a2`, and
+`git fetch`/`pull` are not allowlisted unattended, so both files were edited on the origin mirror
+in `.codex/origin-edc77a2/` and **never** on the stale working copy. `npm run secrets:check` run
+plus an out-of-band scan of both file bodies for value-shaped credential strings, because
+`secrets:check` only reads tracked working-tree files and is structurally blind to a git-data-API
+push (TD-33). `scripts/verify-deploy.mjs` is used for **deployment-state evidence only, not as the
+ship gate**: its success criterion is a 200 `/health`, which is unreachable while the DB is down, so
+it would emit a false "webhook missed" verdict (TD-37) — promotion is confirmed by the amendment
+below instead. The four locally-dirty ops-tooling paths (`scripts/ops/sweep-prompt.md`,
+`scripts/verify-deploy.mjs`, `tests/invariants/ops-tooling.test.mjs`, `scripts/ops/origin-drift.mjs`)
+were left untouched per the stash trap — they are the TD-27 checkout repair, not Branden's
+uncommitted work, and stashing them would re-break the next session's step-0 drift check.
+
+**Still open — owner-only (Level D), unchanged order.** **① disable Vercel cron jobs on project
+`sizzle`** (Settings → Cron Jobs → *Disable Cron Jobs* — disarms the TD-34 trap where the first
+`finalize-videos` tick within 60s of restore mass-flips stranded videos to a terminal `error` the
+finalizer refuses to re-poll) **→ ② Resume / un-restrict Supabase project `gsxoaurmsgqascxukony`**
+(read the dashboard's reason first, follow §1's branch table; **never create a new project**) **→
+③ §4 steps 1–4 verify → ④ §4 step 6, the manual RevenueCat Retry** (restore does **not** replay it)
+**→ ⑤ `gh workflow enable uptime.yml`.** Do ① and ② before **11:23 AM PDT** and the Stripe half
+costs nothing.

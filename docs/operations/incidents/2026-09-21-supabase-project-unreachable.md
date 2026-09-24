@@ -1,7 +1,7 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
 **Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
-(11:23 AM PDT Mon 09-21). **63h30m as of 2026-09-24T09:53:48Z** — re-verified by session 60 (watchdog).
+(11:23 AM PDT Mon 09-21). **64h34m as of 2026-09-24T10:57:18Z** — re-verified by session 61 (watchdog).
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
 
 > **🛑 READ §4 STEP 0 BEFORE YOU CLICK RESUME.** Session 18 found that the first
@@ -10,33 +10,24 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > re-poll** — which silently converts TD-29's prescribed backfill into a no-op and makes
 > its counting query return `0`. One dashboard toggle before Resume avoids the whole mess.
 
-> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — ~8h29m of slack left, and that expiry is TODAY (§2).**
-> Restore before it and the **Stripe** half self-heals with zero manual work. Missing it is *not*
-> a cliff — manual replay stays open to `2026-10-06` (dashboard) / `2026-10-21` (API). There is
-> real time; this is urgent, not frantic.
-> **In calendar terms (session 34):** that expiry is **11:23 AM PDT Thursday 09-24**, so
-> **Wednesday 09-23 is the last full working day on which the cheap path is still available.**
-> **Session 37 (`2026-09-23T10:54Z`): that day has now begun.** It is Wednesday morning PDT —
-> the cheap-path day is no longer approaching, it is the current one, and the next waking
-> window is the last that lands comfortably inside the Stripe budget.
-> **Session 46 (`2026-09-23T19:17Z`): that day is now past its midpoint** — 12:17 PM PDT
-> Wednesday, so roughly half of the last full working day has been spent. The action itself
-> is still ~2 minutes and the slack is still 23h; what has shrunk is the number of *waking*
-> hours left inside it, not the feasibility.
-> **Session 51 (`2026-09-24T00:36Z`): that day has now ENDED** — 5:36 PM PDT Wednesday, so the
-> “last full working day” the chain above has tracked since session 34 is spent. The cheap path is
-> not gone and the slack is still **17h47m**, but every hour of it now falls in one of exactly two
-> windows: **tonight (Wed evening PDT)** or **Thursday morning before 11:23 AM PDT**. After that the
-> Stripe half stops self-healing and joins Apple’s in the manual-replay column (§2 — still open to
-> `2026-10-06` dashboard / `2026-10-21` API, so this is a cost increase, not a cliff).
-> **Session 60 (`2026-09-24T09:53Z`) — the chain ends here: of those two windows the first is spent
-> and the second is the one you are in.** It is 2:53 AM PDT Thursday with **8h29m** of slack, so the
-> only remaining hours are **this morning, roughly 7:00–11:23 AM PDT**. The watchdog's next tick
-> (~3:53 AM PDT) is still overnight, which makes this almost certainly the last summary written while
-> the free path is open. Two clicks — disable crons on Vercel project `sizzle`, then Resume the
-> Supabase project — before **11:23 AM PDT** and the Stripe half replays itself for free. After that
-> nothing breaks further; the work just becomes manual per-event **Resend** in the Stripe dashboard
-> (no secret key needed, 12 days left).
+> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` = 11:23 AM PDT **this morning** — ~7h25m of
+> slack as of `2026-09-24T10:57Z` (§2).** Restore before it and the **Stripe** half self-heals with
+> zero manual work, because the handlers are idempotent and the queued events replay themselves.
+> **Two clicks:** disable crons on Vercel project `sizzle` (§1 step 0), then Resume the Supabase
+> project. **Missing it is a cost increase, not a cliff** — per-event **Resend** in the Stripe
+> dashboard stays open to `2026-10-06` and needs **no secret key**; the API path runs to
+> `2026-10-21`. Nothing breaks further at 11:24 AM; the Stripe work just stops being automatic.
+>
+> *Compressed session 61 (`2026-09-24T10:57Z`), and one correction. Sessions 34/37/46/51/60 each
+> appended a calendar link to this banner tracking "the last full working day"; all five have now
+> resolved to the single fact stated above — you are inside the final free-path window — so the
+> superseded chain was collapsed rather than extended a sixth time (full text preserved in
+> `LOG.md`, which is append-only). **The correction:** session 60 wrote that its own summary was
+> "almost certainly the last written while the free path is open," reasoning that the next tick
+> (~3:53 AM PDT) was still overnight. That is wrong — the watchdog fires on a **60-minute**
+> cooldown, so roughly **seven more** re-verifications land between 3:53 and 11:23 AM PDT, and
+> this is one of them. No deadline moves; do not read session 60 as "no further checks are
+> coming."*
 
 > **🍎 NEW, session 23 — the Apple/RevenueCat half does NOT self-heal, and its window has
 > ALREADY CLOSED.** RevenueCat retries a failing webhook **5 times over 155 minutes total**,
