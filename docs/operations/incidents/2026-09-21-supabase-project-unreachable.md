@@ -1,7 +1,7 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
 **Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
-(11:23 AM PDT Mon 09-21). **56h21m as of 2026-09-24T02:45:00Z** — re-verified by session 53 (watchdog).
+(11:23 AM PDT Mon 09-21). **57h27m as of 2026-09-24T03:50:00Z** — re-verified by session 54 (watchdog).
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
 
 > **🛑 READ §4 STEP 0 BEFORE YOU CLICK RESUME.** Session 18 found that the first
@@ -10,7 +10,7 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > re-poll** — which silently converts TD-29's prescribed backfill into a no-op and makes
 > its counting query return `0`. One dashboard toggle before Resume avoids the whole mess.
 
-> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — ~15h38m of slack left (§2).**
+> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — ~14h33m of slack left (§2).**
 > Restore before it and the **Stripe** half self-heals with zero manual work. Missing it is *not*
 > a cliff — manual replay stays open to `2026-10-06` (dashboard) / `2026-10-21` (API). There is
 > real time; this is urgent, not frantic.

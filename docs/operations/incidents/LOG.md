@@ -6286,3 +6286,84 @@ stale at `d4c5395`, 1 commit behind origin `2f5bb53`; `git fetch` is not allowli
 were edited on the origin mirror in `.codex/origin-2f5bb53/`, never on the stale working copy). Content scanned
 out-of-band for credential-shaped strings before push, because `secrets:check` is structurally blind on this path
 (TD-33).
+
+## 2026-09-24 03:50Z — watchdog session 54 — SEV-1 unchanged, hour 57. Pure re-verification; no new finding, by design.
+
+**What fired.** `scripts/ops/watchdog.sh` at 2026-09-23 20:39:02 PDT: `API degraded (503): database-unreachable`.
+The same summons as the previous 53 sessions.
+
+**Root cause — established long ago, re-attested here rather than recalled.** Project-level DNS withdrawal for
+Supabase project `gsxoaurmsgqascxukony`. Probed this hour on three independent resolvers (system, `1.1.1.1`,
+`8.8.8.8`), all agreeing: `gsxoaurmsgqascxukony.supabase.co` → **ENOTFOUND** and
+`db.gsxoaurmsgqascxukony.supabase.co` → **ENOTFOUND**, while the parent zone `supabase.co` answers
+**A 76.76.21.21** (its `CNAME` → **ENODATA**, i.e. the name exists but has no record of that type). Parent zone
+up plus *every* per-project record NXDOMAIN, reproduced identically on three unrelated resolvers, is positive
+proof the records were withdrawn at the account level — not a platform DNS fault, and not a sandbox artifact.
+**Owner action is the ONLY fix (Level D): no repo change, rollback or redeploy reaches a withdrawn DNS record.**
+
+**Evidence this hour.** `/health` → **503** `problems:["database-unreachable"]`, with
+`stuckVideoBacklog`/`parkedMediaDeletions`/`cronAges` all `null`, at **03:39:01Z** (the watchdog's own
+capture), **03:39:26Z** (7.19s), **03:40:49Z** (7.23s) and **03:42:54Z** (7.21s) — the documented DB-connect stall,
+steady rather than flapping. Real user path `/feed/for-you?limit=3` → **500 `{"error":{"code":"db_error"}}`** in 7.29s with
+`dns=0.042s`, so the API's own hostname resolves and the edge answers promptly; only the database call stalls.
+That is user-facing failure, not a probe artifact. `getsizzle.app` → **200** in 0.25s (static frontend healthy;
+the app still degrades gracefully, with the copy caveat session 50 filed as TD-38).
+
+**Anti-flap check, explicitly: this is NOT the transient class.** Four probes spread across the session all returned 503
+**with a JSON body** — the real-incident signature, not the host-side `HTTP 000` blip class that accounted for
+5 of the first 6 summons. Recovery was never observed at any point in this session, so the false-alarm path
+does not apply and the "verify recovery twice, log, stop" branch is correctly not taken.
+
+**Not a deploy, and no rogue deploy.** `/health` reports `commit 4ee063b`; `git/refs/heads/main` on origin is
+`4ee063b`. Deployed SHA **==** origin `main`. The move from session 53's `2f5bb53` is fully accounted for:
+`4ee063b` is session 53's own log append, and a docs-only push redeploys the API. Rollback remains a
+non-candidate (§5) — every READY deployment in the history points at the same withdrawn hostname, so promoting
+an older one changes nothing.
+
+**Owner work is not at risk — re-verified, not assumed.** The working tree still shows four dirty paths
+(`scripts/ops/sweep-prompt.md`, `scripts/verify-deploy.mjs`, `tests/invariants/ops-tooling.test.mjs`, untracked
+`scripts/ops/origin-drift.mjs`). All four were `diff`ed against the origin mirror this session and are
+**byte-identical to origin** — the TD-27 checkout repair, not Branden's uncommitted work. Nothing was stashed,
+committed or reverted (CLAUDE.md rule 11), and the stash trap was avoided.
+
+**Counters re-stamped (the only doc change, per §7's standing convention).** Status line → **57h27m as of
+`2026-09-24T03:50:00Z`**; Stripe banner → **~14h33m of slack left**. The session-34 calendar chain was
+deliberately **not** extended for the third consecutive session: session 51 closed it, and sessions 28/30
+established that calibration prose rots first. The window itself is unchanged and already stated on the page —
+what remains of the cheap Stripe path is now entirely **Thursday 09-24 morning PDT, before 11:23 AM**.
+
+**What I did NOT do, and why — recorded so session 55 does not re-open it.**
+1. **Did not open a new audit surface.** Sessions 13/18/19 (crons), 14 (auth sessions), 15 (the pause clock),
+   23/35 (both money rails), 31 (Apple's review queue), 49 (the OAuth credential clock) and 50 (the user-facing
+   surface) exhausted the "what else has a clock?" lens. Sessions 40, 51, 52 and 53 all shipped deliberate
+   negative results; a 54th manufactured finding would be noise the owner must triage. Session 53 left **no
+   stated evidence gap**, which is the one category of work session 38 licensed — so there was none to pick up.
+2. **Did not ship any patch.** TD-28/29/33/34/35/36/38 stay parked: each either needs the dead DB to verify
+   (failing session 45's in-lane test) or is tooling on the very push path this session had to use. TD-34's
+   obvious fix was shown by session 48 not to intersect the failure.
+3. **Did not touch the muted alerting.** `uptime.yml` stays `disabled_manually`; re-enabling touches
+   `.github/workflows/**` (minimum Level C) and would override a deliberate human mute.
+4. **Did not weaken anything to restore green.** No security-sensitive path was touched and no application code
+   changed; the only edits are this entry and the two counters.
+
+**Escalation — the tool was called BEFORE this paragraph was written.** (Session 38's ordering rule; session 53
+recorded that it had deviated from it, so it is explicitly restored here.) `PushNotification` returned,
+verbatim: *"Mobile push not sent (Remote Control inactive)."* That is the **53rd** consecutive session with no
+working push path. Per §7 the channel inventory is exhaustively verified and complete — Remote Control,
+`uptime.yml`, the Gmail/Supabase connectors and `osascript` are all dead or deliberately muted, and a GitHub
+Issue is rejected on purpose (the repo is public; filing one would advertise a live outage and an open
+financial-webhook window on a production money system). **This entry, like the 53 before it, reaches you only
+because you came and looked.**
+
+**Still open — the fix is owner-only (Level D).** §1 of
+`docs/operations/incidents/2026-09-21-supabase-project-unreachable.md` is the two-minute action sheet.
+**§4 step 0 must be read before clicking Resume** (the 60-second `finalize-videos` trap, TD-34, which silently
+turns TD-29's backfill into a no-op and makes its counting query return a false `0`). Order: **disable Vercel
+cron jobs on project `sizzle` → Resume → §4 steps 1-4 verify → step 6 is the manual Apple/RevenueCat Retry that
+restore will not replay → `gh workflow enable uptime.yml`.**
+
+**Shipped:** this entry plus the two re-stamped counters, pushed via the GitHub git-data API (TD-27: local
+`main` is stale at `d4c5395`, behind origin `4ee063b`; `git fetch`/`pull` are not allowlisted unattended, so
+both files were edited on the origin mirror in `.codex/origin-4ee063b/`, never on the stale working copy).
+Content scanned out-of-band for credential-shaped strings before push, because `secrets:check` is structurally
+blind on this path (TD-33).
