@@ -7367,6 +7367,14 @@ list — gate only on the value-shaped scan). `scripts/verify-deploy.mjs` is use
 evidence only, not as the ship gate**: its success criterion is a 200 `/health`, unreachable while the DB
 is down, so it would emit a false "webhook missed" verdict (**TD-37**); pass `--sha <40-char SHA>`.
 
+### Push channel — tested, still dead
+
+`PushNotification` returned *"Mobile push not sent (Remote Control inactive)"* — identical to session 12
+and every session since, so the phone channel has now been dead **21 days**, still **predating** the outage.
+§7 stands unamended: since `18:27Z` on 09-21 there is **no working automated push path** from production
+to Branden. This log and the action sheet are **pull, not push** — which remains the single best
+explanation for why a two-click fix has run 67 hours.
+
 ### Still open — owner-only (Level D), unchanged order
 
 **① Disable Vercel cron jobs on project `sizzle`** (Settings → Cron Jobs → *Disable Cron Jobs*; browser
