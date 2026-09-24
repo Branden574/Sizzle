@@ -1,7 +1,7 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
 **Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
-(11:23 AM PDT Mon 09-21). **53h16m as of 2026-09-23T23:39:11Z** — re-verified by session 50 (watchdog).
+(11:23 AM PDT Mon 09-21). **54h13m as of 2026-09-24T00:36:00Z** — re-verified by session 51 (watchdog).
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
 
 > **🛑 READ §4 STEP 0 BEFORE YOU CLICK RESUME.** Session 18 found that the first
@@ -10,7 +10,7 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > re-poll** — which silently converts TD-29's prescribed backfill into a no-op and makes
 > its counting query return `0`. One dashboard toggle before Resume avoids the whole mess.
 
-> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — ~18h43m of slack left (§2).**
+> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` — ~17h47m of slack left (§2).**
 > Restore before it and the **Stripe** half self-heals with zero manual work. Missing it is *not*
 > a cliff — manual replay stays open to `2026-10-06` (dashboard) / `2026-10-21` (API). There is
 > real time; this is urgent, not frantic.
@@ -23,6 +23,12 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > Wednesday, so roughly half of the last full working day has been spent. The action itself
 > is still ~2 minutes and the slack is still 23h; what has shrunk is the number of *waking*
 > hours left inside it, not the feasibility.
+> **Session 51 (`2026-09-24T00:36Z`): that day has now ENDED** — 5:36 PM PDT Wednesday, so the
+> “last full working day” the chain above has tracked since session 34 is spent. The cheap path is
+> not gone and the slack is still **17h47m**, but every hour of it now falls in one of exactly two
+> windows: **tonight (Wed evening PDT)** or **Thursday morning before 11:23 AM PDT**. After that the
+> Stripe half stops self-healing and joins Apple’s in the manual-replay column (§2 — still open to
+> `2026-10-06` dashboard / `2026-10-21` API, so this is a cost increase, not a cliff).
 
 > **🍎 NEW, session 23 — the Apple/RevenueCat half does NOT self-heal, and its window has
 > ALREADY CLOSED.** RevenueCat retries a failing webhook **5 times over 155 minutes total**,

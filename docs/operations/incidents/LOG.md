@@ -6086,3 +6086,56 @@ because you came and looked.**
 
 **The standing note stands:** `LOG.md` is past 600 KB and its unbounded growth is itself a
 problem — **split it into per-incident files once production is back.**
+
+## 2026-09-24 00:36Z — watchdog session 51 — SEV-1 unchanged, hour 54. No new findings; the last full working day has closed.
+
+**What fired.** `scripts/ops/watchdog.sh` at 2026-09-23 17:32:22 PDT: `API degraded (503): database-unreachable`.
+Not the HTTP-000 host-blip class (4-of-5 false summons, TD-23) — a 503 with a JSON body is the real-outage
+signature, so this was worked as a live incident, not an anti-flap check.
+
+**Root cause — unchanged and re-attested, not recalled.** Supabase project `gsxoaurmsgqascxukony` has no DNS
+record. Re-run this hour on three resolvers: `gsxoaurmsgqascxukony.supabase.co` and
+`db.gsxoaurmsgqascxukony.supabase.co` → **ENOTFOUND on system, 1.1.1.1 and 8.8.8.8**, while the parent zone
+`supabase.co` → **A 76.76.21.21** on all three (the session-41 apex change, still present, still not a signal —
+the per-project records are the load-bearing half). Parent zone up + every project record gone = pause or
+deprovision at the account level. **Owner action is the only fix; no repo change, rollback or redeploy reaches it.**
+
+**Evidence this hour (three independent signals, twice, minutes apart).** `/health` **503**
+`problems:["database-unreachable"]`, `stuckVideoBacklog`/`parkedMediaDeletions`/`cronAges` all `null`, at
+00:32:39Z and again at 00:35:46Z (7.20s both — the documented DB-connect stall, steady). Real user path
+`/feed/for-you?limit=3` → **500 `db_error`**, not just liveness. DNS re-probed at 00:35:39Z: still ENOTFOUND.
+`getsizzle.app` → **200** (the static frontend is healthy; the app degrades gracefully per TD-38, session 50).
+
+**Not a deploy, and no rogue deploy.** `/health` reports `commit 6d91e8b` = `git/refs/heads/main` on origin
+(`6d91e8b68c73b83715274c5e6a150dd6fbe1d874`), and the two newest deployments are `6d91e8b` → *Production – sizzle*
+and *Production – sizzle-api* at 2026-09-23T23:45Z — session 50's own docs push. Rollback remains a non-candidate
+(§5: the last pre-outage deploy was 15 days old).
+
+**Alerting still dark.** `gh workflow list` → `Uptime  disabled_manually`; its last run is the **failure at
+2026-09-21T18:23:07Z** that opened this incident, and nothing has run since. Per §7 this stays muted deliberately —
+re-enabling is `.github/workflows/**` = minimum Level C, and an unattended session will not override a human mute.
+
+**The one thing that changed this hour: the calendar, not the state.** It is now **5:36 PM PDT Wednesday 09-23**.
+The action sheet has tracked a single chain since session 34 — Thursday 11:23 AM PDT is when Stripe's auto-retry
+stops, making **Wednesday the last full working day on which the cheap path is available**; session 37 opened that
+day, session 46 marked its midpoint. **Session 51 closes it.** Slack is **17h47m**, but it now lies entirely in
+tonight (Wed evening PDT) or Thursday morning before 11:23 AM PDT. Restated honestly: this is a **cost increase,
+not a cliff** — manual replay stays open to `2026-10-06` (dashboard) / `2026-10-21` (API), and the Apple half
+(TD-35) already expired `2026-09-21T20:58Z` and needs manual Retry regardless. The action is still ~2 minutes.
+
+**What I did NOT do, deliberately.** No new investigation was opened: fifty sessions have settled the diagnosis
+(§5), and the open follow-ups (TD-28/29/33/34/35/36/38) are all parked for the same two reasons — unverifiable
+against a dead DB, and several are Level C. Nothing was shipped but this log and the two re-stamped counters. No
+control was weakened, no security-sensitive path touched, no code change made.
+
+**Still open — the fix is owner-only (Level D).** §1 of
+`docs/operations/incidents/2026-09-21-supabase-project-unreachable.md` is the two-minute action sheet, and
+**§4 step 0 must be read before clicking Resume** (the 60-second `finalize-videos` trap, TD-34, which silently
+turns TD-29's backfill into a no-op). After restore: §4 steps 1-4 verify, step 6 is the **manual** Apple/RevenueCat
+Retry that restore will not replay, and `gh workflow enable uptime.yml` re-arms the only channel that has ever
+reached him.
+
+**Shipped:** this entry + the two counters + the calendar-chain close, pushed via the git-data API (TD-27: local
+`main` is 56+ commits stale at `d4c5395`; `git fetch` is not allowlisted unattended). Content scanned for
+credential-shaped strings out-of-band before push, because `secrets:check` is structurally blind on this path
+(TD-33). Branden's uncommitted working-tree edits were left untouched (CLAUDE.md rule 11).
