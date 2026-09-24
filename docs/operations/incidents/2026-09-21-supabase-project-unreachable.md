@@ -1,7 +1,7 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
 **Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
-(11:23 AM PDT Mon 09-21). **66h34m as of 2026-09-24T12:57:34Z** — re-verified by session 63 (watchdog).
+(11:23 AM PDT Mon 09-21). **67h37m as of 2026-09-24T14:00:25Z** — re-verified by session 64 (watchdog).
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
 
 > **🛑 READ §4 STEP 0 BEFORE YOU CLICK RESUME.** Session 18 found that the first
@@ -10,8 +10,8 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > re-poll** — which silently converts TD-29's prescribed backfill into a no-op and makes
 > its counting query return `0`. One dashboard toggle before Resume avoids the whole mess.
 
-> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` = 11:23 AM PDT **this morning** — ~5h25m of
-> slack as of `2026-09-24T12:57Z` (§2).** Restore before it and the **Stripe** half self-heals with
+> **⏳ Stripe auto-retry expires `2026-09-24T18:23Z` = 11:23 AM PDT **this morning** — ~4h22m of
+> slack as of `2026-09-24T14:00Z` (§2).** Restore before it and the **Stripe** half self-heals with
 > zero manual work, because the handlers are idempotent and the queued events replay themselves.
 > **Two clicks:** disable crons on Vercel project `sizzle` (§1 step 0), then Resume the Supabase
 > project. **Missing it is a cost increase, not a cliff** — per-event **Resend** in the Stripe
@@ -96,6 +96,33 @@ the one-page action sheet. **Read this, not the log.**
    > which matters if the dashboard shows the **Fair Use / quota** branch below, where
    > *"pausing does not remove usage already accumulated."* Re-enable with the same button
    > once you have the stranded-video list.
+   >
+   > ### Settled session 64 — this step is **structurally owner-only**. Stop counting it as "undone".
+   >
+   > Seventeen sessions (34, 43, 44, 46, 47, 48, 51, 53–63, this one) have now measured
+   > `vercel crons ls --project sizzle` and reported "all five paths still listed — still the
+   > cheapest outstanding action," phrasing that reads as though an unattended session were
+   > simply neglecting a ten-second job. **It is not available to one.** Verified this session:
+   > `vercel crons --help` on CLI **57.0.0** exposes exactly three subcommands — **`add`**,
+   > **`list`**, **`run`** — and **no `disable`, `pause`, or `rm`**. Combined with session 19's
+   > finding that Vercel documents only the dashboard button, the toggle has **no non-interactive
+   > surface at all**. No agent can reach it; only a browser can.
+   >
+   > **And it should stay that way even though an undocumented REST endpoint might exist** (not
+   > probed — writing production config through an undocumented API during a SEV-1 is out of
+   > lane). The reason is that the crons are only half a step: they must be **re-enabled** after
+   > the stranded-video list is captured. An agent that disabled them would leave the *disabled*
+   > state as the new default, and because `finalize-videos` is the sole driver that moves assets
+   > to `ready` (Stream webhooks are skipped, `internal.ts:54`; the client poll caps at ~10 min),
+   > crons left off after restore means **every new upload silently never finalizes** — a fresh
+   > SEV-2 layered on the recovery, closable only by the owner doing the very click he was being
+   > spared. Disable-then-re-enable is one human flow bracketing Resume; it does not decompose
+   > into an agent half and an owner half.
+   >
+   > **What this changes:** nothing about the recovery order — ① disable ② Resume is still
+   > correct and still first. It retires a phantom. Future sessions should record step 0's state
+   > if they measure it, but **not** as an agent-actionable omission, and the tally is closed at
+   > seventeen.
 1. Open the [Supabase dashboard](https://supabase.com/dashboard) → org → project `gsxoaurmsgqascxukony`.
 2. The dashboard tells you *why* it stopped. Act per the branch below.
 3. **Restore the existing project. Never create a new one** — see §3.
