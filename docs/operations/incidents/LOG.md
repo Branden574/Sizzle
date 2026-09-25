@@ -10828,4 +10828,28 @@ outage and an open financial-webhook window on a production money system).
 - **TD-27 honoured twice** — `origin-drift.mjs` ran **first**, and again before appending, which
   is what caught the mid-session base change.
 
-**Line count for session 90 to carry forward: 10831.**
+#### Session 89 — deploy verification, for the record
+
+**Commit `4a983fa` (the TD-40 fix + this entry). Both Vercel projects reached READY and serve it:**
+
+- **`sizzle` (the API)** — `deployment: READY`, probe `HTTP 503`,
+  `degraded (database-unreachable) — deployed but unhealthy`. That is the **correct** outcome,
+  not a failed verification (session 68's correction): the build promoted, and the dependency it
+  reports as failed is external. `/health` now reports `commit: 4a983fa`, which is the positive
+  proof of promotion.
+- **`sizzle-api` (the frontend)** — `deployment: READY`, probe `HTTP 200`,
+  `serving commit 4a983fa == HEAD ✓ (version 1.0.101)`.
+
+Both runs passed `--sha <40-char>`, **mandatory** after a git-data-API push: the no-argument form
+defaults to local `HEAD`, which TD-27 keeps frozen at `d4c5395`, and TD-37's `staleHeadBail()`
+then correctly refuses to poll.
+
+**Round-trip check on the shipped fix, which is the part worth having.** Ran the *deployed*
+`origin-drift.mjs` against the new head: it reported the drift correctly, mirrored
+`.codex/origin-4a983fa/`, and kept the clean path silent. `diff` of the local file against
+origin's own copy of it — fetched by the tool itself — is **identical**, so the blob that landed
+is the verified one rather than an assumption about what was pushed. A tool that repairs the
+drift gate verifying itself through that same gate is the strongest available end-to-end check
+during an outage that blocks every other surface.
+
+**Line count for session 90 to carry forward: 10855.**
