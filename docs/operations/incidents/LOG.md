@@ -10853,3 +10853,107 @@ drift gate verifying itself through that same gate is the strongest available en
 during an outage that blocks every other surface.
 
 **Line count for session 90 to carry forward: 10855.**
+
+---
+
+## 2026-09-25T15:58Z — watchdog session 90 — SEV-1 hour **93h38m**, unchanged
+
+**Fired:** `API degraded (503): database-unreachable`, watchdog `2026-09-25 08:58:49` PDT
+(= `15:58:49Z`; the summons' own `/health` body is stamped `15:58:48.122Z`, so the local/UTC
+pair checks out — session 77's heading trap).
+
+**Outcome: nothing changed. No new finding, and none was manufactured** (session 40's rule).
+No evidence gap was inherited — session 89 closed its own and left none — every surface is
+audited, and the TD-register audit came back clean. So the licensed deliverable was fresh
+first-hand evidence, the counter re-stamp, and one index repair. That is what this entry is.
+
+### Root cause re-attested from scratch, not inherited (ground rule 4)
+
+| probe | result | at |
+|---|---|---|
+| `/health` | `503 degraded` `["database-unreachable"]`, commit `1b14e66`, all DB-derived gauges (`stuckVideoBacklog`, `parkedMediaDeletions`, `cronAges`) `null` | `15:59:06Z`, re-probed `16:01:02Z` |
+| `/feed/for-you?limit=3` | **500** `{"error":{"code":"db_error"}}` — a real user-facing endpoint, not a probe artifact | `15:59Z` |
+| DNS, 3 resolvers (system / `1.1.1.1` / `8.8.8.8`) | `supabase.co` → **A=76.76.21.21, CNAME=ENODATA**; `gsxoaurmsgqascxukony.supabase.co` and `db.<ref>.supabase.co` → **ENOTFOUND** on all three | `16:00Z` |
+
+The ENODATA-vs-ENOTFOUND split is the positive attestation: the parent zone is healthy and
+answers, while **both** per-project records are NXDOMAIN on three unrelated resolvers. That is a
+project-level pause/deprovision, not a Supabase platform DNS fault and not a sandbox artifact.
+Identical to every prior session.
+
+**No rollback lever exists, re-confirmed:** `/health.commit` = `1b14e66` = origin `main` head,
+so the deployed artifact is current; the failed dependency is external to the repo. Promoting a
+previous READY deployment would change nothing (ground rule 3 does not apply to this incident).
+
+### The one inherited claim I deliberately re-tested — still true
+
+Per session 33's rule (*an inherited "it's blocked" is a claim with a timestamp, not a fact*), I
+spent **one** call re-probing the allowlisted `mcp__supabase__get_advisors`, because the payoff
+would have been the incident's single open question (Paused vs deprovisioned) and because
+Branden could have rotated the PAT in the four days since session 25 measured it revoked.
+
+> `Unauthorized. Please provide a valid access token to the MCP server via the --access-token flag or SUPABASE_ACCESS_TOKEN.`
+
+Byte-identical server-side failure ⇒ **TD-21 is unchanged; the close condition is still a PAT
+rotation (Level D, owner), not a permission grant.** Recorded and dropped — per action-sheet §5
+and §7 the channel inventory is exhaustive, so I did not hunt for a second route.
+
+### Periodic checks that only decay when nobody runs them
+
+- **§7 counter check — PASS** (fourth consecutive). Session 89's line 4 read `93h06m as of
+  2026-09-25T15:29:30Z`, which matches the elapsed figure inside session 89's own entry, so it
+  was genuinely stamped rather than inherited. Verified against the predecessor's recorded
+  number, not against the line itself (session 71/77's rule — the only check that catches an
+  *omission*). Re-stamped here to `93h38m` / `2026-09-25T16:01:02Z`, anchored to the `time`
+  field of the `/health` response above so it cannot be advanced without actually probing
+  (session 72).
+- **Doc-rot grep (sessions 74/79) — CLEAN, and it was 10 sessions overdue.** Last run at session
+  79/80. `grep -nE "ago|today|currently|this hour"` on the action sheet returns **12** hits;
+  **all 12 are correctly exempt** under session 30's two carve-outs — `:167`/`:216`/`:692` sit
+  inside dated blocks (they read as history), `:213`/`:448` describe *states* not elapsed time,
+  and `:700–727` are sessions 30/74's own write-ups *quoting* the rot they fixed. Nothing to
+  repair in the relative-time class this pass.
+- **Standing counts (session 79/80's class, which has no carve-out) — REPAIRED.** The header
+  read *"**eighty-nine** … **10,800+ lines** … measured `wc -l` = 10831"*. Actual at session
+  **90** is `wc -l` = **10855**. Re-stamped to ninety / eighty-nine watchdog summons + the
+  09-25 sweep / 10,900+.
+
+### Escalation — result verbatim, called before this sentence was written
+
+`PushNotification` at `2026-09-25T16:02Z`:
+
+> `Mobile push not sent (Remote Control inactive).`
+
+Dead at hour **93h38m**, identical to sessions 1–89 — now **90 consecutive sessions** with no
+automated signal reaching Branden since `18:27Z` on 09-21. `LOG.md` and the action sheet remain
+**pull** channels, not push. Do **not** open a GitHub issue (the repo is **public**; that would
+advertise a live outage and an open financial-webhook window on a production money system), and
+do not re-enable `uptime.yml` unattended (it overrides a deliberate human mute).
+
+### Owner action (unchanged, ~2 min, Level D)
+
+1. Vercel project **`sizzle`** (the API — the naming is reversed) → Settings → Cron Jobs →
+   **Disable Cron Jobs**. This is the **only pre-Resume step**, and it is what avoids the TD-34
+   trap: the first `finalize-videos` tick after restore fires within 60 seconds and mass-flips
+   every outage-stranded video to a terminal `error` state the finalizer refuses to re-poll.
+2. **Read Paused vs deprovisioned before clicking anything.** A deprovisioned project means
+   *stop* and contact Supabase support about PITR — not Resume.
+3. Resume the Supabase project; then capture the stranded-video list (§4 step 0's SQL, which is
+   anchored to absolute timestamps and cannot rot) before re-enabling crons.
+4. **Separately, and unrelated to the database:** restore the push channel. It has now been dead
+   for 90 consecutive sessions and is why none of this has reached you.
+
+### Lane check — session 90
+
+- **Nothing shipped but documentation.** No code, config, migration, native file or production
+  setting touched. No security control weakened to chase green. Money code untouched.
+- **No rollback performed, because none applies** — the dependency is external and the deployed
+  commit is already current.
+- **Working tree preserved (CLAUDE.md rule 11).** The four dirty paths
+  (`scripts/ops/sweep-prompt.md`, `scripts/verify-deploy.mjs`,
+  `tests/invariants/ops-tooling.test.mjs`, `scripts/ops/origin-drift.mjs`) are dirty only
+  against the stale local HEAD `d4c5395` under TD-27 — they are checkout artifacts, not
+  Branden's work. Nothing stashed or reverted (the session-21 stash trap).
+- **TD-27 honoured twice** — `origin-drift.mjs` ran **first**, and again immediately before
+  composing this append (session 89's mid-session base-change lesson).
+
+**Line count for session 91 to carry forward: 10959.**
