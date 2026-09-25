@@ -8827,3 +8827,128 @@ endpoint), plus the DNS records underneath both, on three independent resolvers.
 5. **TD-21** — rotate the Supabase PAT and expose it as `SUPABASE_ACCESS_TOKEN`; that one token
    restores the agent DB path and would let a session answer Paused-vs-Deleted directly.
 6. **`ffmpeg-static` CI single point of failure** — filed session 69, needs Branden's call.
+---
+
+## Watchdog session 75 — 2026-09-24 18:25 PDT (`01:25Z` 09-25) — SEV-1 hour 79h04m; no change; closed session 74's stated CI evidence gap
+
+**What fired.** `scripts/ops/watchdog.sh` at `2026-09-24 18:25:53` local: `API degraded (503):
+database-unreachable`. Same signal as the previous 22 ticks. **Not** the HTTP-000 host-side class —
+a 503 carrying a well-formed JSON body is the server itself reporting it cannot reach Postgres,
+which is the documented real-SEV-1 shape.
+
+**Root cause — unchanged, and deliberately not re-derived.** Open incident
+`docs/operations/incidents/2026-09-21-supabase-project-unreachable.md`: Supabase project
+`gsxoaurmsgqascxukony` has had its per-project DNS records withdrawn (pause / restriction /
+deprovision at the account level). Started `2026-09-21T18:23:07Z`; **79h04m** as of this session's
+`/health.time` (`2026-09-25T01:27:51.845Z`). §5 of the action sheet is settled — nothing in it was
+re-litigated.
+
+**Evidence gathered this session (all first-hand).**
+
+- `/health` → **HTTP 503**, `status:"degraded"`, `problems:["database-unreachable"]`,
+  `commit:7ab551a` (= current `origin/main`). Sampled at `01:26:20Z` and `01:27:51Z`; the
+  watchdog's own capture at `01:25:51Z` is a third. First response took **7.2s** — a connect
+  stall, not an instant refusal.
+- DNS, triple-resolver (`.codex/dns-probe.mjs`): `gsxoaurmsgqascxukony.supabase.co` and
+  `db.gsxoaurmsgqascxukony.supabase.co` → **`ENOTFOUND`** on **system, 1.1.1.1 and 8.8.8.8**, while
+  the parent `supabase.co` answers `A=76.76.21.21` / `CNAME=ENODATA`. Parent zone up + every
+  per-project record gone = project-level action, not a platform DNS fault. This is the
+  load-bearing record and it has not come back.
+- Real user path: `GET /feed/for-you?limit=3` → **HTTP 500**
+  `{"error":{"code":"db_error","message":"Something went wrong"}}` in 7.2s. User-visible, not a
+  health-probe artifact.
+- `https://getsizzle.app/` → **HTTP 200** in 0.26s. The static shell still serves a dead app behind
+  it — restated because "the site loads" is the misleading signal a human spot-check hits.
+
+**The one piece of new information — session 74's stated evidence gap, now closed.** Per session
+38's rule (*a predecessor's stated evidence gap is a labelled, pre-scoped task, and the one thing a
+re-verify session can add without re-litigating settled ground*), session 74's single blocked call
+was `gh run list --workflow CI`, which required approval and did not run — leaving CI state on
+`main` **inherited green from session 73 rather than verified**. One allowlisted call closed it this
+session: **6/6 `completed success`**, newest run **36077625678** (`ops: incident log session 74 …`,
+`success`, 49s, `2026-09-25T00:27:36Z`), then 36072584131, 36072450145, 36067285776, 36067099939,
+36060574528. So **CI has stayed green across every docs push of this incident, including session
+74's own** — the inherited claim was correct, and is now first-hand. **No evidence gap is left
+open for session 76.**
+
+**Counter-convention health check (session 71's rule).** Session 74 **did** execute it: the sheet's
+line 4 read `78h01m as of 2026-09-25T00:24:32Z — re-verified by session 74`, which matches session
+74's own recorded elapsed figure and its `/health.time` to the second. Healthy. Re-stamped this
+session to **`79h04m as of 2026-09-25T01:27:51Z`**, anchored to the `/health` response's own `time`
+field per session 72's re-shaping — so the stamp cannot be advanced without actually probing. The
+second counter (Stripe banner) stays **retired**; do not re-arm it.
+
+**TD register audited against session 62's findings (session 45's rule) — clean, nothing unfiled.**
+Session 45's rule is that a predecessor's finding living only in `LOG.md` prose was never *filed*,
+so the register must be grepped separately. Checked TD-28 at
+`docs/engineering/technical-debt.md:37`: session 62's two corrections are both present in the
+register itself — the rollups named as the **counter-example** rather than instances, the fix scoped
+to **three** handlers with *"~40% smaller than originally filed"*, and the *"'no signal at all' was
+too strong"* correction recording that the two rollups have been returning 500 **and** firing
+`captureException` every 15/30 min with no alert attached. Session 48's "does not also close TD-34"
+scope note is there too. **No back-propagation needed.**
+
+**What I did NOT do, and why.** No fix shipped — there is no agent-side lane:
+
+- **Not a bad deploy ⇒ rollback is not a candidate.** `/health.commit` is `7ab551a`, which equals
+  current `origin/main` — a *current* build, freshly built with freshly injected env vars, still
+  reporting `database-unreachable`. That independently kills both "stale artifact" and "env var
+  never picked up" (session 36's free control). The last pre-outage application deploy was 15+ days
+  old; every deployment since is these sessions' own docs-only pushes.
+- **§1 step 0 (disable crons) is structurally owner-only** — settled session 64; Vercel exposes no
+  per-cron disable, only a project-wide dashboard button.
+- **The fix is Level D.** Restoring the Supabase project is an owner dashboard action. Per
+  `docs/operations/incident-response.md`, no patch, rollback or redeploy in this repo can reach it.
+
+**Angles rejected before spending calls (session 40's rule — record them so session 76 doesn't
+re-open them).**
+
+1. **Encoding session 30's timestamp convention as an invariant test.** This is the natural-looking
+   follow-up to session 74's finding (*a convention that only a sweep can verify decays the moment
+   the sweep stops running*) and to session 72's rule (*re-shape a convention so executing it is the
+   only way to produce the artifact*) — `tests/invariants/` exists, a test-only addition is Level A,
+   and it passes session 45's in-lane test since it needs no database. **Rejected on two grounds.**
+   (a) Session 74 measured **six of seven** hits as *correctly exempt* under session 30's own
+   carve-outs (dated blocks read as history; state descriptions aren't elapsed time), so the test
+   needs a hand-maintained allowlist — which has the same decay problem it is meant to solve, and
+   would fail CI on every legitimate append that says "today" inside a dated block, training future
+   sessions to widen the allowlist under incident pressure. (b) More decisively: the artifact being
+   guarded is **one incident's action sheet**, which becomes frozen history the moment Branden clicks
+   Resume — a permanent CI test guarding a dead document is net negative. The narrow variant
+   (header-block-only, no allowlist) survives objection (a) but not (b).
+2. **Hunting a new audit surface.** None left; sessions 13–50 and 72 closed the set (crons, auth
+   sessions, the pause clock, both money rails, Apple's review queue, the OAuth credential clock,
+   the user-visible frontend, the Sentry event budget).
+3. **Re-testing the Gmail / Supabase connectors.** Sessions 73 and 74 tested them ~1h and ~2h
+   earlier; the gate is connector-level and can only change if Branden grants it **interactively**,
+   and he is not at the machine — which is what summoned me. TD-21 re-test skipped this session for
+   the same reason, its result being unchanged across 22 consecutive ticks.
+
+**Anti-flap check.** Explicitly **not** a false alarm: the condition was verified present at three
+timestamps spanning ~2.0 minutes (`01:25:51Z`, `01:26:20Z`, `01:27:51Z`), on two independent
+surfaces (`/health` and the live feed endpoint), plus the DNS records underneath both, on three
+independent resolvers. Nothing recovered and nothing was invented.
+
+**Net for session 75: nothing changed, and one inherited gap closed.** The database is still
+unreachable, the fix is still the two owner-side clicks in §1, and no agent-side lane is open. CI on
+`main` is now first-hand verified green, so the successor inherits **no** stated evidence gap —
+which per session 40 means the correct output next tick is a logged negative result with fresh
+evidence and the two re-stamped counters, not a manufactured finding.
+
+### Still open — all owner-side, unchanged from session 74
+
+1. **The outage.** Two clicks, in this order: **disable crons** on Vercel project `sizzle` (the API
+   — naming is reversed) per §1 step 0, which defuses the TD-34 60-second trap; **then Resume** the
+   Supabase project. Re-enable crons once the stranded-video list is captured — leaving them off
+   silently stops every new upload from finalizing. If the dashboard reads *project not found /
+   deprovisioned*, **stop and contact Supabase support about PITR before touching anything.**
+2. **Apple/RevenueCat refund replays (TD-35).** Retry budget long expired; manual per-event
+   **Retry**. Does not self-heal on restore.
+3. **Stripe replays.** Manual per-event **Resend**, dashboard open until `2026-10-06` (API path to
+   `2026-10-21`). No secret key needed. The free-retry window closed `2026-09-24T18:23Z` — a cost
+   increase, not a cliff.
+4. **`gh workflow enable uptime.yml`** after restore, plus reconnecting Remote Control — together
+   the only path that restores any push alerting at all.
+5. **TD-21** — rotate the Supabase PAT and expose it as `SUPABASE_ACCESS_TOKEN`; that one token
+   restores the agent DB path and would let a session answer Paused-vs-Deleted directly.
+6. **`ffmpeg-static` CI single point of failure** — filed session 69, needs Branden's call.
