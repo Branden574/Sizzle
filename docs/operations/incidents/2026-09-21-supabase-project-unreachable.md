@@ -1,7 +1,7 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
 **Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
-(11:23 AM PDT Mon 09-21). **93h38m as of 2026-09-25T16:01:02Z** — re-verified by session 90 (watchdog).
+(11:23 AM PDT Mon 09-21). **94h43m as of 2026-09-25T17:06:09Z** — re-verified by session 91 (watchdog).
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
 
 > **🛑 READ §4 STEP 0 BEFORE YOU CLICK RESUME.** Session 18 found that the first
@@ -53,9 +53,9 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > without a browser. It changes your *calibration*, not the fix: the app is degrading
 > gracefully, and the misattribution is what is quietly costing you reviews and support mail.
 
-This page exists because **ninety** unattended sessions — eighty-nine watchdog summons plus
-the 2026-09-25 daily sweep — have now diagnosed the same outage and appended **10,900+ lines** to
-`LOG.md` (counts re-stamped session 90, measured `wc -l` = 10855 pre-append; session 48 stamped them at "forty-seven"/"5,600+" and nothing re-checked them
+This page exists because **ninety-one** unattended sessions — ninety watchdog summons plus
+the 2026-09-25 daily sweep — have now diagnosed the same outage and appended **11,000+ lines** to
+`LOG.md` (counts re-stamped session 91, measured `wc -l` = 10959 pre-append; session 48 stamped them at "forty-seven"/"5,600+" and nothing re-checked them
 for the 31 sessions until session 79, so they had understated the burn by a third). The diagnosis is finished.
 This is the one-page action sheet. **Read this, not the log.**
 

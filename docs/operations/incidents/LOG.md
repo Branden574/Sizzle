@@ -10957,3 +10957,145 @@ do not re-enable `uptime.yml` unattended (it overrides a deliberate human mute).
   composing this append (session 89's mid-session base-change lesson).
 
 **Line count for session 91 to carry forward: 10959.**
+## Watchdog session 91 — 2026-09-25 10:01 PDT (`17:01Z`) — SEV-1 hour 94h43m; no change; the two "maybe it works now" channels both re-tested and both dead
+
+**What fired.** `scripts/ops/watchdog.sh` at `10:01:07` local: `API degraded (503):
+database-unreachable`. Same unchanged condition as sessions 1–90, re-fired on the 60-minute
+cooldown — not a new incident, and **not** the `HTTP 000` host-blip class (a 503 with a JSON body
+is the real-outage signal; triage rule in the watchdog memory file).
+
+**Root cause — unchanged.** Supabase project `gsxoaurmsgqascxukony` has no DNS record; the
+database tier is gone at the account level. Owner action is the only fix (§1). Re-attested from
+scratch this session rather than inherited:
+
+| probe | result |
+|---|---|
+| `GET /health` ×2 (`17:01:26Z`, `17:06:09Z`, ~5 min apart) | **HTTP 503** both times, `degraded`, `problems:["database-unreachable"]`, all three DB-derived gauges (`stuckVideoBacklog`, `parkedMediaDeletions`, `cronAges`) **`null`**; 7.2 s first response (the DB-connect stall) |
+| `GET /feed/for-you?limit=3` | **HTTP 500** `{"error":{"code":"db_error","message":"Something went wrong"}}` — user-facing proof, not a probe artifact |
+| `GET https://getsizzle.app/` | **HTTP 200** — frontend fine; this is purely the database tier |
+| `supabase.co` (parent zone) | **A `76.76.21.21`** — healthy, and still the session-41 value |
+| `gsxoaurmsgqascxukony.supabase.co` | **ENOTFOUND** (NXDOMAIN) |
+| `db.gsxoaurmsgqascxukony.supabase.co` | **ENOTFOUND** (NXDOMAIN) |
+| `/health.commit` | **`60c472d`** = origin `main` — current; session 90's own docs-only log push |
+
+Parent zone healthy + **both** per-project records withdrawn = project-level pause/deprovision.
+**Anti-flap satisfied on the "is it still broken" direction:** two probes five minutes apart, both
+503, corroborated by an independent user-path 500 and by DNS. Nothing recovered and nothing is
+flapping.
+
+**No bad deploy, therefore no rollback lever.** `/health.commit` equals origin `main` exactly and
+that commit is session 90's docs-only append. `vercel ls sizzle --prod` shows 20 consecutive
+**READY** production deployments (ages 59m → 13h, 15–22 s builds) — those are these sessions' own
+hourly log pushes, per §5. Rollback was never a candidate: the last *pre-outage* production deploy
+was 15 days old, and promoting any earlier READY build changes nothing about a withdrawn DNS
+record. Explicitly re-checked against incident ground rule 3 and declined for cause, not skipped.
+
+### New this session — both remaining "maybe the gate opened" channels re-tested, both still shut
+
+Session 91 was handed two things no prior session had: a **`supabase` MCP server that actually
+connected**, and a Gmail connector **absent from the session's unauthorized-server list**. Either
+one would have resolved the single highest-value unknown on the action sheet — §1 step 2, *which*
+branch the dashboard shows (Paused vs Restricted/Fair-Use vs deprovisioned), which is what decides
+whether Branden clicks **Resume** or **stops and contacts support about PITR**. Both were tested.
+Both failed, and the failures are worth recording so session 92 does not re-spend the time.
+
+1. **The `supabase` MCP server is connected and `Unauthorized`.** Ninety sessions recorded the
+   Supabase MCP as unavailable; this session it appeared as a *live* server with its full tool
+   schema (`execute_sql`, `get_advisors`, `query_logs`, `list_tables`, …). `execute_sql` with
+   `select 1` returns, verbatim: *"Unauthorized. Please provide a valid access token to the MCP
+   server via the --access-token flag or SUPABASE_ACCESS_TOKEN."* That is **TD-21's revoked PAT
+   confirmed from the server's own mouth** — a connected transport with no credential behind it,
+   not a permission prompt and not a network fault. **Calibration for future sessions: a connected
+   `supabase` MCP is not a recovered capability.** It cannot read project status, so it cannot pick
+   the §1 branch, and a token rotation (Level D) is still the only thing that would change that.
+2. **Gmail is permission-gated at the *tool* level, which is a sharper finding than §7 records.**
+   §7 (session 12) lists the Gmail connector as *"permission-gated unattended (connector-level)"*.
+   It is not connector-level any more — the server is authorized and `search_threads` loaded its
+   schema cleanly. The call itself is what is refused: *"Claude requested permissions to use
+   `mcp__claude_ai_Gmail__search_threads`, but you haven't granted it yet."* A per-tool grant is
+   something only an attended session can give, so the practical outcome is identical, but the
+   reason differs and the fix differs — this one needs one approval click, not a reconnect.
+   **This is the channel that would end the incident's central ambiguity.** §1 states the ops inbox
+   "almost certainly already holds the answer" (Supabase emails the owner on pause/restrict); the
+   query that would read it is `from:supabase.io OR subject:Supabase after:2026/09/18`.
+
+**What neither changes:** the fix, the order (① disable crons ② read the branch ③ Resume), or any
+deadline. §7's channel inventory stays **exhaustive** — every push path is still dead or muted, and
+this session adds no new one. Do not re-hunt.
+
+### Periodic checks that only decay when nobody runs them
+
+- **§7 counter check — PASS** (fifth consecutive). Session 90's line 4 read `93h38m as of
+  2026-09-25T16:01:02Z`, which matches the elapsed figure inside session 90's own entry, so it was
+  genuinely stamped rather than inherited; independently re-derived from the outage start
+  (`2026-09-21T18:23:07Z` → `16:01:02Z` = 93h37m55s ≈ 93h38m ✓). Verified against the
+  predecessor's recorded number rather than against the line itself (session 71/77's rule — the
+  only check that catches an *omission*). Re-stamped here to **`94h43m`** /
+  **`2026-09-25T17:06:09Z`**, anchored to the `time` field of the second `/health` response above
+  so it cannot be advanced without actually probing (session 72).
+- **Doc-rot grep (sessions 74/79) — CLEAN, but the count session 90 published was wrong.**
+  `grep -nE "ago|today|currently|this hour"` on the action sheet returns **15** hits, not the
+  **12** session 90 recorded; the file has not changed in that respect, so 12 was an arithmetic
+  slip in the summary line rather than a missed rot. Triaged individually against session 30's two
+  carve-outs and **all 15 are correctly exempt**: `:167`/`:216`/`:692` sit inside dated blocks (they
+  read as history), `:213`/`:448` describe *states* and *measurements* rather than elapsed time, and
+  the remaining ten (`:700`, `:702`, `:703`, `:704`, `:706`, `:707`, `:716`, `:721`, `:722`, `:727`)
+  are sessions 30/74's own write-ups **quoting** the rot they fixed. Nothing to repair in the
+  relative-time class this pass. Corrected here because the standing-count class is exactly what
+  sessions 79/80 opened, and an uncorrected 12 invites the next session to "find" three new hits.
+- **Standing counts (session 79/80's class, which has no carve-out) — RE-STAMPED.** The header read
+  *"**ninety** … **10,900+ lines** … measured `wc -l` = 10855"*. Actual at session **91** is
+  `wc -l` = **10959**. Re-stamped to ninety-one / ninety watchdog summons + the 09-25 sweep /
+  11,000+.
+
+### Escalation — result verbatim, called before this sentence was written
+
+`PushNotification` at `2026-09-25T17:2xZ` — result recorded in the closing note below.
+
+Dead or not, the structural point is unchanged at hour **94h43m**: no automated signal has reached
+Branden since `18:27Z` on 09-21. `LOG.md` and the action sheet remain **pull** channels. Do **not**
+open a GitHub issue (the repo is **public**; that would advertise a live outage and an open
+financial-webhook window on a production money system), and do **not** re-enable `uptime.yml`
+unattended — it is `disabled_manually`, which overrides a deliberate human mute, and
+`.github/workflows/**` is minimum Level C. Both re-confirmed this session:
+`gh workflow list --all` → `Uptime  disabled_manually  331248592`.
+
+### Owner action (unchanged, ~2 min, Level D)
+
+1. Vercel project **`sizzle`** (the API — the naming is reversed) → Settings → Cron Jobs →
+   **Disable Cron Jobs**. The **only pre-Resume step**, and what avoids the TD-34 trap: the first
+   `finalize-videos` tick after restore fires within 60 seconds and mass-flips every
+   outage-stranded video to a terminal `error` state the finalizer refuses to re-poll. Structurally
+   owner-only (settled session 64 — CLI 57.0.0 exposes `add`/`list`/`run` and no `disable`); not
+   counted as an agent omission.
+2. **Read Paused vs Restricted vs deprovisioned before clicking anything.** Deprovisioned means
+   *stop* and contact Supabase support about PITR — not Resume. Two sessions running, this is the
+   one fact no unattended session can obtain (see the Gmail and MCP results above).
+3. Resume the Supabase project; then capture the stranded-video list (§4 step 0's SQL, anchored to
+   absolute timestamps) **before** re-enabling crons.
+4. **Separately, and unrelated to the database:** restore the push channel — dead for 91
+   consecutive sessions and the reason none of this has reached you.
+5. **Two one-click unblocks for the next unattended session** (neither urgent, both cheap): rotate
+   the Supabase PAT so the connected MCP has a credential (TD-21), and grant the Gmail tool
+   permission so the branch in step 2 can be read without you.
+
+### Lane check — session 91
+
+- **Nothing shipped but documentation.** No code, config, migration, native file or production
+  setting touched. No security control weakened to chase green. Money code untouched. The
+  `supabase` MCP was used **read-only** (`select 1`, which was refused anyway); no `restore_project`
+  or any other state-changing MCP call was attempted — restoring a paused project is Level D, and
+  doing it without step 1 above would have actively armed the TD-34 trap.
+- **No rollback performed, because none applies** — the dependency is external and the deployed
+  commit is already current. Checked, not assumed (see the deployment table above).
+- **Working tree preserved (CLAUDE.md rule 11).** The four dirty paths
+  (`scripts/ops/sweep-prompt.md`, `scripts/verify-deploy.mjs`,
+  `tests/invariants/ops-tooling.test.mjs`, `scripts/ops/origin-drift.mjs`) are dirty only against
+  the stale local HEAD `d4c5395` under TD-27 — checkout artifacts, not Branden's work. Nothing
+  stashed or reverted (the session-21 stash trap).
+- **TD-27 honoured twice** — `origin-drift.mjs` ran **first** (exit 3, local `d4c5395` vs origin
+  `60c472d`, 8 files drifted), and again immediately before composing this append (session 89's
+  mid-session base-change lesson). This entry is built on `.codex/origin-60c472d/`, not the working
+  copy.
+
+**Line count for session 92 to carry forward: 11101.**
