@@ -10376,3 +10376,22 @@ Live counter `89h25m → 90h25m`, session `85 → 86`, anchored to the `/health`
 `2026-09-25T12:48:18Z`. Session/line counts `eighty-five → eighty-six`, `wc -l`
 `10,266 → 10,298` — 10,298 measured on the origin copy **before** appending, which is
 exactly the figure session 85's closing correction told this session to carry forward.
+
+#### Session 86 — escalation + deploy verification, verbatim
+
+`PushNotification` at `2026-09-25T12:53Z`, after deploy verification:
+
+> `Mobile push not sent (Remote Control inactive).`
+
+Dead at hour **90h25m**, identical to sessions 1–85. No automated signal has reached
+Branden since `18:27Z` on 09-21; `LOG.md` and the action sheet remain **pull** channels.
+
+**Deploy verification (docs-only commit `b42e72d`):** both Vercel projects **READY** —
+`sizzle` (API) `HTTP 503` `database-unreachable` (deployed but unhealthy, correctly: the
+failed dependency is external), `sizzle-api` (frontend) `HTTP 200` serving `b42e72d` at
+version `1.0.101`. `/health` now reports `commit: b42e72d` — positive proof of promotion.
+`verify-deploy.mjs --sha b42e72d…` was used, since the no-arg form cannot poll a
+git-data-API push (TD-27 behaving as designed).
+
+**Working tree at exit:** the same four TD-27 ops-tooling paths as at entry. Nothing
+stashed, reverted or committed. **Line count for session 87 to carry forward: 10,391.**
