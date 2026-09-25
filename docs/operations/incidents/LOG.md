@@ -9933,3 +9933,156 @@ financial-webhook window).
 > `SEV-1 hour 86h18m: Supabase project gsxoaurmsgqascxukony still unreachable (host does not`
 > `resolve). Owner-only: disable crons on Vercel project "sizzle", THEN Resume the project.`
 > `No repo fix exists.`
+
+## 2026-09-25 — watchdog session 83 (SEV-1 hour 87h20m, unchanged, Level D)
+
+**Fired:** `API degraded (503): database-unreachable` at `2026-09-25 02:41:34` local
+(`09:41:34Z`; the summons body's own `time` field reads `09:41:32.482Z`, confirming the
+local/UTC pair — session 77's check). **Same outage as 2026-09-21, still open. Nothing new.
+No repo fix exists.** Action sheet:
+`docs/operations/incidents/2026-09-21-supabase-project-unreachable.md` §1.
+
+### Evidence gathered this session (fresh calls, not carried forward)
+
+| Probe | Result | Time (UTC) |
+|---|---|---|
+| `/health` | `503` `{"status":"degraded","problems":["database-unreachable"],"commit":"070bb0a"}` | `09:41:55Z` |
+| `/health` (2nd, anti-flap) | `503` identical body | `09:43:57Z` |
+| `/feed/for-you?limit=3` | `500` `{"error":{"code":"db_error"}}` — user-facing path confirmed down | `09:42Z` |
+| `.codex/dns-probe.mjs` (3 resolvers) | parent zone up, both project records **NXDOMAIN** | `09:42Z` |
+| `vercel ls sizzle --prod` | 9 visible production deployments, **all `● Ready`** | `09:43Z` |
+| `vercel crons ls --project sizzle` | **all five** cron paths still scheduled | `09:44Z` |
+| `gh run list` | **6/6 `success`** on `main` | `09:43Z` |
+
+### Root cause re-verified independently, not inherited
+
+Ground rule 4 says a signal that pattern-matches a known failure may have a different cause, so
+the dependency was re-attested from scratch rather than carried forward from session 82. The
+triple-resolver probe returns the **record-type** attestation, which is strictly stronger than
+session 82's curl-exit-6 calibration:
+
+```
+supabase.co                          A=76.76.21.21   CNAME=ENODATA    (name exists)
+gsxoaurmsgqascxukony.supabase.co     A=ENOTFOUND     CNAME=ENOTFOUND  (NXDOMAIN)
+db.gsxoaurmsgqascxukony.supabase.co  A=ENOTFOUND     CNAME=ENOTFOUND  (NXDOMAIN)
+```
+
+Identical on **system, `1.1.1.1` and `8.8.8.8`**. `ENODATA` on the parent versus `ENOTFOUND` on
+both per-project records is *positive* proof the records were withdrawn — three unrelated
+resolvers agreeing kills the sandbox/local-resolver explanation outright. Parent zone healthy +
+every per-project record gone = **project-level pause/deprovision**, not a platform DNS fault
+and not the HTTP-000 host-blip class that produced the 5-of-6 false alarms.
+
+### Anti-flap determination: NOT a false alarm
+
+Two `/health` calls ~2 minutes apart both returned `503` **with a JSON body naming
+`database-unreachable`**, plus an independent `500` on a real user-facing route. A populated 503
+body is the real-SEV signature; the false-alarm class is a bare `HTTP 000` with no body that
+self-recovers on re-probe. Nothing recovered. Logged as a **real, continuing SEV-1**.
+
+### Rollback candidacy — checked, correctly inapplicable
+
+`/health` served `070bb0a`, where session 82 recorded `68f5189`. Per session 82's own note this
+is the **expected hourly baseline**, not a code change: `origin-drift.mjs` resolves `origin/main`
+to `070bb0a`, so production is running current code, and the delta is session 82's own
+documentation commit triggering an API redeploy. `vercel ls sizzle --prod` shows nine
+consecutive production deployments **all `● Ready`**, ~1h apart, 15–20s builds — one per watchdog
+session. Chased only far enough to confirm the known mechanism; **not** re-derived as a finding.
+
+No rollback candidate exists: the deployed commit equals `origin/main`, nothing failed to build,
+the outage began `2026-09-21T18:23:07Z` *before* these commits, and the failed dependency is
+**outside the repository**. No Vercel deployment at any commit can reach a database whose
+hostname no longer resolves.
+
+### Step 0 re-measured — still not done, trap still armed
+
+`vercel crons ls --project sizzle` at `09:44Z` still lists **all five** paths, including
+`/internal/finalize-videos` and `/internal/publish-scheduled` at `* * * * *`. The TD-34 trap
+(the first post-restore `finalize-videos` tick mass-flips outage-stranded videos to a terminal
+`error` state the finalizer refuses to re-poll, silently converting TD-29's backfill into a
+no-op and making its counting query return a false `0`) is **still armed at hour 87h20m**,
+~4 days after session 34 first measured it. Still the cheapest outstanding action on the sheet:
+one project-wide dashboard toggle, no deploy, and safe for all five crons (sessions 13/18/19).
+
+### Nothing else attempted — the in-lane test (session 45)
+
+*Does verifying it require the dead dependency?* Every parked item (TD-28/29/31/34/35/36/38)
+needs a live DB, a browser, or both, so none can be closed unattended. The angles sessions 79–82
+explicitly killed — re-measuring `vercel logs`/the cron stall, hunting a new audited surface,
+re-running the doc-rot grep, converting the count convention into an invariant test — were
+**not** re-opened. Session 82 left **no stated evidence gap** (session 38's licensed work), and
+the TD-register audit (session 45's rule) came back clean, so per session 40 the correct
+deliverable is a pure re-verification with fresh evidence. No finding was manufactured.
+
+### §7 counter check — PASS (second consecutive)
+
+Per session 71/77, verified against session 82's **own recorded elapsed figure** rather than
+against the line itself: the sheet's line 4 read `86h18m as of 2026-09-25T08:41:27Z — session 82`,
+and session 82's entry heading independently records `86h18m`. Consistent, correctly attributed,
+correctly anchored to a real `/health` `time` field. Recording the pass explicitly, per session
+78 — otherwise the log contains only failures and a successor cannot tell a working convention
+from an unexercised one.
+
+### Index repair — the memory file was 3 sessions stale (session 39/80 rule)
+
+The project memory note `sizzle-watchdog-false-alarms` carried the heading *"settled across **80**
+sessions — count re-stamped session 80"* at session **83**. Sessions 81 and 82 re-stamped the
+action sheet but not the index. Per session 80's rule — *when you find a stamp, check its age
+against the current session number, not just its internal consistency* — and session 39's rule
+that **the index rots faster than the record**, it has been re-stamped to session 83 in the same
+session that found it, so the drift does not re-bill a successor. The action sheet remains
+authoritative where the two disagree.
+
+### Still open — all owner-side, unchanged
+
+Items 1–6 exactly as carried by sessions 75–82; §1 of the action sheet is authoritative.
+Short form: **disable crons on Vercel project `sizzle` (the API — naming is REVERSED) → then
+Resume the Supabase project.** Then the manual RevenueCat **Retry** (TD-35) and Stripe
+**Resend** (dashboard open to `2026-10-06`, no secret key needed) replays,
+`gh workflow enable uptime.yml`, the TD-21 PAT rotation, and the `ffmpeg-static` CI call.
+**If the dashboard reads *project not found / deprovisioned*, stop and contact Supabase
+support about PITR before touching anything.**
+
+### Closing note — session 83 verdicts (written after the calls, not before)
+
+- **Lane check: Level D, and nothing shipped but documentation.** Resuming a paused Supabase
+  project is owner-only under `autonomy-policy.md` Level D. No code, config, migration or
+  production setting was touched. No security control was weakened to chase green. No rollback
+  was performed, because none applies (above).
+- **Working tree:** the four dirty ops-tooling paths (`scripts/ops/sweep-prompt.md`,
+  `scripts/ops/origin-drift.mjs`, `scripts/verify-deploy.mjs`,
+  `tests/invariants/ops-tooling.test.mjs`) were each re-verified **byte-identical** to the origin
+  mirror with `cmp` this session — TD-27 checkout-repair artifacts, dirty only against the stale
+  local HEAD `d4c5395`. **Nothing stashed, reverted or committed** (the session-21 stash trap).
+  CLAUDE.md rule 11 preserved.
+- **TD-27 honoured:** `scripts/ops/origin-drift.mjs` was run **first**; local HEAD `d4c5395` was
+  8 files behind origin `070bb0a`, so this entry was composed against the **origin** copy of
+  `LOG.md` and pushed through the GitHub git-data API. Appending to the stale local copy would
+  have silently truncated prior sessions' entries.
+
+### Counters re-stamped
+
+Live counter (page header) `86h18m → 87h20m`, session `82 → 83`, anchored to the `/health`
+`time` field `2026-09-25T09:43:57Z` that proves the outage is live (session 72's convention).
+Session/line counts `eighty-two → eighty-three` and `wc -l` `9,799 → 9,935` (measured on the
+origin copy **before** appending this entry, per the standing convention).
+
+#### Session 83 — the escalation result, verbatim
+
+**`PushNotification` was called at `2026-09-25T09:45Z`, BEFORE this section was written**
+(the ordering is the fix, not diligence — sessions 38/77 each needed a second commit to repair
+a forward reference; session 78 got it right and so did this one):
+
+> `Mobile push not sent (Remote Control inactive).`
+
+Still dead at hour **87h20m**, identical to sessions 1–82. No automated signal of any kind has
+reached Branden since `18:27Z` on 09-21. `LOG.md` and the action sheet remain **pull** channels.
+§7's channel inventory is exhaustively verified — **do not hunt for a new one**, and do not file
+a GitHub issue (the repo is PUBLIC; that would advertise a live outage and an open
+financial-webhook window on a production money system).
+
+**Message sent (for the record):**
+
+> `SEV-1 hour 87h20m: Supabase project gsxoaurmsgqascxukony still unreachable (DNS withdrawn,`
+> `3 resolvers). Owner-only: disable crons on Vercel project "sizzle", THEN Resume the project.`
+> `No repo fix exists.`
