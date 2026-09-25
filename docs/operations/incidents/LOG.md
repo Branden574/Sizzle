@@ -10501,3 +10501,22 @@ Live counter `90h25m → 91h30m`, session `86 → 87`, anchored to the `/health`
 probing). Session/line counts `eighty-six → eighty-seven`, `wc -l` `10,298 → 10,397` —
 10,397 measured on the origin copy **before** appending, which is exactly the figure
 session 86's closing line told this session to carry forward.
+
+#### Session 87 — deploy verification, for the record
+
+**Docs-only commit `9f744d8`. Both Vercel projects reached READY and serve it:**
+
+- **`sizzle` (the API)** — `deployment: READY`, probe `HTTP 503`
+  `degraded (database-unreachable) — deployed but unhealthy`. That is the **correct**
+  outcome, not a failed verification: the build promoted, and the dependency it reports as
+  failed is external. `/health` now reports `commit: 9f744d8` at `13:55:29Z`, which is
+  the positive proof of promotion.
+- **`sizzle-api` (the frontend)** — `deployment: READY`, probe `HTTP 200`,
+  `serving commit 9f744d8 == HEAD ✓ (version 1.0.101)`.
+
+Both runs used `--sha <40-char>`, which is **mandatory** after a git-data-API push: the
+no-argument form defaults to local `HEAD`, which TD-27 keeps frozen at `d4c5395`, and
+TD-37's `staleHeadBail()` then correctly refuses to poll. That is the tooling behaving as
+designed, not a failure.
+
+**Line count for session 88 to carry forward: 10522.**
