@@ -1,7 +1,7 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
 **Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
-(11:23 AM PDT Mon 09-21). **97h55m as of 2026-09-25T20:17:39Z** — re-verified by session 94 (watchdog).
+(11:23 AM PDT Mon 09-21). **99h52m as of 2026-09-25T22:15:45Z** — re-verified by session 96 (watchdog).
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
 
 > **🛑 READ §4 STEP 0 BEFORE YOU CLICK RESUME.** Session 18 found that the first
@@ -53,10 +53,11 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > without a browser. It changes your *calibration*, not the fix: the app is degrading
 > gracefully, and the misattribution is what is quietly costing you reviews and support mail.
 
-This page exists because **ninety-four** unattended sessions — ninety-three watchdog summons plus
-the 2026-09-25 daily sweep — have now diagnosed the same outage and appended **11,440+ lines** to
-`LOG.md` (counts re-stamped session 94, measured `wc -l` = 11447 pre-append; session 48 stamped them at "forty-seven"/"5,600+" and nothing re-checked them
-for the 31 sessions until session 79, so they had understated the burn by a third). The diagnosis is finished.
+This page exists because **ninety-six** unattended sessions — ninety-five watchdog summons plus
+the 2026-09-25 daily sweep — have now diagnosed the same outage and appended **11,690+ lines** to
+`LOG.md` (counts re-stamped session 96, measured `wc -l` = 11693 pre-append; session 48 stamped them at "forty-seven"/"5,600+" and nothing re-checked them
+for the 31 sessions until session 79, so they had understated the burn by a third — and session 95 skipped
+this stamp entirely, which is what §7's session-96 entry gives a one-call detector for). The diagnosis is finished.
 This is the one-page action sheet. **Read this, not the log.**
 
 ---
@@ -764,6 +765,40 @@ fixed. **Relative-time class clean; the two live counters at the top are the onl
 and both were re-stamped this session.** *Generalised, and it is session 79's rule one level deeper:
 when a periodic check reports a number, pin the command that produces it — otherwise the number
 drifts with whoever ran it, and successors triage the tooling instead of the document.*
+
+**Session 96 (2026-09-25T22:15:45Z) — the omission hole sessions 71/77 left open has a ONE-CALL
+detector, and session 95 is the case that proves it. Run it first, every session.**
+Session 71 found that a skipped counter stamp is indistinguishable from a fresh one, and prescribed
+comparing the line against the previous session's *recorded elapsed figure*. Session 72 re-anchored
+the stamp to `/health`'s `time` field so it could not be **fabricated**. Session 77 named the
+remaining gap exactly — *"hardening an artifact against fabrication is not the same as guaranteeing
+it is produced"* — and then left it open, because every proposed check was another number comparison.
+
+**Session 95 walked into it.** Its commit `0a8f1af` touched **`docs/operations/incidents/LOG.md`
+and nothing else**, so line 4 still read *"97h55m as of `2026-09-25T20:17:39Z` — re-verified by
+session 94"* while session 95's own log entry recorded **98h50m at `21:13Z`**: the page's
+highest-traffic line was stale and **credited to the wrong session**, and the standing counts at
+`:56` were skipped in the same omission. Both are repaired above (99h52m; ninety-six / 11,690+).
+
+**The detector is the commit's file list, not the numbers:**
+
+```sh
+gh api repos/Branden574/Sizzle/commits/<previous session's SHA> --jq '.files[].filename'
+```
+
+If `docs/operations/incidents/2026-09-21-supabase-project-unreachable.md` is **absent**, then every
+sheet-resident periodic check was skipped that session — the counter stamp, the standing counts and
+the doc-rot grep, all at once. It is binary, needs no arithmetic, requires reading neither the sheet
+nor the prior log entry, and catches the whole class rather than one convention at a time. Session
+71's comparison is still the right *repair* procedure; this is the cheaper *detection* step in front
+of it. *Generalised: when a convention has no enforcement, look for a cheap **artifact** that proves
+execution rather than a better way to inspect the output — a commit that never touched the file
+cannot have maintained it, and that is one call to establish.*
+
+Session 96's own runs, for the record: doc-rot grep (pinned invocation above) **24 hits, all 24
+correctly exempt** — the 5 above session 93's count are session 93's and 94's own write-ups quoting
+the token list, the same self-referential growth the secret scan has (session 54), so **a rising
+count here is not a signal**. Last run: session 93, then 96.
 
 ### The one follow-up that makes the next SEV-1 different
 

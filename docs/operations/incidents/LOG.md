@@ -11691,3 +11691,113 @@ financial-webhook window on a production money system), and no unattended re-ena
 **LOG.md line count, measured not inherited: 11618 pre-append.** Session 94 measured 11447 and then
 added ~171 lines for a no-change tick; this entry is deliberately about a third of that. The action
 sheet is the artifact worth growing, and it does not currently need anything added to it.
+
+---
+
+## 2026-09-25 22:15Z — watchdog session 96 · SEV-1 Supabase unreachable, hour 99h52m · NO CHANGE
+
+**Fired:** `API degraded (503): database-unreachable` (watchdog, 15:15:27 PDT / `22:15:27Z`).
+
+**Verdict: the same open SEV-1, re-attested from scratch at the DNS layer. Nothing shipped but
+documentation. Owner action is still the only fix.** Read the action sheet —
+`docs/operations/incidents/2026-09-21-supabase-project-unreachable.md` — not this log.
+
+### Verified independently this session (ground rule 4 — not inherited from 95 prior entries)
+
+- **Root cause re-attested, triple-resolver.** `.codex/dns-probe.mjs` on system / `1.1.1.1` /
+  `8.8.8.8`, all three agreeing: parent `supabase.co` → **A=76.76.21.21, CNAME=ENODATA** (name
+  exists, no record of that type) vs `gsxoaurmsgqascxukony.supabase.co` **and**
+  `db.gsxoaurmsgqascxukony.supabase.co` → **ENOTFOUND** (NXDOMAIN) on both A and CNAME. Parent zone
+  up + every per-project record withdrawn = project-level pause/deprovision, outside Vercel and
+  outside this repo. Three unrelated resolvers agreeing kills the sandbox explanation.
+- `/health` → **HTTP 503** `degraded ["database-unreachable"]`, serving commit `0a8f1af`, twice
+  (`22:15:26Z` watchdog, `22:15:45Z` my own probe). All three DB-derived fields `null`.
+- **A real user path, not just liveness:** `/feed/for-you?limit=3` → **500 `{"error":{"code":
+  "db_error"}}`**. Frontend `getsizzle.app` → **200** (static assets unaffected; the app renders
+  its error card, per TD-38).
+- **TD-21 re-tested** (session 33's rule — an inherited "it's blocked" is a claim with a
+  timestamp): allowlisted `mcp__supabase__get_advisors` still fails **server-side**, byte-identical
+  *"Unauthorized. Please provide a valid access token…"* ⇒ still a **PAT rotation**, not a
+  permission grant. One call, recorded, dropped.
+
+### The one finding — the periodic-check omission hole now has a one-call detector
+
+Sessions 71/72/77 hardened the §7 counter stamp against being *faked* but left it possible to
+silently *skip*. **Session 95 skipped it, and also skipped the standing counts** — its commit
+`0a8f1af` touched `LOG.md` and nothing else, so the sheet's line 4 still read *"97h55m … session
+94"* against session 95's own recorded `98h50m`, and `:56` still read *"ninety-four"/"11,440+"*.
+
+**Detector, which is the commit's file list rather than any number:**
+`gh api repos/Branden574/Sizzle/commits/<prev SHA> --jq '.files[].filename'` — if the action sheet
+is absent, every sheet-resident check was skipped that session. Binary, no arithmetic, catches the
+counter stamp + standing counts + doc-rot grep in one call. Written into §7 as a standing
+convention. *Generalised: when a convention has no enforcement, look for a cheap artifact that
+proves execution rather than a better way to inspect the output.*
+
+**Repairs made to the sheet this session:** line 4 → `99h52m as of 2026-09-25T22:15:45Z` (session
+96); `:56` counts → ninety-six sessions / 11,690+ lines (`wc -l` = 11693 pre-append).
+
+### Periodic checks — state them so session 106 can price the call
+
+- **§7 counter check: FAIL** (session 95 skipped it) — breaks a run of 8 consecutive passes.
+  Repaired. Verified per session 71 against session 95's *own recorded* figure, not the line.
+- **Doc-rot grep (session 93's pinned invocation): ran at 93, skipped at 94/95, ran at 96.**
+  **24 hits, all 24 correctly exempt** under session 30's carve-outs. The 5 above session 93's
+  count are sessions 93/94's own write-ups quoting the token list — self-referential growth, the
+  same class as the secret-scan false positives (session 54). **A rising count here is not a signal.**
+- **TD-register audit: clean.** Tops out at TD-40 (session 89); no new defect found, nothing
+  manufactured per session 40's rule.
+
+### Still blocked, unchanged
+
+- **Paused vs Restricted vs deprovisioned remains unanswerable unattended** — the distinction §1
+  step 2 says to read *before* clicking Resume. One PAT rotation or one permission grant closes it.
+- **Crons still not disabled** (§1 step 0) — structurally owner-only, settled session 64. The
+  TD-34 trap stays armed until that click.
+
+### Escalation — called before this sentence was written (sessions 38/77/78's ordering trap)
+
+`PushNotification` → verbatim: **`Mobile push not sent (Remote Control inactive).`**
+
+Dead at hour 99h52m — **96 consecutive sessions** with no automated signal reaching Branden since
+`18:27Z` on 09-21. Remote Control died ~18 days *before* the outage, so this channel has never once
+worked during this incident. `LOG.md` and the action sheet remain **pull** channels; nobody has been
+paged. No GitHub issue (the repo is **public** — that would advertise a live outage and an open
+financial-webhook window on a production money system), and no unattended re-enable of `uptime.yml`
+(`.github/workflows/**` is minimum Level C, and `disabled_manually` overrides a deliberate mute).
+
+### Lane check — session 96
+
+- **Nothing shipped but documentation.** No code, config, migration, native file or production
+  setting touched. No security control weakened to chase green. Money code untouched. No
+  state-changing MCP call attempted — Resume is Level D, and doing it without §1 step 0 would arm
+  the TD-34 trap. Rollback explicitly re-derived as a no-op: the build is healthy and no previous
+  READY deployment can restore a withdrawn DNS record.
+- **Working tree preserved (CLAUDE.md rule 11).** The four dirty paths are TD-27 checkout artifacts
+  against the frozen local HEAD `d4c5395`, not Branden's work. Nothing stashed or reverted.
+- **TD-27 honoured twice** — `origin-drift.mjs` ran **first** (exit 3; local `d4c5395` vs origin
+  `0a8f1af`, 8 files drifted), and origin head was re-read from `git/refs` immediately before
+  composing this append (session 89's lesson): still
+  `0a8f1afa3e0f1a3863ba80500dfe425f9bfbf924`, so this is built on `.codex/origin-0a8f1af/`, not the
+  working copy.
+- **Secret scan.** TD-33 makes `npm run secrets:check` structurally blind on the git-data push path
+  (it reads the working tree; the blobs are built under gitignored `.codex/`), so the two greps are
+  the only real gate. Both files scanned **value-shaped** — result in the sign-off below.
+- **Deploy verification** runs after the push with an explicit `--sha` per TD-37. Expected outcome
+  is `deployment: READY` + HTTP 503 `degraded (database-unreachable)` — the *"degraded is still
+  deployed"* branch, not a failed SHA check — which doubles as session 36's free control.
+
+**LOG.md line count, measured not inherited: 11693 pre-append** (session 95 measured 11618).
+
+### Sign-off — session 96
+
+- **Secret scan, value-shaped (the only real gate on this path, TD-33):**
+  `(sbp_|sk_live_|sk_test_|whsec_|rk_live_)[A-Za-z0-9]{8,}|eyJ[A-Za-z0-9_-]{20,}` → **0 hits** on
+  both `LOG.md` and the action sheet. **Trap worth recording:** my first attempt folded bare
+  `-----BEGIN` into the value-shaped pattern and returned **37 hits**, all of them prior sessions'
+  own prose describing the secret check they ran (`:2413`, `:2535`, `:2624`, …) — session 40's
+  self-referential false positives. A bare prefix with no entropy attached belongs in the *loose*
+  scan, never the gate; mixing them manufactures an alarming number in an unattended run.
+- **`PushNotification` called before this line was written** (sessions 38/77/78's ordering trap,
+  avoided rather than repaired): verbatim **`Mobile push not sent (Remote Control inactive).`**
+- **Escalation status: nobody has been paged.** This log and the action sheet are pull channels.
