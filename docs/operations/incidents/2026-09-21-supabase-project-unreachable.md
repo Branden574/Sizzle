@@ -1,7 +1,7 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
 **Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
-(11:23 AM PDT Mon 09-21). **76h58m as of 2026-09-24T23:21:08Z** — re-verified by session 73 (watchdog).
+(11:23 AM PDT Mon 09-21). **78h01m as of 2026-09-25T00:24:32Z** — re-verified by session 74 (watchdog).
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
 
 > **🛑 READ §4 STEP 0 BEFORE YOU CLICK RESUME.** Session 18 found that the first
@@ -10,7 +10,7 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > re-poll** — which silently converts TD-29's prescribed backfill into a no-op and makes
 > its counting query return `0`. One dashboard toggle before Resume avoids the whole mess.
 
-> **⏳ CLOSED — the Stripe free-retry window expired `2026-09-24T18:23Z` (11:23 AM PDT today).**
+> **⏳ CLOSED — the Stripe free-retry window expired `2026-09-24T18:23Z` (11:23 AM PDT Thu 09-24).**
 > Session 69 (`19:08Z`) is the first tick past it, so the countdown this banner carried for
 > sessions 34–68 is now **retired**, exactly as the session-61 text instructed its successors to
 > do. **Nothing broke at 11:24 AM.** The operative sentence is the one that was always here:
@@ -708,6 +708,34 @@ hour" in §2’s source-audit note and the "28h28m ago" in the paragraph above s
 time. **Standing convention for every future session: in this sheet write absolute
 timestamps, not elapsed offsets — except the two live counters at the top of the page (the
 status line and the Stripe banner), which are re-stamped each session by design.**
+
+**Re-sweep, session 74 (2026-09-25T00:24:32Z) — the convention held, but the SWEEP was a
+one-time pass and the class re-accumulated. Re-grep it; don't assume session 30 settled it.**
+Session 30 enumerated exactly **six** relative-time expressions and named every one. Re-running
+the same grep this hour returns **seven**, and the five that are not on session 30's list were
+all written *after* it (sessions 31, 35, 36 and 69) — so the convention was never violated in
+spirit, it simply has **no enforcement**: nothing re-checks the page, so each later session added
+prose the original sweep could not have covered. Triaged against session 30's own two exemptions
+(dated blocks read as history; state descriptions are not elapsed time), **six of the seven are
+correctly left alone** — `:166` "this hour" and `:215` "~39 hours ago" sit in dated blocks,
+`:212` "currently holds ~21 minutes" is a measurement, and `:337` / `:386` "right now" describe
+states (a review queue, the OTA channel).
+
+**Exactly one was genuinely rotting, and it was the worst-placed one.** The Stripe banner at
+`:13` — session 69's text, sitting in the **highest-traffic block on the page**, four lines below
+the status line — read *"expired `2026-09-24T18:23Z` (11:23 AM PDT **today**)"*. It was written
+on 09-24 and would have become wrong at **midnight PDT tonight, ~6.5 hours after this session**,
+telling an owner who opens the sheet on 09-25 that a money deadline expired *that* morning rather
+than the previous one. Converted to **`(11:23 AM PDT Thu 09-24)`**. No finding changed; the
+banner's own instruction — *do not derive a new countdown from this paragraph* — still stands,
+and the next real date is still `2026-10-06`.
+
+*Generalised, and the reason this is worth three lines: session 30's lesson was "grep the class
+and write the rule." The rule was written and it worked — but **a convention that only a sweep
+can verify decays the moment the sweep stops running**, and the decay lands in text the
+convention's author never saw. On a long incident, re-grep the class every so often rather than
+trusting that a past sweep closed it; the cost is one `grep` and the failure mode is a wrong date
+on the line an owner reads first.*
 
 ### The one follow-up that makes the next SEV-1 different
 
