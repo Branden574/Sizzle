@@ -9381,3 +9381,166 @@ financial-webhook window on a production money system). **Do not hunt for a new 
 > `SEV-1 hour 82h: Supabase project gsxoaurmsgqascxukony still unreachable (DNS withdrawn, 3`
 > `resolvers agree). Owner-only fix: disable crons on Vercel project "sizzle", THEN Resume the`
 > `project. No repo fix exists.`
+
+## Watchdog session 79 — 2026-09-24 22:31 PDT (`05:31Z` 09-25) — SEV-1 hour 83h09m; no change; re-stamped two counters, the second 31 sessions stale
+
+**Fired:** `API degraded (503): database-unreachable`. Same condition as sessions 1–78; the
+60-minute cooldown re-firing on an unchanged state, exactly one hour after session 78.
+
+**Anti-flap check — this is NOT the transient class.** Per the standing triage rule, an `HTTP 000`
+summons is usually a host-side blip on the Mac; a **503 with a JSON body is a different animal**.
+The API answered every probe (so nothing client-side), and the body names the problem. Not a false
+alarm — a live, continuing SEV-1.
+
+### Evidence gathered this session (all first-hand, before any conclusion)
+
+| Probe | Result |
+|---|---|
+| `GET /health` ×3 over ~45 s | **HTTP 503** every time, `degraded` / `["database-unreachable"]`, with all three DB-derived gauges (`stuckVideoBacklog`, `parkedMediaDeletions`, `cronAges`) **`null`** |
+| `GET /feed/for-you?limit=3` | **HTTP 500** in 7.20 s — a real user-facing endpoint failing, not just the probe surface |
+| `GET https://getsizzle.app/` | **HTTP 200** in 0.10 s — the frontend tier is healthy; this is purely the database tier |
+| `.codex/dns-probe.mjs` (system + `1.1.1.1` + `8.8.8.8`) | `supabase.co` → **`A 76.76.21.21`**, `CNAME ENODATA`; `gsxoaurmsgqascxukony.supabase.co` and `db.gsxoaurmsgqascxukony.supabase.co` → **`ENOTFOUND` on all three resolvers** |
+| `/health.commit` | **`0eef002`** = `gh api …/commits/main --jq .sha` (`0eef002043d1f553d844472902a13304857fc635`) |
+| `vercel ls sizzle --prod` | Nine most recent production deployments **all `● Ready`**, ages 60m/2h/2h/3h/4h/4h/5h/6h/6h, each an 18–21 s build |
+
+**Root cause unchanged, and re-proved rather than assumed.** The parent zone resolves while *every*
+per-project record is NXDOMAIN, identically on three unrelated resolvers — the `ENODATA`-vs-`ENOTFOUND`
+distinction is positive proof the records were **withdrawn**, not that the sandbox blocked the lookup.
+Parent up + all per-project records gone = **project-level pause/deprovision**, not a platform DNS
+fault. Fix is owner-side Resume; **Level D**.
+
+**No bad deploy, therefore no rollback lever — a conclusion from evidence, not a preference.** The
+incident ground rules say prefer `vercel rollback` when a bad deploy just went out. `/health.commit`
+equals origin `main` exactly, and `gh api …/commits/0eef002` shows that commit is
+*"ops: incident session 78 — SEV-1 Supabase project still unreachable (hour 82h07m)"* — session 78's
+own docs-only log push, authored `2026-09-25T04:33:37Z`. The hourly `Ready` cadence in `vercel ls` is
+the same artifact: prior sessions' log pushes, not rogue deploys. There is nothing to roll back to
+that would behave differently, because the failing dependency is outside the repo entirely.
+
+**The free control holds again (session 36's item 6).** This session's own push will flip
+`/health.commit` to a brand-new build with freshly injected env vars. It has failed identically on
+every such build for 79 sessions, which kills "stale artifact" and "env var never picked up" at zero
+extra cost.
+
+### The §7 counter check — PASSED, second consecutive session
+
+Session 77 established the only reliable check: **verify the counter against the previous session's
+own recorded elapsed figure, not against the line itself**, because a skipped stamp is
+indistinguishable from a fresh one. Doing that first, per instruction:
+
+- Line 4 as inherited: `**82h07m as of 2026-09-25T04:30:42Z** — re-verified by session 78`.
+- Session 78's own LOG entry independently records hour **82h07m**. ✅ **Consistent — session 78 did
+  stamp it, and stamped it correctly.** Nothing to repair.
+- Re-stamped to **`83h09m as of 2026-09-25T05:32:35Z` — re-verified by session 79**, anchored to the
+  `time` field of this session's second `/health` probe per session 72's convention.
+
+Arithmetic shown so a successor can check it without re-deriving: `2026-09-21T18:23:07Z` →
+`09-24T18:23:07Z` is 72h; `09-24T18:23:07Z` → `09-25T05:32:35Z` is 11h09m28s; total **83h09m28s**.
+One hour past session 78's figure, which is exactly the inter-summon interval.
+
+Recording the **pass** explicitly, per session 78's note: if the log only ever captures failures, a
+successor cannot tell a working convention from an unexercised one. Two passes in a row (77, 78) now
+sit against two failures (76's omission, 71's repair). The second counter (the Stripe banner) stays
+**retired** — sessions 69/70 closed it when the free-retry window expired `2026-09-24T18:23Z`; do not
+re-arm it.
+
+### The one repair — session 74's rule applied to the class it predicted, and it had decayed again
+
+Session 74's generalised lesson was: **a convention that only a sweep can verify decays the moment
+the sweep stops running** — re-grep the class periodically rather than trusting a past sweep closed
+it. That grep (`ago|today|now|currently|this hour`) had not been run since session 74, four sessions
+ago, so it was this session's cheapest licensed work. It returns **~30 hits**; all the relative-time
+ones are correctly exempt under session 30's two carve-outs (dated blocks read as history; state
+descriptions aren't elapsed time). **The prose was clean.**
+
+**The rot had moved into the adjacent class the same grep surfaces — the standing counts at `:56`,
+and they were the worst-placed ones on the page.** That paragraph sits three lines above §1, the
+block an owner reads to calibrate *how long this has been burning* before acting. It read:
+
+> *"This page exists because **forty-seven** unattended watchdog sessions have now diagnosed the same
+> outage and appended **5,600+ lines** to `LOG.md` (counts re-stamped session 48 …)"*
+
+Measured this session: this is session **79**, and `wc -l` on origin's `LOG.md` is **9,383**. So the
+line understated the session count by **32** and the line count by **~3,800** — roughly a third of the
+incident's actual burn, on the page's orientation paragraph. Session 48 stamped it once (correcting
+"twenty-three"/"well over 1,000"), and **nothing re-checked it for the 31 sessions since** — the exact
+decay curve session 74 described, one class over from where session 74 looked. Now re-stamped with the
+measurement cited inline so the next stamp is checkable.
+
+Two hits deliberately **left alone**: `:101`'s *"Seventeen sessions (34, 43, 44, … this one)"* sits
+inside a dated *"Settled session 64"* block and reads correctly as history, and `:212`'s *"currently
+holds ~21 minutes"* is a measurement, not elapsed time. Both are session 30's carve-outs working as
+designed.
+
+*Generalised, and the reason this is worth four lines: **session 74 wrote the rule for relative-time
+prose, but the same grep surfaces standing counts, and counts have no carve-out to protect them.** A
+"re-stamped by session N" parenthetical reads as maintained *forever* — it records that someone once
+cared, not that anyone still checks. When you find a stamp, check its age against the current session
+number, not just its internal consistency.*
+
+### No new failure mode claimed
+
+Per session 40's rule — *once every surface is audited, "nothing changed" IS the deliverable; a
+manufactured 80th finding is noise the next reader must triage*. Session 78 left **no stated evidence
+gap** (session 38's licensed work), and the TD register was audited clean by session 78 one hour ago
+(session 45's rule), so re-auditing it carries no information.
+
+**Angles killed before spending calls, so a successor doesn't re-open them:**
+
+- **Re-measuring the cron stall / `vercel logs`** — session 77 measured it first-hand two hours ago
+  (`finalize-videos` + `publish-scheduled` at 200, both rollups 500 `TypeError: fetch failed`). An
+  hourly re-measurement of a static condition carries no information.
+- **Hunting a new audited surface** — crons (13/18/19), auth sessions (14), the pause clock (15), both
+  money rails (23/35), Apple's review queue (31), the OAuth credential clock (49), the user-visible
+  frontend (50) and the Sentry event budget (72) are all closed.
+- **`.codex/` scratch growth** — ~90 `origin-<sha>` mirrors each carrying a ~900 KB `LOG.md` copy. Real,
+  but `.codex/` is gitignored, it touches nothing in production, and disk pressure is not this
+  incident. Noted, not acted on.
+- **Splitting `LOG.md` per-incident** — already recorded as worth doing *once prod is back*; doing it
+  mid-incident would rewrite the file every session is appending to.
+
+### Still open — all owner-side, unchanged
+
+Items 1–6 exactly as carried by sessions 75–78;
+`docs/operations/incidents/2026-09-21-supabase-project-unreachable.md` §1 is the authoritative copy.
+Short form: **disable crons on Vercel project `sizzle` (the API — the naming is REVERSED) → then
+Resume the Supabase project.** Then the manual RevenueCat **Retry** (TD-35) and Stripe **Resend**
+(dashboard open to `2026-10-06`, no secret key needed) replays, `gh workflow enable uptime.yml`, the
+TD-21 PAT rotation, and the `ffmpeg-static` CI call. **If the dashboard reads *project not found /
+deprovisioned*, stop and contact Supabase support about PITR before touching anything.**
+
+### Closing note — session 79 verdicts (written after the calls, not before)
+
+- **Lane check: Level D, and nothing shipped but documentation.** Resuming a paused Supabase project
+  is owner-only under `autonomy-policy.md`. **No application code was changed**; the only writes are
+  these two incident documents. There is no Level A/B/C fix available — the dependency is outside the
+  repo, which is why 79 sessions have not closed it. Nothing was weakened to restore green, and no
+  destructive action was taken or attempted.
+- **In-lane work test (session 45):** *does verifying it require the dead dependency?* Every parked
+  item (TD-28/29/31/34/35/36/38) fails that test — each needs a live DB, a browser, or both.
+- **Escalation reality — the result is recorded verbatim below, and the call was made BEFORE this
+  prose was written** (sessions 38 and 77 each needed a second commit for writing it the other way
+  round; the fix is ordering, not diligence). `LOG.md` and the action sheet remain **pull** channels
+  nobody is prompted to open. §7's channel inventory is exhaustively verified — **do not hunt for a
+  new one.**
+- **Working tree:** the four dirty ops-tooling paths (`scripts/ops/sweep-prompt.md`,
+  `scripts/ops/origin-drift.mjs`, `scripts/verify-deploy.mjs`,
+  `tests/invariants/ops-tooling.test.mjs`) are TD-27 checkout-repair artifacts, dirty only against the
+  stale `d4c5395` local HEAD. **Nothing stashed, reverted or committed for them** (the session-21
+  stash trap). CLAUDE.md rule 11 preserved.
+
+#### Session 79 — the escalation result, verbatim
+
+**Result of the `PushNotification` call, made at `2026-09-25T05:35Z`, before this section was written:**
+
+> `Mobile push not sent (Remote Control inactive).`
+
+Still dead at hour **83h09m**, identical to sessions 1–78. Remote Control died ~18 days *before* this
+outage began, so **no automated push signal of any kind has reached Branden since `18:27Z` on 09-21** —
+the outage's full duration plus about two and a half weeks.
+
+**Message sent (for the record, so a successor can see what he would have received):**
+
+> `SEV-1 hour 83h09m: Supabase project gsxoaurmsgqascxukony still unreachable (DNS withdrawn, 3`
+> `resolvers agree). Owner-only fix: disable crons on Vercel project "sizzle", THEN Resume the`
+> `project. No repo fix exists.`
