@@ -10395,3 +10395,109 @@ git-data-API push (TD-27 behaving as designed).
 
 **Working tree at exit:** the same four TD-27 ops-tooling paths as at entry. Nothing
 stashed, reverted or committed. **Line count for session 87 to carry forward: 10,397.**
+
+---
+
+## 2026-09-25T13:53Z — watchdog session 87 — SEV-1 hour **91h30m**, unchanged
+
+**Fired:** `API degraded (503): database-unreachable` (watchdog, 06:50:41 PDT).
+**Root cause:** unchanged since `2026-09-21T18:23:07Z` — Supabase project
+`gsxoaurmsgqascxukony` is not resolvable. The API is healthy and correctly reporting a
+failed **external** dependency. **Level D, owner-only. No repo change can fix it.** The
+action sheet (`2026-09-21-supabase-project-unreachable.md`) is still the page to read.
+
+**This is a clean re-verification with no new finding, and that is the intended output**
+(session 40's rule). Session 86 closed both of its items explicitly and left no stated
+evidence gap, so the licensed work was: fresh evidence, the counter re-stamps, and the
+maintenance checks below. Nothing was manufactured to fill the entry.
+
+**Re-attested from scratch, not inherited (ground rule 4 / session 83):**
+
+- `/health` returned `503` with a *populated* `database-unreachable` body three times —
+  `13:50:39Z` (the watchdog's own summon body), `13:50:58Z` and `13:53:06Z`. Populated
+  JSON body ⇒ the real-SEV class, not the `HTTP 000` host-side blip class.
+- DNS, **3 resolvers with 2 controls in the same call** (`.codex/dns-probe-s62.mjs` at
+  `13:51:54Z`): `gsxoaurmsgqascxukony.supabase.co` and
+  `db.gsxoaurmsgqascxukony.supabase.co` both **`ENOTFOUND`** on system, `1.1.1.1` and
+  `8.8.8.8`, while in the same pass `supabase.co` → `A 76.76.21.21` and `api.supabase.com`
+  → `A 104.18.42.230,172.64.145.26` on all three. The controls rule out local/resolver
+  fault: **the provider is up and only this project's records are withdrawn.**
+- **User-facing proof, not just the probe endpoint:** `/feed/for-you?limit=3` → **`500`
+  `{"error":{"code":"db_error"}}`**. `getsizzle.app` → `200` (static frontend unaffected).
+
+**Rollback: re-checked, not assumed — still inapplicable.** `vercel ls sizzle --prod`
+shows the **nine** most recent production deployments all `● Ready` (latest 58m old), and
+`/health` reports `commit: 58d4a98`, which **is** current `origin/main`
+(`58d4a98aec86abcf5e391ff1a32128f200627e21`, read from `git/refs`). There is no bad deploy
+to promote away from; the failed dependency is outside the repository, so every rollback
+target fails identically. The hourly `Ready` cadence is prior sessions' own docs-only log
+pushes — **never re-chase the `/health` `commit` churn as a bad deploy.**
+
+**Maintenance checks — 4 run, 4 clean (this is the session's actual work):**
+
+1. **§7 counter check: PASS.** Verified session 86's stamp against arithmetic rather than
+   against the line itself (session 71/77's rule — a skipped stamp is indistinguishable
+   from a fresh one): `18:23:07Z + 90h25m = 12:48:07Z`, matching its cited `/health` `time`
+   field `12:48:18Z`. Correct, and correctly attributed. **Fourth consecutive pass** —
+   recording passes too, so a successor can tell a working convention from an unexercised
+   one.
+2. **Line-count handoff: PASS.** Session 86 told this session to carry **10,397** forward;
+   `wc -l` on the origin copy is **10,397**. The handoff mechanism session 85 improvised is
+   holding.
+3. **TD-register audit (session 45's rule): CLEAN.** TD-37 closed, TD-38 and TD-39 open
+   with their non-ship rationale intact. Session 86's two prose items needed no filing —
+   item 1 is existing TD-21 context, item 2 is corroboration of TD-39 as already written.
+   **No finding is living in LOG prose unfiled.**
+4. **Doc-rot grep (session 74's rule, unrun for 7 sessions): CLEAN on the prose class.**
+   All relative-time hits are correctly exempt under session 30's two carve-outs — inside
+   dated blocks that read as history (`:15`, `:23`, `:26`, `:102`, `:167`, `:216`,
+   `:585`, `:593`, `:673`, `:687`) or state descriptions rather than elapsed time
+   (`:213`, `:338`, `:387`, `:448`, `:505`). The only rot was the **counts** class at
+   `:56`, which has no carve-out (session 79/80) and is re-stamped below as the routine
+   per-session task, not as a finding.
+
+**Owner action (unchanged, ~2 min, Level D):** on Vercel project **`sizzle`** (the API —
+naming is reversed) → Settings → Cron Jobs → **Disable Cron Jobs**; **then** Resume the
+Supabase project — **reading Paused vs deprovisioned first**, because a deprovisioned
+project means stop and contact Supabase support about PITR instead of clicking Resume
+(session 86 measured that this distinction is unreadable from any unattended path); **then**
+re-enable crons once the stranded-video list is captured. Disabling first is what avoids
+the TD-34 trap, where the next `finalize-videos` tick flips outage-stranded videos to a
+terminal `error` state the finalizer refuses to re-poll.
+
+### Escalation — result verbatim, called before this sentence was written
+
+`PushNotification` at `2026-09-25T13:54Z`:
+
+> `Mobile push not sent (Remote Control inactive).`
+
+Dead at hour **91h30m**, identical to sessions 1–86. No automated signal has reached
+Branden since `18:27Z` on 09-21; `LOG.md` and the action sheet remain **pull** channels.
+Per action-sheet §7 the channel inventory is exhaustive — do not hunt for a new one, and
+do **not** open a GitHub issue (the repo is **public**; that would advertise a live outage
+and an open financial-webhook window on a production money system).
+
+### Lane check — session 87
+
+- **Nothing shipped but documentation.** Resuming a paused Supabase project is Level D. No
+  code, config, migration or production setting touched. **No security control weakened to
+  chase green.** No rollback performed, because none applies (above).
+- **No in-lane code work exists.** Session 45's test — *does verifying it require the dead
+  dependency?* — still excludes TD-28/29/34/35/36/38, and TD-39 remains deliberately
+  unshipped because `watchdog.sh` is executed from the repo by launchd at the next 5-minute
+  tick with no CI or deploy gate, and changing the monitor perturbs the very signal being
+  watched for recovery.
+- **Working tree preserved (CLAUDE.md rule 11).** The four dirty ops-tooling paths are
+  TD-27 checkout-repair artifacts, dirty only against the stale local HEAD `d4c5395`.
+  Nothing stashed, reverted or committed — the session-21 stash trap.
+- **TD-27 honoured.** `scripts/ops/origin-drift.mjs` ran **first**; local `d4c5395` was 8
+  files behind origin `58d4a98`, so this entry and the re-stamps were composed against the
+  **origin** copies and pushed via the GitHub git-data API.
+
+### Counters re-stamped
+
+Live counter `90h25m → 91h30m`, session `86 → 87`, anchored to the `/health` `time` field
+`2026-09-25T13:53:06Z` (session 72's rule: the stamp cannot be advanced without actually
+probing). Session/line counts `eighty-six → eighty-seven`, `wc -l` `10,298 → 10,397` —
+10,397 measured on the origin copy **before** appending, which is exactly the figure
+session 86's closing line told this session to carry forward.
