@@ -10150,3 +10150,117 @@ question for future sessions rather than leaving it to be re-probed.**
 since before this outage began; no automated signal has reached Branden since `18:27Z` on
 09-21. `LOG.md` and the action sheet are pull channels. Called again this session for the
 record.
+
+## 2026-09-25 — watchdog session 85 (SEV-1 hour 89h25m, unchanged, Level D)
+
+**Fired:** `API degraded (503): database-unreachable` at `2026-09-25 04:46:12` local
+(`11:46:12Z`), one watchdog cooldown after session 84. **Same outage as 2026-09-21,
+still open, no repo fix exists.** Action sheet:
+`docs/operations/incidents/2026-09-21-supabase-project-unreachable.md` §1.
+
+**Short by design**, per the precedent session 84 set: re-attest that the failure mode is
+unchanged, stamp the hour, record only what is genuinely new. Nothing re-derived to
+manufacture volume.
+
+### Confirmation that nothing changed (fresh calls)
+
+| Probe | Result | Time (UTC) |
+|---|---|---|
+| `/health` (watchdog's own body) | `503` `{"problems":["database-unreachable"],"commit":"f6101cc"}` | `11:46:10Z` |
+| `/health` (independent re-probe, anti-flap pair) | `503` identical | `11:46:28Z` |
+| `/health` (third, for the hour stamp) | `503` identical | `11:48:43Z` |
+| `/feed/for-you?limit=3` | `500` `{"error":{"code":"db_error"}}` — real user path still down | `11:47Z` |
+| DNS (system resolver) | `gsxoaurmsgqascxukony.supabase.co` **ENOTFOUND**, `db.<ref>` **ENOTFOUND**, parent `supabase.co` `A=76.76.21.21` | `11:47Z` |
+| `getsizzle.app` | `200` — static frontend unaffected, as throughout | `11:47Z` |
+
+**Anti-flap: NOT a false alarm.** Three 503s with a *populated JSON body* naming
+`database-unreachable`, plus a 500 on a real user route. The false-alarm class is a bare
+`HTTP 000` with no body that self-recovers; nothing recovered, and this is hour 89 of a
+continuously verified outage.
+
+**Rollback still correctly inapplicable.** `/health` serves `f6101cc`, which **is**
+`origin/main` (confirmed via `gh api repos/:owner/:repo/commits` → `f6101cc`, session 84's
+own doc commit — the known hourly baseline). No deployment at any commit can reach a
+database whose hostname no longer resolves.
+
+### New this session — TD-39: the watchdog has no acknowledgment state, so a known, owner-blocked outage re-summons a full agent session every hour forever
+
+This is the first session to audit **the monitor itself** rather than the thing it watches.
+Eighty-four predecessors treated each summon as a given; none asked why the summons keep
+coming for an incident whose diagnosis closed around session 23 and whose fix has been the
+same fixed 2-minute owner click since session 1.
+
+**Verified by reading `scripts/ops/watchdog.sh`, not inferred:**
+
+- `COOLDOWN_MIN=60` (`:18`) is a **constant**. There is no backoff, no escalation ceiling,
+  and no per-incident acknowledgment.
+- The cooldown file is `touch`ed on every summon (`:74`) and removed **only** when every
+  probe comes back clean (`:59`). So while production stays red the loop is *unbounded* —
+  it re-summons a full headless Claude session every 60 minutes for as long as the outage
+  lasts, which on the Paused branch means up to the **1-year** restore window (§2).
+- The only suppression that exists is the kill switch `touch ~/.sizzle-ops/paused` (`:9`,
+  `:24`), which is **all-or-nothing**: it disables *all three probes*, so using it to quiet
+  a known outage would also blind the host to a **second, different** incident layered on
+  top. The available mitigation is therefore strictly worse than the loop it would mitigate.
+
+**Measured cost:** 85 sessions over 89h25m ≈ **0.96 summons/hour**, matching the 60-minute
+constant exactly, and `LOG.md` has grown to 10,152 lines. Per §7 **none of that output
+reaches Branden** — the push channel has been dead since before the outage began, so the
+loop's entire product is appends to a pull-only file that already says "read the action
+sheet, not the log."
+
+> *Honest limit:* `~/Library/Logs/sizzle-watchdog.log` is **outside the session sandbox and
+> could not be read** (`grep`/`ls` both refused), so the summon count above is derived from
+> `LOG.md`'s own session numbering, not from the watchdog's log. The `0.96/hour` figure is
+> that derivation cross-checked against `COOLDOWN_MIN=60`, and the two agree; treat it as
+> corroborated rather than directly measured.
+
+**The fix is NOT to silence it** — the hourly re-probe is exactly what would detect recovery
+or a layered second incident, and that value is real. The fix is a **signature-aware
+backoff**: hash the `PROBLEMS` text, and while the signature is unchanged *and* matches an
+acknowledged open incident, back the interval off geometrically to a ceiling (~6h); reset to
+the 60-minute cadence the instant the signature **changes or clears**. That preserves both
+detections while cutting the burn by roughly an order of magnitude.
+
+**Filed as TD-39 (P3, ops tooling) and deliberately NOT shipped mid-outage** — same standard
+that parked TD-28/29/34/35/36: changing the watchdog now would perturb the very signal being
+watched for recovery, and an unattended session cannot verify a launchd-driven timer change.
+`scripts/ops/watchdog.sh` is dev-only ops tooling outside the security-sensitive path list,
+so the change itself is Level A/B whenever it is picked up — **after** restore.
+
+### Still open — all owner-side, unchanged
+
+Items exactly as carried by sessions 75–84; §1 of the action sheet is authoritative.
+Short form: **disable crons on Vercel project `sizzle` (the API — naming is REVERSED) →
+then Resume the Supabase project → re-enable crons once the stranded-video list is
+captured.** Then the manual RevenueCat **Retry** (TD-35) and Stripe **Resend** (dashboard
+open to `2026-10-06`, no secret key needed) replays, `gh workflow enable uptime.yml`, the
+TD-21 PAT rotation, and the `ffmpeg-static` CI call. **If the dashboard reads *project not
+found / deprovisioned*, stop and contact Supabase support about PITR before touching
+anything.**
+
+### Closing note — session 85 verdicts (written after the calls, not before)
+
+- **Lane check: Level D, and nothing shipped but documentation.** Resuming a paused Supabase
+  project is owner-only under `autonomy-policy.md` Level D. No code, config, migration or
+  production setting was touched. No security control was weakened to chase green. No
+  rollback was performed, because none applies (above). TD-39 was *filed*, not shipped.
+- **Working tree:** the four dirty ops-tooling paths (`scripts/ops/sweep-prompt.md`,
+  `scripts/ops/origin-drift.mjs`, `scripts/verify-deploy.mjs`,
+  `tests/invariants/ops-tooling.test.mjs`) are TD-27 checkout-repair artifacts, dirty only
+  against the stale local HEAD `d4c5395`. **Nothing stashed, reverted or committed** (the
+  session-21 stash trap). CLAUDE.md rule 11 preserved.
+- **TD-27 honoured:** `scripts/ops/origin-drift.mjs` was run **first**; local HEAD `d4c5395`
+  was 8 files behind origin `f6101cc`, so this entry, the TD-39 row and the counter
+  re-stamps were all composed against the **origin** copies and pushed through the GitHub
+  git-data API. Appending to the stale local copy would have silently truncated prior
+  sessions' entries.
+
+### Counters re-stamped
+
+Live counter (page header) `88h24m → 89h25m`, session `84 → 85`, anchored to the `/health`
+`time` field `2026-09-25T11:48:43Z` that proves the outage is live (session 72's
+convention). Session/line counts `eighty-four → eighty-five` and `wc -l` `10,152 → 10,266`
+— the first figure measured on the origin copy **before** appending (and equal to session
+84's closing stamp), the second the post-append total, which is the chain sessions 83/84
+were actually recording.
