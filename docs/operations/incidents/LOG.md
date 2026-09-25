@@ -10627,4 +10627,19 @@ recorded figure rather than by reading the line, per session 71: `13:53:06Z + 1h
 15:13:36Z`, and `91h30m + 1h20m = 92h50m`. **Line-count handoff PASS** — session 87 said carry
 10,522 forward; `wc -l` on the origin copy is 10,522.
 
-**Line count for session 89 to carry forward: 10630.**
+### Escalation — result verbatim, called before this sentence was written
+
+`PushNotification` at `2026-09-25T15:22Z`:
+
+> `Mobile push not sent (Remote Control inactive).`
+
+Dead at hour **92h50m**, identical to sessions 1–87 — now **88 consecutive sessions** with no
+automated signal reaching Branden since `18:27Z` on 09-21. `LOG.md` and the action sheet remain
+**pull** channels. Per action-sheet §7 the channel inventory is exhaustive: do not hunt for a new
+one, and do **not** open a GitHub issue (the repo is **public** — that would advertise a live
+outage and an open financial-webhook window on a production money system).
+
+The unbroken 88-session streak is itself the finding worth surfacing: restoring a working push
+path is a second owner action, independent of the database.
+
+**Line count for session 89 to carry forward: 10645.**
