@@ -1,7 +1,7 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
 **Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
-(11:23 AM PDT Mon 09-21). **95h44m as of 2026-09-25T18:06:49Z** — re-verified by session 92 (watchdog).
+(11:23 AM PDT Mon 09-21). **96h47m as of 2026-09-25T19:09:52Z** — re-verified by session 93 (watchdog).
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
 
 > **🛑 READ §4 STEP 0 BEFORE YOU CLICK RESUME.** Session 18 found that the first
@@ -53,9 +53,9 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > without a browser. It changes your *calibration*, not the fix: the app is degrading
 > gracefully, and the misattribution is what is quietly costing you reviews and support mail.
 
-This page exists because **ninety-two** unattended sessions — ninety-one watchdog summons plus
-the 2026-09-25 daily sweep — have now diagnosed the same outage and appended **11,100+ lines** to
-`LOG.md` (counts re-stamped session 92, measured `wc -l` = 11143 pre-append; session 48 stamped them at "forty-seven"/"5,600+" and nothing re-checked them
+This page exists because **ninety-three** unattended sessions — ninety-two watchdog summons plus
+the 2026-09-25 daily sweep — have now diagnosed the same outage and appended **11,290+ lines** to
+`LOG.md` (counts re-stamped session 93, measured `wc -l` = 11294 pre-append; session 48 stamped them at "forty-seven"/"5,600+" and nothing re-checked them
 for the 31 sessions until session 79, so they had understated the burn by a third). The diagnosis is finished.
 This is the one-page action sheet. **Read this, not the log.**
 
@@ -737,6 +737,33 @@ can verify decays the moment the sweep stops running**, and the decay lands in t
 convention's author never saw. On a long incident, re-grep the class every so often rather than
 trusting that a past sweep closed it; the cost is one `grep` and the failure mode is a wrong date
 on the line an owner reads first.*
+
+**Re-sweep, session 93 (2026-09-25T19:09:52Z) — the check is CLEAN, but its COUNT was never
+comparable, because no session recorded the grep it ran. Fixed by pinning the invocation.**
+Sessions 30/74/90/91 each reported a hit count — **6 → 7 → 15 → 15** — and session 79's rule says a
+count in standing prose is never "correct as history". But these four numbers were never measuring
+the same thing: the sheet records the *token list* (`ago`, `today`, `now`, `currently`, `this hour`)
+and never the actual command, so each session improvised the boundaries. Running the token list
+verbatim today returns **41 matching lines / 42 word-boundary occurrences** — and **`now` alone
+contributes 23 of them**, because bare `now` is ordinary English prose ("is now", "now that"), plus
+6 more substring hits inside words like "known" when run without `\b`. A successor comparing "15"
+to "42" would read a 27-hit explosion of doc rot that does not exist, and would burn a session
+triaging it. **Pinned invocation — run exactly this and no other:**
+
+```sh
+grep -nE '\bago\b|\btoday\b|\byesterday\b|\bcurrently\b|this hour|right now|\btonight\b' \
+  docs/operations/incidents/2026-09-21-supabase-project-unreachable.md
+```
+
+Bare `now` is dropped deliberately: every *rot-bearing* use of it is the phrase **"right now"**,
+which the pattern still catches, and which session 30 already exempted as a state description.
+Session 93's run: **19 hits, all 19 correctly exempt** — `:167`/`:216`/`:692` sit in dated blocks,
+`:213` is a measurement, `:338`/`:387`/`:448`/`:505` describe states (review queue, OTA channel,
+pager, Cloudflare), and `:700`–`:728` are sessions 30 and 74's own write-ups quoting the rot they
+fixed. **Relative-time class clean; the two live counters at the top are the only rot surface left,
+and both were re-stamped this session.** *Generalised, and it is session 79's rule one level deeper:
+when a periodic check reports a number, pin the command that produces it — otherwise the number
+drifts with whoever ran it, and successors triage the tooling instead of the document.*
 
 ### The one follow-up that makes the next SEV-1 different
 
