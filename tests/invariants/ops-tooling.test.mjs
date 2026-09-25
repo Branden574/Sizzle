@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-import { classifyDrift, driftReport, mirrorPathFor } from '../../scripts/ops/origin-drift.mjs';
+import { classifyDrift, driftReport, isRetryableGhError, materialiseReport, mirrorAll, mirrorPathFor } from '../../scripts/ops/origin-drift.mjs';
 import { checkWebVersion, commitTimeIso, createVercelClient, staleHeadBail } from '../../scripts/verify-deploy.mjs';
 
 /** Minimal stand-in for a fetch Response, enough for the client's ok/status/json use. */
@@ -256,6 +256,82 @@ test('origin-drift writes only inside the gitignored .codex scratch', async () =
   }
   assert.match(src, /outDir = `\.codex\/origin-/, 'the scratch dir must stay under .codex/ (gitignored since TD-20)');
   assert.equal(mirrorPathFor('.codex/origin-abc', 'docs/x.md'), '.codex/origin-abc/docs/x.md');
+});
+
+/* A transient `gh api` EOF mid-mirror must not suppress the drift verdict (session 88).
+   Measured 2026-09-25: two consecutive runs died with `unexpected EOF` on a `contents/`
+   fetch and printed "do not proceed on the working copy" instead of the drift they had
+   already computed — which is the TD-27 failure the tool exists to prevent. */
+
+test('isRetryableGhError classifies the transport blips but not a real absence', () => {
+  assert.ok(isRetryableGhError(new Error('Get "https://api.github.com/...": unexpected EOF')));
+  assert.ok(isRetryableGhError(new Error('read ECONNRESET')));
+  assert.ok(isRetryableGhError(new Error('socket hang up')));
+  assert.ok(!isRetryableGhError(new Error('HTTP 404: Not Found')), '404 is absence — retrying it just burns calls');
+  assert.ok(!isRetryableGhError(new Error('HTTP 401: Bad credentials')), 'a revoked token will never succeed on retry');
+  assert.ok(!isRetryableGhError(undefined), 'a missing error must not be treated as retryable');
+});
+
+test('a failed mirror reports the paths and keeps the verdict authoritative', () => {
+  const lines = materialiseReport([{ path: 'docs/operations/incidents/LOG.md', reason: 'unexpected EOF' }]).join('\n');
+  assert.match(lines, /verdict above is COMPLETE and valid/, 'the gate succeeded — say so, or the session discards it');
+  assert.match(lines, /docs\/operations\/incidents\/LOG\.md/, 'it must name which mirror is missing');
+  assert.match(lines, /Do NOT reason about the working copy/, 'the stale copy is exactly what TD-27 warns against');
+  assert.match(lines, /raw\.githubusercontent\.com/, 'hand the session the single-file fallback that works');
+});
+
+test('a fully successful mirror adds no warning noise', () => {
+  assert.deepEqual(materialiseReport([]), [], 'the clean path must stay silent');
+});
+
+test('a mid-mirror EOF is collected, not thrown — one bad file cannot abort the run', () => {
+  const files = [
+    { path: 'package-lock.json', status: 'modified' },
+    { path: 'docs/operations/incidents/LOG.md', status: 'modified' },
+  ];
+  // The real failure shape: the big file blows up, everything else is fine.
+  const failures = mirrorAll({
+    files,
+    outDir: `.codex/origin-test-${process.pid}`,
+    fetchContent: (path) => {
+      if (path === 'docs/operations/incidents/LOG.md') {
+        throw new Error('Get "https://api.github.com/repos/x/y/contents/z": unexpected EOF');
+      }
+      return Buffer.from(`content of ${path}`).toString('base64');
+    },
+  });
+  assert.deepEqual(failures.map((f) => f.path), ['docs/operations/incidents/LOG.md'],
+    'the EOF must be collected and the other files still mirrored');
+  assert.match(failures[0].reason, /unexpected EOF/, 'the reason must survive for the banner');
+});
+
+test('mirrorAll fetches the lockfile manifest only when the lockfile drifted', () => {
+  const asked = [];
+  const fetchContent = (path) => { asked.push(path); return ''; };
+  mirrorAll({ files: [{ path: 'package-lock.json', status: 'modified' }], outDir: `.codex/origin-test-${process.pid}`, fetchContent });
+  assert.ok(asked.includes('package.json'), 'npm audit needs the manifest beside the lockfile');
+
+  asked.length = 0;
+  mirrorAll({ files: [{ path: 'docs/x.md', status: 'modified' }], outDir: `.codex/origin-test-${process.pid}`, fetchContent });
+  assert.ok(!asked.includes('package.json'), 'no lockfile drift ⇒ no wasted manifest call');
+});
+
+test('mirrorAll never fetches a file that origin deleted', () => {
+  const asked = [];
+  mirrorAll({
+    files: [{ path: 'gone.md', status: 'removed' }, { path: 'here.md', status: 'modified' }],
+    outDir: `.codex/origin-test-${process.pid}`,
+    fetchContent: (path) => { asked.push(path); return ''; },
+  });
+  assert.deepEqual(asked, ['here.md'], 'a removed file has no content at the origin ref');
+});
+
+test('origin-drift prints the verdict before the mirror warning, never instead of it', async () => {
+  const src = await readFile(new URL('../../scripts/ops/origin-drift.mjs', import.meta.url), 'utf8');
+  assert.match(src, /ghWithRetry\(`repos\/\$\{REPO_SLUG\}\/contents\//, 'content fetches must go through the retrying wrapper');
+  const report = src.indexOf('console.log(driftReport(');
+  const note = src.indexOf('const note = materialiseReport(failures)');
+  assert.ok(report > 0 && note > report, 'the verdict prints first; the mirror warning is appended after it');
 });
 
 test('the drift check is wired into the sweep prompt before the checks it protects', async () => {

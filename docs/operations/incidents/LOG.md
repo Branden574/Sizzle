@@ -10643,3 +10643,189 @@ The unbroken 88-session streak is itself the finding worth surfacing: restoring 
 path is a second owner action, independent of the database.
 
 **Line count for session 89 to carry forward: 10645.**
+
+## 2026-09-25T15:29Z — watchdog session 89 — SEV-1 hour **93h06m**, unchanged
+
+**Fired:** `API degraded (503): database-unreachable` (watchdog, `07:54:01` PDT / `14:54:01Z`).
+**Root cause:** unchanged since `2026-09-21T18:23:07Z` — Supabase project
+`gsxoaurmsgqascxukony` is not resolvable. The API is healthy and correctly reporting a failed
+**external** dependency. **Level D, owner-only. No repo change can fix it.** The action sheet
+(`2026-09-21-supabase-project-unreachable.md`) is still the page to read.
+
+### Read the ordering before trusting the number — and the near-miss it caused
+
+This watchdog summon fired at `14:54:01Z`, **19 minutes BEFORE** session 88's daily-sweep slot
+(`15:13Z`) — but session 88 composed, pushed and closed while this session was still working, so
+origin moved `37c41d3` → `a2ac3a7` **mid-session**. Numbered **89** by append order, not summon
+order.
+
+The consequence is exactly the corruption TD-27 exists to prevent, and it nearly landed: **the
+LOG base this session had already materialised was stale by the time it came to append**, so
+writing against it would have silently truncated session 88's entire sweep entry — including its
+TD-31 correction. Caught by re-running `origin-drift.mjs` after the code change and noticing its
+`originHead` had moved (`.codex/origin-37c41d3/` → `.codex/origin-a2ac3a7/`); this entry, the
+TD-40 filing and the counter re-stamps are all composed against the **new** base, and the
+forward-carry line count was re-measured on it (10,645, matching session 88's handoff).
+
+*Generalised, and new: TD-27's tooling is written as a **start-of-session** gate, but the origin
+mirror is only as fresh as the moment it was fetched. On a hot incident with more than one launchd
+slot in play, **re-check the head immediately before appending**, not just before starting. The
+existing guard that saves you if you forget is the git-data push's parent check (session 72) — it
+would have rejected the push, but only after the entry was written against the wrong base.*
+
+### Root cause re-attested from scratch, not inherited (ground rule 4)
+
+- `/health` → **503** with a *populated* `database-unreachable` body, three times: `14:53:58Z`
+  (the watchdog's own summon body), `14:54:21Z`, `15:29:30Z`. A populated JSON body is the
+  **real-SEV** class, not the `HTTP 000` host-side blip class — the distinction that matters per
+  [[sizzle-watchdog-false-alarms]].
+- **DNS, three resolvers with the parent zone as an in-call control** (`.codex/dns-probe.mjs`):
+  `supabase.co` → `A=76.76.21.21`, `CNAME=**ENODATA**` (the name exists, no record of that type)
+  versus `gsxoaurmsgqascxukony.supabase.co` and `db.gsxoaurmsgqascxukony.supabase.co` →
+  **`ENOTFOUND`** (NXDOMAIN) on system, `1.1.1.1` **and** `8.8.8.8`. Three unrelated resolvers
+  agreeing kills the sandbox/local-fault explanation; `ENODATA`-vs-`ENOTFOUND` is *positive*
+  proof the per-project records were withdrawn. **Provider up, this project's records gone ⇒
+  project-level pause or deprovision.**
+- **User-facing proof, not just the probe endpoint:** `/feed/for-you?limit=1` → **500**
+  `{"error":{"code":"db_error"}}`. `getsizzle.app` → **200** in 1.70s (the static frontend is
+  unaffected; only DB-backed paths fail).
+
+### Rollback — re-checked, not assumed; still inapplicable
+
+`/health` reports `commit: a2ac3a7`, which **is** current `origin/main` (read from `git/refs`) —
+session 88's own docs push. The failed dependency is outside the repository, so **every rollback
+target fails identically**; there is no bad deploy to promote away from. The hourly `Ready`
+cadence on project `sizzle` is prior sessions' own docs-only log pushes — **never re-chase the
+`/health` `commit` churn as a bad deploy.**
+
+### Finding — SHIPPED: the mandatory-first TD-27 gate aborts on a transient EOF (TD-40)
+
+**This session hit a real, first-hand, previously-unrecorded defect in its own first step**, and
+it is the rare thing that is both in-lane and worth shipping mid-outage. `origin-drift.mjs` — the
+tool every session must run **before** reasoning about any file — died twice in a row:
+
+```
+Get "https://api.github.com/.../contents/tests/invariants/ops-tooling.test.mjs?ref=37c41d3": unexpected EOF
+origin-drift: FAILED — Command failed: gh api ...
+This check is mandatory before sweep items 4 and 6; do not proceed on the working copy.
+```
+
+The **third** identical invocation succeeded untouched, so the fault is transient transport, not
+a broken repo or a revoked token. Two things were wrong, and the second is the dangerous one:
+
+1. **No retry** on the per-file `contents/` fetch. This gets worse every incident hour by
+   construction: `LOG.md` is one of the drifted files and is now ~950 KB (≈1.26 MB base64) in a
+   single `gh api` call, growing ~100 lines per session, and the loop is ~9 sequential calls.
+   The mandatory-first tool becomes more failure-prone the longer the outage runs.
+2. **Mirroring (a convenience) and the drift verdict (the gate) shared one failure mode.** The
+   report was printed *after* the content loop, so a blip in the convenience half destroyed the
+   output of the gate half — and the error text then actively instructed the session *"do not
+   proceed on the working copy"*. The verdict was **already fully computed** at that point from
+   two cheap calls that had succeeded. So the gate failed in the one direction that pushes a
+   session onto the **stale** working copy: precisely the 2026-09-04 near-miss TD-27 was written
+   for, where a stale lockfile produced a false *"advisory cleared"* claim.
+
+That risk is not hypothetical here. **Session 88's entry, 20 minutes after this summon, records
+that this exact tool's output was load-bearing for a correct finding** — *"Had I audited the
+local lockfile instead, item 4 would have been wrong."* A hard abort would have left that session
+with no verdict at all.
+
+**Fix (shipped, Level A — ops-only tooling, no production effect, no security-sensitive path):**
+exit 1 now means *"the verdict could not be computed"* and nothing weaker. Content fetches go
+through `ghWithRetry` (bounded backoff, 3 attempts); `isRetryableGhError` distinguishes the
+transport class (`unexpected EOF`, `ECONNRESET`, `socket hang up`, 502/503/504) from a real
+absence (404/401 are **not** retried — a revoked token never succeeds on retry); `mirrorAll`
+catches per file and **returns** failures instead of throwing; the verdict prints
+unconditionally, and `materialiseReport` then names any missing mirror, states that the verdict
+above is still complete and valid, warns *"do NOT reason about the working copy for those
+paths"*, and hands over the single-file `raw.githubusercontent.com` fallback **verified working
+in this session** (it is how this entry's base was fetched after the aborts).
+
+**Why this was shippable during an unfixable outage** — session 45's test, *does verifying it
+require the dead dependency?* **No.** It is pure ops tooling: no DB, no application surface, no
+migration, no auth/money path, nothing on the security-sensitive list. Same class as TD-37, which
+session 45 shipped mid-outage for the same reason.
+
+**Verification — all four, not just the unit tests:**
+
+- **Invariants: 51/51 pass** (`npm run test:invariants`), up from 47; unit suite **7/7**.
+- **Mutation-verified against the real pre-fix source, not a hand-made mutant.**
+  `.codex/mutation-check-s88.mjs` replays the new assertions against origin's `37c41d3` copy:
+  all five fail there (`ghWithRetry` absent · guarded `mirror()` call sites **0**, test demands 2
+  · `materialiseReport` index **-1** · both new exports missing). These are genuine regression
+  tests, not tautologies.
+- **The degraded path is executed, not argued from source structure.** The first draft asserted
+  the fix by grepping the script's own text, which is weak. `mirrorAll` now takes an injected
+  `fetchContent`, so a test throws the *exact* measured error (`unexpected EOF`) for the big file
+  and asserts the other files still mirror, the failure is collected with its reason intact, and
+  nothing throws. Two further tests pin behaviour a retry loop could plausibly break: the
+  lockfile manifest is fetched **only** when `package-lock.json` drifted, and a `removed` file is
+  **never** fetched.
+- **Live, on the real surface, three times.** Pre-fix: two aborts. Post-fix: full run writes
+  `.codex/origin-a2ac3a7/` and the clean path stays **silent** (no warning noise) — and it is the
+  run whose changed `originHead` caught the stale-base near-miss described above.
+
+Filed as **TD-40, closed/shipped** in the same edit.
+
+### Maintenance checks
+
+1. **§7 counter check: PASS (sixth consecutive).** Verified session 88's stamp by arithmetic
+   against session 87's own recorded figure rather than by reading the line (session 71/77's
+   rule — a skipped stamp is indistinguishable from a fresh one): `13:53:06Z + 1h20m30s =
+   15:13:36Z` and `91h30m + 1h20m = 92h50m`. Correct and correctly attributed.
+2. **Line-count handoff: PASS.** Session 88 said carry **10,645**; `wc -l` on the new origin copy
+   is **10,645**. Note this was *re-measured after* origin moved — the figure from the stale base
+   was 10,522, and using it would have been the truncation described above.
+3. **TD-register audit (session 45's rule): CLEAN, then extended.** TD-37 closed; TD-38/TD-39
+   open with their non-ship rationale intact; register topped out at TD-39. This session's finding
+   is **not** left living in LOG prose — it is filed as TD-40, which is the whole point of that
+   rule.
+4. **Doc-rot grep (session 74's rule):** not re-run — session 88 ran it 16 minutes before this
+   summon and found the prose class clean. Re-running it here would be the manufactured work
+   session 40 warns about. The **counts** class (no carve-out, session 79/80) is re-stamped below
+   as the routine per-session task.
+
+### Owner action (unchanged, ~2 min, Level D)
+
+On Vercel project **`sizzle`** (the API — naming is reversed) → Settings → Cron Jobs →
+**Disable Cron Jobs**; **then** Resume the Supabase project — **reading Paused vs deprovisioned
+first**, because a deprovisioned project means stop and contact Supabase support about PITR
+instead of clicking Resume; **then** re-enable crons once the stranded-video list is captured.
+Disabling first is what avoids the TD-34 trap, where the next `finalize-videos` tick flips
+outage-stranded videos to a terminal `error` state the finalizer refuses to re-poll.
+
+**Second, independent owner action:** the push channel has now been dead for **89 consecutive
+sessions**. Restoring it is unrelated to the database and is why none of this has reached you.
+
+### Escalation — result verbatim, called before this sentence was written
+
+`PushNotification` at `2026-09-25T15:32Z`:
+
+> `Mobile push not sent (Remote Control inactive).`
+
+Dead at hour **93h06m**, identical to sessions 1–88 — now **89 consecutive sessions** with no
+automated signal reaching Branden since `18:27Z` on 09-21. `LOG.md` and the action sheet remain
+**pull** channels. Per action-sheet §7 the channel inventory is exhaustive: do not hunt for a new
+one, and do **not** open a GitHub issue (the repo is **public** — that would advertise a live
+outage and an open financial-webhook window on a production money system).
+
+### Lane check — session 89
+
+- **One in-lane code change shipped, deliberately:** `scripts/ops/origin-drift.mjs` +
+  `tests/invariants/ops-tooling.test.mjs` (TD-40). **Level A** — ops-only tooling invoked from
+  `scripts/ops/*-prompt.md`, not a package script, not CI-with-secrets, no production effect, no
+  path on the security-sensitive list. Diff is well under the 150-line Level A budget.
+- **Nothing else shipped but documentation.** No config, migration, native file or production
+  setting touched. **No security control weakened to chase green.** Money code untouched.
+- **No rollback performed, because none applies** (above) — the dependency is external.
+- **Working tree preserved (CLAUDE.md rule 11).** `scripts/ops/sweep-prompt.md` and
+  `scripts/verify-deploy.mjs` are dirty only against the stale local HEAD `d4c5395` and were
+  verified **byte-identical to origin** with `diff` before anything was touched (session 52's
+  rule) — so they are TD-27 checkout artifacts, not Branden's work, and were left alone. Nothing
+  stashed or reverted: the session-21 stash trap.
+- **The two edited code files were also verified byte-identical to origin before editing**, so
+  the fix is composed on the correct base rather than on a 3-week-stale local copy.
+- **TD-27 honoured twice** — `origin-drift.mjs` ran **first**, and again before appending, which
+  is what caught the mid-session base change.
+
+**Line count for session 90 to carry forward: 10831.**
