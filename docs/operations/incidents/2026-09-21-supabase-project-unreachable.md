@@ -1,7 +1,7 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
 **Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
-(11:23 AM PDT Mon 09-21). **81h07m as of 2026-09-25T03:30:54Z** — re-verified by session 77 (watchdog).
+(11:23 AM PDT Mon 09-21). **82h07m as of 2026-09-25T04:30:42Z** — re-verified by session 78 (watchdog).
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
 
 > **🛑 READ §4 STEP 0 BEFORE YOU CLICK RESUME.** Session 18 found that the first
