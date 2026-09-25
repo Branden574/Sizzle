@@ -9057,3 +9057,133 @@ manual RevenueCat **Retry** (TD-35) and Stripe **Resend** (dashboard open to `20
   `tests/invariants/ops-tooling.test.mjs`) are TD-27 checkout-repair artifacts, dirty only against the
   stale `d4c5395` local HEAD. **Nothing stashed, reverted or committed for them** (the session-21 stash
   trap). CLAUDE.md rule 11 preserved.
+
+---
+
+## 2026-09-25 — watchdog session 77 (`2026-09-24 20:28:02` local / `2026-09-25T03:28:02Z`) — SEV-1 unchanged, hour 81h07m
+
+**Negative result on the outage; two real findings on the incident's own bookkeeping.** The watchdog
+re-fired on its 60-minute cooldown, ~1h02m after session 76. The Supabase project is still
+unreachable, the fix is still the two owner-side clicks in §1, and **no agent-side lane is open**.
+What this session adds is not a new failure mode — it is the **closure of the evidence gap session 76
+explicitly flagged**, plus a repair of two bookkeeping defects that were actively misinforming a
+reader. Per session 38's rule, a predecessor's stated gap is the one thing a re-verify session is
+licensed to add; per session 40, the negative result is logged as one.
+
+### Fresh evidence (taken this session, not inherited)
+
+- **`/health` × 3 spanning 2m52s** — `03:28:00.468Z` (the watchdog's own capture), `03:28:23.595Z`,
+  `03:30:54.185Z`. All **HTTP 503**, `status: degraded`, `problems: ["database-unreachable"]`, with
+  `stuckVideoBacklog` / `parkedMediaDeletions` / `cronAges` all **`null`** (the `health.ts:88`
+  both-probes-failed branch). Three readings minutes apart rules out the anti-flap "single blip,
+  already recovered" branch of the incident prompt.
+- **Live users are failing, not just the probe.** `GET /feed/for-you?limit=3` → **HTTP 500** in 7.2s.
+  `/health` alone reads as a probe artifact; a real feed endpoint 500ing is the user-facing proof.
+- **DNS, triple-resolver, with a control.** `.codex/dns-probe.mjs` on **system + 1.1.1.1 + 8.8.8.8**,
+  identical on all three: `supabase.co` → `A=76.76.21.21`, `CNAME=ENODATA` (parent zone healthy);
+  `gsxoaurmsgqascxukony.supabase.co` and `db.gsxoaurmsgqascxukony.supabase.co` → **`ENOTFOUND`** on
+  both record types. `ENODATA`-vs-`ENOTFOUND` across three unrelated resolvers is positive proof the
+  per-project records are **withdrawn**, not that our egress is broken. **Same root cause, not a new
+  failure wearing the same symptom** — which is the thing worth re-checking before pattern-matching
+  to an open incident.
+- **No bad deploy → rollback is still not the lever.** `/health.commit` = **`74bb7d1`**;
+  `gh api …/git/refs/heads/main` = **`74bb7d17fded5d610171e7e21ef0947c313a378e`**. The API is serving
+  origin HEAD exactly, and that commit is session 76's own log push. There is no previous-READY
+  deployment to promote because no deployment caused this (incident-prompt rule 3 checked, not
+  assumed).
+
+### Finding 1 — session 76's stated evidence gap is CLOSED: the crons ARE still running
+
+Session 76 could not re-measure the TD-34 cron trap because the Vercel CLI was not allowlisted that
+session, and honestly flagged it: *"a successor with CLI approval should re-measure rather than
+inherit this."* **This session had CLI approval, and the measurement is first-hand:**
+
+- `vercel crons ls --project sizzle` → **5 cron jobs**, schedules as in `apps/api/vercel.json`. As
+  session 19 established, this listing has **no state column** and therefore cannot by itself tell
+  you whether crons are enabled — so the listing is necessary but not sufficient.
+- `vercel logs sizzle-chi.vercel.app --json` is what actually settles it. In the window
+  `03:10:17Z`–`03:26:17Z` the crons are firing **every single minute**:
+  `/internal/finalize-videos` → **200**, and `/internal/publish-scheduled` → **200**, one of each per
+  minute without a gap. Both rollups appear on schedule and **500** with
+  `TypeError: fetch failed` — `rollup-watch-ratios` at `03:17:44.188Z` (**4 ms**),
+  `rollup-hashtag-trends` at `03:15:11.217Z` (**24 ms**).
+
+**Consequences.** (a) **§1 step 0 is confirmed still required, on current evidence rather than
+inheritance** — the TD-34 trap is armed, and the first `finalize-videos` tick within 60 seconds of
+Resume will still mass-flip the stranded cohort to terminal `error`. The last first-hand measurement
+is now *this* session, not session 44's on 09-23. (b) Session 62's finding is re-confirmed live: the
+two rollups are the **counter-example** to TD-28 — they check `error`, return 500 and fire
+`captureException`, so **Sentry and Vercel Cron's failure view have carried a true signal for the
+entire 81 hours with no alert wired to it.** That remains the cheapest real answer to the postmortem
+template's *"what would have caught this earlier?"*.
+
+**One observation recorded, deliberately NOT worked up into a finding.** The two every-minute crons
+stall — `finalize-videos` reports a stable **21s** and `publish-scheduled` a stable **7s** on every
+invocation, against the same dead DNS that the rollups hit in 4–24 ms. The difference is structural
+and already understood: the rollups return on the first failed call, while the other three swallow
+the error (TD-28) and continue into further calls. This is the **DB-connect stall** the log already
+characterises — it is the documented cause of the `responseStatusCode: 0` rows memory files under
+"don't re-derive: noise". Noted so the next session recognises the durations rather than re-opening
+them; **no new defect claimed.**
+
+### Finding 2 — session 76 SKIPPED the §7 counter stamp, and session 72's structural fix does not prevent that
+
+Session 71 diagnosed the §7 counter's flaw (a skipped stamp is indistinguishable from a fresh one)
+and session 72 re-anchored line 4 to the `time` field of the `/health` response that proves the
+outage is live, *"so the stamp cannot be advanced without actually probing."* **Session 76 skipped it
+anyway.** As pushed in `74bb7d1` — session 76's own commit — line 4 of the action sheet still read:
+
+> `**79h04m as of 2026-09-25T01:27:51Z** — re-verified by session 75 (watchdog).`
+
+So the page's **highest-traffic line**, the one an owner skims first under pressure, was **2h03m
+stale and attributed to the wrong session**, on a worsening incident. Re-stamped this session to
+**`81h07m as of 2026-09-25T03:30:54Z` — re-verified by session 77**, anchored to this session's third
+`/health` probe per the session-72 convention. The second counter (the Stripe banner) correctly needs
+no stamp — sessions 69/70 retired it when the free-retry window closed `2026-09-24T18:23Z`; it stays
+retired.
+
+*Generalised, and this sharpens session 72's rule rather than repeating it:* **re-shaping a convention
+so its artifact cannot be *fabricated* does nothing to stop it being *omitted*.** Session 72 closed the
+forgery hole; the skip hole was still wide open, and it took four sessions to be exercised. The only
+check that catches an omission is the one session 71 prescribed — **verify the counter against the
+previous session's own recorded elapsed figure**, not against the line itself. Two sessions have now
+paid for this; it is cheap and it belongs at the top of every re-verify session's list.
+
+### Finding 3 (correction, appended not rewritten) — session 76's entry header carries a wrong timestamp
+
+Session 76's heading reads `(02:26:10 local / 09:26Z)`. **Both halves cannot be right, and its own
+evidence settles which is wrong:** that entry cites its two `/health` probes at
+`2026-09-25T02:26:26.863Z` and `2026-09-25T02:28:03.635Z`. Local here is PDT (UTC−7), so `02:26Z` is
+**`19:26:10` local on 09-24**. The header appears to have placed the *UTC* time in the *local* slot and
+then converted it to UTC a second time, yielding `09:26Z` — a stamp **~7 hours in the future** of the
+session it labels. Left in place, it makes the most recent check look far more recent (or far more
+distant) than it was, and it breaks the ordering against this entry.
+
+Corrected reading: **session 76 ran at `2026-09-24 19:26:10` local / `2026-09-25T02:26:10Z`.** Per
+session 28's precedent this is recorded as a dated correction here rather than by rewriting session
+76's entry — the log is append-only in spirit. *Generalised: sessions 30/74 established that relative
+time expressions rot; this is the sibling defect — a **converted** timestamp is a computation, and an
+unchecked conversion in a heading fails silently and in the highest-traffic line of the entry. Write
+local and UTC from the same source, and sanity-check the pair against a timestamp inside the entry.*
+
+### Still open — all owner-side, unchanged
+
+Items 1–6 as carried by sessions 75/76; `docs/operations/incidents/2026-09-21-supabase-project-unreachable.md`
+§1 is the authoritative copy. Short form: **disable crons on Vercel project `sizzle` (the API — naming
+is reversed) → then Resume the Supabase project**; then the manual RevenueCat **Retry** (TD-35) and
+Stripe **Resend** (dashboard open to `2026-10-06`) replays, `gh workflow enable uptime.yml`, the TD-21
+PAT rotation, and the `ffmpeg-static` CI call. **If the dashboard reads *project not found /
+deprovisioned*, stop and contact Supabase support about PITR before touching anything.**
+
+### Closing note — session 77 verdicts (written after the calls, not before; session 38's ordering trap)
+
+- **Lane check:** **Level D.** Resuming a paused Supabase project is owner-only under
+  `autonomy-policy.md`; no repo change, rollback or redeploy can reach it. **No application code was
+  changed.** The only writes this session are to the two incident documents.
+- **Escalation reality:** `PushNotification` result recorded verbatim in the notification section
+  below. `LOG.md` and the action sheet remain **pull** channels nobody is prompted to open; §7's
+  channel inventory is exhaustively verified — do not hunt for a new one.
+- **Working tree:** the four dirty ops-tooling paths (`scripts/ops/sweep-prompt.md`,
+  `scripts/ops/origin-drift.mjs`, `scripts/verify-deploy.mjs`, `tests/invariants/ops-tooling.test.mjs`)
+  are TD-27 checkout-repair artifacts, dirty only against the stale `d4c5395` local HEAD. **Nothing
+  stashed, reverted or committed for them** (the session-21 stash trap). CLAUDE.md rule 11 preserved.
