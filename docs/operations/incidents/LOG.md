@@ -10086,3 +10086,67 @@ financial-webhook window on a production money system).
 > `SEV-1 hour 87h20m: Supabase project gsxoaurmsgqascxukony still unreachable (DNS withdrawn,`
 > `3 resolvers). Owner-only: disable crons on Vercel project "sizzle", THEN Resume the project.`
 > `No repo fix exists.`
+
+## 2026-09-25 — watchdog session 84 (SEV-1 hour 88h24m, unchanged, Level D)
+
+**Fired:** `API degraded (503): database-unreachable` at `2026-09-25 03:44:24` local
+(`10:44:24Z`), exactly one watchdog cooldown after session 83. **Same outage as
+2026-09-21, still open, no repo fix exists.** Action sheet:
+`docs/operations/incidents/2026-09-21-supabase-project-unreachable.md` §1.
+
+**Deliberately short.** Session 83 re-attested the root cause from scratch 63 minutes ago
+and the action sheet says to read it rather than the log. This entry records only the
+hour stamp, a minimal independent confirmation that the *failure mode* has not changed,
+and the one genuinely new data point below. Nothing was re-derived to manufacture volume.
+
+### Confirmation that nothing changed (fresh calls)
+
+| Probe | Result | Time (UTC) |
+|---|---|---|
+| `/health` | `503` `{"problems":["database-unreachable"],"commit":"3af689f"}` | `10:44:53Z` |
+| `/health` (watchdog's own body, anti-flap pair) | `503` identical | `10:44:23Z` |
+| `/feed/for-you?limit=3` | `500` `{"error":{"code":"db_error"}}` — user path still down | `10:47Z` |
+| `.codex/dns-probe.mjs` (3 resolvers) | parent `supabase.co` `A=76.76.21.21`; both project records **NXDOMAIN** on system, `1.1.1.1`, `8.8.8.8` | `10:47Z` |
+| `getsizzle.app` | `200` — static frontend unaffected, as throughout | `10:44Z` |
+
+**Anti-flap: NOT a false alarm.** Two 503s *with a populated JSON body* naming
+`database-unreachable`, plus a 500 on a real user route. The false-alarm class is a bare
+`HTTP 000` with no body that self-recovers; nothing recovered, and this is hour 88 of a
+continuously-verified outage.
+
+**Rollback: still correctly inapplicable.** `/health` serves `3af689f`, which **is**
+`origin/main` (`gh api git/refs/heads/main` → `3af689ffe93c535c…`) — session 83's own doc
+commit, the known hourly baseline. The failed dependency is outside the repository; no
+deployment at any commit can reach a database whose hostname no longer resolves.
+
+### New this session — the three credential-free paths re-tested in a session where the MCP server actually connected
+
+Worth one line because it sharpens **TD-21**'s close condition rather than restating it.
+This session started with the `supabase` MCP server *connected* (prior sessions saw it
+absent), so the gate was re-tested end-to-end instead of assumed:
+
+- `mcp__supabase__get_advisors` → **`Unauthorized. Please provide a valid access token…`**
+  — a *server-side* error, not a permission prompt. Connecting the server changes nothing;
+  the **revoked PAT** is the blocker, confirming TD-21's diagnosis a second time.
+- `mcp__claude_ai_Supabase__list_projects` → **permission-gated** (not self-grantable).
+- `mcp__claude_ai_Gmail__search_threads` → **permission-gated**. This is the one that
+  matters: §1 notes the Supabase pause/restrict email in the ops inbox names *which branch*
+  Branden is in (Paused vs Fair-Use-restricted), and it remains unreadable unattended.
+
+Consequence unchanged: the dashboard is still the only surface that can read project state,
+and Resume is still an owner-only click. **No new capability was found — this closes the
+question for future sessions rather than leaving it to be re-probed.**
+
+### Still open / owner action (unchanged, ~2 minutes)
+
+1. Vercel → project **`sizzle`** (the API; naming is reversed) → Settings → Cron Jobs →
+   **Disable Cron Jobs** (§4 step 0 — avoids the TD-34 trap that mass-flips stranded videos
+   to a terminal `error` state within 60s of restore).
+2. Supabase dashboard → project `gsxoaurmsgqascxukony` → read the reason → **Resume**
+   (never create a new project — §3).
+3. Re-enable the crons once the stranded-video list is captured.
+
+**Push channel still dead.** `PushNotification` has reported `Remote Control inactive`
+since before this outage began; no automated signal has reached Branden since `18:27Z` on
+09-21. `LOG.md` and the action sheet are pull channels. Called again this session for the
+record.
