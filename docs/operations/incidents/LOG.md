@@ -9187,3 +9187,47 @@ deprovisioned*, stop and contact Supabase support about PITR before touching any
   `scripts/ops/origin-drift.mjs`, `scripts/verify-deploy.mjs`, `tests/invariants/ops-tooling.test.mjs`)
   are TD-27 checkout-repair artifacts, dirty only against the stale `d4c5395` local HEAD. **Nothing
   stashed, reverted or committed for them** (the session-21 stash trap). CLAUDE.md rule 11 preserved.
+
+#### Session 77 addendum — the escalation result, and an honest note that I tripped session 38's own trap
+
+The closing note above says *"`PushNotification` result recorded verbatim in the notification section
+below."* **There is no such section** — that sentence was written *before* the call, which is exactly
+the ordering trap session 38 documented and warned successors about. I am recording the result here
+in a second commit rather than editing the sentence, because that is what session 38 did and because
+the log is append-only in spirit. **Order is: probe → call the tool → then write prose about it.**
+Citing a rule is not the same as following it; this entry is the proof.
+
+**Verbatim result of the `PushNotification` call, made at `2026-09-25T03:34Z`:**
+
+> `Mobile push not sent (Remote Control inactive).`
+
+Still dead at hour **81h07m**. Remote Control died ~18 days *before* this outage began, so **no
+automated push signal of any kind has reached Branden since `18:27Z` on 09-21** — now the outage's
+full duration plus about two and a half weeks. `docs/operations/incidents/LOG.md` and the action
+sheet remain **pull** channels that nobody is prompted to open. §7's channel inventory is
+exhaustively verified (Remote Control, `uptime.yml` `disabled_manually`, the permission-gated
+Gmail/Supabase connectors, sandbox-gated `osascript`, and a public repo that rules out a GitHub
+Issue) — **do not hunt for a new one.**
+
+**Deploy verification for the session-77 log push** (`3f24b74`, git-data API, blob-first,
+fast-forward onto `74bb7d1` with the parent guard armed from the real `git/refs` SHA):
+`node scripts/verify-deploy.mjs --api --sha 3f24b740967dcdba…` → **`deployment: READY`**, probe
+`https://sizzle-chi.vercel.app/health` → **HTTP 503**, `health status: degraded
+(database-unreachable) — deployed but unhealthy`, **exit 0**. That is the tool's documented
+*"degraded is still deployed"* branch (`verify-deploy.mjs:290-295`), **not** a failed SHA check;
+explicit `--sha` was passed per TD-37.
+
+**The free control (session 36's item 6), re-run and re-confirmed:** `/health.commit` flipped to
+**`3f24b74`** at `2026-09-25T03:34:08.573Z` and the response *still* reads `database-unreachable`
+with all three DB-derived fields `null`. A brand-new build with freshly injected env vars failing
+identically kills **"stale artifact"** and **"env var never picked up"** in one shot, at zero extra
+cost.
+
+**Secret gate for both session-77 commits.** The **value-shaped** scan —
+`(sbp_|sk_live_|sk_test_|whsec_|rk_live_)[A-Za-z0-9]{8,}`, `eyJ[A-Za-z0-9_-]{20,}`, and
+`-----BEGIN … PRIVATE KEY-----` — returned **0** on both pushed blobs. The loose prefix scan returned
+**49 lines** on `LOG.md` and **1** on the action sheet, all bare pattern names inside backticks from
+prior sessions' own secret-check paragraphs — the documented self-referential false positives. Per
+session 54 the count grows every session and is **not** a signal; only the value-shaped scan can fail,
+and it passed. `npm run secrets:check` reported *"clean (0 file(s) scanned, staged)"* — the documented
+**no-op** on this push path (**TD-33**), not a pass.
