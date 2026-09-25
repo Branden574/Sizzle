@@ -10520,3 +10520,111 @@ TD-37's `staleHeadBail()` then correctly refuses to poll. That is the tooling be
 designed, not a failure.
 
 **Line count for session 88 to carry forward: 10522.**
+
+---
+
+## 2026-09-25 08:13 PDT / 15:13Z — Daily maintenance sweep (session 88)
+
+**This was the daily sweep, not a watchdog summon** — the `com.sizzle.daily-sweep` launchd slot
+(08:13 PDT) firing on schedule for the first time since the 09-22 run that filed TD-31/TD-32. It
+matters because the sweep runs four checks the 87 watchdog sessions do **not**: CI, dependency PRs,
+`npm audit`, and the secret-scanning alert list. Those were the session's real work; the SEV-1 was
+re-attested but not re-investigated, per session 40.
+
+### Production — unchanged, hour 92h50m
+
+`/health` → **503** `{"status":"degraded","problems":["database-unreachable"]}`, `commit: 37c41d3`,
+`time: 2026-09-25T15:13:36Z`. `getsizzle.app` → **200** in 0.57s. `cronAges`,
+`stuckVideoBacklog` and `parkedMediaDeletions` are all `null` — they are DB-derived, so the
+outage suppresses the very gauges sweep item 5 reads.
+
+Root cause re-attested from scratch (ground rule 4), not inherited: `.codex/dns-probe.mjs` on
+**three** resolvers with the parent zone as an in-call control — `supabase.co` → `A=76.76.21.21`,
+`CNAME=ENODATA` (name exists, no record of that type) versus `gsxoaurmsgqascxukony.supabase.co`
+and `db.gsxoaurmsgqascxukony.supabase.co` → **`ENOTFOUND`** (NXDOMAIN) on system / `1.1.1.1` /
+`8.8.8.8`. Provider up, this project's records withdrawn. Project-level pause or deprovision;
+Level D, owner-only.
+
+### Sweep checklist — results
+
+1. **Health** — above. Web green, API degraded on the external dependency.
+2. **CI** — last 5 runs on `main`: 4 `success`, 1 `cancelled`. Investigated rather than assumed:
+   run `36137547617` (session 86's first push, 12:53:14Z) was cancelled by Actions **concurrency**
+   when session 86 pushed again 25s later (`36137590092`, 12:53:39Z, `success`) to correct its own
+   forward-carry line count. Superseded, not failed. **No CI failure exists.**
+3. **Dependency PRs** — three open, **none merged**, all correctly held:
+   - **#8** `hono` 4.13.0→4.13.5 — see the TD-31 correction below. Held, and the *reason* changed.
+   - **#6** esbuild 0.24.2→0.28.2 + grouped vite — semver-major, first item of TD-18's queue,
+     needs a local build + iOS-Simulator smoke. Owner. Unchanged since 08-09.
+   - **#3** `@hono/node-server` 1.19.17→2.0.10 — major, and carries **no security driver** since
+     TD-19 closed. Purely optional. Owner.
+4. **`npm audit`** — run against the **origin** lockfile (`.codex/origin-37c41d3/`, per TD-27;
+   the local copy is 3 weeks stale and would misreport). **3 advisories, 0 new:** the `hono`
+   trio is TD-31 (filed 09-22) and the esbuild/vite pair is TD-18. I re-derived the hono
+   reachability triage independently before grepping the register — it matched TD-31 exactly.
+   Recording that as a *near-miss*: without session 29's "grep the register before writing
+   anything up as new" I would have filed a duplicate TD-40.
+5. **Stuck operational state** — **not executable.** Every query needs the dead DB, and the
+   Supabase MCP is independently blocked (TD-21, PAT revoked). No signal available.
+6. **Security quick-check** — `get_advisors` unavailable (same two reasons). GitHub
+   **secret-scanning alerts: `[]`, none open** — this one *is* fully executable during the
+   outage and is clean.
+7. **Flag drift** — one real defect found. Below.
+
+### Finding — TD-31's "first decisive" blocker is FALSE (corrected, hold stands)
+
+TD-31 records two reasons for not merging PR #8 unattended and labels **(a) the decisive one**:
+that the sweep's mandatory `scripts/verify-deploy.mjs` step "requires a 200 `/health`", which the
+outage makes impossible, so the bump is *"unverifiable by construction"*.
+
+**That is the exact claim session 68 corrected in the incident record, and it was never
+back-propagated to the TD register.** Verified first-hand on origin's copy of the script:
+`verify-deploy.mjs:291-293` carries an explicit branch — *"Degraded is still 'deployed' — report
+the problems without failing the SHA check"* — present since 2026-08-23 (`a1d05bf`), a month
+before this outage. It fails only on a **served-commit mismatch**. Session 87 ran it live
+mid-outage against its own push: `READY` / `HTTP 503` / `degraded (database-unreachable)`,
+**exit 0**.
+
+This is session 39's index-rot class one document over, and session 78's sharper version of it:
+**the entries most worth re-checking are the ones that tell you not to trust something.** A
+successor picking up TD-31 would either act on a false blocker, or notice it was false and
+conclude the hold itself was unfounded — and merge a money-path dependency mid-incident.
+
+**The hold stands, on reason (b), which is DB-independent and now sharper.** `monetize.ts:873`
+reads the raw body with `c.req.text()` and feeds it straight to the Stripe HMAC at `:883`; the
+4.13.5 changeset includes a **body-parsing** fix (GHSA-g6gw-c38x-mqfc). So the bump's blast
+radius sits directly beneath webhook signature verification, where a regression is **silent 401s
+on every Stripe event** — and the verification CLAUDE.md demands for money paths (live-fire
+webhook testing) is precisely what the dead DB blocks. The unverifiability argument therefore
+*moves* from `/health` (false) to live-fire webhook testing (true), and the conclusion is
+unchanged.
+
+Added a standing urgency note in the same edit: advisory (3), the only reachable one, is
+**currently unexploitable** — the shared-cached routes it targets (`feed.ts:280` `s-maxage=30`,
+`hashtags.ts:37,72`) return 500 `db_error`, so there is no valid response to poison. The window
+reopens at Resume, which is exactly when PR #8 should land. There is no cost to waiting.
+
+### Lane check — session 88
+
+- **Nothing shipped but documentation.** No code, config, migration or production setting
+  touched. No security control weakened. Money code untouched (report-only, per the sweep rules
+  and CLAUDE.md rule 4) — PR #8 was analysed and deliberately **not** merged.
+- **Working tree preserved (rule 11).** The four dirty ops-tooling paths remain TD-27
+  checkout-repair artifacts, dirty only against the stale local HEAD `d4c5395`. Nothing stashed,
+  reverted or committed — the session-21 stash trap.
+- **TD-27 honoured.** `origin-drift.mjs` ran **first** and reported local `d4c5395` 8 files behind
+  origin `37c41d3`; every edit here was composed against the **origin** copies and pushed via the
+  GitHub git-data API. Had I audited the local lockfile instead, item 4 would have been wrong.
+
+### Counters re-stamped
+
+Live counter `91h30m → 92h50m`, session `87 → 88`, anchored to the `/health` `time` field
+`2026-09-25T15:13:36Z` (session 72's rule: the stamp cannot be advanced without actually probing).
+Session/line counts `eighty-seven → eighty-eight`, `wc -l` `10,397 → 10,522`.
+
+**§7 counter check PASS** (fifth consecutive) — verified by arithmetic against session 87's own
+recorded figure rather than by reading the line, per session 71: `13:53:06Z + 1h20m30s =
+15:13:36Z`, and `91h30m + 1h20m = 92h50m`. **Line-count handoff PASS** — session 87 said carry
+10,522 forward; `wc -l` on the origin copy is 10,522.
+
+**Line count for session 89 to carry forward: 10630.**
