@@ -8952,3 +8952,37 @@ evidence and the two re-stamped counters, not a manufactured finding.
 5. **TD-21** — rotate the Supabase PAT and expose it as `SUPABASE_ACCESS_TOKEN`; that one token
    restores the agent DB path and would let a session answer Paused-vs-Deleted directly.
 6. **`ffmpeg-static` CI single point of failure** — filed session 69, needs Branden's call.
+**Closing note — session 75 verdicts (written after the calls, not before; session 38's ordering trap).**
+
+- **Push:** `50e93b1` (git-data API, blob-first, fast-forward onto `7ab551a`). The parent guard was
+  armed with the full `7ab551a0363b315e…` read from `git/refs` rather than typed, per session 72;
+  origin had not moved and the ref advanced cleanly.
+- **Secret scan:** the **value-shaped** gate — `(sbp_|sk_live_|sk_test_|whsec_|rk_live_)[A-Za-z0-9]{8,}`,
+  `eyJ[A-Za-z0-9_-]{20,}`, and `-----BEGIN … PRIVATE KEY-----` — returned **0 hits** across both
+  pushed blobs (`LOG.md` 831,602 chars; the action sheet 54,631). The loose prefix scan returned
+  **90** on `LOG.md` and **1** on the sheet, all bare pattern names inside backticks from prior
+  sessions' own secret-check paragraphs — the documented self-referential false positives, and per
+  session 54 the count **grows every session** (41 lines / 59 occurrences at s54, 90 now), so a
+  changed number is not a signal. `npm run secrets:check` also ran and reported *"clean (0 file(s)
+  scanned, staged)"* — the documented **no-op** on the git-data-API path (**TD-33**), not a pass. The
+  value-shaped scan on the exact blob strings is the real gate, and it is the one that passed.
+- **`verify-deploy.mjs --api --sha 50e93b156bc913ac…`:** `deployment: READY` · probe
+  `https://sizzle-chi.vercel.app/health` → **HTTP 503** · `health status: degraded
+  (database-unreachable) — deployed but unhealthy`, **exit 0** in seconds. That is the tool's
+  documented *"degraded is still deployed"* branch (`verify-deploy.mjs:290-295`), **not** a failed
+  SHA check. Explicit `--sha` was passed per **TD-37**.
+- **The free control (session 36's item 6), re-run and re-confirmed:** `/health.commit` flipped to
+  **`50e93b1`** at `2026-09-25T01:31:44Z` and the response *still* reads `database-unreachable`,
+  with `stuckVideoBacklog` / `parkedMediaDeletions` / `cronAges` all `null`. A brand-new build with
+  freshly injected env vars failing identically kills **"stale artifact"** and **"env var never
+  picked up"** in one shot, at zero extra cost.
+- **`PushNotification`:** `Mobile push not sent (Remote Control inactive).` Called with the outage
+  summary and the two-click fix. Still dead at hour **79h08m** — it died ~18 days *before* the outage
+  began, plus its full duration. **No automated push signal of any kind has reached Branden since
+  `18:27Z` on 09-21.** `LOG.md` and the action sheet remain **pull** channels nobody is prompted to
+  open; §7's channel inventory is exhaustively verified — do not hunt for a new one.
+- **Working tree:** the four dirty ops-tooling paths (`scripts/ops/sweep-prompt.md`,
+  `scripts/ops/origin-drift.mjs`, `scripts/verify-deploy.mjs`,
+  `tests/invariants/ops-tooling.test.mjs`) are TD-27 checkout-repair artifacts that read as dirty
+  only against the stale `d4c5395` local HEAD. Nothing stashed, reverted or committed for them (the
+  session-21 stash trap). CLAUDE.md rule 11 preserved.
