@@ -10264,3 +10264,35 @@ convention). Session/line counts `eighty-four → eighty-five` and `wc -l` `10,1
 — the first figure measured on the origin copy **before** appending (and equal to session
 84's closing stamp), the second the post-append total, which is the chain sessions 83/84
 were actually recording.
+
+#### Session 85 — the escalation result, verbatim
+
+`PushNotification` was called at `2026-09-25T11:53Z`, after the deploy verification and
+before this note was committed:
+
+> `Mobile push not sent (Remote Control inactive).`
+
+Still dead at hour **89h30m**, identical to sessions 1–84. No automated signal of any kind
+has reached Branden since `18:27Z` on 09-21. `LOG.md` and the action sheet remain **pull**
+channels. §7's channel inventory is exhaustively verified — **do not hunt for a new one**,
+and do not file a GitHub issue (the repo is PUBLIC; that would advertise a live outage and
+an open financial-webhook window on a production money system).
+
+**Message sent (for the record):**
+
+> `SEV-1 hour 89h30m: Supabase project gsxoaurmsgqascxukony still unreachable (DNS withdrawn,`
+> `3 resolvers). Owner-only, ~2 min: disable crons on Vercel project "sizzle", THEN Resume`
+> `the project. No repo fix exists.`
+
+**Deploy verification (docs-only commit `5549893`), for the record:** both Vercel projects
+reached **READY** — `sizzle` (API) probe `HTTP 503` `database-unreachable` (deployed but
+unhealthy, correctly: the failed dependency is external), `sizzle-api` (frontend) `HTTP 200`
+serving `5549893` at version `1.0.101`. `/health` now reports `commit: 5549893`, which is
+the positive proof the push promoted. Note for successors: `verify-deploy.mjs` with no
+argument **cannot** poll a git-data-API push (local HEAD `d4c5395` has aged off the
+deployments page) — it says so explicitly and tells you to re-run with
+`--sha <40-char SHA>`, which works. That is TD-27 behaving as designed, not a failure.
+
+*Line-count correction: the closing stamp above reads `10,152 → 10,266`, measured before
+this note existed. With this note appended the file is **10,298** lines. Session 86 should
+carry 10,298 forward, not 10,266.*
