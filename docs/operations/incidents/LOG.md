@@ -11141,3 +11141,154 @@ project is still DNS-withdrawn, the fix is still the two-click owner sequence in
 capability gates re-tested this session (Supabase MCP credential, Gmail per-tool permission) are
 each still one owner action away from letting the *next* session determine the dashboard branch
 without him.
+
+---
+
+## 2026-09-25 11:04:01 local / 18:04Z — watchdog summon (session 92) — SEV-1 `database-unreachable`, hour 95h44m, UNCHANGED
+
+**Fired:** `API degraded (503): database-unreachable` — same signature as sessions 1–91.
+**Verdict: no change in the incident's state. Root cause unchanged, fix unchanged, still Level D
+(owner-only). Nothing shipped but this log entry and two counter re-stamps.** Per session 40's
+rule — past the point where every surface is audited, a clean re-verification with fresh evidence
+is the deliverable and a manufactured finding is noise the next reader must triage.
+
+### Root cause — re-attested from scratch this session, not inherited
+
+Ground rule 4 says a signal that pattern-matches a known failure may have a different cause, so the
+attestation was re-derived rather than carried forward. `.codex/dns-probe.mjs`, three resolvers,
+identical on all three:
+
+| name | system | 1.1.1.1 | 8.8.8.8 |
+|---|---|---|---|
+| `supabase.co` | A=`76.76.21.21`, CNAME=**ENODATA** | same | same |
+| `gsxoaurmsgqascxukony.supabase.co` | **ENOTFOUND** | **ENOTFOUND** | **ENOTFOUND** |
+| `db.gsxoaurmsgqascxukony.supabase.co` | **ENOTFOUND** | **ENOTFOUND** | **ENOTFOUND** |
+
+Parent zone resolves (ENODATA = the name exists, just no record of *that type*) while **every
+per-project record is NXDOMAIN**. That asymmetry is positive proof the records were **withdrawn at
+the project level** — not a platform DNS fault, and not a sandbox artifact, since three unrelated
+resolvers agree. The Supabase project is paused / suspended / deprovisioned; which one is
+**unanswerable from inside an unattended session** (all three credential paths remain closed) and is
+step 2 of the owner sequence below.
+
+### Evidence gathered before concluding
+
+- **`/health` ×2** — `18:04:18Z` and `18:06:49Z`, both HTTP **503**,
+  `{"status":"degraded","problems":["database-unreachable"],"commit":"0e2bd9d"}`, all three
+  DB-derived gauges (`stuckVideoBacklog`, `parkedMediaDeletions`, `cronAges`) **`null`**.
+- **A real user-facing endpoint, not just the probe** — `GET /feed/for-you?limit=3` → HTTP **500**
+  `{"error":{"code":"db_error"}}`. This is what live users hit; `/health` alone reads as a probe artifact.
+- **Frontend** — `getsizzle.app` → HTTP **200**. The web shell serves fine; the app degrades at the
+  feed, exactly as session 50 documented (TD-38: the error copy blames the user's connection).
+- **Vercel `sizzle` (the API — naming is reversed)** — `vercel ls sizzle --prod`: the nine most recent
+  production deployments are **all `● Ready`**, ages 40m / 45m / 2h / 2h / 3h / 3h / 3h / 4h / 4h,
+  18–21s builds. **These are prior sessions' own docs-only log pushes — do NOT re-chase the `/health`
+  `commit` churn as a bad deploy.** No failed or stuck build; the deployed code is healthy.
+- **No rollback performed, because none applies.** Checked, not assumed: there is no bad deploy to
+  revert, the served commit is current, and the failure is an **external dependency**. Rolling back
+  would change nothing and would discard the log commits.
+
+### Periodic checks — state the session number, so N+10 can decide whether to spend the call
+
+- **§7 counter check — PASS (sixth consecutive).** Session 91's line 4 read `94h43m as of
+  2026-09-25T17:06:09Z`. Verified against the predecessor's *own recorded elapsed figure* rather than
+  against the line itself (sessions 71/77 — the only check that catches an **omission**, which
+  session 72's anti-forgery anchor does not): my probe at `18:06:49Z` is **1h00m40s** later, and
+  `94h43m02s + 1h00m40s = 95h43m42s`, which independently matches the derivation from outage start
+  (`2026-09-21T18:23:07Z` → `2026-09-25T18:06:49Z` = 95h43m42s ≈ **95h44m** ✓). So session 91
+  genuinely stamped it. Re-stamped here to **`95h44m` / `2026-09-25T18:06:49Z`**, anchored to the
+  `time` field of the second `/health` response above so it cannot be advanced without actually
+  probing (session 72).
+- **Doc-rot grep (sessions 74/79/90) — NOT RUN, and deliberately so. Last run: session 91, CLEAN**
+  (15 hits, all 15 correctly exempt under session 30's carve-outs). One session of age is not
+  overdue; session 90's rule exists so the *age* is knowable, not so it runs every hour.
+- **Standing counts (session 79/80's class, which has no carve-out) — RE-STAMPED.** Header read
+  *"**ninety-one** … ninety watchdog summons … **11,000+ lines**, `wc -l` = 10959"*. Actual at
+  session **92** is `wc -l` = **11143**. Re-stamped to ninety-two / ninety-one watchdog summons +
+  the 09-25 sweep / **11,100+**.
+- **TD-register audit (session 45's rule) — CLEAN.** Nothing in session 91's prose proposed a defect
+  that went unfiled; it was itself a clean re-verification. No new TD filed this session.
+
+### Index repair (session 39's rule — the index rots faster than the record)
+
+The memory file `sizzle-watchdog-false-alarms.md` is a hand-maintained summary of this sheet, and
+drift there re-bills every successor while looking like diligence. Two repairs made this session:
+
+1. Its session-90 bullet recorded the doc-rot grep as **"12 hits, all 12 correctly exempt"**.
+   Session 91 measured **15** and recorded the 12 as an arithmetic slip — but that correction landed
+   in `LOG.md` only and was never back-propagated. Left alone, session 93 reads "12" in the
+   **higher-traffic** document and "finds" three new hits that were never rot. Corrected to 15.
+2. Its `## Don't re-derive` heading still read *"settled across **90** sessions"* at session 92 —
+   session 80's class exactly (a count is never "correct as history" in standing prose, and it rots
+   in the dangerous direction: it understates how much re-derivation the section exists to prevent).
+   Re-stamped to 92.
+
+### Angles rejected before spending calls (recorded so the successor doesn't re-open them)
+
+- **Hunting a new audit surface.** Sessions 13/18/19 (crons), 14 (auth sessions), 15 (the pause
+  clock), 23/35 (both money rails), 31 (Apple's review queue), 49 (the OAuth credential clock),
+  50 (the user-facing surface), 72 (the Sentry budget the outage *burns*), 85 (the monitor itself).
+  The list is closed; session 40's rule applies.
+- **Re-probing the Supabase credential paths.** Session 90 spent the one justified call
+  (`mcp__supabase__get_advisors` → byte-identical server-side *"Unauthorized … valid access token"*
+  ⇒ TD-21 needs a **PAT rotation**, not a permission grant). One session later, nothing has changed
+  that; don't hunt a second route.
+- **Converting a parked TD into code.** Every open TD (28/29/31/34/35/36/38) fails session 45's
+  in-lane test — verifying each one requires the dead database. TD-34's tempting patch is
+  specifically a **silent no-op** (session 48); don't ship it.
+
+### Owner action — unchanged, ~2 minutes, Level D (nothing below is an agent omission)
+
+1. **Vercel project `sizzle`** (the API — the naming is reversed) → Settings → Cron Jobs →
+   **Disable Cron Jobs**. This is the **only pre-Resume step** and it is what avoids the TD-34 trap:
+   the first `finalize-videos` tick fires **within 60 seconds** of restore and mass-flips every
+   outage-stranded video to a terminal `error` state the finalizer then refuses to re-poll, silently
+   turning TD-29's prescribed backfill into a no-op whose counting query returns a false `0`.
+   Structurally owner-only (settled session 64: CLI 57.0.0 exposes `add`/`list`/`run`, no `disable`).
+2. **Read Paused vs Restricted vs deprovisioned BEFORE clicking anything.** Deprovisioned means
+   *stop* and contact Supabase support about PITR — **not** Resume. This is the one fact no
+   unattended session can obtain. Look for a **payment-failure notice** and for the **absence** of an
+   ~09-14 inactivity warning; a billing hold must be cleared before Resume will stick (session 15).
+3. Resume the project, then capture the stranded-video list (§4 step 0's SQL, anchored to absolute
+   timestamps so it cannot rot) **before** re-enabling crons.
+4. **Separately, unrelated to the database:** restore the push channel. It has been dead for **92
+   consecutive sessions** and is the reason none of this has reached you.
+5. **Two one-click unblocks for the next session** (neither urgent, both cheap): rotate the Supabase
+   PAT (TD-21) so the connected MCP has a credential, and grant the Gmail tool permission — either
+   would let an unattended session answer step 2 without you.
+
+### Escalation — called before this sentence was written (sessions 38/77's ordering trap)
+
+`PushNotification` → verbatim: **`Mobile push not sent (Remote Control inactive).`**
+
+Dead at hour 95h44m, identical to sessions 1–91 — **92 consecutive sessions** with no automated
+signal reaching Branden since `18:27Z` on 09-21. Remote Control died ~18 days *before* the outage
+began, so this channel has never once worked during this incident. `LOG.md` and the action sheet
+remain **pull** channels; nobody has been paged. Do **not** open a GitHub issue (the repo is
+**public** — that would advertise a live outage and an open financial-webhook window on a production
+money system), and do **not** re-enable `uptime.yml` unattended (`disabled_manually` overrides a
+deliberate human mute, and `.github/workflows/**` is minimum Level C).
+
+### Lane check — session 92
+
+- **Nothing shipped but documentation.** No code, config, migration, native file or production
+  setting touched. No security control weakened to chase green. Money code untouched. No
+  state-changing MCP call attempted — restoring a paused project is Level D, and doing it without
+  step 1 above would actively arm the TD-34 trap.
+- **Working tree preserved (CLAUDE.md rule 11).** The four dirty paths
+  (`scripts/ops/sweep-prompt.md`, `scripts/verify-deploy.mjs`, `tests/invariants/ops-tooling.test.mjs`,
+  `scripts/ops/origin-drift.mjs`) are dirty only against the frozen local HEAD `d4c5395` under TD-27 —
+  checkout artifacts, not Branden's work. Nothing stashed or reverted (the session-21 stash trap).
+- **TD-27 honoured twice** — `origin-drift.mjs` ran **first** (exit 3; local `d4c5395` vs origin
+  `0e2bd9d`, 8 files drifted), and the origin head was re-read from `git/refs` immediately before
+  composing this append (session 89's mid-session base-change lesson): still
+  `0e2bd9d5f8292525f43ca0785b24e9e9e27bb887`, so the mirror was current and this entry is built on
+  `.codex/origin-0e2bd9d/`, not the working copy.
+- **Deploy verification** for this push runs immediately after it lands, with an explicit
+  `--sha <full 40-char pushed SHA>` (mandatory on the git-data path per TD-37). Expected and
+  documented outcome is `deployment: READY` + HTTP 503 `degraded (database-unreachable)` — the
+  tool's *"degraded is still deployed"* branch (`verify-deploy.mjs:290-295`), **not** a failed SHA
+  check. It doubles as session 36's free control: a brand-new build with freshly injected env vars
+  failing identically kills "stale artifact" and "env var never picked up" at zero extra cost.
+
+**Line count for session 93 to carry forward: 11295** (appended to 11143).
