@@ -11098,4 +11098,46 @@ unattended — it is `disabled_manually`, which overrides a deliberate human mut
   mid-session base-change lesson). This entry is built on `.codex/origin-60c472d/`, not the working
   copy.
 
-**Line count for session 92 to carry forward: 11101.**
+**Line count for session 92 to carry forward: 11143.**
+### Closing note — session 91, written after everything above had already been pushed
+
+**`PushNotification` result at `2026-09-25T17:22Z`, verbatim:**
+
+> `Mobile push not sent (Remote Control inactive).`
+
+Dead at hour **94h43m**, identical to sessions 1–90 — now **91 consecutive sessions** with no
+automated signal reaching Branden since `18:27Z` on 09-21. Remote Control died ~18 days *before*
+the outage began, so this channel has never once worked during the incident. `LOG.md` and the
+action sheet remain **pull** channels.
+
+**Deploy verification for this session's own log push** (`9b8730a`, git-data API, blob-first,
+fast-forward onto `60c472d` with the parent guard armed from the real `git/refs` SHA, `force:false`):
+`node scripts/verify-deploy.mjs --api --sha 9b8730a882f766b846d96959bc6e53c5816735db` →
+**`deployment: READY`**, probe `https://sizzle-chi.vercel.app/health` → **HTTP 503**,
+`health status: degraded (database-unreachable) — deployed but unhealthy`. That is the tool's
+documented *"degraded is still deployed"* branch (`verify-deploy.mjs:290-295`), **not** a failed
+SHA check; explicit `--sha` was passed per TD-37. The runner script was first confirmed
+**byte-identical to origin's copy** (`diff` empty) so that a TD-27 checkout artifact could not be
+mistaken for a local edit to the verifier itself.
+
+**The free control (session 36's item 6), re-run and re-confirmed:** `/health.commit` flipped to
+**`9b8730a`** at `2026-09-25T17:22:11.990Z` and the response *still* reads `database-unreachable`
+with all three DB-derived gauges `null`. A brand-new build with freshly injected env vars failing
+identically kills **"stale artifact"** and **"env var never picked up"** in one shot, at zero extra
+cost.
+
+**Secret gate for both session-91 commits.** The **value-shaped** scan —
+`(sbp_|sk_live_|sk_test_|whsec_|rk_live_)[A-Za-z0-9]{8,}`, `eyJ[A-Za-z0-9_-]{20,}`, and
+`-----BEGIN … PRIVATE KEY-----` — returned **0** on both pushed blobs. The loose prefix scan
+returned **53** lines on `LOG.md` and **1** on the action sheet, all bare pattern names inside
+backticks from prior sessions' own secret-check paragraphs — the documented self-referential false
+positives (49 at session 77; the count grows every session and per session 54 is **not** a signal).
+Session 91's own entry text contributes **0** hits to even the loose scan. `npm run secrets:check`
+reported *"clean (0 file(s) scanned, staged)"* — the documented **no-op** on this push path
+(**TD-33**), not a pass.
+
+**This is the last word on session 91.** Nothing in the incident's state changed during it: the
+project is still DNS-withdrawn, the fix is still the two-click owner sequence in §1, and the two
+capability gates re-tested this session (Supabase MCP credential, Gmail per-tool permission) are
+each still one owner action away from letting the *next* session determine the dashboard branch
+without him.
