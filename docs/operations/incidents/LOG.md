@@ -11616,3 +11616,78 @@ deliberate human mute, and `.github/workflows/**` is minimum Level C).
 
 **Line count for session 95 to carry forward: measure it, don't inherit it.** Session 93 measured
 11294 and I measured 11447 on the origin mirror pre-append.
+
+---
+
+## 2026-09-25 21:13Z — watchdog session 95 · SEV-1 Supabase unreachable, hour 98h50m · NO CHANGE
+
+**Fired:** `API degraded (503): database-unreachable` (watchdog, 14:13:11 PDT / `21:13:09Z`).
+
+**Verdict: the same open SEV-1, re-confirmed at the DNS layer. Nothing shipped. Owner action is
+still the only fix.** Read the action sheet —
+`docs/operations/incidents/2026-09-21-supabase-project-unreachable.md` — not this log.
+
+### Verified independently this session (not inherited from the 94 prior entries)
+
+- `/health` → **HTTP 503** `degraded ["database-unreachable"]`, serving commit `0907953`, twice
+  (`21:13:09Z` watchdog, `21:13:28Z` my own probe). All three DB-derived fields are `null`
+  (`stuckVideoBacklog`, `parkedMediaDeletions`, `cronAges`) — precisely the `health.ts:88`
+  condition `backlog === null && crons === null`.
+
+- **New this session — the cleanest discriminator is DNS, not HTTP.**
+  `gsxoaurmsgqascxukony.supabase.co` **does not resolve**: `curl` exit **6** (*could not resolve
+  host*) on both `/rest/v1/` and `/auth/v1/health`. Calibrated in the same minute so this is not a
+  local resolver fault — `supabase.com` → **HTTP 200**, and `sizzle-chi.vercel.app` answered with a
+  full JSON body. A torn-down DNS record is the paused-project signature, and it locates the fault
+  **entirely outside Vercel and outside this repo**. This is a cheaper and less ambiguous check
+  than reading `/health`, and it is credential-free — future sessions can stop at this step.
+
+- **Not a bad deploy, and rollback is a no-op for this failure class.**
+  `verify-deploy.mjs --api --sha 0907953d15f7de5124e9110bc4324b0f17eecb91` →
+  `deployment: READY`, probe `HTTP 503`, `degraded (database-unreachable) — deployed but unhealthy`.
+  The build is healthy. Promoting any previous READY deployment cannot restore a DNS record for a
+  paused Supabase project, so incident-response's *"rollback first when rollback is safer"* does not
+  apply here. Recording this explicitly because the standing incident brief tells each session to
+  prefer rollback, and every session must re-derive why it is wrong here.
+
+### Still blocked, unchanged
+
+- **Paused vs Restricted vs deprovisioned remains unanswerable unattended** — the distinction §1
+  step 2 says to read *before* clicking Resume. Both Supabase paths refused this session: the
+  `.mcp.json` server and the claude.ai connector each returned a permission/credential refusal
+  (TD-21). **One PAT rotation or one permission grant closes this**, and would let the next session
+  answer step 2 for Branden instead of handing him a branch to evaluate himself.
+- **Crons still not disabled** (§1 step 0) — structurally owner-only, settled session 64. Not
+  re-measured; session 64 established that re-counting it adds nothing.
+
+### Escalation
+
+`PushNotification` → verbatim: **`Mobile push not sent (Remote Control inactive).`**
+
+Dead at hour 98h50m — **95 consecutive sessions** with no automated signal reaching Branden since
+`18:27Z` on 09-21. `LOG.md` and the action sheet remain **pull** channels; nobody has been paged.
+Per sessions 38/77/78: no GitHub issue (public repo — that advertises a live outage and an open
+financial-webhook window on a production money system), and no unattended re-enable of `uptime.yml`
+(`.github/workflows/**` is minimum Level C, and `disabled_manually` overrides a deliberate mute).
+
+### Lane check — session 95
+
+- **Nothing shipped but this log entry.** No code, config, migration, native file or production
+  setting touched. No security control weakened to chase green. Money code untouched. No
+  state-changing MCP call attempted — Resume is Level D, and doing it without §1 step 0 would arm
+  the TD-34 trap.
+- **Working tree preserved (CLAUDE.md rule 11).** The four dirty paths are TD-27 checkout artifacts
+  against the frozen local HEAD `d4c5395`, not Branden's work. Nothing stashed or reverted.
+- **TD-27 honoured twice** — `origin-drift.mjs` ran **first** (exit 3; local `d4c5395` vs origin
+  `0907953`, 8 files drifted), and origin head was re-read from `git/refs` immediately before
+  composing this append (session 89's lesson): still
+  `0907953d15f7de5124e9110bc4324b0f17eecb91`, so this is built on `.codex/origin-0907953/`, not the
+  working copy.
+- **Secret scan.** TD-33 makes `npm run secrets:check` structurally blind on the git-data push path
+  (it reads the working tree; the blob is built under gitignored `.codex/`). This append is prose I
+  authored, contains no credential-shaped string, and was scanned value-shaped before push.
+- **Deploy verification** ran with an explicit `--sha` per TD-37, and is re-run after this push.
+
+**LOG.md line count, measured not inherited: 11618 pre-append.** Session 94 measured 11447 and then
+added ~171 lines for a no-change tick; this entry is deliberately about a third of that. The action
+sheet is the artifact worth growing, and it does not currently need anything added to it.
