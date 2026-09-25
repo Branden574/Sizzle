@@ -10296,3 +10296,83 @@ deployments page) — it says so explicitly and tells you to re-run with
 *Line-count correction: the closing stamp above reads `10,152 → 10,266`, measured before
 this note existed. With this note appended the file is **10,298** lines. Session 86 should
 carry 10,298 forward, not 10,266.*
+
+---
+
+## 2026-09-25T12:48Z — watchdog session 86 — SEV-1 hour **90h25m**, unchanged
+
+**Fired:** `API degraded (503): database-unreachable` (watchdog, 05:47:11 PDT).
+**Root cause:** unchanged since `2026-09-21T18:23:07Z` — Supabase project
+`gsxoaurmsgqascxukony` is not resolvable; the API is healthy and correctly reporting a
+failed external dependency. **Level D, owner-only. No repo change can fix it.** The action
+sheet (`2026-09-21-supabase-project-unreachable.md`) is still the page to read; this entry
+exists only to attest the hour and record the two things that are new.
+
+**Re-attested (anti-flap, three independent probes):**
+
+- `/health` returned `503` with a *populated* `database-unreachable` body at `12:47:10Z`,
+  `12:47:28Z` and `12:48:18Z`. Per the watchdog-calibration rule this is the real-SEV
+  class, not the HTTP-000 host-side blip class.
+- DNS, **3 resolvers with a control in the same call**: `gsxoaurmsgqascxukony.supabase.co`
+  and `db.gsxoaurmsgqascxukony.supabase.co` both `ENOTFOUND` on Cloudflare `1.1.1.1`,
+  Google `8.8.8.8` and Quad9 `9.9.9.9`, while `supabase.com` resolved to `216.150.1.193`
+  on all three. The control rules out local/resolver fault: the project's records are
+  withdrawn, the provider is up.
+- `getsizzle.app` still `200` (static frontend unaffected); Supabase REST `HTTP 000` with
+  `time_namelookup=0.000000`, i.e. it fails at resolution, never opening a socket.
+
+**Rollback: still inapplicable, re-checked not assumed.** `vercel ls sizzle --prod` shows
+the six most recent production deployments all `● Ready` (latest 55m old), and `/health`
+reports `commit: c86981e`, which **is** current `origin/main`. There is no bad deploy to
+promote away from — the broken dependency is outside the repository, so every rollback
+target fails identically. CI is green on all five most recent runs.
+
+**New this session (2 items, both small):**
+
+1. **The Paused-vs-deprovisioned question is still unverifiable unattended.** The action
+   sheet's §4 tail says that if the project reads *deprovisioned* the owner must stop and
+   contact Supabase support about PITR rather than click Resume — a genuinely different
+   action. This session tried the claude.ai Supabase connector (TD-21 option c) to settle
+   it: `list_projects` returned **`Claude requested permissions … but you haven't granted
+   it yet`**. So option c is still *permission-gated*, not merely unconfigured, and it
+   joins the revoked PAT (TD-21, dead since 2026-08-16) as a closed door. **Consequence
+   for the owner: the dashboard is the only place this distinction can be read, and it
+   must be read before clicking Resume.** Successors: do not re-probe this, it is now
+   measured twice.
+2. **TD-39's hourly-summons rate has a cheaper corroboration than counting sessions.**
+   `gh run list` timestamps the per-session doc pushes at `08:43:50Z`, `09:46:29Z`,
+   `10:48:06Z`, `11:52:50Z` — ~62 min spacing, matching `watchdog.sh:18`'s
+   `COOLDOWN_MIN=60` constant directly from CI history. TD-39 (filed session 85,
+   signature-aware backoff) stands as written and is still **deliberately not shipped**
+   mid-outage: changing the watchdog perturbs the very signal being watched for recovery.
+
+**Owner action (unchanged, ~2 min, Level D):** on Vercel project **`sizzle`** (the API —
+naming is reversed) → Settings → Cron Jobs → **Disable Cron Jobs**; **then** Resume the
+Supabase project (checking Paused vs deprovisioned first, per item 1); **then** re-enable
+crons once the stranded-video list is captured. Disabling first is what avoids the TD-34
+trap where the next `finalize-videos` tick flips outage-stranded videos to a terminal
+`error` state the finalizer refuses to re-poll.
+
+**Escalation:** `PushNotification` called at the end of this session; result recorded
+below. Per action-sheet §7 the channel inventory is exhaustive — successors should not
+hunt for a new one, and must not open a GitHub issue (the repo is **public**; that would
+advertise a live outage and an open financial-webhook window on a production money system).
+
+### Lane check — session 86
+
+- **Nothing shipped but documentation.** Resuming a paused Supabase project is Level D.
+  No code, config, migration or production setting touched. No security control weakened
+  to chase green. No rollback performed, because none applies (above).
+- **Working tree preserved (CLAUDE.md rule 11).** The four dirty ops-tooling paths are
+  TD-27 checkout-repair artifacts, dirty only against the stale local HEAD `d4c5395`.
+  Nothing stashed, reverted or committed — the session-21 stash trap.
+- **TD-27 honoured.** `scripts/ops/origin-drift.mjs` ran **first**; local `d4c5395` was 8
+  files behind origin `c86981e`, so this entry and the counter re-stamps were composed
+  against the **origin** copies and pushed via the GitHub git-data API.
+
+### Counters re-stamped
+
+Live counter `89h25m → 90h25m`, session `85 → 86`, anchored to the `/health` `time` field
+`2026-09-25T12:48:18Z`. Session/line counts `eighty-five → eighty-six`, `wc -l`
+`10,266 → 10,298` — 10,298 measured on the origin copy **before** appending, which is
+exactly the figure session 85's closing correction told this session to carry forward.
