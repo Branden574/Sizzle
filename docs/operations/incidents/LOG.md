@@ -8986,3 +8986,74 @@ evidence and the two re-stamped counters, not a manufactured finding.
   `tests/invariants/ops-tooling.test.mjs`) are TD-27 checkout-repair artifacts that read as dirty
   only against the stale `d4c5395` local HEAD. Nothing stashed, reverted or committed for them (the
   session-21 stash trap). CLAUDE.md rule 11 preserved.
+
+---
+
+## 2026-09-25 — watchdog session 76 (`02:26:10` local / `09:26Z`) — SEV-1 unchanged, hour 80h05m
+
+**Negative result, logged as one.** The watchdog re-fired on its 60-minute cooldown, 55 minutes
+after session 75. Nothing has changed: the Supabase project is still unreachable, the fix is still
+the two owner-side clicks in §1 of the action sheet, and **no agent-side lane is open**. This entry
+exists to re-stamp the counters with first-hand evidence and to record two things session 75 did
+not state. It is deliberately short — the diagnosis is finished, `2026-09-21-supabase-project-unreachable.md`
+is the action sheet, and appending another workup to a 9,000-line log is the failure mode sessions
+40 and 48 called out.
+
+### Fresh evidence (taken this session, not inherited)
+
+- **`/health` × 2, 97 seconds apart** — `2026-09-25T02:26:26.863Z` and `2026-09-25T02:28:03.635Z`.
+  Both **HTTP 503**, `status: degraded`, `problems: ["database-unreachable"]`, and all three
+  DB-derived fields (`stuckVideoBacklog`, `parkedMediaDeletions`, `cronAges`) **`null`** — the
+  `health.ts:88` both-probes-failed branch, i.e. a real DB reachability failure, not a stale-cron
+  false positive.
+- **The API itself is healthy.** It answered with its own JSON body in 7.2s and 0.4s. This is the
+  distinction memory encodes as the calibration that matters: a `000`/timeout summons is usually
+  host-side noise, but a **503 with a well-formed JSON body is the app reporting on itself**, so
+  Vercel, the build and the routing are all fine. Only the database is gone.
+- **DNS, with a control.** `gsxoaurmsgqascxukony.supabase.co` **fails to resolve** (curl exit 6,
+  `http=000` in 0.06s — resolution failure, not a timeout); `/auth/v1/health` fails identically in
+  0.00004s. Control: `https://supabase.com` resolves and returns **200**. So the local resolver and
+  egress are healthy and the project's own hostname is simply absent from DNS — the paused-project
+  signature. **This is the same root cause, not a new failure wearing the same symptom**, which was
+  the thing worth checking before pattern-matching to the open incident.
+- **No bad deploy → rollback is not the lever.** `/health.commit` is **`0f231b8`** and
+  `gh api …/git/refs/heads/main` returns **`0f231b80608b784cf7ff9053079133af27ebeb86`** — the API is
+  serving origin HEAD exactly. There is no previous-READY deployment to promote, because no
+  deployment caused this. (Rule 3 of the incident prompt prefers rollback when a bad deploy just went
+  out; it did not.)
+
+### Two things not previously stated
+
+1. **TD-21 re-confirmed dead from a second, independent client.** The Supabase MCP server configured
+   in *this* session (`mcp__supabase__execute_sql`) returned **`Unauthorized. Please provide a valid
+   access token`** — a different client than the `.mcp.json` PAT path earlier sessions tested, failing
+   the same way. So item 5 is not a stale-config artifact on one machine: there is genuinely no valid
+   token anywhere, and the Paused-vs-Deleted question still cannot be answered from an agent seat.
+2. **The cron trap could NOT be re-measured this session, and the reason is structural.** Sessions
+   34/43/44 re-measured TD-34 by calling `vercel crons ls` / pulling runtime logs. In this session the
+   Vercel CLI is **not allowlisted** and every invocation returned `This command requires approval`,
+   which an unattended session cannot grant. Recording this as an honest gap rather than asserting a
+   number: **the last first-hand measurement remains session 44's** (`17:05Z`–`17:10Z` on 09-23, one
+   `finalize-videos` + one `publish-scheduled` per minute, all `200`). Nothing since then could have
+   disabled the crons except Branden, so **§1 step 0 should be assumed still required** — but a
+   successor with CLI approval should re-measure rather than inherit this. This is the same shape as
+   TD-27 (`git fetch`) and TD-21 (the PAT): an unattended seat that cannot see the thing it must
+   verify.
+
+### Still open — all owner-side, unchanged from session 75
+
+Items 1–6 as listed in session 75's entry are carried forward verbatim in substance; the action sheet
+`docs/operations/incidents/2026-09-21-supabase-project-unreachable.md` §1 is the authoritative copy.
+The short form: **disable crons on Vercel project `sizzle` → Resume the Supabase project**, then the
+manual RevenueCat **Retry** (TD-35) and Stripe **Resend** (dashboard open to `2026-10-06`) replays,
+`gh workflow enable uptime.yml`, the TD-21 PAT rotation, and the `ffmpeg-static` CI call.
+
+### Closing note — session 76 verdicts (written after the calls, not before)
+
+- **Lane check:** Level D. Resuming a paused Supabase project is owner-only under
+  `autonomy-policy.md`; no repo change, rollback or redeploy can reach it. **No code was changed.**
+- **Working tree:** the four dirty ops-tooling paths (`scripts/ops/sweep-prompt.md`,
+  `scripts/ops/origin-drift.mjs`, `scripts/verify-deploy.mjs`,
+  `tests/invariants/ops-tooling.test.mjs`) are TD-27 checkout-repair artifacts, dirty only against the
+  stale `d4c5395` local HEAD. **Nothing stashed, reverted or committed for them** (the session-21 stash
+  trap). CLAUDE.md rule 11 preserved.
