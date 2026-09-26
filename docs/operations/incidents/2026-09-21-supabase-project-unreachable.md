@@ -1,8 +1,8 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
 **Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
-(11:23 AM PDT Mon 09-21). **123h43m — past 5 days — as of 2026-09-26T22:06:32Z**, re-verified by session 97
-(watchdog), which re-derived the DNS withdrawal from scratch against a deliberate fake-project control.
+(11:23 AM PDT Mon 09-21). **124h44m — past 5 days — as of 2026-09-26T23:07:38Z**, re-verified by session 98
+(watchdog), which re-derived the DNS withdrawal from scratch on three resolvers.
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
 
 > **🛑 READ §4 STEP 0 BEFORE YOU CLICK RESUME.** Session 18 found that the first
@@ -54,11 +54,14 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > without a browser. It changes your *calibration*, not the fix: the app is degrading
 > gracefully, and the misattribution is what is quietly costing you reviews and support mail.
 
-This page exists because **ninety-six** unattended sessions — ninety-five watchdog summons plus
-the 2026-09-25 daily sweep — have now diagnosed the same outage and appended **11,690+ lines** to
-`LOG.md` (counts re-stamped session 96, measured `wc -l` = 11693 pre-append; session 48 stamped them at "forty-seven"/"5,600+" and nothing re-checked them
-for the 31 sessions until session 79, so they had understated the burn by a third — and session 95 skipped
-this stamp entirely, which is what §7's session-96 entry gives a one-call detector for). The diagnosis is finished.
+This page exists because **ninety-eight** unattended sessions — ninety-seven watchdog summons plus
+the 2026-09-25 daily sweep — have now diagnosed the same outage and appended **11,898+ lines** to
+`LOG.md` (counts re-stamped session 98, measured `wc -l` = 11898 pre-append; session 48 stamped them at "forty-seven"/"5,600+" and nothing re-checked them
+for the 31 sessions until session 79, so they had understated the burn by a third — session 95 skipped
+this stamp entirely, which is what §7's session-96 entry gives a one-call detector for, and **session 97
+skipped it again while passing that detector**, which is what session 98's correction below fixes).
+**At least one further session diagnosed this outage without landing an entry at all** — see session 98's
+lost-session finding in §7 — so the true summon count exceeds the entry count. The diagnosis is finished.
 This is the one-page action sheet. **Read this, not the log.**
 
 ---
@@ -668,6 +671,7 @@ and eleven prior sessions each recorded a piece of it without putting it togethe
 | GitHub Actions `Uptime` failure email | **The only channel ever proven to reach you — and it is muted.** `disabled_manually` since ~18:27Z, ~4 min after the first failing run. |
 | GitHub Issue | **Not usable.** `gh repo view` → `visibility: PUBLIC`. Filing one would publicly advertise a live outage *and* an open financial-webhook window on a production money system. Ruled out on purpose — don't re-propose it. |
 | Gmail / Supabase MCP connectors | Permission-gated unattended (connector-level; even `search_docs` is denied). |
+| **`Make` (make.com) connector** | **Gated too — and this row completes the class.** Make is an automation platform with mail/SMS/webhook modules, so a Make scenario was the one plausible *never-audited* push path. `mcp__claude_ai_Make__environment_get` — the id lookup Make's own instructions call always-available, i.e. the cheapest possible read — returns *"Claude requested permissions … but you haven't granted it yet."* Same connector-level gate as Gmail, hit before a single scenario could be listed. **Consequence: every MCP connector in an unattended session is now measured as gated, so no connector-based escalation channel exists. Do not re-shop connectors — the negative is the whole class, not one connector.** *(First found by the lost session of 2026-09-25T23:20Z whose entry never landed; independently re-verified first-hand by session 98 rather than inherited — see the lost-session finding below.)* |
 | **`telegram` plugin** (session 21) | **Unknown — worth 5 attended minutes.** A `telegram` plugin *is* installed (skills `telegram:access` / `telegram:configure`), which no session 1–20 had noticed. Both skills **fail to load** unattended, and the sandbox blocks reading their config, so this session could not tell unconfigured from broken. If it can be made to work it is the push channel this table otherwise says does not exist — and unlike `uptime.yml` it cannot be silenced by one click, and unlike `PushNotification` it does not depend on Remote Control. **Re-tested session 25: both skills still fail to load and the plugin directory read is still sandbox-blocked — reproduced, not resolved. Treat this as "needs 5 attended minutes", not as an open investigation; no further unattended session should spend time on it.** |
 | `LOG.md` + this page | The only channels carrying anything — but **pull, not push.** They require you to come and look. |
 
@@ -800,6 +804,62 @@ Session 96's own runs, for the record: doc-rot grep (pinned invocation above) **
 correctly exempt** — the 5 above session 93's count are session 93's and 94's own write-ups quoting
 the token list, the same self-referential growth the secret scan has (session 54), so **a rising
 count here is not a signal**. Last run: session 93, then 96.
+
+**Session 98 (2026-09-26T23:07:38Z) — session 96's detector is ONE-DIRECTIONAL. Absence proves a
+skip; PRESENCE PROVES NOTHING. Use the patch, not the filename — it is the same one call.**
+Session 96's *absence* half is sound and stays the cheapest first step. Its framing — *"it replaces
+three number comparisons"* — is what misleads, and **session 97 is the case that proves it**:
+
+- `gh api …/commits/68e87cd --jq '.files[].filename'` → the action sheet **is** present ⇒ detector **PASS**.
+- `gh api …/compare/7b72d2d...68e87cd` → session 97's **sole** sheet edit was **line 4**, the counter.
+- The standing counts at `:57-58` went untouched — still *"ninety-six"* / *"11,690+"* / *"`wc -l` = 11693"*
+  against an actual of **97 sessions / 11,898 lines**. Repaired by session 98 above.
+
+A **per-file** artifact-of-execution cannot certify a convention made of **three independent
+per-line checks**: it distinguishes "touched the sheet" from "didn't", never "maintained one line"
+from "maintained all three". So it reports **PASS on a two-thirds skip** — which makes it *more*
+dangerous than the number comparison it displaced, because it reads as binary and authoritative.
+The drift it let through here was one session and 208 lines: small in magnitude, but it is exactly
+session 79's no-carve-out class, landing in the paragraph an owner skims to judge *how long this has
+been burning*.
+
+**The fix costs the same single call, so there is no tradeoff — ask for the patch:**
+
+```sh
+gh api repos/Branden574/Sizzle/compare/<prev-1 SHA>...<prev SHA> \
+  --jq '.files[] | select(.filename | endswith("supabase-project-unreachable.md")) | .patch'
+```
+
+The hunk headers show *which* lines moved, so a partial skip is visible at the same cost as the
+binary check. *Generalised: when you replace a number-comparison check with a cheap
+artifact-of-execution, match the artifact's **granularity** to the convention's — and note this is
+session 77's lesson one instrument later: hardening against **total** omission does not catch
+**partial** omission.*
+
+**Also session 98 — A WHOLE SESSION WAS LOST, and its finding nearly went with it. Re-check the
+push pipeline's last step.** Origin has a **23h49m push gap**: `7b72d2d` (`2026-09-25T22:20:17Z`,
+session 96) → `68e87cd` (`2026-09-26T22:09:20Z`, session 97). A session ran inside that gap — local
+`.codex/` holds its complete, unpushed draft (`append-s97.mjs`, probes anchored `2026-09-25T23:20:41Z`,
+hour **100h57m**) — and it got as far as creating the **blob and tree on GitHub** (`blob97-*.json`,
+`tree97.json`, `23:27:33`/`23:27:35` local) and then **died before the commit object**: `commit96.json`
+exists, **`commit97.json` does not**. Blob + tree without a commit are unreferenced, so the ref never
+moved and **its entire write-up never landed**. Two consequences:
+
+1. **Its unique finding was recoverable and is now recovered** — the `Make` connector row added to the
+   table above. It appeared in **neither** `LOG.md` nor this sheet (`grep -c` → 0 on both). Session 98
+   re-verified it first-hand rather than inheriting an unpushed claim (ground rule 4).
+2. **Only one session's artifacts exist in that 23h49m window**, so the evidence supports *one* lost
+   session plus a quiet host (the Mac asleep — sessions 89–96 were all 09-25, session 97 the first
+   09-26), **not** 23 failed pushes. Stated as a bound, not a certainty: the watchdog log is
+   sandbox-blocked, so the quiet period cannot be confirmed from inside a session.
+
+*Generalised: session 45's rule was "a predecessor's finding that lives only in LOG prose was never
+filed." The worse case is a finding that lives only in **gitignored local scratch** — `.codex/` is
+invisible to origin, so a session that dies at the last pipeline step leaves **no trace in the record
+at all**, and the next session inherits a silent hole rather than a stated gap. When the push gap
+between two consecutive entries is much larger than the summon interval, look in `.codex/` for an
+orphaned draft before assuming nothing happened.* Practical check, one call:
+`ls .codex/ | grep -i '^commit'` — a `tree<N>.json` with no matching `commit<N>.json` is an aborted push.
 
 ### The one follow-up that makes the next SEV-1 different
 

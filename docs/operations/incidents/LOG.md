@@ -11896,3 +11896,192 @@ pre-append** (session 96 measured 11693 pre-append and wrote 110 lines).
   reaching Branden. `LOG.md` and the action sheet remain **pull** channels. No GitHub issue (public repo —
   that would advertise a live outage and an open financial-webhook window), and no unattended re-enable of
   `uptime.yml` (`.github/workflows/**` is minimum Level C, and `disabled_manually` overrides a deliberate mute).
+
+## 2026-09-26 16:04 PDT / 23:04Z — watchdog session 98 · SEV-1 Supabase unreachable, hour **124h44m** · NO CHANGE — but a PREDECESSOR SESSION WAS LOST and its finding recovered
+
+**What fired.** `scripts/ops/watchdog.sh` at `2026-09-26T16:04:54` local. `/health` → HTTP **503**,
+`{"status":"degraded","problems":["database-unreachable"],"commit":"7d3492f"}`. A 503 **with a JSON
+body** is explicitly *not* the HTTP-000 host-blip class (project memory `sizzle-watchdog-false-alarms`),
+so this was worked as a live incident rather than an anti-flap re-verify. **Confirmed twice, 2m45s
+apart** — `23:04:53.349Z` (watchdog) and `23:07:38.938Z` (mine), both 503 `database-unreachable`,
+all three DB-derived fields `null`. Not a blip; hour **124h44m** of the same outage, **day 6**.
+
+**Root cause: unchanged, re-derived from scratch per ground rule 4 rather than inherited.**
+Triple-resolver probe (`.codex/dns-probe.mjs` — Node's `dns` module, which needs no allowlist
+where `dig` does):
+
+| name | system | 1.1.1.1 | 8.8.8.8 | reading |
+|---|---|---|---|---|
+| `supabase.co` (parent) | A=`76.76.21.21`, CNAME=**ENODATA** | same | same | zone exists and answers |
+| `gsxoaurmsgqascxukony.supabase.co` | **ENOTFOUND** | **ENOTFOUND** | **ENOTFOUND** | NXDOMAIN |
+| `db.gsxoaurmsgqascxukony.supabase.co` | **ENOTFOUND** | **ENOTFOUND** | **ENOTFOUND** | NXDOMAIN |
+
+ENODATA on the parent (name exists, no record *of that type*) against NXDOMAIN on **both**
+per-project records, identical across three unrelated resolvers, is positive proof the records were
+**withdrawn** — not a resolver fault, not a sandbox artifact, not a network blip. Project-level
+pause/restriction/deprovision, outside Vercel and outside this repo. **Level D — owner-only.**
+
+**User-facing state, re-measured not carried forward:** `/feed/for-you?limit=3` → **500
+`{"error":{"code":"db_error"}}`**; `getsizzle.app` → **200** in 0.21s. Real users hit session 50's
+graceful error card (with TD-38's misattributing "check your connection" copy), not a white screen.
+
+**Rollback considered and correctly not attempted.** The dead dependency is a DNS record for a
+service outside Vercel; **no previous READY deployment can restore it**, so there is nothing to roll
+back and never was (§5). The served commit `7d3492f` *is* origin head — session 97's own log
+amendment, i.e. the known docs-push churn, never a rogue deploy.
+
+### Finding 1 — A WHOLE SESSION WAS LOST, and its finding nearly went with it
+
+Origin has a **23h49m push gap**: `7b72d2d` (`2026-09-25T22:20:17Z`, session 96) → `68e87cd`
+(`2026-09-26T22:09:20Z`, session 97). The watchdog fires hourly, so that gap is anomalous on its face.
+
+A session **did** run inside it. Local gitignored `.codex/` holds its complete, unpushed draft —
+`append-s97.mjs`, probes anchored `2026-09-25T23:20:41Z`, hour **100h57m**, a full work-up
+(three `/health` probes, triple-resolver DNS, `vercel ls`, CI, `Uptime` state, plus a genuinely
+new connector finding). It got as far as creating the **blob and tree on GitHub**
+(`blob97-*.json`, `tree97.json`) and then **died before the commit object**: `commit96.json`
+exists, **`commit97.json` does not**. A blob and tree with no commit are unreferenced garbage — the
+ref never moved and **its entire write-up never landed in the record.**
+
+**`grep -c` for that finding → 0 on both `LOG.md` and the action sheet.** It was one session away
+from being lost permanently.
+
+**Recovered, and re-verified first-hand rather than inherited** (ground rule 4 — an unpushed draft is
+a claim, not a fact): `mcp__claude_ai_Make__environment_get`, the id lookup Make's own instructions
+call always-available, returns *"Claude requested permissions … but you haven't granted it yet."*
+**The `Make` connector is gated like Gmail's**, and since Make is an automation platform with
+mail/SMS/webhook modules it was the one plausible *never-audited* push path. Added as a row to §7's
+table, where it **completes the class: every MCP connector in an unattended session is now measured
+as gated, so no connector-based escalation channel exists. Don't re-shop connectors.**
+
+Bounding the gap honestly: **only one session's artifacts exist in that 23h49m window**, so the
+evidence supports *one* lost session plus a quiet host (sessions 89–96 were all 09-25; session 97 was
+the first 09-26 — consistent with the Mac asleep), **not** 23 failed pushes. `~/Library/Logs/sizzle-watchdog.log`
+is sandbox-blocked, so the quiet period cannot be confirmed from inside a session. Stated as a bound.
+
+*Generalised: session 45's rule was "a predecessor's finding that lives only in LOG prose was never
+filed." **The worse case is a finding that lives only in gitignored local scratch** — `.codex/` is
+invisible to origin, so a session dying at the last pipeline step leaves no trace in the record at
+all, and the successor inherits a **silent hole** rather than a stated gap (which session 38's rule
+would at least have made actionable). When the push gap between consecutive entries greatly exceeds
+the summon interval, look for an orphaned draft before concluding nothing happened.* One-call check:
+`ls .codex/ | grep -i '^commit'` — a `tree<N>.json` with no matching `commit<N>.json` is an aborted push.
+
+### Finding 2 — session 96's one-call detector is ONE-DIRECTIONAL; session 97 is the proof case
+
+Session 96 closed the long-running "a skipped stamp is indistinguishable from a fresh one" hole
+(sessions 71/72/77) with a real improvement: read the **previous session's commit file list**, and
+*"if the action sheet is absent, every sheet-resident check was skipped that session … Binary, no
+arithmetic."* The **absence** half is sound and I used it first, as prescribed. The **presence** half
+does not hold, and session 96's framing — *"it replaces three number comparisons"* — invites reading
+it as sufficient.
+
+- `gh api …/commits/68e87cd --jq '.files[].filename'` → sheet **present** ⇒ detector **PASS**.
+- `gh api …/compare/7b72d2d...68e87cd` → session 97's **sole** sheet edit was **line 4**, the counter.
+- Standing counts at `:57-58` untouched: still *"ninety-six"* / *"11,690+"* / *"`wc -l` = 11693"*
+  against an actual of **97 sessions / 11,898 lines** (measured on the origin mirror, not inherited).
+
+A **per-file** artifact-of-execution cannot certify a convention made of **three independent per-line
+checks** — it separates "touched the sheet" from "didn't", never "maintained one line" from
+"maintained all three", so it reports **PASS on a two-thirds skip**. That makes it *more* dangerous
+than the comparison it displaced, because it reads as binary and authoritative. Magnitude here was
+small (one session, 208 lines) but it is precisely session 79's **no-carve-out** class, landing in the
+paragraph an owner skims to judge how long this has been burning.
+
+**Fix costs the same single call — ask for the patch, not the filename:**
+`gh api repos/Branden574/Sizzle/compare/<prev-1>...<prev> --jq '.files[] | select(.filename | endswith("supabase-project-unreachable.md")) | .patch'`.
+Hunk headers show *which* lines moved. Pinned into §7 beside session 96's version, which stays.
+
+*Generalised: when you replace a number-comparison check with a cheap artifact-of-execution, match the
+artifact's **granularity** to the convention's. This is session 77's lesson one instrument later —
+hardening against **total** omission does not catch **partial** omission.*
+
+### Finding 3 — `stat -t '…Z'` renders LOCAL time and the literal `Z` lies
+
+Session 77 logged a converted-timestamp error (UTC placed in a local slot). Same trap, new instrument,
+and it nearly cost Finding 1: `stat -f '%Sm' -t '%Y-%m-%dT%H:%M:%SZ'` on `append-s97.mjs` printed
+`2026-09-25T16:26:30Z`. That is **PDT**, not UTC — the `Z` was literal text I supplied and `stat`
+renders local time by default. Taken at face value it dated the draft **1h54m before** the
+`7b72d2d` commit it references, i.e. an impossibility that reads as "this file is stale junk" — and
+I would have dropped the thread. Correct value is `2026-09-25T23:26:30Z`, ~6 min after that session's
+own `23:20:41Z` probe. The same offset silently broke a `find -newermt` bound in the same session
+(`-newermt` also parses in local time). *Generalised: any tool that formats a timestamp from a
+format string will happily print a `Z` you typed onto a local-time value — verify a converted
+timestamp against a second timestamp of known origin before reasoning from it.*
+
+### Periodic checks — state them so session 108 can price the call
+
+- **§7 counter check: PASS** (session 97 stamped correctly). Verified per session 71 against session
+  97's *own recorded* figure (`123h43m as of 2026-09-26T22:06:32Z`), and re-derived from outage
+  start rather than trusting the line. Re-stamped to **124h44m as of `2026-09-26T23:07:38Z`**,
+  anchored to the `time` field of the `/health` response that proves the outage is live (session 72).
+- **Standing counts (`:57-58`): FAIL — repaired.** See Finding 2. Re-stamped to **ninety-eight /
+  11,898** (measured pre-append), plus a note that summons now exceed entries (Finding 1).
+- **Doc-rot grep (session 93's pinned invocation): deliberately SKIPPED.** Session 96 ran it two
+  sessions ago (24 hits, all exempt). Recording the skip per session 94's rule, since a clean run
+  leaves no trace and N+10 cannot otherwise price the call. **Ran at 96; skipped at 97 and 98.**
+- **TD-register audit: clean.** Still tops out at TD-40 (session 89). Nothing manufactured per session
+  40's rule — all three findings are in the *instruments and the record*, not the system.
+
+### Still blocked, unchanged
+
+- **Paused vs Restricted vs deprovisioned: unanswerable unattended.** Not re-probed — session 97
+  re-tested both paths ~1h ago and TD-21's close condition is a **PAT rotation** (Level D). Nothing
+  could have changed without Branden acting. The `Make` probe above was a *new* channel, not a re-test.
+- **Crons still not disabled** (§1 step 0), so the **TD-34 trap stays armed**. Session 97 measured all
+  five still scheduled ~1h ago; structurally owner-only (session 64).
+- **TD-35 Apple/RevenueCat** retries expired `2026-09-21T20:58Z`; restore will not replay them.
+- **Stripe** auto-retries expired `2026-09-24T18:23Z`; per-event dashboard **Resend** open to `2026-10-06`.
+
+### Escalation — called before this sentence was written (sessions 38/77/78's trap, and session 97's explicit note to session 98)
+
+`PushNotification` → verbatim: **`Mobile push not sent (Remote Control inactive).`**
+
+**98 consecutive sessions, nobody paged.** With `Make` now measured as gated, §7's table is
+**exhaustive** — every push channel is confirmed dead, muted or permission-gated. `LOG.md` and the
+action sheet remain **pull** channels. No GitHub issue (repo is **public** — it would advertise a live
+outage and an open financial-webhook window on a production money system), and no unattended
+re-enable of `uptime.yml` (`.github/workflows/**` is minimum Level C over a deliberate human mute).
+
+### What Branden must do — unchanged, still ~2 minutes, still the only fix
+
+1. Vercel → project **`sizzle`** (the API; naming is reversed) → Settings → Cron Jobs → **Disable Cron
+   Jobs**. Ten seconds, no deploy. Do this **first** — it prevents the restore from silently destroying
+   the video backfill (§4 step 0 / TD-34).
+2. Supabase dashboard → project `gsxoaurmsgqascxukony` → **Resume**. Read §1 step 2 and §3 first
+   (never recreate under a new ref).
+3. After restore: **RevenueCat** → Retry the Apple refund/chargeback webhooks whose automatic retries
+   expired (§2, §4 step 6), and **Stripe** → per-event Resend (free window closed 09-24; dashboard path
+   open until **2026-10-06**).
+
+### Lane check — session 98
+
+Nothing shipped but documentation. No code, config, migration, native file or production setting
+touched; no security control weakened to chase green; money code untouched. **Resume is Level D** and
+clicking it without §1 step 0 would arm the TD-34 trap — not attempted. The one MCP call made
+(`Make environment_get`) is a read-only id lookup and was refused before reading anything.
+**Working tree preserved** (CLAUDE.md rule 11): the dirty paths are TD-27 checkout artifacts against
+the frozen local HEAD `d4c5395` — re-verified byte-identical to the origin mirror this session
+(`diff -q` on `scripts/verify-deploy.mjs` and `tests/invariants/ops-tooling.test.mjs`, both
+silent). Nothing stashed or reverted.
+
+**TD-27 honoured twice.** `origin-drift.mjs` ran **first** (local `d4c5395` vs origin `7d3492f`,
+8 files drifted), and origin head was re-read immediately before composing this append (session 89's
+lesson, which Finding 1 makes newly concrete). Both edited files are built on `.codex/origin-7d3492f/`,
+not the working copy — which matters because the action sheet **does not exist** in the local checkout.
+**LOG.md line count, measured not inherited: 11898 pre-append** (session 97 measured 11803 and wrote 95).
+
+### Sign-off — session 98
+
+- **Secret scan, value-shaped (the only real gate on this path, TD-33):**
+  `(sbp_|sk_live_|sk_test_|whsec_|rk_live_)[A-Za-z0-9]{8,}|eyJ[A-Za-z0-9_-]{20,}` → result recorded
+  in the push note below, run on both changed files. Bare `-----BEGIN` deliberately kept **out** of
+  the gate pattern (session 96's trap: with no entropy attached it only matches prior sessions' own
+  prose about the scan and manufactures ~37 false positives).
+- **`PushNotification` called before this sign-off was composed**, per session 97's explicit note to
+  session 98 — verbatim: **`Mobile push not sent (Remote Control inactive).`**
+- **Escalation status: nobody has been paged.** This log and the action sheet are pull channels.
+- **Verdict: the same open SEV-1 at hour 124h44m, re-attested from scratch at the DNS layer, with
+  rollback re-derived as a no-op. Owner action is the only fix.** The session's real yield is not the
+  re-attestation but the **recovery of a lost session's finding** and the correction of the detector
+  that let a partial skip pass — plus the `Make` row that finally closes the escalation class.
