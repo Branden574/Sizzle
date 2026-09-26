@@ -11801,3 +11801,86 @@ financial-webhook window on a production money system), and no unattended re-ena
 - **`PushNotification` called before this line was written** (sessions 38/77/78's ordering trap,
   avoided rather than repaired): verbatim **`Mobile push not sent (Remote Control inactive).`**
 - **Escalation status: nobody has been paged.** This log and the action sheet are pull channels.
+
+## 2026-09-26 15:03 PDT / 22:03Z — watchdog session 97 · SEV-1 Supabase unreachable, hour **123h43m** · NO CHANGE — **the outage has crossed 5 days**
+
+**What fired.** `scripts/ops/watchdog.sh` at `2026-09-26T15:03:51` local. `/health` → HTTP **503**,
+`{"status":"degraded","problems":["database-unreachable"],"commit":"7b72d2d"}`. Per project memory
+(`sizzle-watchdog-false-alarms`) a 503 **with a JSON body** is explicitly *not* the HTTP-000 host-blip
+class, so this was worked as a live incident, not an anti-flap re-verify. Correct call — it is real.
+
+**Root cause: unchanged, and re-derived from scratch rather than inherited.** The Supabase project
+`gsxoaurmsgqascxukony` is still DNS-withdrawn. Fresh evidence this session, with the calibration that
+makes it conclusive:
+
+| probe | result | reading |
+|---|---|---|
+| `https://gsxoaurmsgqascxukony.supabase.co/rest/v1/` | curl **exit 6**, `000`, **0.030s** | host does not resolve |
+| `https://zzzznotarealproject12345.supabase.co/rest/v1/` (deliberate fake) | curl **exit 6**, `000`, **0.055s** | **byte-identical signature to ours** |
+| `https://supabase.com/` (control) | **200**, 0.230s | DNS + egress from this host are healthy |
+
+The fake-project control is the load-bearing one: our project's ref is indistinguishable from a
+hostname that never existed, while general DNS works fine from the same shell in the same second.
+That is project-level record withdrawal, not a resolver fault and not a network blip. Consistent with
+§5, which no longer needs re-deriving.
+
+**The one genuinely new fact: the outage passed 120h (5 days) at `2026-09-26T18:23:07Z`.** This is the
+first session on the far side of it, and the first session dated 09-26 at all — sessions 89–96 were all
+09-25. Nothing else moved.
+
+**Nothing else changed — each re-measured, not carried forward:**
+
+- **Not a bad deploy; rollback re-confirmed a no-op.** `vercel ls sizzle --prod` → **19/19 READY**, newest
+  24h old (session 96's own docs commit). No FAILED or ERROR build exists to roll back *from*, and no
+  previous READY deployment can restore a withdrawn DNS record for a service outside Vercel. The
+  incident-response preference for rollback-over-forward-fix genuinely does not apply here.
+- **Crons still enabled — §1 step 0 still not done.** `vercel crons ls --project sizzle` still lists all
+  five paths (`finalize-videos` and `publish-scheduled` at `* * * * *`). The TD-34 trap stays armed, so
+  **§4 step 0 must still be read before Resume is clicked.**
+- **TD-21 re-tested cheaply, per §5's own lesson** ("a predecessor's recorded 'I tried and it's gated' is
+  worth one cheap re-test"). Both paths still shut, and they still fail *differently*, which is the useful
+  part: the **claude.ai** Supabase connector returns a **permission prompt** ("requested permissions … not
+  granted"), while the local tokenless `supabase` MCP server returns a **server-side** error —
+  `"Unauthorized. Please provide a valid access token … via --access-token or SUPABASE_ACCESS_TOKEN"`.
+  Session 25's refinement holds: the blocker is the **revoked PAT**, not a permission grant. Paused vs
+  Restricted vs deprovisioned therefore remains unanswerable unattended.
+- **Frontend is up.** `getsizzle.app` → **200** in 0.10s. Users are getting session 50's graceful error
+  card (with its misattributing "check your connection" copy, TD-38), not a white screen.
+- **Origin advanced to `7b72d2d`** = session 96's own log commit. No third-party commit has landed.
+
+**Lane check — session 97.** Nothing shipped but this documentation. No code, config, migration, native
+file or production setting touched; no security control weakened to chase green; money code untouched.
+No state-changing MCP call attempted. **Resume is Level D** (owner-only) and clicking it without §1 step 0
+would arm the TD-34 trap, so it was not attempted. Disabling the crons is likewise settled as
+structurally owner-only (session 64) and was not attempted. **Working tree preserved** (CLAUDE.md rule 11):
+the four dirty paths are TD-27 checkout artifacts against the frozen local HEAD `d4c5395`, not Branden's
+work — nothing stashed or reverted.
+
+**TD-27 honoured twice.** `origin-drift.mjs` ran **first** (exit 3; local `d4c5395` vs origin `7b72d2d`,
+8 files drifted), and origin head was re-read from `git/refs` immediately before composing this append
+(session 89's lesson): still `7b72d2dffc090b32b71ebddd30a5d80310b9cbd5`. This entry is built on
+`.codex/origin-7b72d2d/`, not the working copy. **LOG.md line count, measured not inherited: 11803
+pre-append** (session 96 measured 11693 pre-append and wrote 110 lines).
+
+### What Branden must do — unchanged, still ~2 minutes, still the only fix
+
+1. Vercel → project **`sizzle`** (the API; naming is reversed) → Settings → Cron Jobs → **Disable Cron
+   Jobs**. Ten seconds, no deploy. Do this **first** — it is what prevents the restore from silently
+   destroying the video backfill (§4 step 0).
+2. Supabase dashboard → project `gsxoaurmsgqascxukony` → **Resume**. Read §1 step 2 and §3 first
+   (never recreate under a new ref).
+3. After restore, the manual cleanups no session can do: **RevenueCat** dashboard → Retry the Apple
+   refund/chargeback webhooks whose automatic retries expired (§2, §4 step 6), and **Stripe** dashboard →
+   per-event Resend (free window closed 09-24; the dashboard path stays open until **2026-10-06**).
+
+### Sign-off — session 97
+
+- **Secret scan, value-shaped** (the only real gate on the git-data push path, TD-33):
+  `(sbp_|sk_live_|sk_test_|whsec_|rk_live_)[A-Za-z0-9]{8,}|eyJ[A-Za-z0-9_-]{20,}` → **0 hits** on both
+  changed files. Session 96's trap avoided: bare `-----BEGIN` was deliberately kept out of the gate
+  pattern, since with no entropy attached it only matches prior sessions' prose about the scan itself.
+- **`PushNotification` called before this line was written** (sessions 38/77/78's ordering trap).
+- **Escalation status: still nobody has been paged.** 97 consecutive sessions with no automated signal
+  reaching Branden. `LOG.md` and the action sheet remain **pull** channels. No GitHub issue (public repo —
+  that would advertise a live outage and an open financial-webhook window), and no unattended re-enable of
+  `uptime.yml` (`.github/workflows/**` is minimum Level C, and `disabled_manually` overrides a deliberate mute).

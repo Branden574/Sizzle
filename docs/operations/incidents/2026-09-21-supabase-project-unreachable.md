@@ -1,7 +1,8 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
 **Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
-(11:23 AM PDT Mon 09-21). **99h52m as of 2026-09-25T22:15:45Z** — re-verified by session 96 (watchdog).
+(11:23 AM PDT Mon 09-21). **123h43m — past 5 days — as of 2026-09-26T22:06:32Z**, re-verified by session 97
+(watchdog), which re-derived the DNS withdrawal from scratch against a deliberate fake-project control.
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
 
 > **🛑 READ §4 STEP 0 BEFORE YOU CLICK RESUME.** Session 18 found that the first
