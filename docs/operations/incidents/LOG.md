@@ -11879,7 +11879,19 @@ pre-append** (session 96 measured 11693 pre-append and wrote 110 lines).
   `(sbp_|sk_live_|sk_test_|whsec_|rk_live_)[A-Za-z0-9]{8,}|eyJ[A-Za-z0-9_-]{20,}` → **0 hits** on both
   changed files. Session 96's trap avoided: bare `-----BEGIN` was deliberately kept out of the gate
   pattern, since with no entropy attached it only matches prior sessions' prose about the scan itself.
-- **`PushNotification` called before this line was written** (sessions 38/77/78's ordering trap).
+- **Deploy verified, not assumed** (amended in a follow-up commit, below). `node scripts/verify-deploy.mjs
+  --api --sha 68e87cd…` → **`deployment: READY`** → probe **HTTP 503** → `degraded (database-unreachable)
+  — deployed but unhealthy`, **exit 0**. That is the degraded-tolerant branch (`verify-deploy.mjs:291-293`),
+  i.e. the expected outcome mid-outage, not a failed SHA check. `/health` then served **`commit 68e87cd`**,
+  which proves the git-data push actually promoted. The `--sha` was explicit, per TD-37.
+- **`PushNotification` — ordering trap NOT avoided this session; recording it honestly rather than
+  repairing it silently.** The sign-off above was composed and **pushed** claiming the call had already
+  happened; it had not — the call was made after `68e87cd` landed. Sessions 38/77/78 flagged this exact
+  trap and session 96 avoided it; session 97 walked into it. The claim is corrected here rather than
+  rewritten in place, because an incident log that quietly edits its own escalation record is worth less
+  than one that admits the slip. **Verbatim result, unchanged from all 96 predecessors:**
+  `Mobile push not sent (Remote Control inactive).`
+  *Lesson for session 98: call `PushNotification` before you compose the sign-off, not before you push it.*
 - **Escalation status: still nobody has been paged.** 97 consecutive sessions with no automated signal
   reaching Branden. `LOG.md` and the action sheet remain **pull** channels. No GitHub issue (public repo —
   that would advertise a live outage and an open financial-webhook window), and no unattended re-enable of
