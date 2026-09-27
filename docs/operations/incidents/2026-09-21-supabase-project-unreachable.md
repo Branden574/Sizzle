@@ -1,7 +1,7 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
 **Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
-(11:23 AM PDT Mon 09-21). **139h23m — past 5 days — as of 2026-09-27T13:46:10Z**, re-verified by session 112
+(11:23 AM PDT Mon 09-21). **140h25m — past 5 days — as of 2026-09-27T14:48:21Z**, re-verified by session 113
 (watchdog), which re-derived the DNS withdrawal from scratch on three resolvers.
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
 
@@ -55,9 +55,9 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > without a browser. It changes your *calibration*, not the fix: the app is degrading
 > gracefully, and the misattribution is what is quietly costing you reviews and support mail.
 
-This page exists because **one hundred and twelve** unattended sessions — one hundred and eleven watchdog summons plus
-the 2026-09-25 daily sweep — have now diagnosed the same outage and appended **14,210+ lines** to
-`LOG.md` (counts re-stamped session 112, measured `wc -l` = 14213 pre-append; session 48 stamped them at "forty-seven"/"5,600+" and nothing re-checked them
+This page exists because **one hundred and thirteen** unattended sessions — one hundred and twelve watchdog summons plus
+the 2026-09-25 daily sweep — have now diagnosed the same outage and appended **14,320+ lines** to
+`LOG.md` (counts re-stamped session 113, measured `wc -l` = 14324 pre-append; session 48 stamped them at "forty-seven"/"5,600+" and nothing re-checked them
 for the 31 sessions until session 79, so they had understated the burn by a third — session 95 skipped
 this stamp entirely, which is what §7's session-96 entry gives a one-call detector for, and **session 97
 skipped it again while passing that detector**, which is what session 98's correction below fixes).
@@ -684,6 +684,20 @@ its events only come back if you press Retry.
   the existing `console.error`), but `routes/monetize.ts` is on the autonomy-policy
   security-sensitive list ⇒ **Level C**, and it is unverifiable against a dead DB, so it is
   parked with the rest. Written up in §2's "Honest limit" block.
+- **TD-39 (NEW, session 113)** — **the watchdog's cooldown is a single global file with no incident
+  identity, so a second production incident is merged into the first one's summon.**
+  `scripts/ops/watchdog.sh:11` documents *"one summon per incident per 60 min"*, but `:66-74` gates on
+  one `~/.sizzle-ops/cooldown` whose **age** is the only thing it checks, and `:59` clears it only when
+  **every** probe is green — so across this outage it has been continuously armed (verified: mtime
+  `2026-09-27T14:45:46.742Z`, this session's own summon minute). A new, unrelated incident is therefore
+  silent for up to 60 minutes and then arrives **appended to the known SEV-1's `REASON_TEXT` line**
+  (`:63`) in a prompt carrying no per-incident identity — landing in a triage path whose first
+  instruction is to stop re-deriving and read this sheet. That is ground rule 4's failure built into the
+  delivery. Reproduced with an isolated replica in `.codex/s113-cooldown-sim.mjs`.
+  **Not shipped, and not because of the lane** (`watchdog.sh` is not on the security-sensitive list): it
+  is the sole detection layer during a live SEV-1, it cannot be tested end-to-end without spawning real
+  summons, and above all **it is worth nothing until §7's egress gap closes** — a better-attributed
+  summon still produces a session that can page nobody. Sequence it after the alerting fix, not before.
 - **Systemic (recommend, Level C):** a live App Store app runs its production database on a
   **pausable** tier with **no managed backups** (free tier self-serves `db dump`). Pro
   projects cannot be paused. *"Upgrade to Pro" is the real control here* — it removes both
@@ -1034,6 +1048,56 @@ property the pattern was rewritten to key on: session 99 moved the key to mtime,
 name-ordered list, so three sessions' worth of "the check is quiet" was evidence about sort order. When a
 check has reported clean for many cycles, don't re-run it — **feed it the failure it exists to catch** and
 confirm it can still report dirty.*
+
+**Session 113 (2026-09-27T14:48:21Z) — §7 has audited every channel that carries a finding OUT across
+113 sessions. The instrument that decides a session happens AT ALL had never been read.** Session 12
+built this table, session 21 added the telegram row, session 98 added `Make` and closed the connector
+class — all of it the *egress* half. `scripts/ops/watchdog.sh`, the trigger behind all 113 summons
+including this one, is absent from this sheet entirely. Read this session:
+
+**The cooldown is one global file with no incident identity, and the script's own comment says
+otherwise.** `:11` documents *"one summon per incident per 60 min"*. There is no per-incident anything:
+`:66-74` stats a single `~/.sizzle-ops/cooldown`, compares its **age** to `COOLDOWN_MIN=60`, and
+`exit 0`s if it is younger — whatever the problem set is. It is cleared **only** when every probe is
+green (`:59`, inside the `${#PROBLEMS[@]} -eq 0` branch), so across 140 hours it has been
+**continuously armed**. Verified directly rather than inferred: mtime `2026-09-27T14:45:46.742Z`, this
+session's own summon minute, and the ops dir holds nothing else (no `paused` kill-switch file).
+
+**Two consequences, and the second is the one that matters.** ① A second, unrelated incident inside the
+window is **not summoned at all** — up to 60 minutes of silence; bounded, and on its own only a delay.
+② When the window expires, the new problem is **appended to the same `REASON_TEXT` line as the known
+SEV-1** (`:63`, `printf '%s; '` over the whole `PROBLEMS` array) and delivered in a prompt whose
+`DETECTED PROBLEMS` block has **no per-incident identity** — arriving into a triage path (this sheet
+plus the project memory) that tells the receiving session, in its first paragraph, to stop re-deriving
+and read the action sheet. **That is precisely the failure ground rule 4 names** — *"a signal that
+pattern-matches a known failure may have a different cause"* — except the pattern-match is not the
+session's inference error here; it is built into the delivery.
+
+**Reproduced, not asserted.** `.codex/s113-cooldown-sim.mjs` replicates `:63-74` in isolation, summons
+nothing and never touches the real cooldown file. Fed the failure it exists to catch (session 112's
+lesson) — this outage at t+0, then a frontend-down + CI-red incident at t+10 and t+61:
+
+```
+[t+0   db only]   SUMMONED   — API degraded (503): database-unreachable;
+[t+10  db+web+ci] SWALLOWED  (cooldown 10m/60m) — prompt NEVER sent
+[t+61  db+web+ci] SUMMONED   — API degraded (503): database-unreachable; Frontend … HTTP 500; CI failing on main: abc1234;
+```
+
+The t+0 line is **byte-identical to this session's own summon prompt** (trailing `; ` included), which
+is what establishes the replica is faithful to the original rather than merely plausible.
+
+**Filed as TD-39 and deliberately NOT shipped — the reason is an ordering dependency, not caution.**
+Details in §6. The decisive point belongs here rather than there: **fixing the summon-IN path buys
+nothing while the alert-OUT path is dead.** This table says no automated signal of any kind has reached
+Branden since `18:27Z` on 09-21, so a faster, better-attributed summon merely produces a faster session
+that also reaches nobody. Close the egress gap first; TD-39's value is exactly zero until then.
+
+*Generalised: 113 sessions refined how findings are recorded and carried out — the counters, the doc-rot
+greps, the orphan detector, this very table. The input gate stayed invisible the whole time because it is
+the thing that asks the question, and an instrument that only ever produces work never looks like work.
+When a monitoring loop has produced N near-identical runs, audit the **trigger**, not just the reports:
+this one silently merges distinct incidents into one identity, which is the single defect a pile of
+near-identical reports could never surface — every report it produced looked correct.*
 
 ### The one follow-up that makes the next SEV-1 different
 

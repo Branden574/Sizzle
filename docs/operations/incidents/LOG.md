@@ -14322,3 +14322,144 @@ the git-data API, so the value-shaped scan is the load-bearing gate) plus a pref
 across both blobs, using the `-----BEGIN…KEY-----`-with-body arm rather than the bare marker that
 false-fires on this log's own prose → **0 hits**. Base guards re-applied: the push refuses unless the
 fetched `LOG.md` exceeds 1.15 MB and its line count equals the 14,213 measured this session.
+
+## SEV-1 watchdog summon 2026-09-27T14:45:46Z (session 113) — same Supabase outage, hour 140h25m; still owner-only, and the SUMMON path that produced all 113 sessions had never been audited
+
+**What fired.** `scripts/ops/watchdog.sh` at 07:45:46 PDT on `/health` → **HTTP 503**,
+`{"status":"degraded","problems":["database-unreachable"]}`, commit `7c3a519`. Per the
+watchdog-calibration memo a **503 with a JSON body is not the host-blip class** (that class is HTTP
+`000`), so this was worked as real from the first probe rather than triaged as noise — correctly again.
+
+**Root cause — unchanged, and re-derived from scratch rather than inherited (ground rule 4).**
+Project-level DNS withdrawal for Supabase project `gsxoaurmsgqascxukony`. All three resolvers agree:
+
+| name | system | 1.1.1.1 | 8.8.8.8 |
+|---|---|---|---|
+| `gsxoaurmsgqascxukony.supabase.co` | ENOTFOUND | ENOTFOUND | ENOTFOUND |
+| `db.gsxoaurmsgqascxukony.supabase.co` | ENOTFOUND | ENOTFOUND | ENOTFOUND |
+| `supabase.co` (apex) | A 76.76.21.21 | A 76.76.21.21 | A 76.76.21.21 |
+
+Parent zone up + every per-project record gone = pause/restrict/deprovision **at the account level**.
+Identical to §5's settled finding, including session 41's refreshed apex answer — restated so it is not
+re-read as a new signal. **Onset `2026-09-21T18:23:07Z` ⇒ 140h25m at `14:48:21Z`.** Sheet line 4
+re-stamped from session 112's `139h23m`.
+
+**Liveness confirmed three times, so this is not the anti-flap case:** `/health` → 503
+`database-unreachable` at `14:45:45Z` (watchdog), `14:46:09Z` and `14:48:21Z` (this session), each taking
+**~7.2s** — the DB-connect stall §5 identifies as the source of the `responseStatusCode: 0` cron noise.
+Byte-identical bodies, same commit `7c3a519`. A real user path was probed too, not just liveness:
+`/feed/for-you?limit=3` → **HTTP 500 in 7.21s**. Nothing recovered and nothing degraded further.
+
+**Ruled out this session, not assumed.**
+- **Not a bad deploy, nothing to roll back.** `vercel ls sizzle --prod` → the six most recent production
+  deployments are **all ● Ready** (newest 55m old, 16s build). Rollback would promote a READY build that
+  talks to the same absent DNS record. §5's "last pre-outage deploy was 15 days old" still holds.
+- **CI is green and the pager is still muted.** `gh workflow list --all` → `CI active`, `CodeQL active`,
+  `Dependabot Updates active`, **`Uptime disabled_manually`** (unchanged; re-enabling it is minimum
+  Level C and would override a deliberate human mute, so no unattended session will do it). The five most
+  recent CI runs on `main` are all `success` — they are these sessions' own docs-only log pushes.
+- **No agent DB path opened.** Cheap re-test rather than inherited (session 33's lesson): local
+  `supabase` MCP `get_advisors` → *"Unauthorized. Please provide a valid access token … via the
+  `--access-token` flag or `SUPABASE_ACCESS_TOKEN`."* Same tokenless failure session 25 recorded.
+  **TD-21 unchanged: the PAT is revoked, and rotation is Level D.**
+- **The ops-inbox path is still gated.** §1's branch-picking email was re-tried once, per §5's rule that
+  an inherited "it's gated" is worth one cheap re-test: `mcp__claude_ai_Gmail__search_threads` →
+  *"Claude requested permissions … but you haven't granted it yet."* §7's connector row holds.
+  Paused-vs-restricted-vs-deleted therefore remains unanswerable from inside a session.
+
+**Lane check — nothing here is agent-actionable.** The fault is entirely on the far side of a credential
+and a dashboard: the database is gone at DNS, restoring it is **Level D** (owner-only), and §1 step 0's
+`Disable Cron Jobs` toggle was settled **structurally owner-only** by session 64. Per ground rule 2 I
+diagnosed and stopped. No code shipped: TD-28/29/30/31/33/34/35/36 all stay parked because every one is
+unverifiable against a dead DB.
+
+**Sheet-resident periodic checks, all run (session 96/98's detector applied to session 112 first).**
+`gh api …/compare/aca0d6d...7c3a519` → session 112 touched line 4, the standing counts **and** §7's
+pinned invocation ⇒ **full maintenance, not a partial skip**. The three pinned doc-rot greps: deictic
+**26 hits** (25 at session 111 — the rise is later sessions quoting the token list, which session 96
+established is not a signal), duration-digit **33 hits**, spelled-number **9 hits**. All triaged against
+session 106's buckets and **all exempt** — provider/policy constants (Stripe's *"up to three days"*,
+RevenueCat's `5/10/20/40/80 minutes`), dated or attributed history, measurements, and sessions 93/106/111's
+own write-ups quoting their patterns. **Bucket 3 — an elapsed-outage figure in standing prose outside the
+two live counters — is empty.** §7's orphan detector, run with session 112's corrected `ls -lTt … | head -3`:
+newest artifact `s112-tree.json` at `13:52:47Z` vs origin tip `7c3a519` at `13:52:48Z` ⇒ **quiet,
+correctly — session 112 landed.**
+
+### The one new thing — the instrument that decides a session happens at all had never been read
+
+**§7 has audited every channel that carries a finding OUT to Branden, across 113 sessions. Nobody had
+read the one that decides a session happens at all.** Session 12 built the channel table, session 21
+added the telegram row, session 98 added the `Make` row and closed the connector class. All of it is the
+*egress* half. `scripts/ops/watchdog.sh` — the trigger that produced all 113 summons, including this one —
+is absent from the sheet entirely. Read this session:
+
+**The cooldown is one global file with no incident identity, and its own comment says otherwise.**
+`watchdog.sh:11` documents *"Cooldown: one summon per incident per 60 min"*. There is no per-incident
+anything: `:66-74` stats a single `~/.sizzle-ops/cooldown`, compares its age to `COOLDOWN_MIN=60`, and
+`exit 0`s if it is younger — whatever the problem set is. It is cleared **only** when every probe is
+green (`:59`, inside the `${#PROBLEMS[@]} -eq 0` branch), so across 140 hours of this outage it has been
+**continuously armed**. Verified directly rather than inferred: `~/.sizzle-ops/cooldown` has mtime
+`2026-09-27T14:45:46.742Z` — this session's own summon minute — and the ops dir holds nothing else (no
+`paused` kill-switch file).
+
+**Two consequences, and the second is the one that matters.**
+
+1. A second, unrelated production incident arriving inside the window is **not summoned at all** — up to
+   60 minutes of silence. Bounded, and on its own only a delay.
+2. When the window does expire, the new problem is **appended to the same `REASON_TEXT` line as the known
+   SEV-1** (`:63`, `printf '%s; '` over the whole `PROBLEMS` array) and delivered in a prompt whose
+   `DETECTED PROBLEMS` block carries **no per-incident identity**. It therefore arrives into a triage path —
+   this sheet plus the project memory — that tells the receiving session, in its first paragraph, to stop
+   re-deriving and go read the action sheet. **That is precisely the failure ground rule 4 names:** *"A
+   signal that pattern-matches a known failure may have a different cause."* The pattern-match is not the
+   session's inference error here; it is built into the delivery.
+
+**Reproduced, not asserted.** `.codex/s113-cooldown-sim.mjs` is an isolated replica of `:63-74` that
+summons nothing and never touches the real cooldown file. Feeding it the failure it exists to catch
+(session 112's lesson) — the DB outage at t+0, then a frontend-down + CI-red incident at t+10 and t+61:
+
+```
+[t+0   db only]   SUMMONED   — API degraded (503): database-unreachable;
+[t+10  db+web+ci] SWALLOWED  (cooldown 10m/60m) — prompt NEVER sent
+[t+61  db+web+ci] SUMMONED   — API degraded (503): database-unreachable; Frontend https://getsizzle.app HTTP 500; CI failing on main: abc1234;
+```
+
+The t+0 line is **byte-identical to this session's own summon prompt** (`API degraded (503):
+database-unreachable; `, trailing `; ` included), which is what establishes the replica is faithful to
+the original rather than merely plausible.
+
+**Filed as TD-39 and deliberately NOT shipped — and the reason is an ordering dependency, not caution.**
+`scripts/ops/watchdog.sh` is not on the autonomy policy's security-sensitive list, so the lane is not
+what stops this. Three things do. It is the **sole** detection layer during a live SEV-1; it runs under
+`set -u` over bash arrays, where a typo is silent until the next incident needs it; and it cannot be
+tested end-to-end without spawning real summons, so "fully verified" (ground rule 2's bar for shipping
+outside Level A/B) is unreachable unattended. **The decisive reason is none of those:** fixing the
+summon-IN path buys nothing while the alert-OUT path is dead. §7's table says no automated signal of any
+kind has reached Branden since `18:27Z` on 09-21 — so a faster, better-attributed summon merely produces
+a faster session that also reaches nobody. **Close §7's egress gap first; TD-39 is strictly second, and
+its value is exactly zero until then.**
+
+*Generalised: 113 sessions refined how findings are recorded and carried out — the counters, the doc-rot
+greps, the orphan detector, the connector table. The input gate was invisible the whole time because it
+is the thing that asks the question, and an instrument that only ever produces work never looks like
+work. When a monitoring loop has produced N near-identical runs, audit the **trigger**, not just the
+reports: this one silently merges distinct incidents into a single identity, which is the one defect a
+pile of near-identical reports could never reveal — every report it produced looked correct.*
+
+**`PushNotification` result, verbatim: *"Mobile push not sent (Remote Control inactive)."*** Called
+before this blob was built (session 78's ordering fix) and re-tested rather than inherited: unchanged,
+now **~27 days standing**. It died *before* the 09-21 outage, so no unattended session has ever paged
+anyone, and none paged him for this incident either. **§7's channel table holds in full: `LOG.md` and the
+action sheet remain PULL channels, and nothing has reached Branden across 113 sessions.**
+
+**Secret gate on this entry:** `npm run secrets:check` (clean; 0 staged files — this push goes through
+the git-data API, so the value-shaped scan is the load-bearing gate) plus a prefix-plus-entropy scan
+across both blobs, using the `-----BEGIN…KEY-----`-with-body arm rather than the bare marker that
+false-fires on this log's own prose → **0 hits**. Base guards re-applied: the push refuses unless the
+fetched `LOG.md` exceeds 1.15 MB and its line count equals the 14,324 measured this session.
+
+**What Branden must do — unchanged, still ~2 minutes, still the whole fix.** ① Vercel → project `sizzle`
+→ Settings → Cron Jobs → **Disable Cron Jobs** (§1 step 0 — avoids the TD-34 trap that turns TD-29's
+backfill into a no-op). ② Supabase dashboard → project `gsxoaurmsgqascxukony` → read which branch it
+shows → **Resume project** (or fix billing first if it shows Restricted). Then §4's verification, §4 step
+6's manual RevenueCat retries (those do **not** self-heal), and `gh workflow enable uptime.yml`.
