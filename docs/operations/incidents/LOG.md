@@ -13034,3 +13034,114 @@ since session ~12; sessions since exist to keep the evidence current and the act
 
 **Read `docs/operations/incidents/2026-09-21-supabase-project-unreachable.md`, not this log.** It is the
 one-page action sheet; this entry only re-attests it.
+
+## Watchdog session 105 — 2026-09-26 23:36 PDT (`06:36Z` 09-27) — SEV-1 hour 132h13m; no change; owner action still the only fix
+
+**What fired.** `scripts/ops/watchdog.sh` at `2026-09-26 23:32:15` local: API degraded, HTTP 503,
+`problems:["database-unreachable"]`, commit `f8ef2f0`. A structured 503 with a JSON body — **not**
+the HTTP-000 host-blip class that 5 of 6 early summons turned out to be — so it was worked as real
+from the first call, per the calibration note in project memory.
+
+**Root cause — unchanged, and re-derived from scratch rather than inherited.** Supabase project
+`gsxoaurmsgqascxukony` is still DNS-withdrawn. Measured this session on **three** public resolvers
+via Node's `dns.Resolver` (`dig` is not allowlisted unattended, which is a tooling difference from
+session 104, not a different result):
+
+| host | 1.1.1.1 | 8.8.8.8 | 9.9.9.9 |
+|---|---|---|---|
+| `db.gsxoaurmsgqascxukony.supabase.co` | ENOTFOUND | ENOTFOUND | ENOTFOUND |
+| `gsxoaurmsgqascxukony.supabase.co` | ENOTFOUND | ENOTFOUND | ENOTFOUND |
+| `supabase.co` (calibration) | 76.76.21.21 | 76.76.21.21 | 76.76.21.21 |
+
+The calibration row is the load-bearing half: the apex resolves on all three resolvers in the same
+process that got ENOTFOUND for both per-project records, so the resolver path demonstrably works and
+this is not a local-network or DNS-outage artifact. Parent up + **every** per-project record withdrawn
+= project-level pause/restriction or deprovision. **Level D — owner action is the only fix; no repo
+change, rollback or redeploy can reach a withdrawn DNS name.**
+
+**Two spaced probes confirm persistence, not a blip:** `06:32:39Z` (503, `f8ef2f0`, `t=7.2s` — the
+connect-timeout shape) and `06:36:09Z` (503, `f8ef2f0`). Anti-flap therefore does not apply: nothing
+recovered between probes, and the outage is 5.5 days old.
+
+**Rollback ruled out structurally, not assumed.** `gh api repos/Branden574/Sizzle/commits/main` puts
+origin tip at `f8ef2f0ecacb2c6ddc9fdbbba15eecc918b208aa`, committed `2026-09-27T05:34:16Z` — session
+104's own docs-only commit, landed **one hour before this summon** — and `/health` reports exactly
+that commit. Deployed code therefore equals origin tip, so no bad deploy is in play and there is no
+earlier-READY deployment that would change the DB's DNS. Blast radius on live surfaces this hour:
+`/health` **503**, `/feed/for-you` **500 `db_error`**, `getsizzle.app` **200 in 0.125s** (frontend
+still serves and, per session 50, degrades to an error card rather than a white screen; the TD-38
+copy defect still misattributes the fault to the user's own phone, still deliberately unshipped).
+
+**TD-21 re-confirmed first-hand, and this session exercised BOTH surfaces in one pass — they fail for
+two independent reasons, neither reachable unattended:**
+
+- `mcp__supabase__list_tables` (local `.mcp.json` server) → *"Unauthorized. Please provide a valid
+  access token to the MCP server via the `--access-token` flag or `SUPABASE_ACCESS_TOKEN`."* A
+  **server-side error**, matching session 25's refinement: the blocker is the **revoked PAT**.
+- `mcp__claude_ai_Supabase__list_projects` (the claude.ai connector, TD-21 option **c**) → a
+  **permission prompt** — *"Claude requested permissions … but you haven't granted it yet"* — which
+  an unattended session cannot grant itself.
+
+Not a new finding; it is session 25's conclusion with the second surface now measured alongside the
+first, so a successor need not re-test either. Rotation and the connector grant are both Level D.
+
+**§1 step 0 — state INHERITED this session, explicitly flagged as such.** `vercel crons ls --project
+sizzle` is **not allowlisted** in this session's Bash policy (it returned *"This command requires
+approval"*), so I could not re-measure the five cron paths. `/health` carries no substitute signal:
+its `cronAges` field is `null` precisely *because* the DB is unreachable. Session 104 measured all
+five paths still listed one hour ago; per session 64 the toggle is **structurally owner-only** (CLI
+57.0.0 exposes only `crons add|list|run`), so this remains recorded as state, **not** an
+agent-actionable omission. Stating the inheritance rather than restating 104's numbers as my own
+measurement — session 79's no-carve-out rule cuts both ways.
+
+**Periodic checks, each with its session number so a successor can price the call:**
+
+- **Session 98 granularity detector** (patch, not filename) on session 104's commit `f8ef2f0`:
+  **PASS at full granularity** — `gh api …/compare/5b2d03b...f8ef2f0` shows the sheet patch touching
+  *both* line 4 (the live counter) *and* the `:56-58` standing counts. No partial skip, no repair owed.
+- **Session 99 aborted-push detector** (mtime, naming-free): newest `.codex/` draft artifact is
+  `s104-ref.json` at `2026-09-26 22:34:16` local (`2026-09-27T05:34:16Z`), which **equals** origin
+  tip `f8ef2f0`'s commit time ⇒ session 104's push landed and **no orphaned session** sits in the
+  60-minute window between it and this summon. Quiet, correctly.
+- **Doc-rot grep** — **deliberately SKIPPED, one session of age.** Session 104 ran it verbatim at
+  **24 hits, flat** against session 96. Session 93's standard is that two sessions of age is not
+  overdue and one certainly is not. Recorded so the next session reads *"last run 104, skipped 105"*
+  and decides from that rather than re-deriving. Per session 96, a rising count here is
+  self-referential growth and not a signal.
+- **TD-41 mirror guard**: the TD-27 origin mirror materialised `LOG.md` at **1,129,424 bytes /
+  13,036 lines** — non-zero, so TD-41's zero-byte failure mode stays closed and this append is built
+  on origin's full blob, not the stale local copy.
+- **TD-27 drift**: local `HEAD d4c5395` vs `origin/main f8ef2f0`, 8 files differing.
+  `scripts/ops/origin-drift.mjs` ran **first**, before any repo-derived reasoning. Also confirmed
+  from the other direction: `node scripts/verify-deploy.mjs` reported local HEAD *"predates every
+  deployment on the page"* and told me to re-run with an explicit SHA — the intended TD-27 behaviour.
+
+**What I did.** Diagnosed and re-attested only. **No code, config, migration, native file or
+production setting touched; no security control weakened; no deploy or rollback issued.** Every
+parked item (TD-28/29/34/35/36/38) stays parked for the reason the sheet already gives: each is
+unverifiable against a dead database, and TD-36 sits in `routes/monetize.ts`, which is Level C
+regardless. `.github/workflows/**` untouched, so the deliberate human mute on `uptime.yml`
+(`disabled_manually`) stands. Working tree preserved per hard rule 11 — the four dirty paths
+(`scripts/ops/sweep-prompt.md`, `scripts/verify-deploy.mjs`, `tests/invariants/ops-tooling.test.mjs`,
+`scripts/ops/origin-drift.mjs`) were not touched, stashed or reverted.
+
+**No new finding manufactured.** Per session 40, the deliverable of a fully-audited incident hour is
+fresh evidence plus honest counters — not an invented discovery. The diagnosis has been complete
+since session ~12.
+
+**Still open — FOR BRANDEN, still the same two clicks, ~2 minutes:**
+
+1. **Vercel → project `sizzle` (the API; naming is reversed) → Settings → Cron Jobs →
+   `Disable Cron Jobs`** (no deploy needed). Do this **first** — it disarms the TD-34 trap where the
+   first `finalize-videos` tick within 60s of Resume mass-flips every outage-stranded video to a
+   terminal `error` the finalizer refuses to re-poll. Re-enable after capturing the stranded list.
+2. **Supabase dashboard → project `gsxoaurmsgqascxukony` → Resume** — read §1's branch table first;
+   the dashboard says *why* it stopped, and the ops inbox almost certainly holds the email.
+3. Then §4's verification block, §4 step 0's stranded-video capture, and §4 step 6's **manual**
+   RevenueCat **Retry** (Apple's 155-minute retry budget expired `2026-09-21T20:58Z`; restore will
+   **not** replay it — the one item restore does not cover). Stripe's automatic window closed
+   `2026-09-24T18:23Z`; the dashboard per-event **Resend** path stays open to `2026-10-06` and needs
+   no secret key.
+
+**Read `docs/operations/incidents/2026-09-21-supabase-project-unreachable.md`, not this log.** It is
+the one-page action sheet; this entry only re-attests it.
