@@ -684,9 +684,9 @@ its events only come back if you press Retry.
   the existing `console.error`), but `routes/monetize.ts` is on the autonomy-policy
   security-sensitive list ⇒ **Level C**, and it is unverifiable against a dead DB, so it is
   parked with the rest. Written up in §2's "Honest limit" block.
-- **TD-39 (NEW, session 113)** — **the watchdog's cooldown is a single global file with no incident
+- **TD-43 (NEW, session 113; filed in the register by the 2026-09-27 daily sweep — session 113 wrote "TD-39" here, but that id was already session 85's *separate* defect in the same script, so this finding sat unfiled)** — **the watchdog's cooldown is a single global file with no incident
   identity, so a second production incident is merged into the first one's summon.**
-  `scripts/ops/watchdog.sh:11` documents *"one summon per incident per 60 min"*, but `:66-74` gates on
+  `scripts/ops/watchdog.sh:10` documents *"one summon per incident per 60 min"*, but `:66-74` gates on
   one `~/.sizzle-ops/cooldown` whose **age** is the only thing it checks, and `:59` clears it only when
   **every** probe is green — so across this outage it has been continuously armed (verified: mtime
   `2026-09-27T14:45:46.742Z`, this session's own summon minute). A new, unrelated incident is therefore
@@ -1086,11 +1086,11 @@ lesson) — this outage at t+0, then a frontend-down + CI-red incident at t+10 a
 The t+0 line is **byte-identical to this session's own summon prompt** (trailing `; ` included), which
 is what establishes the replica is faithful to the original rather than merely plausible.
 
-**Filed as TD-39 and deliberately NOT shipped — the reason is an ordering dependency, not caution.**
+**Filed as TD-43 (not TD-39 — see §6) and deliberately NOT shipped — the reason is an ordering dependency, not caution.**
 Details in §6. The decisive point belongs here rather than there: **fixing the summon-IN path buys
 nothing while the alert-OUT path is dead.** This table says no automated signal of any kind has reached
 Branden since `18:27Z` on 09-21, so a faster, better-attributed summon merely produces a faster session
-that also reaches nobody. Close the egress gap first; TD-39's value is exactly zero until then.
+that also reaches nobody. Close the egress gap first; TD-43's value is exactly zero until then.
 
 *Generalised: 113 sessions refined how findings are recorded and carried out — the counters, the doc-rot
 greps, the orphan detector, this very table. The input gate stayed invisible the whole time because it is

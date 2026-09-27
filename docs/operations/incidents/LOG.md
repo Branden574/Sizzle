@@ -14463,3 +14463,56 @@ fetched `LOG.md` exceeds 1.15 MB and its line count equals the 14,324 measured t
 backfill into a no-op). ② Supabase dashboard → project `gsxoaurmsgqascxukony` → read which branch it
 shows → **Resume project** (or fix billing first if it shows Restricted). Then §4's verification, §4 step
 6's manual RevenueCat retries (those do **not** self-heal), and `gh workflow enable uptime.yml`.
+
+## Daily sweep 2026-09-27
+
+**Prod is still down and it is still the same two owner clicks.** The Supabase SEV-1 is open at
+**hour ~141** — `gsxoaurmsgqascxukony.supabase.co` is still `ENOTFOUND` and `/health` still returns
+503 `database-unreachable` after a 7.2s connect stall (served commit `6668f4c` = origin HEAD);
+`getsizzle.app` answers 200. Verified with one DNS probe and one `/health` probe, then straight to the
+action sheet — **not re-derived**. CI is green (last 5 runs on `main` all `success`), **zero open
+secret-scanning alerts**, and `npm audit` on the origin mirror is unchanged at **3 advisories
+(2 moderate, 1 high)** — the same `esbuild`/`vite` (TD-18) and `hono` (TD-31) set, no new advisory
+since `autonomy-audit.md`. Items 5 and 5b (parked media deletions, stuck `video_assets`, `cron_runs`
+failures, `get_advisors`) are **unrunnable for the 6th consecutive sweep** — the DB has no DNS record
+and the MCP PAT is still revoked (TD-21). All three open dependency PRs stay held and were **not
+re-commented**: #8 (`hono` 4.13.0→4.13.5) already carries sweep triage from 09-22 and 09-25 and TD-31
+is current, #6 and #3 are majors tracked by TD-18. Independently re-derived TD-31's hold and reached the
+same answer — `toSSG`/`parseBody` are absent from the API, so 2 of the 3 hono advisories are
+unreachable, the third is unexploitable while the cached routes return 500, and `monetize.ts:873-883`
+HMACs the raw `c.req.text()` body, so a body-parsing patch lands under Stripe signature verification
+with the live-fire webhook test that CLAUDE.md requires blocked by the dead DB. Also corrected a claim
+this sweep did **not** inherit: `@hono/node-server` is **not** dev-only — `apps/api/api/index.ts:8,28`
+uses `getRequestListener` as the production Vercel entry, which makes PR #3 a major bump of the
+production request path for every route, money included.
+
+**The one thing shipped: a lost finding, filed.** Flag drift (item 6) turned up a **duplicate TD id**.
+Session 113 filed the watchdog cooldown-identity defect as "TD-39" in the action sheet, but TD-39 was
+already session 85's *different* defect in the same script (no ack state ⇒ unbounded re-summons), so
+session 113's finding had **no register entry at all** — the register's highest id was TD-42 and a
+`grep -iE` for "incident identity", "second incident" and "REASON_TEXT" across it returned 0 hits.
+That is session 45's rule ("a finding that lives only in prose was never filed") firing on the register
+itself, and left alone it would have been silently closed out when TD-39 closes. Filed as **TD-43**
+with the mechanism re-verified first-hand against `scripts/ops/watchdog.sh` (`:67-73` gates on the
+**age** of one global cooldown file with no per-incident key; `:59` clears it only on an all-green pass,
+so it is continuously armed through a multi-day SEV-1; `:63` flattens all `PROBLEMS` into one
+`REASON_TEXT` that `:84` interpolates into the prompt) and the four TD-39 references in the sheet
+relabelled, including its `watchdog.sh:11` citation, which is off by one — the comment is at `:10`.
+The entry records that TD-39's signature-aware backoff already fixes this defect's *timing* half, so
+whoever implements it does not do the work twice; what is left is the *presentation* half (label each
+problem **NEW** vs **ONGOING**). Not shipped as code, for session 113's reason: the watchdog is the sole
+detection layer during a live SEV-1, and a better-attributed summon still produces a session that can
+page nobody until the egress gap closes.
+
+**`PushNotification` re-tested rather than inherited: still dead** — *"Mobile push not sent (Remote
+Control inactive)"*, now ~27 days standing. So this entry, like the 113 before it, reaches nobody until
+Branden opens it.
+
+**What Branden must do — unchanged, ~2 minutes, still the whole fix.** ① Vercel → project `sizzle`
+→ Settings → Cron Jobs → **Disable Cron Jobs** (§1 step 0, avoids the TD-34 trap that turns TD-29's
+backfill into a no-op). ② Supabase dashboard → project `gsxoaurmsgqascxukony` → read which branch it
+shows → **Resume project** (fix billing first if it shows Restricted). Then §4's verification, §4 step 6's
+**manual** RevenueCat retries (they do *not* self-heal), `gh workflow enable uptime.yml`, and merge PR #8
+as the first post-restore deploy. Two owner items this sweep could not touch remain: rotate the Supabase
+PAT (TD-21) so items 5/5b stop being skipped, and grant `Bash(git fetch:*)` (TD-27) — local `main` is
+still frozen at `d4c5395`, so every file above was read from the origin mirror.
