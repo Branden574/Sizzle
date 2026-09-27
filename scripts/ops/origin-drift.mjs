@@ -35,6 +35,10 @@
  * still prints, the exit stays 3, and the banner names the paths whose mirror is missing.
  * Conflating the two is how a transient `gh` EOF used to emit "do not proceed on the
  * working copy" and hand the session zero drift information (see `isRetryableGhError`).
+ *
+ * A mirror that materialises with the WRONG BYTE COUNT counts as missing, not as present —
+ * a silently-empty mirror is more dangerous than an absent one, because the session reads
+ * it as origin's truth (see `decodeMirrorBytes` and `contentsNeedsRawFallback`).
  */
 import { execFileSync } from 'node:child_process';
 import { mkdirSync, writeFileSync } from 'node:fs';
@@ -125,19 +129,73 @@ export function isRetryableGhError(err) {
   return /unexpected EOF|EOF|ECONNRESET|ETIMEDOUT|EPIPE|socket hang up|timeout|502|503|504/i.test(text);
 }
 
-/** Fetch with a bounded backoff, so one transport blip does not cost the whole run. */
-function ghWithRetry(path, attempts = 3) {
-  let lastErr;
-  for (let i = 0; i < attempts; i += 1) {
-    try {
-      return gh(path);
-    } catch (err) {
-      lastErr = err;
-      if (i === attempts - 1 || !isRetryableGhError(err)) throw err;
-      execFileSync('sleep', [String(0.5 * 2 ** i)]);
+/**
+ * The same call, asking for the file's bytes instead of a JSON envelope. Needed because
+ * the `contents` API refuses to inline anything over 1 MiB (see `contentsNeedsRawFallback`).
+ * No `encoding` option, so this returns a Buffer and stays correct for any payload.
+ */
+const ghRaw = (path) => execFileSync('gh', ['api', '-H', 'Accept: application/vnd.github.raw', path], { maxBuffer: 64 * 1024 * 1024 });
+
+/** Wrap a fetcher in a bounded backoff, so one transport blip does not cost the whole run. */
+function retrying(fetch) {
+  return (path, attempts = 3) => {
+    let lastErr;
+    for (let i = 0; i < attempts; i += 1) {
+      try {
+        return fetch(path);
+      } catch (err) {
+        lastErr = err;
+        if (i === attempts - 1 || !isRetryableGhError(err)) throw err;
+        execFileSync('sleep', [String(0.5 * 2 ** i)]);
+      }
     }
+    throw lastErr;
+  };
+}
+
+const ghWithRetry = retrying(gh);
+const ghRawWithRetry = retrying(ghRaw);
+
+/**
+ * GitHub's `contents` API only inlines files up to 1 MiB. Between 1 and 100 MB it still
+ * answers 200 with full metadata but sets `encoding: "none"` and `content: ""` — a
+ * SUCCESSFUL response carrying no bytes. Decoding that yields a 0-byte mirror, and a
+ * 0-byte mirror of `LOG.md` is the worst possible base: an append built on it silently
+ * truncates every prior entry, which is precisely the TD-27 corruption this tool exists
+ * to prevent (`CORRUPTS_CHECK` says so in as many words).
+ *
+ * Measured 2026-09-27 (watchdog session 101): `LOG.md` reached 1,085,434 bytes and
+ * crossed the cap between sessions 89 (mirror 953,732 bytes, fine) and 100 (mirror
+ * **0 bytes**). Session 100 caught it by hand and wrote "check the mirrored size before
+ * diffing" into the log — prose that must be hand-executed every run, which is the exact
+ * failure mode this file's header rejects. So it is a gate now.
+ *
+ * `LOG.md` only ever grows, so this is permanent from here on, not a blip.
+ */
+export function contentsNeedsRawFallback(payload) {
+  if (!payload || typeof payload !== 'object') return false;
+  if (payload.encoding === 'base64') return false;
+  return Number(payload.size) > 0;
+}
+
+/**
+ * Decode one mirrored file, verifying the byte count origin reported.
+ *
+ * The size assertion is deliberately broader than the 1 MiB cap it was written for: it
+ * catches ANY short write — a truncated body, a partial transfer that still exited 0, a
+ * future API change to the envelope — and converts it into a named failure that
+ * `materialiseReport` tells the session not to reason around. A wrong mirror must never be
+ * indistinguishable from a right one.
+ */
+export function decodeMirrorBytes({ payload, path, fetchRaw }) {
+  const bytes = contentsNeedsRawFallback(payload)
+    ? Buffer.from(fetchRaw(path))
+    : Buffer.from(String(payload?.content ?? '').replace(/\s/g, ''), 'base64');
+  const expected = Number(payload?.size);
+  if (Number.isFinite(expected) && bytes.length !== expected) {
+    throw new Error(`mirror truncated: wrote ${bytes.length} bytes, origin reports ${expected}`);
   }
-  throw lastErr;
+  return bytes;
 }
 
 /**
@@ -148,16 +206,16 @@ function ghWithRetry(path, attempts = 3) {
  * the stale working copy, which is the exact TD-27 failure this tool exists to prevent.
  * So every fetch is caught per file and reported, never thrown.
  *
- * `fetchContent` is injected so the degraded path is testable without a live network.
- * Returns the list of files that could not be mirrored (empty on full success).
+ * `fetchPayload` and `fetchRaw` are injected so the degraded paths are testable without a
+ * live network. Returns the list of files that could not be mirrored (empty on full success).
  */
-export function mirrorAll({ files, outDir, fetchContent }) {
+export function mirrorAll({ files, outDir, fetchPayload, fetchRaw }) {
   const failures = [];
   const write = (path) => {
-    const b64 = fetchContent(path);
+    const bytes = decodeMirrorBytes({ payload: fetchPayload(path), path, fetchRaw });
     const dest = mirrorPathFor(outDir, path);
     mkdirSync(dirname(dest), { recursive: true });
-    writeFileSync(dest, Buffer.from(b64.replace(/\s/g, ''), 'base64'));
+    writeFileSync(dest, bytes);
   };
   const attempt = (path) => {
     try {
@@ -212,13 +270,15 @@ function main() {
   let failures = [];
   if (!checkOnly) {
     outDir = `.codex/origin-${short(originHead)}`;
+    const contentsPath = (path) => {
+      const encoded = path.split('/').map(encodeURIComponent).join('/');
+      return `repos/${REPO_SLUG}/contents/${encoded}?ref=${originHead}`;
+    };
     failures = mirrorAll({
       files,
       outDir,
-      fetchContent: (path) => {
-        const encoded = path.split('/').map(encodeURIComponent).join('/');
-        return JSON.parse(ghWithRetry(`repos/${REPO_SLUG}/contents/${encoded}?ref=${originHead}`)).content;
-      },
+      fetchPayload: (path) => JSON.parse(ghWithRetry(contentsPath(path))),
+      fetchRaw: (path) => ghRawWithRetry(contentsPath(path)),
     });
   }
 

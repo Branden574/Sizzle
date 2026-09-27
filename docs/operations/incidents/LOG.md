@@ -12430,3 +12430,176 @@ silently truncates prior entries. **`LOG.md` line count measured, not inherited:
   action is the only fix. The session's yield beyond re-attestation is **closing the gap session 99
   opened in the index** — its retired orphan detector was still the one the project memory
   prescribed — plus the **first live exercise** of the replacement, which ran quiet and correctly.
+
+## 2026-09-26 19:16 PDT / 2026-09-27 02:16Z — watchdog session 101 · SEV-1 Supabase unreachable, hour **128h01m** · NO CHANGE upstream — but the TD-27 mirror of `LOG.md` now materialises **0 BYTES**, and that is shipped as **TD-41**
+
+**What fired.** `scripts/ops/watchdog.sh` at `19:16:46` local: `API degraded (503): database-unreachable`.
+Reproduced immediately on probe (`02:17:06Z`, 7.2 s) and again at `02:24:15Z`. A 503 **with a JSON body**
+is not the host-side `HTTP 000` class — the API answers, the database does not.
+
+**Root cause re-attested from scratch** (ground rule 4 — not inherited). `.codex/dns-probe.mjs`, three
+resolvers, identical on all three: parent `supabase.co` → `A=76.76.21.21`, `CNAME=ENODATA` (the name
+exists, no record of that type) vs `gsxoaurmsgqascxukony.supabase.co` **and**
+`db.gsxoaurmsgqascxukony.supabase.co` → both `A=ENOTFOUND`, `CNAME=ENOTFOUND` (NXDOMAIN). Parent zone up
++ *every* per-project record withdrawn = **project-level pause/deprovision**, not a platform DNS fault
+and not a sandbox artifact. Unchanged since `2026-09-21T18:23:07Z`.
+
+**Corroborating evidence, all fresh this session:**
+
+| probe | result |
+|---|---|
+| `/health` | **503** `degraded` / `["database-unreachable"]`, commit `bfbb5ea`, `time 2026-09-27T02:24:15Z` |
+| `/feed/for-you?limit=3` (real user path) | **500** `{"error":{"code":"db_error"}}` — users, not just probes, are failing |
+| `getsizzle.app` | **200** — frontend serves; the app degrades, it does not white-screen |
+| `vercel ls sizzle --prod` | newest **1h**, all `● Ready` — hourly deploys are **prior sessions' own docs pushes**, never a bad deploy |
+| `gh run list --workflow CI` | **6/6 `success`** on `main`, incl. session 100's `bfbb5ea` |
+
+**Rollback re-derived, not assumed: still a structural no-op.** Every prod deployment on the page is
+`Ready`; the failure is a withdrawn DNS record at a third party. There is no bad deploy to promote away
+from, and `vercel rollback` cannot restore a database that has no `A` record.
+
+### The finding — TD-41: the TD-27 drift gate silently mirrored `LOG.md` as 0 bytes
+
+This session's yield is **closing the gap session 100 stated in prose** (session 38's rule: a
+predecessor's flagged-but-unfixed item is a labelled, pre-scoped task). Session 100 wrote: *"the mirror's
+`LOG.md` materialised **0 bytes** this session … check the mirrored size before diffing against it, or a
+stale base silently truncates prior entries."* It diagnosed the **symptom** and prescribed a **hand-executed
+check** — which is the exact failure mode `origin-drift.mjs`'s own header rejects: *"Prose that must be
+hand-executed every run is a checklist item waiting to be skipped, so this makes it one command."*
+
+**Root cause, which session 100 did not have.** GitHub's `contents` API only inlines files up to **1 MiB**.
+Above that it still answers **200 with full metadata** but sets `encoding: "none"` and `content: ""` — a
+*successful* response carrying no bytes. Measured directly:
+
+```
+gh api repos/Branden574/Sizzle/contents/docs/operations/incidents/LOG.md?ref=bfbb5ea
+  → {"content_len": 0, "encoding": "none", "size": 1085434}
+```
+
+`1,085,434 > 1,048,576`. `origin-drift.mjs:220` read `.content`, `:160` decoded the empty string, and
+`writeFileSync` wrote **0 bytes** — no throw, so `failures` stayed empty and `materialiseReport` reported
+nothing. **The threshold crossing is dated:** `.codex/origin-a2ac3a7/` (session 89) mirrored **953,732
+bytes**, fine; `.codex/origin-a2acf86/` (session 100) mirrored **0**. This is why 99 sessions never hit it.
+
+**Why this was worth a ship rather than another log paragraph.** `CORRUPTS_CHECK` names this exact path in
+as many words — *"the sweep log append — a stale base silently truncates prior entries."* The prescribed
+TD-27 workflow is *build the append on the mirror*; a session that followed it would have pushed a
+**12,432-line deletion of the entire incident log**. That is strictly worse than the 2026-09-04 near-miss
+TD-27 was created for, and worse than TD-40's aborted fetch, because **an empty mirror reads as success**
+where a missing one announces itself. Session 100 survived on a *habit* (it reached for session 89's
+`raw.githubusercontent.com` fallback), not a gate. `LOG.md` only grows, so from here the bug is
+**permanent, not transient** — every future session inherits it.
+
+**The fix** (`scripts/ops/origin-drift.mjs`, + 5 invariants):
+
+- `contentsNeedsRawFallback(payload)` — exported, pure. Detects the oversize envelope (`encoding !== 'base64'`
+  with `size > 0`) and, deliberately, **does not** fire on a genuinely empty file.
+- `ghRaw` / `ghRawWithRetry` — the same `gh api` call with `Accept: application/vnd.github.raw`, returning a
+  Buffer. Both fetchers now go through one `retrying()` wrapper, so TD-40's retry covers the new branch too.
+- `decodeMirrorBytes({ payload, path, fetchRaw })` — takes the raw path when needed and **asserts the byte
+  count origin reported**. The assertion is deliberately **broader than the cap it was written for**: it
+  catches any short write — a truncated body, a partial transfer that exited 0, a future envelope change —
+  and converts it into a named failure. A wrong mirror must never be indistinguishable from a right one.
+- `mirrorAll` takes `fetchPayload` + `fetchRaw` (was `fetchContent`), so the degraded paths stay **executed
+  in tests, not grepped from source** — session 89's design principle, preserved.
+
+**Verified four ways.** Invariants **56/56** (51 → 56; `npm run test:invariants`). **Mutation-verified in
+both halves, not tautological:** deleting the size assertion fails exactly test 34
+(`decodeMirrorBytes REFUSES a short write`, 38 → 37); deleting the raw-fallback branch — i.e. restoring the
+pre-fix decode — fails exactly tests 33 and 36 (38 → 36), which is the live bug reproduced as a red test.
+**Live end-to-end run** of the real tool against the real origin: the mirror that was 0 bytes now
+materialises **1,085,434 bytes / 12,432 lines**, `cmp`-identical to the `raw.githubusercontent.com` copy.
+**And this session's own append is built on that repaired mirror**, so the fix is load-bearing for the
+commit that ships it.
+
+**Lane:** `npm run safety:diff` → **Level B** (ops tooling; `scripts/ops/**` and `tests/**` are not on the
+autonomy-policy security-sensitive list; no application surface, no migration, no native file, no
+production config). It passes session 45's in-lane test in the sharpest way — **verifying it requires the
+dead database not at all**, only the GitHub API and the script itself.
+
+### Still open — unchanged, all owner-blocked
+
+- **Paused vs deleted is unanswerable unattended.** All three routes closed (claude.ai connector
+  permission-gated; local `supabase` MCP tokenless; `api.supabase.com` → 401, PAT revoked). **TD-21 needs a
+  PAT rotation, not a permission grant.** Only the dashboard or the ops inbox answers it.
+- **Crons still not disabled** (§1 step 0) ⇒ the **TD-34 trap stays armed** at hour 128h01m. Structurally
+  owner-only (Vercel exposes only a project-wide dashboard button). Still the cheapest owner action, still undone.
+- **TD-35 Apple/RevenueCat** retries expired `2026-09-21T20:58Z`; restore will **not** replay them.
+- **Stripe** auto-retries expired `2026-09-24T18:23Z`; per-event dashboard **Resend** open to `2026-10-06`.
+  Next real date remains `2026-10-06` — **no new countdown derived.**
+- **TD-28/29/30/31/33/34/36/38/39** all still parked: each is unverifiable against a dead database, and
+  several perturb the very signals being watched for recovery.
+
+### Escalation — called before this sign-off was composed (sessions 38/77/78's trap)
+
+`PushNotification` → verbatim: **`Mobile push not sent (Remote Control inactive).`**
+
+**101 consecutive sessions, nobody paged.** §7's channel table is exhaustive as of session 98's `Make` row.
+`LOG.md` and the action sheet are **pull** channels. No GitHub issue (the repo is **public**; filing one
+would advertise a live outage and an open financial-webhook window on a production money system), and no
+unattended re-enable of `uptime.yml` (`.github/workflows/**` is minimum Level C, over a deliberate human mute).
+
+### What Branden must do — unchanged, still ~2 minutes, still the only fix
+
+1. Vercel → project **`sizzle`** (the API; naming is reversed) → Settings → Cron Jobs → **Disable Cron Jobs**.
+   Ten seconds, no deploy. Do this **first** — it prevents the restore from silently destroying the
+   stranded-video backfill (§4 step 0 / TD-34).
+2. Supabase dashboard → project `gsxoaurmsgqascxukony` → **Resume**. Read §1 step 2 and §3 first —
+   **never recreate under a new ref.** If a billing hold exists, clear it or Resume will not stick.
+3. After restore: **RevenueCat** → Retry the Apple refund/chargeback webhooks (§2, §4 step 6); **Stripe** →
+   per-event Resend (dashboard path open to **2026-10-06**); merge Dependabot **PR #8** as the first
+   post-restore deploy (TD-31); then `gh workflow enable uptime.yml` and reconnect Remote Control.
+
+### Lane check — session 101
+
+Shipped **documentation + one Level B ops-tooling fix (TD-41)**. No application code, config, migration,
+native file or production setting touched; no security control weakened to chase green; money code
+untouched. **Resume is Level D** and clicking it without §1 step 0 would arm the TD-34 trap — not attempted.
+Rollback re-derived as a structural no-op rather than assumed. **Working tree preserved** (CLAUDE.md rule
+11): the two files I edited (`scripts/ops/origin-drift.mjs`, `tests/invariants/ops-tooling.test.mjs`) were
+re-verified **byte-identical to the origin mirror before editing** — they are TD-27 checkout artifacts
+against the frozen local HEAD `d4c5395`, not Branden's work — and the other two dirty paths
+(`scripts/ops/sweep-prompt.md`, `scripts/verify-deploy.mjs`) were left untouched. Nothing stashed or reverted.
+
+**TD-27 honoured.** `origin-drift.mjs` ran **first** (local `d4c5395` vs origin `bfbb5ea`, 8 files drifted),
+and all three edited documents are built on origin's blobs at `bfbb5ea`. **`LOG.md` line count measured, not
+inherited: 12432 pre-append** — via the repaired mirror, `cmp`-identical to a raw fetch.
+
+**Periodic checks.** §7 counter stamp: **PASS** — session 100's line 4 read `126h53m as of
+2026-09-27T01:16:11Z` and matched its own logged elapsed figure (verified against the previous session's
+recorded number per session 71, not against the line itself); standing counts were also current at
+"one hundred"/"12,260+". Both re-stamped this session. Doc-rot grep (session 93's pinned invocation): ran at
+96, skipped 97–100, **ran at 101 — 24 hits, all 24 exempt** under session 30's carve-outs (`:172`/`:218`/
+`:221`/`:698` sit in dated blocks; `:343`/`:392`/`:453`/`:510` describe states, not elapsed time; `:706`–
+`:764` are sessions 30/74/93's own write-ups quoting the token list). **Flat at session 96's 24** —
+relative-time class clean.
+
+**One refinement to session 99's aborted-push detector, found by running it: it needs `-t`.** As recorded
+(`ls -lT .codex/ | grep -E '^-.*(blob|tree)' | tail -3`) it sorts **alphabetically**, not by mtime — and now
+that session numbers have crossed three digits, `tree100.json` sorts *before* `tree97.json`, so the
+recorded form returned sessions 97/98/99's artifacts as "newest" and would have **missed an aborted push by
+session 100 or later entirely**. `ls -lTt` (mtime-sorted) gives the real answer: newest is `ref100.json` at
+`Sep 26 18:18:56` PDT = `2026-09-27T01:18:56Z`, one second *after* origin tip `bfbb5ea`
+(`2026-09-27T01:18:55Z`) — i.e. session 100's own successful ref update, with `commit100.json` present.
+⇒ **quiet, correctly.** This is session 99's own lesson one rollover later: *a detector keyed to a
+convention inherits that convention's coverage* — here the convention was **lexical ordering**, and it broke
+silently at 100, in the clean-looking direction.
+
+### Sign-off — session 101
+
+- **Secret scan, value-shaped (the only real gate on this path, TD-33):**
+  `(sbp_|sk_live_|sk_test_|whsec_|rk_live_)[A-Za-z0-9]{8,}|eyJ[A-Za-z0-9_-]{20,}` on all changed files →
+  result recorded in the push note below. Bare `-----BEGIN` deliberately kept **out** of the pattern
+  (session 96's trap: with no entropy attached it matches only prior sessions' own prose about the scan).
+- **`PushNotification` called before this sign-off was composed** — verbatim result quoted above.
+- **Escalation status: nobody has been paged.** This log and the action sheet are pull channels.
+- **Verdict: the same open SEV-1 at hour 128h01m**, re-attested from scratch at the DNS layer on three
+  resolvers, with rollback re-derived as a structural no-op and the Vercel fleet all-READY. **Owner action
+  is the only fix.** The session's yield beyond re-attestation is **TD-41** — root-causing session 100's
+  0-byte mirror to GitHub's 1 MiB `contents` cap, dating the crossing to between sessions 89 and 100, and
+  converting its hand-executed warning into a gate that fails loudly on *any* truncated mirror.
+
+*Generalised lesson for successors: when a predecessor reports a tool's output looked wrong and works
+around it by hand, the finding is not the workaround — it is that **a successful response can carry no
+payload**, and a convenience layer that cannot tell empty from absent will hand you a corrupt base and call
+it origin's truth. Verify size, not just status.*

@@ -10,11 +10,21 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-import { classifyDrift, driftReport, isRetryableGhError, materialiseReport, mirrorAll, mirrorPathFor } from '../../scripts/ops/origin-drift.mjs';
+import { classifyDrift, contentsNeedsRawFallback, decodeMirrorBytes, driftReport, isRetryableGhError, materialiseReport, mirrorAll, mirrorPathFor } from '../../scripts/ops/origin-drift.mjs';
 import { checkWebVersion, commitTimeIso, createVercelClient, staleHeadBail } from '../../scripts/verify-deploy.mjs';
 
 /** Minimal stand-in for a fetch Response, enough for the client's ok/status/json use. */
 const response = (status, body) => ({ ok: status >= 200 && status < 300, status, json: async () => body });
+
+/**
+ * A GitHub `contents` envelope for a file small enough to inline (≤1 MiB). `size` is
+ * overridable so a test can express the "server said N, we got fewer" truncation case.
+ */
+const inlinePayload = (body, { size = Buffer.byteLength(body) } = {}) => ({
+  encoding: 'base64',
+  content: Buffer.from(body).toString('base64'),
+  size,
+});
 
 function harness(statuses, { whoamiSucceeds = true } = {}) {
   const calls = { fetch: 0, whoami: 0, tokens: [] };
@@ -293,11 +303,11 @@ test('a mid-mirror EOF is collected, not thrown — one bad file cannot abort th
   const failures = mirrorAll({
     files,
     outDir: `.codex/origin-test-${process.pid}`,
-    fetchContent: (path) => {
+    fetchPayload: (path) => {
       if (path === 'docs/operations/incidents/LOG.md') {
         throw new Error('Get "https://api.github.com/repos/x/y/contents/z": unexpected EOF');
       }
-      return Buffer.from(`content of ${path}`).toString('base64');
+      return inlinePayload(`content of ${path}`);
     },
   });
   assert.deepEqual(failures.map((f) => f.path), ['docs/operations/incidents/LOG.md'],
@@ -307,12 +317,12 @@ test('a mid-mirror EOF is collected, not thrown — one bad file cannot abort th
 
 test('mirrorAll fetches the lockfile manifest only when the lockfile drifted', () => {
   const asked = [];
-  const fetchContent = (path) => { asked.push(path); return ''; };
-  mirrorAll({ files: [{ path: 'package-lock.json', status: 'modified' }], outDir: `.codex/origin-test-${process.pid}`, fetchContent });
+  const fetchPayload = (path) => { asked.push(path); return inlinePayload(''); };
+  mirrorAll({ files: [{ path: 'package-lock.json', status: 'modified' }], outDir: `.codex/origin-test-${process.pid}`, fetchPayload });
   assert.ok(asked.includes('package.json'), 'npm audit needs the manifest beside the lockfile');
 
   asked.length = 0;
-  mirrorAll({ files: [{ path: 'docs/x.md', status: 'modified' }], outDir: `.codex/origin-test-${process.pid}`, fetchContent });
+  mirrorAll({ files: [{ path: 'docs/x.md', status: 'modified' }], outDir: `.codex/origin-test-${process.pid}`, fetchPayload });
   assert.ok(!asked.includes('package.json'), 'no lockfile drift ⇒ no wasted manifest call');
 });
 
@@ -321,14 +331,96 @@ test('mirrorAll never fetches a file that origin deleted', () => {
   mirrorAll({
     files: [{ path: 'gone.md', status: 'removed' }, { path: 'here.md', status: 'modified' }],
     outDir: `.codex/origin-test-${process.pid}`,
-    fetchContent: (path) => { asked.push(path); return ''; },
+    fetchPayload: (path) => { asked.push(path); return inlinePayload(''); },
   });
   assert.deepEqual(asked, ['here.md'], 'a removed file has no content at the origin ref');
 });
 
+// ---------------------------------------------------------------------------
+// The 1 MiB `contents` cap (TD-41, measured watchdog session 101).
+//
+// GitHub answers 200 with full metadata but `encoding:"none"` / `content:""` for any file
+// over 1 MiB. Decoding that yielded a 0-byte mirror of `LOG.md` — the single file whose
+// stale/empty base "silently truncates prior entries" per CORRUPTS_CHECK. It is the one
+// failure direction that reads as success, so every test below is about refusing to write
+// a mirror that looks fine and is not.
+// ---------------------------------------------------------------------------
+
+test('contentsNeedsRawFallback fires only on the oversize envelope', () => {
+  assert.ok(contentsNeedsRawFallback({ encoding: 'none', content: '', size: 1_085_434 }),
+    'encoding "none" with a non-zero size is the >1 MiB envelope');
+  assert.ok(!contentsNeedsRawFallback({ encoding: 'base64', content: 'aGk=', size: 2 }),
+    'an inlined file must not cost a second call');
+  assert.ok(!contentsNeedsRawFallback({ encoding: 'none', content: '', size: 0 }),
+    'a genuinely empty file is legitimately empty — do not invent a fallback fetch');
+  assert.ok(!contentsNeedsRawFallback(null), 'a missing payload must not claim a fallback');
+});
+
+test('decodeMirrorBytes takes the raw path for an oversize file and returns every byte', () => {
+  const body = 'x'.repeat(1_085_434);
+  const asked = [];
+  const bytes = decodeMirrorBytes({
+    payload: { encoding: 'none', content: '', size: body.length },
+    path: 'docs/operations/incidents/LOG.md',
+    fetchRaw: (path) => { asked.push(path); return Buffer.from(body); },
+  });
+  assert.deepEqual(asked, ['docs/operations/incidents/LOG.md'], 'the oversize branch must reach for the raw bytes');
+  assert.equal(bytes.length, body.length, 'the mirror must carry the whole file, not an empty string');
+});
+
+test('decodeMirrorBytes REFUSES a short write instead of returning it', () => {
+  // The exact pre-fix bug: a successful response that inlined nothing.
+  assert.throws(
+    () => decodeMirrorBytes({
+      payload: { encoding: 'none', content: '', size: 1_085_434 },
+      path: 'docs/operations/incidents/LOG.md',
+      fetchRaw: () => Buffer.alloc(0),
+    }),
+    /mirror truncated: wrote 0 bytes, origin reports 1085434/,
+    'a 0-byte mirror of LOG.md must be an error, never a base to append to',
+  );
+  // Broader than the cap it was written for: any truncation, inline branch included.
+  assert.throws(
+    () => decodeMirrorBytes({ payload: inlinePayload('half', { size: 999 }), path: 'x.md' }),
+    /mirror truncated: wrote 4 bytes, origin reports 999/,
+    'the size gate must cover the inline branch too',
+  );
+});
+
+test('mirrorAll reports an un-materialisable oversize file instead of writing 0 bytes', () => {
+  const failures = mirrorAll({
+    files: [{ path: 'docs/operations/incidents/LOG.md', status: 'modified' }],
+    outDir: `.codex/origin-test-${process.pid}`,
+    fetchPayload: () => ({ encoding: 'none', content: '', size: 1_085_434 }),
+    fetchRaw: () => { throw new Error('Get "https://api.github.com/...": unexpected EOF'); },
+  });
+  assert.deepEqual(failures.map((f) => f.path), ['docs/operations/incidents/LOG.md'],
+    'an unfetchable mirror must be NAMED — materialiseReport is what tells the session not to trust the working copy');
+});
+
+test('mirrorAll writes the real bytes through the injected raw fallback', async () => {
+  const outDir = `.codex/origin-test-${process.pid}-raw`;
+  const body = `line\n`.repeat(50_000); // 250 KB, stands in for the >1 MiB envelope
+  const failures = mirrorAll({
+    files: [{ path: 'docs/operations/incidents/LOG.md', status: 'modified' }],
+    outDir,
+    fetchPayload: () => ({ encoding: 'none', content: '', size: body.length }),
+    fetchRaw: () => Buffer.from(body),
+  });
+  assert.deepEqual(failures, [], 'the fallback is the happy path for a big file, not a failure');
+  const written = await readFile(`${outDir}/docs/operations/incidents/LOG.md`, 'utf8');
+  assert.equal(written.length, body.length, 'the mirror on disk must match origin byte for byte');
+});
+
 test('origin-drift prints the verdict before the mirror warning, never instead of it', async () => {
   const src = await readFile(new URL('../../scripts/ops/origin-drift.mjs', import.meta.url), 'utf8');
-  assert.match(src, /ghWithRetry\(`repos\/\$\{REPO_SLUG\}\/contents\//, 'content fetches must go through the retrying wrapper');
+  // Both fetchers must be wrapped; a bare `gh(contentsPath(...))` would reintroduce the
+  // single-blip abort that TD-40 fixed, on whichever branch was left unwrapped.
+  assert.match(src, /fetchPayload: \(path\) => JSON\.parse\(ghWithRetry\(contentsPath\(path\)\)\)/,
+    'the envelope fetch must go through the retrying wrapper');
+  assert.match(src, /fetchRaw: \(path\) => ghRawWithRetry\(contentsPath\(path\)\)/,
+    'the >1 MiB raw fallback must go through the retrying wrapper too');
+  assert.ok(!/[^a-zA-Z]gh\(contentsPath\(/.test(src), 'no un-retried content fetch may survive');
   const report = src.indexOf('console.log(driftReport(');
   const note = src.indexOf('const note = materialiseReport(failures)');
   assert.ok(report > 0 && note > report, 'the verdict prints first; the mirror warning is appended after it');
