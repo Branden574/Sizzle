@@ -13479,3 +13479,116 @@ outage plus an open financial-webhook window on a production money system.
 **exit 0**, in seconds. `/health` then served **commit `7f0b23c`**, i.e. the deploy genuinely
 promoted. That doubles as the free control noted in §6: the failure reproducing on a **brand-new
 build with freshly injected env vars** kills both "stale artifact" and "env var never picked up".
+
+## SEV-1 watchdog summon 2026-09-27T09:38:48Z (session 108) — same Supabase outage, hour 135h19m; root cause re-derived from scratch, nothing new is actionable by an agent
+
+**What fired.** `scripts/ops/watchdog.sh` probe 1: `API degraded (503): database-unreachable`, local
+`2026-09-27 02:38:48` PDT. The 60-minute cooldown re-firing on an unchanged condition — 58 minutes
+after session 107 (`08:40:55Z` anchor), exactly as **TD-39** (filed session 85) predicts for a
+`COOLDOWN_MIN=60` constant with no backoff and no acknowledgment state. **Not** the `HTTP 000`
+host-blip class (TD-23): a 503 carrying a parseable JSON body naming `database-unreachable` is the
+API answering honestly about a dead dependency, which is the real-incident branch of that
+discrimination.
+
+**Anti-flap check answered explicitly: this is NOT transient noise and was not logged as a false
+alarm.** Two `/health` probes 26 seconds apart (`09:39:14Z`, `09:39:46Z` derived) plus the
+write-time anchor (`09:42:39Z`) all returned identical `503 / degraded / ["database-unreachable"]`.
+The condition is continuous across 135 hours, not a blip that had recovered by probe time.
+
+**Root cause re-derived from scratch on three resolvers, not inherited** (ground rule 4). System,
+`1.1.1.1` and `8.8.8.8` all agree: `gsxoaurmsgqascxukony.supabase.co` → **ENOTFOUND** and
+`db.gsxoaurmsgqascxukony.supabase.co` → **ENOTFOUND**, while the parent zone `supabase.co` →
+**A 76.76.21.21**. Parent zone up + both per-project records gone = account-level pause/restrict/
+deprovision, unchanged since `2026-09-21T18:23:07Z`. The apex `A` answer matches session 41's
+recorded change and is still **not** a signal (§5).
+
+**Prescribed verification (§4) run in order, all still failing at step 1:**
+
+| Step | Result |
+|---|---|
+| 1. DNS | `ENOTFOUND` on all three resolvers — **still down** |
+| 2. `/health` | **503** `degraded` `["database-unreachable"]`, commit `a8879d8`, `stuckVideoBacklog`/`parkedMediaDeletions`/`cronAges` all **null** (the three-null signature of a dead DB) |
+| 3. `/feed/for-you?limit=3` | **HTTP 500** `{"error":{"code":"db_error","message":"Something went wrong"}}` — the real user path, not just liveness |
+| 4. `gh workflow enable uptime.yml` | **NOT run** — still `disabled_manually`; re-arming is post-restore by design and `.github/workflows/**` is minimum Level C |
+| 5/6. TD-29/34/35 backfills | Not runnable — all require a live DB or an owner dashboard |
+
+`getsizzle.app` = **200** (static frontend unaffected, as throughout).
+
+**Rollback explicitly evaluated and correctly ruled out — re-measured, not inherited.**
+`vercel ls sizzle --prod` shows the nine most recent production deployments **all `● Ready`**, ages
+55m/56m/2h/3h/4h/5h/6h/7h/8h — i.e. these sessions' own hourly docs-only log pushes, 16–19s builds.
+There is no failed or newly-promoted bad deploy, and `/health` serves `a8879d8` = origin tip, so no
+rogue deploy either. Per the incident-response rule "rollback first when rollback is safer" — it
+is not applicable here at all: the last *pre-outage* deploy was 15 days old (§5), so no deployment
+boundary coincides with the failure. Promoting any previous READY deployment would roll back only
+documentation and would not touch the withdrawn DNS record.
+
+**Cheap re-tests of the blocked paths rather than inheriting predecessors' negatives** (§5's own
+lesson: *"a predecessor's recorded 'I tried and it's gated' is worth one cheap re-test"*). All four
+re-confirmed this session, first-hand:
+
+- `mcp__supabase__get_advisors` (local, tokenless server) → *"Unauthorized. Please provide a valid
+  access token … `--access-token` flag or `SUPABASE_ACCESS_TOKEN`."* — **TD-21 unchanged.**
+- `curl https://api.supabase.com/v1/projects` → **401** `{"message":"Unauthorized"}` — the revoked
+  PAT, independently re-confirmed.
+- `mcp__claude_ai_Supabase__list_projects` → *"requested permissions … but you haven't granted it
+  yet"* — connector still gated (TD-21 option c).
+- `mcp__claude_ai_Gmail__search_threads` (query `Supabase after:2026/09/20 before:2026/09/28`, the
+  one call that would name §1's branch from the pause email) → same permission gate.
+
+So **paused-vs-restricted-vs-deleted remains unanswerable from inside a session**, and §7's
+whole-class connector negative holds. Two calls, then stopped — §7 says do not re-shop connectors,
+and this was the confirmation pass, not a shopping trip.
+
+**Successor-session detectors run against session 107, per §7's stack.** Aborted-push check in
+session 99's naming-free form: newest `.codex/` draft artifact `tree99.json`
+(`Sep 26 17:19:01` local = `2026-09-27T00:19:01Z`) against origin tip `a8879d8`
+(`2026-09-27T08:46:01Z`) — tip is materially **newer** ⇒ **quiet, correctly** (no orphaned push).
+Session 98's patch-granularity detector on `8e43031...a8879d8` → session 107's sheet patch contains
+**both** hunks: line 4 (`133h15m`→`134h17m`, session 106→107) and the standing counts
+(`one hundred and six`→`one hundred and seven`, `13,140+`→`13,320+`, `wc -l` 13147→13326).
+**PASS at the granularity that matters** — no two-thirds skip to repair, the first clean pass since
+session 98 built the check.
+
+**Doc-rot class re-checked with both greps.** Session 93's pinned invocation and session 106's
+complementary duration grep both run against the origin copy. The `[0-9]+h[0-9]+m` sweep returns 20
+hits and **every one outside line 4 is correctly exempt**: provider constants (`2h35m` ×5),
+dated/attributed history (`15h34m`, `40h57m`, `28h28m`, `30h32m`, `23h49m` ×3, `100h57m`,
+`97h55m`/`98h50m`/`99h52m`, `133h15m`), all inside sessions' own write-ups quoting the rot they
+fixed. **Zero new members of session 106's rot class** — §7's heading is still duration-free, which
+is the repair holding rather than a check passing by luck.
+
+**New this session: nothing. Stated plainly rather than padded.** The one candidate worth a grep —
+whether the hourly re-summon burn had ever been *filed* rather than just re-narrated — turned out
+to be **TD-39, filed session 85**, with `COOLDOWN_MIN=60` and the `~/.sizzle-ops/paused` kill switch
+already read out of `watchdog.sh:9,18,74`. So it was not opened again. Every other open item
+(TD-28/29/34/35/36, TD-21, the Pro-tier recommendation) is either owner-only or explicitly parked as
+unverifiable against a dead DB, and shipping a resilience fix mid-outage remains the wrong call for
+the same reason 107 predecessors gave: it cannot be validated on a real surface.
+
+**Working tree, TD-27 handled first.** `scripts/ops/origin-drift.mjs` run **before** any reasoning
+(per TD-27, since a stale base silently corrupts findings) and it fired: local `HEAD d4c5395`
+(2026-09-02) vs `origin main a8879d8`, **8 files differ** — including `LOG.md` itself and the entire
+action sheet, which does not exist locally at all. All reasoning above and both edits below are
+built on the **origin** copies in `.codex/origin-a8879d8/`, never the stale working tree. Branden's
+four uncommitted local files (`scripts/ops/sweep-prompt.md`, `scripts/verify-deploy.mjs`,
+`tests/invariants/ops-tooling.test.mjs`, untracked `scripts/ops/origin-drift.mjs`) are **preserved
+untouched** per CLAUDE.md rule 11; note origin has since superseded all four, so the local copies are
+stale rather than ahead.
+
+**Shipped:** this entry + the action sheet's two live counters (line 4 → `135h19m` /
+`2026-09-27T09:42:39Z` / session 108; standing counts → one hundred and eight sessions /
+`13,480+` lines / `wc -l` 13481 pre-append). Value-shaped secret scan run over the full appended
+blob before the push: **0 hits**. Docs only — no code, config, migration, native file, production
+setting or security control touched, so there is no deploy to verify beyond the docs promotion.
+
+**For Branden — this is still the entire fix, and it is still two clicks, Level D, ~2 minutes:**
+① Vercel → project **`sizzle`** (the API; naming is reversed) → Settings → Cron Jobs → **Disable
+Cron Jobs** (§1 step 0 — avoids the TD-34 trap that silently converts the stranded-video backfill
+into a no-op within 60 seconds of Resume). ② Supabase dashboard → project `gsxoaurmsgqascxukony` →
+read *why* it stopped, then **Resume**. Then §4 steps 4–6, of which **step 6 (RevenueCat Retry) is
+the one restore will not do for you** — its automatic retries expired `2026-09-21T20:58Z` and each
+missed Apple refund means a refunded buyer keeps premium access permanently and a creator is paid
+for a reversed sale, so do it **before the next payout run**. The Stripe half now needs per-event
+**Resend** from the dashboard (no secret key; open until `2026-10-06`). **Nothing paged you about
+this, again** — `PushNotification` result recorded below.
