@@ -14008,3 +14008,58 @@ Jobs** (§4 step 0 — avoids the 60-second trap that would silently void TD-29'
 deprovision, so do **not** start with Resume. ③ Then act per §1's branch table. Afterwards:
 `gh workflow enable uptime.yml`, reconnect Remote Control, and the TD-35 RevenueCat dashboard
 retries (manual, per event — restore does not replay them).
+
+### Session 110 addendum — the first execution of session 109's new ship gate, and session 109's push-script guard misfires on a counter-only re-stamp
+
+All three are facts the push created, so they could not have been inside the entry above — not the
+dangling-forward-reference pattern session 108b retired, which was a session promising a result it
+already knew how to get.
+
+**① Session 109's finding ① executed, and it passes.** Session 109 established that a docs-only
+commit on `main` still triggers a production deploy on *both* Vercel projects, and that 109 sessions
+had never verified one. First run of that gate, `node scripts/verify-deploy.mjs --sha 210c4bc…`
+(`--sha` mandatory after a git-data push, per TD-37):
+
+| Project | Deployment | Probe |
+|---|---|---|
+| `sizzle` (the **API**) | **READY** | `/health` **503** `degraded (database-unreachable)` — *deployed but unhealthy*, i.e. the DB is the only fault |
+| `sizzle-api` (the **frontend**) | **READY** | `getsizzle.app` **200**, **serving commit `210c4bc` == HEAD ✓** (version 1.0.101) |
+
+So the correction session 109 wrote for its successors is now a *performed* check rather than an
+instruction, and the answer is clean: both builds still promote, and the 503 is the withdrawn DNS
+record and nothing else. Worth stating plainly because this push carried **code** (`origin-drift.mjs`
+and the invariants) rather than only prose — ops scripts are not deployed to either project, but the
+deploy fires regardless, so the gate is exactly as load-bearing as session 109 said.
+
+**② The push script's own post-condition was asserting the wrong invariant, and it blocked a correct
+push.** `.codex/push-s109.mjs` guards its sheet edit with `if (byteLength(sheet) <= sheetBaseLen)
+throw 'sheet did not grow'`. That is right for a session *adding* prose — session 109 added the §1
+promotion — and **wrong for a session that only re-stamps the two live counters**, which is the
+ordinary case §7's convention prescribes. My re-stamp legitimately **shrank** the sheet by 2 bytes
+(`one hundred and nine` → `one hundred and ten`, `one hundred and eight` → `one hundred and nine`;
+every other substitution is length-neutral), so the guard fired on a substitution that had already
+succeeded — both `ok` lines printed above it.
+
+Fixed the way session 107 prescribed after its own guard misfired: scope the post-condition to the
+**stamp form** and assert the new stamp is **present**, rather than asserting a byte count moved or a
+bare figure vanished. The replacement asserts both new stamps verbatim *and* that the old line-4
+stamp is gone, then prints the before/after byte count noting a re-stamp may shrink.
+
+*This is session 107's lesson recurring one instrument later, and the pattern is now worth naming: a
+guard written by the session that needed it encodes **that** session's change shape. Session 109 added
+prose, so "it grew" was a true post-condition; copied forward to a counter-only session it becomes a
+false one. The failure direction is benign here — it refused a good push rather than allowing a bad
+one — but the cost is real, because the obvious way out under incident pressure is to delete the guard
+rather than correct it, which is how a session ends up pushing a sheet whose substitution silently
+matched nothing.*
+
+**③ `PushNotification` result, verbatim: *"Mobile push not sent (Remote Control inactive)."*** Called
+before building this blob, per session 78's ordering fix. Re-tested rather than inherited: unchanged,
+now ~25 days standing — it died *before* the 09-21 outage, so no unattended session has ever paged
+anyone, and none paged him for this incident either. §7's channel table holds in full: **`LOG.md` and
+the action sheet remain PULL channels, and nothing has reached Branden across 110 sessions.**
+
+**Secret gate on this addendum:** value-shaped scan (prefix-plus-entropy, plus the
+`-----BEGIN…KEY-----`-with-body arm rather than the bare marker that false-fires on this log's own
+prose) → **0 hits**. Base guard re-applied: refused to push unless the fetched `LOG.md` base exceeded
+1.15 MB.
