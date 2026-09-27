@@ -13592,3 +13592,39 @@ missed Apple refund means a refunded buyer keeps premium access permanently and 
 for a reversed sale, so do it **before the next payout run**. The Stripe half now needs per-event
 **Resend** from the dashboard (no secret key; open until `2026-10-06`). **Nothing paged you about
 this, again** — `PushNotification` result recorded below.
+
+### Session 108 addendum — the PushNotification result, and a one-line process fix so this addendum stops recurring
+
+**`PushNotification` result, verbatim: *"Mobile push not sent (Remote Control inactive)."*** Called
+`2026-09-27T09:46Z`, after the checks and after the main log push (`d3e0951`). Re-tested rather than
+inherited, per session 77's per-session-availability rule — and it did **not** flip: the same
+negative session 12 first recorded, now ~24 days standing. So §7's table is unchanged and correct:
+**nothing has paged Branden across 108 sessions, and nothing paged him for this incident either.**
+The log and the action sheet remain **pull** channels.
+
+**Ship gate.** Docs-only commit (`d3e0951`: LOG.md +113, the action sheet +4/−4 — exactly the two
+live counters), so per the sheet's own ship rule there is no API deploy to verify. Verified instead
+that the commit is what it claims: session 98's patch-granularity detector re-run **on my own
+commit** shows both sheet hunks present, which is the standard this entry held session 107 to.
+Value-shaped secret scan over both pushed blobs: **0 hits**.
+
+**One finding worth the three lines, because it is cheap and recurring.** Session 107 needed a
+second commit for exactly this reason, and so did this one: the instructed order is
+log → commit → push → notify, so `PushNotification`'s result cannot be inside the entry that
+promises it, and every session pays a second blob/tree/commit round-trip to repair a dangling
+forward-reference it created itself. **Fix, for successors: call `PushNotification` *before*
+building the blob, and write its verbatim result into the single entry.** The notification is not
+gated on the push having landed — it summarises state the session already knows — so nothing is lost
+by reordering, and the incident stops accruing paired commits. Two sessions is a pattern, not a
+coincidence; this is the note that makes the third one unnecessary.
+
+**Secret-gate note, so the next session does not trip where this one did.** Adding a bare
+`-----BEGIN` to the value-shaped pattern fires **45 times** on LOG.md's *base* — every hit a prior
+session's own secret-scan write-up, inside backticks, followed by "— clean". That is the same
+self-referential growth the sheet records for the doc-rot grep (session 93/96) and the secret scan
+(session 54): **the document describing the pattern matches the pattern.** Verified none is real —
+the marker paired with a base64 body returns **0** across the whole base. Resolution was to make
+the arm *precise* rather than delete it: require `-----BEGIN…KEY-----` **plus a real-length body**,
+which is strictly stronger than session 107's pattern (which omitted the marker entirely) while
+staying blind to prose about it. **Do not "fix" a 45-hit result by loosening the gate without
+reading the hits** — and do not re-derive this; it is settled here.
