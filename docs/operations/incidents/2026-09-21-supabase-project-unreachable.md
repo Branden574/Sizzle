@@ -1,8 +1,8 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
 **Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
-(11:23 AM PDT Mon 09-21). **140h25m — past 5 days — as of 2026-09-27T14:48:21Z**, re-verified by session 113
-(watchdog), which re-derived the DNS withdrawal from scratch on three resolvers.
+(11:23 AM PDT Mon 09-21). **141h24m — past 5 days — as of 2026-09-27T15:47:17Z**, re-verified by session 115
+(watchdog) with one DNS probe and one `/health` probe. Session 114 skipped this stamp — see §7.
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
 
 > **🛑 READ §4 STEP 0 BEFORE YOU CLICK RESUME.** Session 18 found that the first
@@ -55,9 +55,9 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > without a browser. It changes your *calibration*, not the fix: the app is degrading
 > gracefully, and the misattribution is what is quietly costing you reviews and support mail.
 
-This page exists because **one hundred and thirteen** unattended sessions — one hundred and twelve watchdog summons plus
-the 2026-09-25 daily sweep — have now diagnosed the same outage and appended **14,320+ lines** to
-`LOG.md` (counts re-stamped session 113, measured `wc -l` = 14324 pre-append; session 48 stamped them at "forty-seven"/"5,600+" and nothing re-checked them
+This page exists because **one hundred and fifteen** unattended sessions — one hundred and thirteen watchdog summons plus
+the 2026-09-25 and 2026-09-27 daily sweeps — have now diagnosed the same outage and appended **14,519+ lines** to
+`LOG.md` (counts re-stamped session 115, measured `wc -l` = 14519 pre-append; session 48 stamped them at "forty-seven"/"5,600+" and nothing re-checked them
 for the 31 sessions until session 79, so they had understated the burn by a third — session 95 skipped
 this stamp entirely, which is what §7's session-96 entry gives a one-call detector for, and **session 97
 skipped it again while passing that detector**, which is what session 98's correction below fixes).
@@ -927,7 +927,9 @@ five of the last eleven sessions while looking like a clean negative.
 newest scratch artifact's mtime against origin's tip:**
 
 ```sh
-ls -lTt .codex/ | grep -E '^-.*(blob|tree)' | head -3       # newest draft artifact by MTIME (-t sorts; -T only widens the stamp)
+# CORRECTED session 115: the '(blob|tree)' name filter and the '^-' file-only anchor made this blind to
+# the current artifact naming (see §7). Key on mtime ALONE, pruning origin-drift.mjs's own mirrors:
+node -e "const fs=require('fs'),p=require('path');const o=[];(function w(d){for(const e of fs.readdirSync(d,{withFileTypes:true})){if(e.isDirectory()&&/^origin-/.test(e.name))continue;const f=p.join(d,e.name);if(e.isDirectory())w(f);else o.push([fs.statSync(f).mtime.toISOString(),f])}})('.codex');o.sort().reverse().slice(0,3).forEach(r=>console.log(r[0],r[1]))"
 gh api repos/Branden574/Sizzle/commits/main --jq '.commit.committer.date'
 ```
 
@@ -1098,6 +1100,50 @@ the thing that asks the question, and an instrument that only ever produces work
 When a monitoring loop has produced N near-identical runs, audit the **trigger**, not just the reports:
 this one silently merges distinct incidents into one identity, which is the single defect a pile of
 near-identical reports could never surface — every report it produced looked correct.*
+
+**Session 115 (2026-09-27T15:47:17Z) — the orphan detector is STILL blind, one axis over from session
+112's fix, and it read the WRONG SESSION'S artifacts as "newest". Corrected invocation pinned above.**
+Session 112 fixed the *pipeline* (`ls -lT` sorts by name, so "newest" was alphabetical) and closed with
+the right instruction: *feed it the failure it exists to catch.* Doing that this session exposed the axis
+it left untouched — the **name filter**. `grep -E '^-.*(blob|tree)'` discards every artifact session 114
+wrote, on two independent grounds: its scripts are `s114-build.mjs` / `s114-push.mjs` /
+`s114-pushed-sha` (no `blob` or `tree` in the name), and its actual payloads are `LOG.md`,
+`2026-09-21-supabase-project-unreachable.md` and `technical-debt.md` **inside `s114-out/`** — a
+directory, which `^-` excludes as well. Measured this session:
+
+```
+pinned  '^-.*(blob|tree)'  →  s113-tree.json      2026-09-27T14:53:17Z   ← session 113's, called "newest"
+mtime-only, mirrors pruned →  s114-pushed-sha     2026-09-27T15:22:19Z   ← the actual newest
+                              s114-out/LOG.md     2026-09-27T15:20:39Z
+origin tip 5198d72                                2026-09-27T15:22:18Z
+```
+
+**The false negative is in the one direction that matters, and the counterfactual is exact.** Session
+114's predecessor tip was `6668f4c`, committed `2026-09-27T14:53:18Z`. Had session 114's push died at the
+commit object — session 97's actual failure, the one this detector exists to catch — the tip would have
+stayed at `6668f4c` while `s114-out/LOG.md` (`15:20:39Z`) sat **27m21s newer** than it: a live orphan.
+The pinned command would have reported `s113-tree.json` (`14:53:17Z`) against that tip — **1 second
+older ⇒ quiet.** So sessions 113, 114 and 115 each ran a check that could not see the run it was
+auditing. It is quiet *correctly* this hour — `s114-pushed-sha` is 1.2 s newer than the tip, which is the
+signature of a **successful** push (that file records the SHA *after* the ref moves), not a material
+gap, and session 114's entry is present on origin. But that is the data's doing again, not the check's.
+
+**One caveat on the replacement, learned by running it.** The naive recursive version reports
+`.codex/origin-<sha>/…` as newest every time, because `origin-drift.mjs` rewrites that mirror on every
+invocation — including this one, at `15:47:51Z`, *after* the `/health` probe. The mirror is not a push
+artifact, so the pinned command prunes `^origin-` directories. Without that prune the detector is worse
+than before: permanently "dirty" and therefore permanently ignored.
+
+**Not filed as a TD, deliberately.** Per session 75: the guarded artifact is this incident's own push
+path, which stops existing the moment Resume is clicked, so a register entry or an invariant test would
+outlive its subject. The correction belongs in the pinned command, and it is there now.
+
+*Generalised: session 112 said a detector is pattern + pipeline. It is pattern + pipeline + **the naming
+convention the pattern assumes** — and that third part is supplied by whoever ran last, so it drifts
+without anyone touching the detector. Session 99 diagnosed this precisely ("prefer a key the filesystem
+supplies (mtime) over one each session chooses") and then shipped a command that filtered on names
+anyway, so the old key kept doing the work for thirteen sessions. When you move a check's key to the
+filesystem, delete the name filter in the same edit.*
 
 ### The one follow-up that makes the next SEV-1 different
 

@@ -14516,3 +14516,102 @@ shows → **Resume project** (fix billing first if it shows Restricted). Then §
 as the first post-restore deploy. Two owner items this sweep could not touch remain: rotate the Supabase
 PAT (TD-21) so items 5/5b stop being skipped, and grant `Bash(git fetch:*)` (TD-27) — local `main` is
 still frozen at `d4c5395`, so every file above was read from the origin mirror.
+
+## Watchdog session 115 — 2026-09-27 08:46:39 local / 15:46:39Z
+
+**What fired.** `API degraded (503): database-unreachable;` — that was the *only* problem in the summon,
+which per TD-43 is the check that matters: no second, unrelated incident has been merged into this
+SEV-1's identity this hour.
+
+**Root cause: unchanged, and re-verified rather than re-derived.** Supabase project
+`gsxoaurmsgqascxukony` is still withdrawn at DNS. The outage is open **141h24m (5.89 days)** as of the
+`/health` `time` field `2026-09-27T15:47:17.557Z`, against a start of `2026-09-21T18:23:07Z`. It is
+**Level D — owner-only**; no repo change, rollback or redeploy can touch it, and the last pre-outage
+deploy is 21 days old while every deployment since is READY, so rollback is not a candidate. The
+one-page action sheet is `docs/operations/incidents/2026-09-21-supabase-project-unreachable.md` — read
+that, not this log.
+
+**Evidence this hour, all first-hand.**
+
+- `/health` → **503** `{"status":"degraded","problems":["database-unreachable"]}` after a **7.23 s**
+  connect stall; served commit `5198d72`, which equals origin's tip.
+- `/feed/for-you?limit=3` → **500** `{"error":{"code":"db_error"}}` after **7.31 s**. This is the
+  user-facing proof; `/health` alone reads as a probe artifact.
+- `getsizzle.app` → **200** in 0.24 s. The frontend is healthy — this is API + DB only.
+- DNS via `.codex/dns-probe.mjs`, three resolvers (system, `1.1.1.1`, `8.8.8.8`), all three agreeing:
+  calibration host `supabase.co` → `A 76.76.21.21`, CNAME **ENODATA**; both
+  `gsxoaurmsgqascxukony.supabase.co` and `db.gsxoaurmsgqascxukony.supabase.co` → **ENOTFOUND** on every
+  resolver. ENODATA-vs-ENOTFOUND with a live parent zone is positive proof the per-project records are
+  withdrawn, not that our resolver path is broken.
+- CI on `main`: **5/5 `success`**, newest `5198d72` (session 114's own push).
+- `node scripts/ops/origin-drift.mjs` → exit **3**. Local `main` is still frozen at `d4c5395` vs origin
+  `5198d72` (TD-27, 8 files drifted), so every file reasoned about or edited below was read from and
+  rebuilt on the `.codex/origin-5198d72/` mirror, not the working tree.
+
+**§7 counter check — FAILED, and repaired.** Applying session 71's rule (verify line 4 against the
+*previous* session's own recorded elapsed figure, not against the line itself): line 4 read *"140h25m …
+as of `2026-09-27T14:48:21Z`, re-verified by session 113"* while session 114's own entry recorded *"hour
+~141"*. Session 114 did edit the sheet — it relabelled the TD-43 references at `:687` — but skipped the
+stamp, so the page's highest-traffic line shipped **58m56s stale and credited to the wrong session.**
+That is the third occurrence of the *omission* hole sessions 71/76/77 documented and that session 72
+knowingly left open when it closed the *forgery* hole. Re-stamped to `141h24m` /
+`2026-09-27T15:47:17Z` / session 115.
+
+**Standing counts re-stamped (session 79's rule).** `:58-60` read *"one hundred and thirteen"* sessions
+and *"14,320+ lines"*; the true figures are session **115** and `wc -l` = **14,519** pre-append. A count
+has no "correct as history" carve-out, unlike relative-time prose.
+
+**Doc-rot greps — clean, no action.** All three pinned patterns run against the origin copy: deictic
+**26** hits (25 at session 111 — a rising count is not a signal per session 96, the increase being later
+sessions quoting the token list), duration **36**, spelled-numeral **9**. Every spelled-numeral hit is
+exempt under session 106's buckets — `:35`/`:202`/`:208`/`:1004` are Stripe's quoted *"up to three
+days"* policy (bucket 1, facts about the world) and `:750`/`:989`/`:990`/`:992`/`:1005` sit inside
+sessions 28's and 111's dated write-ups (bucket 2). Bucket 3, the rot class, is still empty.
+
+**NEW FINDING — §7's orphan detector is still blind, one axis over from session 112's fix, and it has
+been auditing the wrong session's artifacts.** Session 112 corrected the *pipeline* (`ls -lT` sorts
+alphabetically, so "newest" was a name, not a time) and closed by instructing successors to *feed the
+check the failure it exists to catch*. Doing that exposed the axis it left alone: the **name filter**
+`grep -E '^-.*(blob|tree)'` cannot see any artifact session 114 wrote — its scripts are
+`s114-build.mjs` / `s114-push.mjs` / `s114-pushed-sha`, and its real payloads sit **inside `s114-out/`**,
+a directory that `^-` excludes too. So the command reported `s113-tree.json` (`14:53:17Z`) as newest
+while the actual newest was `s114-pushed-sha` (`15:22:19Z`). **The counterfactual is exact:** session
+114's predecessor tip `6668f4c` was committed `14:53:18Z`, so had session 114's push died at the commit
+object — session 97's real failure, the one the detector exists to catch — `s114-out/LOG.md`
+(`15:20:39Z`) would have been a **27m21s-newer live orphan** while the pinned command compared
+`s113-tree.json` against that tip and found it **1 second older ⇒ quiet.** Fixed by pinning an
+mtime-only invocation in §7, with one caveat found by running it: the naive recursive form reports
+`.codex/origin-<sha>/…` as newest every time, because `origin-drift.mjs` rewrites that mirror on every
+run, so the replacement prunes `^origin-` directories. **No TD filed, deliberately** — per session 75
+the guarded artifact is this incident's own push path, which ceases to exist at Resume, so enforcement
+would outlive its subject. Full write-up and the corrected command are in §7 of the action sheet.
+
+**Nothing else was licensed, and nothing was manufactured.** Session 114 left no stated evidence gap
+(its two open items — rotate the Supabase PAT for TD-21, grant `Bash(git fetch:*)` for TD-27 — are
+owner-side, not closable gaps), every audit surface is exhausted, and the TD-register audit came back
+clean. Per session 40's rule the deliverable is fresh evidence plus the repairs above. No parked fix
+(TD-28/29/30/34/35/36/38) was shipped: all of them need the dead DB to verify, which is session 45's
+in-lane test.
+
+**`PushNotification` re-tested rather than inherited — still dead.** Verbatim: *"Mobile push not sent
+(Remote Control inactive)."* Called **before** this paragraph was written, per session 78's ordering
+fix. It has now been dead ~28 days, predating the outage, so no unattended session has ever paged
+anyone. §7's channel table holds in full: `LOG.md` and the action sheet are **PULL** channels. **This
+entry reaches Branden only when he opens it.**
+
+**Secret gate.** `npm run secrets:check` is structurally blind on the git-data push path (TD-33 — it
+reads bodies from the working tree, while the blobs uploaded are built under gitignored `.codex/`), so
+the load-bearing gate is a **value-shaped** scan — a prefix *with entropy attached*,
+`(sbp_|sk_live_|sk_test_|whsec_|rk_live_)[A-Za-z0-9]{8,}` or `eyJ[A-Za-z0-9_-]{20,}` — run across both
+blobs: **0 hits.** The loose prefix scan returns its usual self-referential hits on this log's own
+secret-check prose and is not a gate, per session 54.
+
+**What Branden must do — unchanged, ~2 minutes, still the entire fix.** ① Vercel → project `sizzle` →
+Settings → Cron Jobs → **Disable Cron Jobs** (§1 step 0 — this is what avoids the TD-34 trap that turns
+TD-29's prescribed backfill into a silent no-op and makes its counting query return a false `0`).
+② Supabase dashboard → project `gsxoaurmsgqascxukony` → read which state it shows → **Resume project**,
+fixing billing first if it shows Restricted. Then §4's verification, §4 step 6's **manual** RevenueCat
+retries (those do *not* self-heal and their automatic window closed on 09-21), `gh workflow enable
+uptime.yml`, and merge PR #8 as the first post-restore deploy. Two owner-side items this session could
+not touch also remain: rotate the Supabase PAT (TD-21) so sweep items 5/5b stop being skipped, and
+grant `Bash(git fetch:*)` (TD-27), without which local `main` stays frozen at `d4c5395`.
