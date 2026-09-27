@@ -13324,3 +13324,137 @@ were not touched, stashed or reverted.
 
 **Read `docs/operations/incidents/2026-09-21-supabase-project-unreachable.md`, not this log.** It is
 the one-page action sheet; this entry re-attests it and records one correction to its §7.
+
+## Watchdog session 107 — 2026-09-27 01:38 PDT (`08:40Z` 09-27) — SEV-1 hour 134h17m; no change upstream; the INHERITED CRON GAP was named after an instrument that cannot answer it, and is now closed first-hand
+
+**What fired.** `scripts/ops/watchdog.sh` at `2026-09-27T01:38:24` local: `API degraded (503):
+database-unreachable`. A structured 503 **with a JSON body**, which is explicitly *not* the HTTP-000
+host-blip class ([[sizzle-watchdog-false-alarms]] triage rule) — worked as real from the first call.
+
+**Persistence, three spaced probes.** The watchdog's own `08:38:23.140Z`, then `08:38:48.608Z`
+(t=7.2s — the connect-timeout shape) and `08:40:55.939Z`. All `503`, all
+`problems:["database-unreachable"]`, all serving commit `8e43031`. Not transient; no recovery to
+verify, so the anti-flap branch does not apply.
+
+**Root cause — re-derived from scratch, not inherited.** `.codex/dns-probe.mjs` across three
+resolvers (system, `1.1.1.1`, `8.8.8.8`; `dig` is not allowlisted, Node's `dns` module needs no
+approval):
+
+| name | A | CNAME |
+|---|---|---|
+| `supabase.co` (calibration) | `76.76.21.21` on all three | `ENODATA` |
+| `gsxoaurmsgqascxukony.supabase.co` | `ENOTFOUND` on all three | `ENOTFOUND` |
+| `db.gsxoaurmsgqascxukony.supabase.co` | `ENOTFOUND` on all three | `ENOTFOUND` |
+
+The calibration row is the load-bearing half: the apex resolving **in the same process** rules out a
+local resolver artifact, and `ENODATA` (name exists, no record of that type) versus `ENOTFOUND`
+(NXDOMAIN) is *positive* proof the records were withdrawn rather than merely unreachable. Parent zone
+up + **every** per-project record gone = project-level pause or deprovision. **Owner action is the
+only fix (Level D).**
+
+**Rollback ruled out structurally, not assumed.** Origin tip `8e43031` is session 106's own docs-only
+commit (`07:43:58Z`, 57 min before this summon) and `/health` reports exactly `8e43031` — so deployed
+code *equals* origin tip. `vercel ls sizzle --prod` is **ten-for-ten `Ready`** (newest 56m, then 2h,
+3h, 4h… — prior sessions' hourly log pushes, the known artifact). No earlier READY deployment could
+change a DNS record in Supabase's zone, so there is nothing to roll back to. CI **6/6 `success`** on
+`main`.
+
+**Blast radius.** `/health` **503**; `/feed/for-you?limit=3` → **500 `{"error":{"code":"db_error"}}`**
+(the user-facing proof, better than a probe artifact); `getsizzle.app` **200 in 0.215s** (static
+frontend unaffected, as throughout).
+
+### The finding: an inherited gap named after the wrong instrument re-blocks every successor
+
+Sessions 104, 105 and 106 all carried §1 step 0's cron state as **inherited**, and session 106 stated
+the blocker as *"`vercel crons ls --project sizzle` is not allowlisted in this session's Bash policy,
+and `/health` carries no substitute because `cronAges` is `null` precisely because the DB is
+unreachable."* Both halves of that sentence are true. The framing is still wrong, and expensively so:
+
+**Session 77 already established that `vercel crons ls` CANNOT answer this question** — it prints
+five paths with **no state column** (session 19 first measured that) — *"the runtime log is the
+measurement."* So for three consecutive sessions the gap was recorded against an instrument that
+provably cannot close it, while the instrument that can (`vercel logs`) went un-retested. Session 104
+did run `crons ls` and recorded *"all five paths still listed"*, which is precisely the reading that
+looks like a measurement and contains no state information.
+
+**Closed first-hand this session.** `vercel logs sizzle-chi.vercel.app --json` (allowlisted this
+session — session 77's *"the CLI isn't allowlisted is a PER-SESSION fact"*):
+
+- `finalize-videos` — **200 every minute**, duration a stable **21s**
+- `publish-scheduled` — **200 every minute**, duration a stable **7s**
+- `rollup-hashtag-trends` — **500 `TypeError: fetch failed` in 18ms**
+
+⇒ **The crons are still enabled and still firing. The TD-34 trap is still armed**, so §1 step 0
+remains a required pre-Resume owner action, now on first-hand evidence rather than a 3-session-old
+inheritance. The 200s-with-21s-stalls are TD-28's swallow; the millisecond 500 is the DNS-failure
+shape (session 62's counter-example pair — the rollups check `{ data, error }`, the other three don't).
+
+*Generalised, and this is the transferable half: **an inherited evidence gap is only as good as the
+instrument it names.** Session 38's rule says a predecessor's stated gap is pre-scoped work worth one
+call; session 33's says an inherited "it's blocked" is a claim with a timestamp. The composition of
+the two is sharper than either — **when you inherit a gap, check that the named instrument could
+answer the question at all before you re-inherit it**, because a gap attributed to the wrong tool is
+self-perpetuating: each successor tests the tool it was handed, finds it gated, and passes the gap on
+intact. Three sessions paid for that here, and the record needed to break it had been in the log
+since session 77.*
+
+### Periodic checks — each recorded with its session number
+
+- **§7 counter (sessions 71/77): PASS.** Verified against session 106's *own recorded* elapsed figure,
+  not against the line itself: sheet line 4 read `133h15m as of 2026-09-27T07:38:35Z`, and its LOG
+  heading agreed. My `/health.time` is `08:40:55.939Z` ⇒ **134h17m**, exactly 1h02m later over 1h02m
+  of wall clock. Re-stamped to `134h17m` / `08:40:55Z` / session 107.
+- **Standing counts (session 79 — counts have no carve-out): ROT FOUND, repaired.** `:57-58` read
+  *"one hundred and six … **13,140+ lines**"* against an actual of **107 sessions / 13,326 lines**.
+  Session 106 stamped them correctly one hour ago; this is the ordinary one-session decay, not a skip.
+- **Doc-rot grep: ran at 107.** No new rot in the header block — line 4 is absolute, the Stripe banner
+  correctly reads `Thu 09-24`, and session 106's duration-free §7 heading fix is holding
+  (`has gone unfixed for days`, no elapsed figure to decay).
+- **Session 99 mtime aborted-push detector: quiet, correctly.** Newest `.codex/` artifact
+  `s106-ref.json` at `00:43:58` local = **`07:43:58Z`**, identical to origin tip `8e43031`'s commit
+  timestamp ⇒ session 106's push landed; no orphaned draft. (`ls -lTt` — the `-t` is load-bearing per
+  session 101; `ls -lT` prints **local** time, converted before comparing, per session 98.)
+- **TD-41 mirror guard: held.** `LOG.md` mirrored at **1,150,629 bytes / 13,326 lines** — non-zero, so
+  the append is built on origin's full blob.
+- **TD-27 drift: ran FIRST**, before any repo-derived reasoning. Local `HEAD d4c5395` vs
+  `origin/main 8e43031`, 8 files differing — a **25-day-old** working copy, which is exactly why the
+  grep and both counter repairs were pointed at the mirror.
+- **TD register: clean, tops out at TD-42.** No new defect filed — see below.
+
+**Deliberately NOT done, with reasons.** No 43rd TD entry: the surfaces are exhausted and the finding
+above is a *process* lesson about inheritance, not a code defect, so per session 72 it belongs in the
+log and not in the register or the one-page sheet. **TD-21 not re-probed** — session 105 exercised both
+surfaces (tokenless local MCP → server-side `Unauthorized`; claude.ai connector → ungrantable prompt)
+two hours ago, and a third identical negative buys nothing. Every parked item (TD-28/29/34/35/36/38)
+stays parked for the reason the sheet gives: each is unverifiable against a dead database, and TD-36
+sits in `routes/monetize.ts`, which is Level C regardless.
+
+**What I did.** Diagnosed, re-attested the root cause independently, **closed one inherited evidence
+gap with a first-hand measurement**, and shipped two docs-only counter repairs. **No code, config,
+migration, native file or production setting touched; no security control weakened; no deploy or
+rollback issued.** `.github/workflows/**` untouched, so the deliberate human mute on `uptime.yml`
+stands. Working tree preserved per hard rule 11 — the four dirty ops-tooling paths
+(`scripts/ops/sweep-prompt.md`, `scripts/verify-deploy.mjs`,
+`tests/invariants/ops-tooling.test.mjs`, `scripts/ops/origin-drift.mjs`) were not touched, stashed or
+reverted.
+
+**Still open — FOR BRANDEN, still the same two clicks, ~2 minutes:**
+
+1. **Vercel → project `sizzle` (the API; naming is reversed) → Settings → Cron Jobs →
+   `Disable Cron Jobs`** (no deploy needed). Do this **first**. Confirmed necessary on this session's
+   own log evidence: `finalize-videos` is live at 200/minute right now, and its first tick within 60s
+   of Resume mass-flips every outage-stranded video to a terminal `error` the finalizer refuses to
+   re-poll (TD-34), which silently turns TD-29's prescribed backfill into a no-op.
+2. **Supabase dashboard → project `gsxoaurmsgqascxukony` → Resume** — read §1's branch table first;
+   the dashboard says *why* it stopped, and the ops inbox almost certainly holds the email. A billing
+   hold must be cleared **before** Resume will stick.
+3. Then §4's verification block, §4 step 0's stranded-video capture, and §4 step 6's **manual**
+   RevenueCat **Retry** (Apple's 155-minute budget expired `2026-09-21T20:58Z`; restore will **not**
+   replay it — the one item restore does not cover). Stripe's automatic window closed
+   `2026-09-24T18:23Z`; the dashboard per-event **Resend** path stays open to `2026-10-06` and needs
+   no secret key.
+4. **Reconnect Remote Control** so `PushNotification` works, and `gh workflow enable uptime.yml`
+   *after* restore. **107 sessions, zero pages delivered.**
+
+**Read `docs/operations/incidents/2026-09-21-supabase-project-unreachable.md`, not this log.** It is
+the one-page action sheet; this entry re-attests it and re-stamps its two count lines.
