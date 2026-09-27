@@ -13860,3 +13860,151 @@ and a mirror the mandatory-first gate had already written to disk. A claim that 
 forward is the least-audited text in the log precisely because it looks settled; §7 has documented
 that shape for greps (session 106), for detectors (98, 99) and for counters (95, 97), and this is the
 same shape in the **ship gate**, the one paragraph every session writes and none re-derives.*
+
+---
+
+## SEV-1 watchdog summon 2026-09-27T11:43:50Z (session 110) — same Supabase outage, hour 137h28m; still owner-only, and session 109's OWN prescribed follow-up had never been filed — now shipped
+
+**What fired.** `scripts/ops/watchdog.sh`: `API degraded (503): database-unreachable`, local
+`2026-09-27 04:43:50` PDT. 65 minutes after session 109's `10:38:48Z` summon — the `COOLDOWN_MIN=60`
+constant re-firing on an unchanged condition, exactly as **TD-39** describes. **Not** the `HTTP 000`
+host-blip class (TD-23): a 503 carrying a well-formed JSON body that names `database-unreachable` is
+the API answering honestly about a dead dependency, which project memory records as the genuine-SEV-1
+branch of that discrimination rather than noise.
+
+**Anti-flap answered explicitly: NOT transient, NOT a false alarm.** Three `/health` probes —
+the watchdog's own `11:43:48Z`, then `11:44:07Z` and `11:51:05Z` (7 minutes apart, the write-time
+anchor) — returned byte-identical `503 / degraded / ["database-unreachable"]` with
+`stuckVideoBacklog` / `parkedMediaDeletions` / `cronAges` all `null`, the three-null signature of a
+dead DB. The condition is continuous across 137 hours; nothing had recovered by probe time, so the
+"verify recovery twice" branch of the anti-flap rule does not apply.
+
+**Root cause re-attested from scratch, not inherited** (ground rule 4). One `node:dns` run across
+three resolvers — system, `1.1.1.1`, `8.8.8.8`; nine lookups, all agreeing:
+`gsxoaurmsgqascxukony.supabase.co` → **ENOTFOUND**, `db.gsxoaurmsgqascxukony.supabase.co` →
+**ENOTFOUND**, parent zone `supabase.co` → **A 76.76.21.21 / CNAME ENODATA**. Parent zone up + both
+per-project records withdrawn = pause/restrict/deprovision at the account level, unchanged since
+`2026-09-21T18:23:07Z`. `ENODATA`-vs-`ENOTFOUND` across three unrelated resolvers is positive proof
+the records were withdrawn, not a sandbox artifact. `/feed/for-you?limit=3` → **HTTP 500** (the real
+user path, not just liveness); `getsizzle.app` → **200** (static frontend unaffected, as throughout).
+
+**Rollback ruled out — measured this session, not inherited.** `/health.commit` is `8221971` and
+origin `main` is `8221971` (session 109's addendum), so the API is serving exactly origin tip — no
+rogue or half-promoted deploy. Per §5 the last *pre-outage* production deploy was 15 days old, so no
+deployment boundary coincides with the failure. The incident-response rule "rollback first when
+rollback is safer" is not merely outranked here, it is **inapplicable**: promoting any previous READY
+deployment would roll back documentation and cannot restore a withdrawn DNS record.
+
+**Successor detectors run against session 109 — all PASS.**
+
+- Session 99's naming-free aborted-push check (`ls -lTt`, mtime-sorted): newest `.codex/` artifact is
+  `s109b-ref.json` at `Sep 27 03:50:14` local = `2026-09-27T10:50:14Z`, against origin tip `8221971`
+  committed `2026-09-27T10:50:14Z` — **the same second**, i.e. session 109b's own successful ref
+  update with `s109b-commit.json` present ⇒ **quiet, correctly**. No orphaned push.
+- Session 96's skip detector on `5f208f5`: the action sheet **is** in the file list ⇒ sheet-resident
+  checks were not wholesale skipped.
+- Session 71's counter check (the one that catches *omission*, which per session 77 the
+  fabrication-hardening does not): sheet line 4 reads `136h21m … session 109` against session 109's
+  own logged `136h21m` — **consistent, PASS**.
+- Push gap: 109b at `10:50Z` → this summon at `11:43Z`, ~53 min against an hourly interval, so no
+  session was lost in between (session 98's class).
+
+---
+
+### New this session — session 109 prescribed a fix, said "filed", and it was NOT filed. Shipped, with the phantom retired at source
+
+**The finding session 109 made is correct and I re-verified it first-hand before building on it.**
+`git status` reports four dirty paths; byte-compared against the origin mirror (`Buffer.equals`, not a
+diff heuristic), **all four were identical to origin** — there was no uncommitted work in this repo at
+all. The cause is TD-27's own mechanism: a git-data-API push moves the remote ref without touching
+local `HEAD` or the index, so content that landed at origin hours ago presents as `M`/`??` forever.
+
+**What was actually wrong: the follow-up existed only in LOG prose.** Session 109 wrote *"Filed as a
+follow-up to **TD-27**: the drift tool already knows both trees, so it is the natural place to print
+`dirty-but-identical-to-origin` and retire the phantom at source."* Checked rather than assumed:
+`grep -n 'dirty-but-identical\|phantom'` on origin's `technical-debt.md` → **0 hits**, and session
+109's commit `5f208f5` touched only the action sheet and `LOG.md`. So **session 109 tripped the exact
+rule it was invoking** — session 45's *"a predecessor's finding that lives only in LOG prose was never
+FILED"* — one layer down: it is not that a finding went unfiled, it is that the entry **asserted** the
+filing. An unverified "filed" claim is strictly worse than silence, because session 45's remedy is
+*grep the register*, and a successor who trusts the assertion never greps.
+
+**Why this was shippable during an unfixable outage** (session 45's in-lane test — *does verifying it
+require the dead dependency?*): `origin-drift.mjs` is ops tooling that runs `git rev-parse`,
+`git status` and `gh api` GETs and writes only inside gitignored `.codex/`. No DB, no API surface, no
+production config. `npm run safety:diff` → **Level B**.
+
+**The fix, in `scripts/ops/origin-drift.mjs`.** Three exported pure functions plus one guarded caller:
+`parseGitStatus` (porcelain → entries, resolving `R old -> new` to the on-disk path and *flagging*
+git-quoted paths rather than unescaping them), `classifyDirty` (splits dirty paths into
+`phantom` / `real` / `unknown`), and `dirtyReport` (the wording, so it is testable). Live run on this
+very tree, which is the verification that matters:
+
+```
+  DIRTY BUT BYTE-IDENTICAL TO ORIGIN — this is NOT uncommitted work:
+     M scripts/ops/sweep-prompt.md
+     M scripts/verify-deploy.mjs
+     M tests/invariants/ops-tooling.test.mjs
+  REAL LOCAL WORK — differs from origin. PRESERVE IT (rule 11):
+    ?? scripts/ops/origin-drift.mjs
+      ↳ content differs from origin — genuine local work
+```
+
+The fourth line is the part worth trusting: it correctly flagged **this session's own in-progress
+edit** as real work while calling the other three phantoms. A classifier that labelled everything a
+phantom would have printed four phantoms and looked identical at a glance.
+
+**The design decision that matters is the asymmetry.** Only a *positive* byte comparison against the
+mirror may retire a path to `phantom`; every other outcome — mirror fetch failed, path git-quoted,
+file deleted locally, `--check` mode (which writes no mirrors at all) — lands in `real` or `unknown`,
+both of which tell the session to preserve. **A phantom mistaken for work costs a wasted paragraph;
+work mistaken for a phantom costs the work.** One deduction needs no mirror and is still airtight: a
+path *absent* from the drift set has origin matching local `HEAD`, so a working copy differing from
+`HEAD` necessarily differs from origin — which also makes the in-sync case correct for free.
+
+**Guarded, and the guards mutation-verified** (invariants **57 → 66/66**):
+
+| Mutation | Expected | Result |
+|---|---|---|
+| Drop the `mirrorFailures` guard (compare against a mirror that was never fetched) | a test fails | **not ok 42**, only that one |
+| Replace the byte comparison with `if (true)` — every path rubber-stamped as a phantom | a test fails | **not ok 40**, only that one |
+
+The second is the dangerous direction, and it is the one a code-shaped guard would most plausibly
+have missed. Both restored; 66/66 green. Also pinned by test: the dirty comparison is computed
+**after** the verdict prints and is wrapped in `try`/`catch`, because **TD-40, TD-41 and TD-42 were
+each one half of this same tool silently corrupting the other half's answer** — this is the fourth
+feature added to `origin-drift.mjs` and the first thing to check was whether it could repeat that
+shape.
+
+**Filed for real this time**, as a dated addendum on **TD-27**'s register row (same mechanism, so a
+new TD number would fragment it) — recording the phantom, the shipped fix, and explicitly that this
+**does not close TD-27**: the close condition is still the owner's one-line `Bash(git fetch:*)`, and
+retiring a symptom is not fixing the cause.
+
+*Generalised, and it is this incident's own recurring lesson pointed one level deeper: §7 has
+documented that inherited **claims** rot (sessions 33, 39, 109). The sharper case is a claim about
+**the record itself** — "filed as TD-N", "covered in §4", "noted in memory" — because those are
+precisely the claims that *suppress* the check that would catch them. When an entry says it filed
+something, the grep is one call and the failure is silent.*
+
+---
+
+**Ship gate — and per session 109's finding ①, a docs-only push IS a production deploy on both
+projects, so this one is verified rather than waved through.** Code + tests + register + log +
+counters. `npm run test:invariants` **66/66**; `npm run safety:diff` **Level B**; value-shaped secret
+scan over every pushed blob (prefix-plus-entropy, and the `-----BEGIN…KEY-----`-plus-body arm rather
+than the bare marker that false-fires on this log's own prose): **0 hits**. Base guard: refused to
+push unless the fetched `LOG.md` base exceeded 1.15 MB, so a truncated mirror cannot silently delete
+the record (TD-41's failure mode). Built on the **origin** mirror at `8221971` per TD-27, not the
+stale working copy (local HEAD `d4c5395`, 8 files behind). The two phantom paths
+(`scripts/ops/sweep-prompt.md`, `scripts/verify-deploy.mjs`) were **left untouched** — now on
+positive proof they are phantoms rather than on the assumption that they were work.
+
+**For Branden — unchanged, still ~2 minutes, and nothing an agent can do substitutes for it.**
+① Vercel → project **`sizzle`** (the API; naming is reversed) → Settings → Cron Jobs → **Disable Cron
+Jobs** (§4 step 0 — avoids the 60-second trap that would silently void TD-29's backfill).
+② Supabase dashboard → project `gsxoaurmsgqascxukony` → read the status, **and search the ops inbox
+09-13 → 09-22 for a Supabase warning email**: no ~09-14 warning ⇒ this is billing/quota or
+deprovision, so do **not** start with Resume. ③ Then act per §1's branch table. Afterwards:
+`gh workflow enable uptime.yml`, reconnect Remote Control, and the TD-35 RevenueCat dashboard
+retries (manual, per event — restore does not replay them).

@@ -10,7 +10,7 @@ import assert from 'node:assert/strict';
 import { readFile } from 'node:fs/promises';
 import test from 'node:test';
 
-import { classifyDrift, contentsNeedsRawFallback, decodeMirrorBytes, driftReport, isRetryableGhError, materialiseReport, mirrorAll, mirrorPathFor } from '../../scripts/ops/origin-drift.mjs';
+import { classifyDirty, classifyDrift, contentsNeedsRawFallback, decodeMirrorBytes, dirtyReport, driftReport, isRetryableGhError, materialiseReport, mirrorAll, mirrorPathFor, parseGitStatus } from '../../scripts/ops/origin-drift.mjs';
 import { checkWebVersion, commitTimeIso, createVercelClient, staleHeadBail } from '../../scripts/verify-deploy.mjs';
 
 /** Minimal stand-in for a fetch Response, enough for the client's ok/status/json use. */
@@ -448,6 +448,117 @@ test('origin-drift prints the verdict before the mirror warning, never instead o
   const report = src.indexOf('console.log(driftReport(');
   const note = src.indexOf('const note = materialiseReport(failures)');
   assert.ok(report > 0 && note > report, 'the verdict prints first; the mirror warning is appended after it');
+});
+
+/* ---------- TD-27's phantom: `git status` is dirty, but nothing is uncommitted ----------
+   Measured by watchdog session 109 of the Supabase SEV-1: all four paths `git status` called
+   dirty were byte-identical to origin, because a git-data-API push never advances local HEAD
+   or the index. For ~100 sessions every entry promised to "preserve" them under rule 11, and
+   the real hazard runs the other way — a commit built from the stale base lands as a REVERT of
+   origin's own content. These tests pin the discrimination and, more importantly, its SAFE
+   DIRECTION: only a positive byte comparison may retire a path to phantom. */
+
+const bytes = (s) => Buffer.from(s);
+
+test('classifyDirty calls a dirty-but-identical path a phantom, not uncommitted work', () => {
+  const { phantom, real, unknown } = classifyDirty({
+    entries: parseGitStatus(' M scripts/verify-deploy.mjs\n'),
+    driftPaths: ['scripts/verify-deploy.mjs'],
+    readLocal: () => bytes('same'),
+    readMirror: () => bytes('same'),
+  });
+  assert.deepEqual(phantom.map((e) => e.path), ['scripts/verify-deploy.mjs']);
+  assert.deepEqual(real, [], 'rule 11 must not fire on content that already landed at origin');
+  assert.deepEqual(unknown, []);
+});
+
+test('classifyDirty preserves a path whose bytes really differ from origin', () => {
+  const { phantom, real } = classifyDirty({
+    entries: parseGitStatus(' M scripts/ops/origin-drift.mjs\n'),
+    driftPaths: ['scripts/ops/origin-drift.mjs'],
+    readLocal: () => bytes('edited in this session'),
+    readMirror: () => bytes('origin'),
+  });
+  assert.deepEqual(phantom, [], 'a differing file is work — misclassifying it costs the work');
+  assert.deepEqual(real.map((e) => e.path), ['scripts/ops/origin-drift.mjs']);
+});
+
+test('classifyDirty treats an unmirrored path as REAL without needing a comparison', () => {
+  // Absent from the drift set ⇒ origin at originHead matches local HEAD there, so a working
+  // copy that differs from HEAD necessarily differs from origin. No mirror required.
+  const { phantom, real } = classifyDirty({
+    entries: parseGitStatus(' M apps/web/src/screens/Feed.tsx\n'),
+    driftPaths: [],
+    readLocal: () => { throw new Error('must not be read'); },
+    readMirror: () => { throw new Error('must not be read'); },
+  });
+  assert.deepEqual(phantom, []);
+  assert.deepEqual(real.map((e) => e.path), ['apps/web/src/screens/Feed.tsx']);
+});
+
+test('classifyDirty refuses to guess when the origin copy is missing or the path is quoted', () => {
+  const failed = classifyDirty({
+    entries: parseGitStatus(' M docs/operations/incidents/LOG.md\n'),
+    driftPaths: ['docs/operations/incidents/LOG.md'],
+    mirrorFailures: ['docs/operations/incidents/LOG.md'],
+    readLocal: () => bytes('x'),
+    readMirror: () => bytes('x'),
+  });
+  assert.deepEqual(failed.phantom, [], 'an unfetchable mirror must never license "identical to origin"');
+  assert.deepEqual(failed.unknown.map((e) => e.path), ['docs/operations/incidents/LOG.md']);
+
+  const quoted = classifyDirty({
+    entries: parseGitStatus(' M "docs/a b.md"\n'),
+    driftPaths: ['"docs/a b.md"'],
+    readLocal: () => bytes('x'),
+    readMirror: () => bytes('x'),
+  });
+  assert.deepEqual(quoted.phantom, [], 'a git-quoted path could name a different file — never compare it blind');
+  assert.equal(quoted.unknown.length, 1);
+});
+
+test('classifyDirty will not call a locally-deleted file a phantom', () => {
+  const { phantom, unknown } = classifyDirty({
+    entries: parseGitStatus(' D scripts/verify-deploy.mjs\n'),
+    driftPaths: ['scripts/verify-deploy.mjs'],
+    readLocal: () => null, // gone from disk
+    readMirror: () => bytes('origin'),
+  });
+  assert.deepEqual(phantom, [], 'a deletion is uncommitted work, and an unreadable side is not a match');
+  assert.equal(unknown.length, 1);
+});
+
+test('parseGitStatus reads the on-disk path of a rename and marks quoted paths', () => {
+  assert.deepEqual(parseGitStatus('R  old.md -> new.md\n').map((e) => e.path), ['new.md']);
+  assert.equal(parseGitStatus(' M "a b.md"\n')[0].quoted, true);
+  assert.deepEqual(parseGitStatus('?? scripts/ops/origin-drift.mjs\n').map((e) => e.code), ['??']);
+  assert.deepEqual(parseGitStatus('\n\n').length, 0, 'blank porcelain output is not a dirty path');
+});
+
+test('dirtyReport tells the session rule 11 does NOT apply to a phantom', () => {
+  const text = dirtyReport({ phantom: [{ code: ' M', path: 'scripts/verify-deploy.mjs' }] }).join('\n');
+  assert.match(text, /NOT uncommitted work/);
+  assert.match(text, /REVERTS/, 'the real hazard is a commit off the stale base, and the banner must name it');
+  assert.deepEqual(dirtyReport({}), [], 'a clean tree must stay silent');
+});
+
+test('dirtyReport says PRESERVE for real work, and the phantom banner never leaks onto it', () => {
+  const text = dirtyReport({ real: [{ code: ' M', path: 'apps/web/src/screens/Feed.tsx', reason: 'differs' }] }).join('\n');
+  assert.match(text, /PRESERVE IT \(rule 11\)/);
+  assert.ok(!/NOT uncommitted work/.test(text), 'real work must never be described as a phantom');
+});
+
+test('the dirty comparison cannot suppress the drift verdict — TD-40/41/42 class', async () => {
+  const src = await readFile(new URL('../../scripts/ops/origin-drift.mjs', import.meta.url), 'utf8');
+  const verdict = src.indexOf('console.log(driftReport({ localHead, originHead, files, outDir })');
+  const dirty = src.indexOf('const dirty = dirtySectionLines(');
+  assert.ok(verdict > 0 && dirty > verdict, 'the verdict must print before the dirty section is even computed');
+  assert.match(src, /function dirtySectionLines[\s\S]{0,1200}try \{/,
+    'the convenience half must be caught, never allowed to abort the gate half');
+  // `--check` writes no mirrors, so drifted paths must be reported UNDETERMINED rather than
+  // deduced "real" from a file that was simply never fetched.
+  assert.match(src, /mirrorFailures: checkOnly \? files\.map\(\(f\) => f\.path\) : failures\.map\(\(f\) => f\.path\)/,
+    '--check must not compare against mirrors it never wrote');
 });
 
 test('the drift check is wired into the sweep prompt before the checks it protects', async () => {

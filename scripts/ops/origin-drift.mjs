@@ -39,9 +39,16 @@
  * A mirror that materialises with the WRONG BYTE COUNT counts as missing, not as present —
  * a silently-empty mirror is more dangerous than an absent one, because the session reads
  * it as origin's truth (see `decodeMirrorBytes` and `contentsNeedsRawFallback`).
+ *
+ * It also answers the SECOND question TD-27's mechanism makes unanswerable: is anything
+ * `git status` calls dirty actually uncommitted work? Pushing through the git-data API never
+ * advances local HEAD or the index, so a file that landed at origin hours ago keeps
+ * presenting as modified forever (see `classifyDirty`). This tool already holds both trees,
+ * so it is the only place that can tell a phantom from real work without a hand-run
+ * byte comparison.
  */
 import { execFileSync } from 'node:child_process';
-import { mkdirSync, writeFileSync } from 'node:fs';
+import { mkdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { dirname, join } from 'node:path';
 
 export const REPO_SLUG = process.env.SIZZLE_GH_REPO || 'Branden574/Sizzle';
@@ -258,6 +265,142 @@ export function materialiseReport(failures) {
   return lines;
 }
 
+/**
+ * Parse `git status --porcelain` into entries. Pure, so the odd shapes are testable.
+ *
+ * A rename records `old -> new`; the path on disk is the new one. Paths containing
+ * specials are QUOTED by git, and a quoted path is deliberately not unescaped here —
+ * mis-parsing one would compare the wrong file, so it is handed to the session instead
+ * (`classifyDirty` routes it to UNDETERMINED).
+ */
+export function parseGitStatus(porcelain) {
+  const entries = [];
+  for (const raw of String(porcelain).split('\n')) {
+    if (raw.length < 4) continue;
+    const code = raw.slice(0, 2);
+    let path = raw.slice(3);
+    if (code.includes('R') && path.includes(' -> ')) path = path.split(' -> ').pop();
+    entries.push({ code, path, quoted: path.startsWith('"') });
+  }
+  return entries;
+}
+
+/**
+ * Split `git status`'s dirty paths into "phantom" (byte-identical to origin) and
+ * "real local work", which is the distinction rule 11 actually cares about.
+ *
+ * Why this is needed at all (TD-27, measured by watchdog session 109). The only write path
+ * available unattended is the GitHub git-data API, which moves the remote ref without
+ * touching local `HEAD` or the index. So a file whose content landed at origin — including
+ * the ops files a past session materialised into the checkout as a TD-27 repair — reports as
+ * `M`/`??` forever, and the staleness compounds every session. Rule 11 says *preserve all
+ * existing uncommitted work*, so a session reading those markers either protects content
+ * that is already pushed, or worse "rescues" it into a commit built from the stale base,
+ * which lands as a REVERT of origin. Session 109 byte-compared all four dirty paths in this
+ * repo and found every one identical to origin: there was no uncommitted work at all.
+ *
+ * The classification is only ever allowed to *downgrade* a path to phantom on POSITIVE
+ * proof — a successful byte comparison against the mirror. Every other outcome lands in
+ * `real` or `unknown`, both of which tell the session to preserve. That asymmetry is
+ * deliberate: a phantom mistaken for work costs a wasted paragraph, work mistaken for a
+ * phantom costs the work.
+ *
+ * Paths absent from the drift set need no mirror to decide: origin at `originHead` matches
+ * local `HEAD` there, so a working copy that differs from `HEAD` necessarily differs from
+ * origin. That also makes the in-sync case correct for free — pass `driftPaths: []` and
+ * everything dirty is real.
+ */
+export function classifyDirty({ entries, driftPaths = [], mirrorFailures = [], readLocal, readMirror }) {
+  const failed = new Set(mirrorFailures);
+  const mirrored = new Set(driftPaths);
+  const phantom = [];
+  const real = [];
+  const unknown = [];
+
+  for (const entry of entries) {
+    if (entry.quoted) {
+      unknown.push({ ...entry, reason: 'git-quoted path — compare it by hand rather than risk the wrong file' });
+      continue;
+    }
+    if (failed.has(entry.path)) {
+      unknown.push({ ...entry, reason: 'origin copy could not be mirrored, so no comparison is possible' });
+      continue;
+    }
+    if (!mirrored.has(entry.path)) {
+      real.push({ ...entry, reason: 'origin matches local HEAD here, so a dirty working copy really differs from origin' });
+      continue;
+    }
+    const localBytes = readLocal(entry.path);
+    const originBytes = readMirror(entry.path);
+    if (!localBytes || !originBytes) {
+      unknown.push({ ...entry, reason: 'could not read both copies (deleted locally, or an unreadable mirror)' });
+      continue;
+    }
+    if (Buffer.compare(localBytes, originBytes) === 0) phantom.push({ ...entry });
+    else real.push({ ...entry, reason: 'content differs from origin — genuine local work' });
+  }
+  return { phantom, real, unknown };
+}
+
+/**
+ * The dirty-vs-origin report. Pure, so the wording is testable — and the wording carries the
+ * whole finding: a session that reads "M scripts/verify-deploy.mjs" and stops there will
+ * protect a file that has been pushed for days.
+ */
+export function dirtyReport({ phantom = [], real = [], unknown = [] }) {
+  if (!phantom.length && !real.length && !unknown.length) return [];
+  const lines = ['  ----  `git status` vs ORIGIN — what rule 11 actually applies to  ----', ''];
+  if (phantom.length) {
+    lines.push('  DIRTY BUT BYTE-IDENTICAL TO ORIGIN — this is NOT uncommitted work:');
+    for (const entry of phantom) lines.push(`    ${entry.code} ${entry.path}`);
+    lines.push('      ↳ A git-data-API push never advances local HEAD or the index, so content that');
+    lines.push('        already landed at origin presents as dirty forever. Rule 11 does not apply here;');
+    lines.push('        committing these re-lands origin\'s own bytes, or REVERTS them off a stale base.');
+    lines.push('');
+  }
+  if (real.length) {
+    lines.push('  REAL LOCAL WORK — differs from origin. PRESERVE IT (rule 11):');
+    for (const entry of real) lines.push(`    ${entry.code} ${entry.path}\n      ↳ ${entry.reason}`);
+    lines.push('');
+  }
+  if (unknown.length) {
+    lines.push('  UNDETERMINED — treat as real work until compared by hand:');
+    for (const entry of unknown) lines.push(`    ${entry.code} ${entry.path}\n      ↳ ${entry.reason}`);
+    lines.push('');
+  }
+  return lines;
+}
+
+/**
+ * Read `git status` and decide, per dirty path, whether it is real work or a TD-27 phantom.
+ *
+ * Wrapped in a try/catch for the same reason `mirrorAll` is: TD-40, TD-41 and TD-42 were each
+ * one half of this tool silently corrupting the other half's answer. This is a convenience
+ * layered on the verdict, so a failure here prints a named note and changes no exit code.
+ */
+function dirtySectionLines({ outDir, driftPaths, mirrorFailures }) {
+  try {
+    const entries = parseGitStatus(execFileSync('git', ['status', '--porcelain'], { encoding: 'utf8' }));
+    if (!entries.length) return [];
+    const readBytes = (path) => {
+      try {
+        return readFileSync(path);
+      } catch {
+        return null;
+      }
+    };
+    return dirtyReport(classifyDirty({
+      entries,
+      driftPaths,
+      mirrorFailures,
+      readLocal: readBytes,
+      readMirror: (path) => (outDir ? readBytes(mirrorPathFor(outDir, path)) : null),
+    }));
+  } catch (err) {
+    return [`  ⚠  could not compare \`git status\` against origin: ${(err?.message || String(err)).split('\n')[0]}`, ''];
+  }
+}
+
 function main() {
   const checkOnly = process.argv.includes('--check');
 
@@ -266,6 +409,9 @@ function main() {
 
   if (localHead === originHead) {
     console.log(driftReport({ localHead, originHead, files: [] }).lines.join('\n'));
+    // In sync, so origin IS local HEAD: anything dirty differs from origin and is real work.
+    const synced = dirtySectionLines({ outDir: null, driftPaths: [], mirrorFailures: [] });
+    if (synced.length) console.log(synced.join('\n'));
     return 0;
   }
 
@@ -291,6 +437,15 @@ function main() {
   console.log(driftReport({ localHead, originHead, files, outDir }).lines.join('\n'));
   const note = materialiseReport(failures);
   if (note.length) console.log(note.join('\n'));
+
+  // `--check` writes no mirrors, so a drifted path has nothing to compare against — say so
+  // rather than deducing "real" from a missing file, which would re-arm the phantom.
+  const dirty = dirtySectionLines({
+    outDir,
+    driftPaths: files.map((f) => f.path),
+    mirrorFailures: checkOnly ? files.map((f) => f.path) : failures.map((f) => f.path),
+  });
+  if (dirty.length) console.log(dirty.join('\n'));
   return 3;
 }
 
