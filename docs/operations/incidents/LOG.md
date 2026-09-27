@@ -14615,3 +14615,116 @@ retries (those do *not* self-heal and their automatic window closed on 09-21), `
 uptime.yml`, and merge PR #8 as the first post-restore deploy. Two owner-side items this session could
 not touch also remain: rotate the Supabase PAT (TD-21) so sweep items 5/5b stop being skipped, and
 grant `Bash(git fetch:*)` (TD-27), without which local `main` stays frozen at `d4c5395`.
+
+## Watchdog session 116 — 2026-09-27 09:48:02 local / 16:48:35Z
+
+**What fired.** `API degraded (503): database-unreachable;` — and that was the *only* problem in the
+summon, which per TD-43 is the first thing to check rather than the last: no second, unrelated incident
+has been merged into this SEV-1's identity this hour. Confirmed independently below (frontend 200, CI
+green), because TD-43's other half is that a second incident inside the 60-minute window is *swallowed
+entirely* rather than mis-labelled.
+
+**Root cause: unchanged, re-verified rather than re-derived.** Supabase project `gsxoaurmsgqascxukony` is
+still withdrawn at DNS. The outage is open **142h25m (5.94 days)** as of the `/health` `time` field
+`2026-09-27T16:48:35.689Z`, against a start of `2026-09-21T18:23:07Z`. It is **Level D — owner-only**; no
+repo change, rollback or redeploy can touch it, and rollback was never a candidate (the last pre-outage
+deploy is 22 days old and every deployment since is READY). The one-page action sheet is
+`docs/operations/incidents/2026-09-21-supabase-project-unreachable.md` — read that, not this log.
+
+**Evidence this hour, all first-hand.**
+
+- `/health` → **503** `{"status":"degraded","problems":["database-unreachable"]}` after a **7.21 s**
+  connect stall; served commit `ac5209e`, which equals origin's tip.
+- `/feed/for-you` → **500** `{"error":{"code":"db_error","message":"Something went wrong"}}`. This is the
+  user-facing proof; `/health` alone reads as a probe artifact.
+- `getsizzle.app` → **200** in 0.26 s. The frontend is healthy — this is API + DB only.
+- DNS, one `node -e` over three resolvers (system, `1.1.1.1`, `8.8.8.8`), all three agreeing: calibration
+  host `supabase.co` → `A 76.76.21.21`; both `gsxoaurmsgqascxukony.supabase.co` and
+  `db.gsxoaurmsgqascxukony.supabase.co` → **ENOTFOUND**. A live parent zone with every per-project record
+  gone is positive proof the records are withdrawn, not that our resolver path is broken — the
+  calibration host is the load-bearing half.
+- CI on `main`: **8/8 `success`**, newest `ac5209e` (session 115's own push). No CI incident hiding behind
+  the cooldown.
+- `node scripts/ops/origin-drift.mjs` → local `main` still frozen at `d4c5395` vs origin `ac5209e`
+  (TD-27, 8 files drifted), so every file reasoned about or edited below was read from and rebuilt on the
+  `.codex/origin-ac5209e/` mirror, not the working tree. The tool also confirms this session's four dirty
+  working-tree paths are **byte-identical to origin** — not uncommitted work, so rule 11 does not apply.
+
+**§7 counter check — PASSED, no repair needed.** Run on both axes rather than one: session 96's *absence*
+check (`gh api …/commits/ac5209e --jq '.files[].filename'`) shows the action sheet present, and session
+98's *granularity* check confirms session 115 touched line 4 **and** the standing counts, not just one of
+them. Cross-verified by arithmetic per session 71: line 4 read `141h24m / 2026-09-27T15:47:17Z / session
+115`, matching session 115's own recorded figure, and its `wc -l` = 14519 pre-append plus its ~98-line
+entry equals the 14,617 measured this hour. **This is the first hour in several with nothing to repair
+here** — recorded so a successor does not read the run of consecutive repairs (sessions 95, 97, 114) as
+an expectation that one is always owed.
+
+Re-stamped for this session: **142h25m / `2026-09-27T16:48:35Z` / session 116**, and the standing counts
+to **one hundred and sixteen** sessions / **14,617+ lines** (`wc -l` = 14617 pre-append).
+
+**Doc-rot greps — all three clean, bucket 3 empty.** Deictic **27** hits (26 at session 115; per session
+96 a rising count is not a signal — the increase is sessions 112–115's own write-ups quoting the token
+list), duration **36**, spelled-numeral **9**. Triaged against session 106's buckets: the duration set is
+provider/policy constants (`155 minutes`, `3`/`15`/`30 days`, `7 days idle`, `60 minutes`, `~2 minutes`),
+dated measurements (`~21 minutes` of log buffer, the cron invocation counts), and prior sessions' own
+write-ups; `:1064`'s *"across 140 hours"* sits inside session 113's dated heading and reads correctly as
+history. Every spelled-numeral hit is Stripe's quoted *"up to three days"* (bucket 1) or sits in sessions
+28's and 111's dated write-ups (bucket 2). **No elapsed-outage figure exists in standing prose outside
+the two live counters.**
+
+**NEW FINDING — the orphan detector has now been verified FIRING, and that test shows it cannot be read
+by the session running it.** Sessions 99–115 rewrote this check four times (name filter → mtime → sort
+order → prune) and *every* observation of it across sixteen sessions was a **true negative**, plus session
+115's arithmetic counterfactual. Session 112's standing instruction is to feed it the failure it exists to
+catch, so this session did, with the cheapest positive case available: **its own in-flight work.** Before
+the push, `.codex/s116-out/sheet.md` (`16:53:52.945Z`) sat **58m46s newer** than tip `ac5209e`
+(`15:55:06Z`) ⇒ the pinned command **reported dirty**. First confirmed positive; session 115's `^origin-`
+prune does not suppress a real hit.
+
+**The consequence is a precondition nobody had stated.** A live session's staged artifacts are always
+newer than the tip until its own ref moves, so **self-applied mid-run the detector can only ever say
+dirty** — it cannot separate "my predecessor died at the commit object" from "I have not pushed yet."
+Every clean reading sessions 100–115 recorded was obtained by running it *before* writing any output,
+which held only because those sessions happened to probe first and stage second. That ordering was
+incidental and is in fact load-bearing; the pinned command says nothing about it. Written into §7 as
+**"run it as the first call of the session, before creating any `.codex/` artifact — or read it as a
+statement about your predecessor only."**
+
+Not filed as a TD, per session 75 and session 115's precedent: the guarded artifact is this incident's own
+push path, which stops existing the moment Resume is clicked, so a register entry would outlive its
+subject. The correction belongs in the pinned text, and it is there.
+
+*Generalised: five sessions fixed this detector's pattern, pipeline and name filter, and all five verified
+the fix by reasoning about cases rather than producing one. A check observed only on true negatives is
+indistinguishable from a check that cannot fail — which is precisely what four consecutive blind spots
+here were. Producing one real positive also measured the detector's preconditions, and that was invisible
+to every counterfactual, because a counterfactual re-runs the command in your head, where you are not
+holding a half-written file.*
+
+**Nothing shipped from the parked queue, deliberately.** TD-28/29/34/35/36/43 all remain unshipped for the
+reasons already recorded: each is unverifiable against a dead DB, several perturb the very signals being
+watched for recovery, and TD-43 is worth zero until §7's egress gap closes. Nothing in this hour's
+evidence changes that ordering.
+
+**Alerting — still no push path, re-tested this session.** `PushNotification` remains dead ("Remote
+Control inactive"), so this entry and the action sheet are **pull** channels only, exactly as §7 says.
+This session could page nobody; that remains the single reason a two-minute fix has stayed open past hour
+142.
+
+**Secrets check.** Both blobs scanned for the strict value patterns
+`(sbp_|sk_live_|sk_test_|whsec_|rk_live_)[A-Za-z0-9]{8,}` and `eyJ[A-Za-z0-9_-]{20,}`: **0 hits.** The
+loose prefix scan returns its usual self-referential hits on this log's own secret-check prose and is not
+a gate, per session 54.
+
+**What Branden must do — unchanged, ~2 minutes, still the entire fix.** ① Vercel → project `sizzle` (the
+API; the naming is reversed) → Settings → Cron Jobs → **Disable Cron Jobs** (§1 step 0 — this is what
+avoids the TD-34 trap that turns TD-29's prescribed backfill into a silent no-op and makes its counting
+query return a false `0`). ② Supabase dashboard → project `gsxoaurmsgqascxukony` → read which state it
+shows → **Resume project**, fixing billing first if it shows Restricted; if it shows *Project not found*,
+contact Supabase support about PITR before touching anything. Then §4's verification, §4 step 6's
+**manual** RevenueCat retries (those do not self-heal and their automatic window closed on 09-21), the
+Stripe dashboard per-event **Resend** for the missed webhooks (no secret key needed; that path closes
+`2026-10-06`), `gh workflow enable uptime.yml`, and merge PR #8 as the first post-restore deploy. Two
+owner-side items this session could not touch also remain: rotate the Supabase PAT (TD-21) so the sweep's
+DB items stop being skipped, and grant `Bash(git fetch:*)` (TD-27), without which local `main` stays
+frozen at `d4c5395`.

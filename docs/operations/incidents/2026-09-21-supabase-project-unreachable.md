@@ -1,8 +1,8 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
 **Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
-(11:23 AM PDT Mon 09-21). **141h24m — past 5 days — as of 2026-09-27T15:47:17Z**, re-verified by session 115
-(watchdog) with one DNS probe and one `/health` probe. Session 114 skipped this stamp — see §7.
+(11:23 AM PDT Mon 09-21). **142h25m — past 5 days — as of 2026-09-27T16:48:35Z**, re-verified by session 116
+(watchdog) with one DNS probe and one `/health` probe. Session 115 maintained this stamp — see §7.
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
 
 > **🛑 READ §4 STEP 0 BEFORE YOU CLICK RESUME.** Session 18 found that the first
@@ -55,9 +55,9 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > without a browser. It changes your *calibration*, not the fix: the app is degrading
 > gracefully, and the misattribution is what is quietly costing you reviews and support mail.
 
-This page exists because **one hundred and fifteen** unattended sessions — one hundred and thirteen watchdog summons plus
-the 2026-09-25 and 2026-09-27 daily sweeps — have now diagnosed the same outage and appended **14,519+ lines** to
-`LOG.md` (counts re-stamped session 115, measured `wc -l` = 14519 pre-append; session 48 stamped them at "forty-seven"/"5,600+" and nothing re-checked them
+This page exists because **one hundred and sixteen** unattended sessions — one hundred and fourteen watchdog summons plus
+the 2026-09-25 and 2026-09-27 daily sweeps — have now diagnosed the same outage and appended **14,617+ lines** to
+`LOG.md` (counts re-stamped session 116, measured `wc -l` = 14617 pre-append; session 48 stamped them at "forty-seven"/"5,600+" and nothing re-checked them
 for the 31 sessions until session 79, so they had understated the burn by a third — session 95 skipped
 this stamp entirely, which is what §7's session-96 entry gives a one-call detector for, and **session 97
 skipped it again while passing that detector**, which is what session 98's correction below fixes).
@@ -1144,6 +1144,30 @@ without anyone touching the detector. Session 99 diagnosed this precisely ("pref
 supplies (mtime) over one each session chooses") and then shipped a command that filtered on names
 anyway, so the old key kept doing the work for thirteen sessions. When you move a check's key to the
 filesystem, delete the name filter in the same edit.*
+
+**Session 116 (2026-09-27T16:48:35Z) — the corrected orphan detector has now been verified FIRING, which
+no session had done; and that test reveals it cannot be read by the session running it.** Sessions 99
+through 115 rewrote this detector four times and every observation of it was a **true negative** — "quiet,
+correctly" — plus session 115's *arithmetic* counterfactual. Session 112's standing instruction is to feed
+it the failure it exists to catch, so this session did, using the cheapest possible positive case: **its
+own in-flight work.** Mid-session, before the push, `.codex/s116-out/sheet.md` (`16:53:52.945Z`) sat
+**58m46s newer** than tip `ac5209e` (`15:55:06Z`) ⇒ the command **reported dirty**. First confirmed
+positive. Session 115's `^origin-` prune does not suppress a real hit.
+
+**The caveat is who may run it.** A live session's staged artifacts are *always* newer than the tip until
+its own ref moves, so **self-applied mid-run the detector cannot return anything but dirty** — it cannot
+distinguish "my predecessor died at the commit object" from "I have not pushed yet." Every clean reading
+sessions 100–115 recorded was obtained by running it *before* staging any output, which worked only
+because those sessions happened to probe first and write second. **Run it as the first call of the
+session, before creating any `.codex/` artifact — or read it as a statement about your predecessor only.**
+That ordering was previously incidental; it is load-bearing, and nothing in the pinned command says so.
+
+*Generalised — and it closes the arc sessions 99/106/111/112/115 walked: each fixed the detector's
+pattern, pipeline, or name filter, and all five verified the fix by reasoning about cases rather than
+producing one. A check verified only on true negatives is indistinguishable from a check that cannot fail,
+which is what four consecutive blind spots here actually were. Producing one real positive also measured
+the detector's **preconditions** — and that was invisible to every counterfactual, because a
+counterfactual re-runs the command in your head, where you are not holding a half-written file.*
 
 ### The one follow-up that makes the next SEV-1 different
 
