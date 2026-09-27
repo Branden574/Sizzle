@@ -14063,3 +14063,151 @@ the action sheet remain PULL channels, and nothing has reached Branden across 11
 `-----BEGIN…KEY-----`-with-body arm rather than the bare marker that false-fires on this log's own
 prose) → **0 hits**. Base guard re-applied: refused to push unless the fetched `LOG.md` base exceeded
 1.15 MB.
+
+## SEV-1 watchdog summon 2026-09-27T12:44:03Z (session 111) — same Supabase outage, hour 138h28m; still owner-only, and the doc-rot detector has a SECOND blind spot that session 106's widening did not cover
+
+**What fired.** `scripts/ops/watchdog.sh`: `API degraded (503): database-unreachable`, local
+`2026-09-27 05:44:03` PDT. Exactly 60 minutes after session 110's `11:43:50Z` summon — the
+`COOLDOWN_MIN=60` constant re-firing on an unchanged condition, **TD-39**. **Not** the `HTTP 000`
+host-blip class (TD-23): a 503 carrying a well-formed JSON body naming `database-unreachable` is the
+API answering honestly about a dead dependency, which project memory records as the genuine-SEV-1
+branch of that discrimination rather than noise.
+
+**Anti-flap answered explicitly: NOT transient, NOT a false alarm.** Three `/health` probes —
+the watchdog's own `12:44:03Z`, then `12:44:29Z` and `12:51:58Z` (the write-time anchor, ~8 min
+later) — returned byte-identical `503 / degraded / ["database-unreachable"]` with
+`stuckVideoBacklog` / `parkedMediaDeletions` / `cronAges` all `null`, the three-null signature of a
+dead DB. The condition is continuous across 138 hours; nothing had recovered by probe time, so the
+"verify recovery twice" branch of the anti-flap rule does not apply.
+
+**Root cause re-attested from scratch, not inherited** (ground rule 4). One `node:dns` run across
+three resolvers — system, `1.1.1.1`, `8.8.8.8`; nine lookups, all agreeing:
+`gsxoaurmsgqascxukony.supabase.co` → **ENOTFOUND**, `db.gsxoaurmsgqascxukony.supabase.co` →
+**ENOTFOUND**, parent zone `supabase.co` → **A 76.76.21.21 / CNAME ENODATA**. Parent zone up + both
+per-project records withdrawn = pause/restrict/deprovision at the account level, unchanged since
+`2026-09-21T18:23:07Z`. `ENODATA`-vs-`ENOTFOUND` across three unrelated resolvers is positive proof
+the records were withdrawn, not a sandbox artifact. `/feed/for-you?limit=3` → **HTTP 500**
+`{"error":{"code":"db_error"}}` (the real user path, not just liveness); `getsizzle.app` → **200**.
+
+**Rollback ruled out — measured, not inherited.** `/health.commit` is `737907a` and origin `main` is
+`737907a` (session 110's addendum), so the API serves exactly origin tip — no rogue or half-promoted
+deploy. Per §5 the last *pre-outage* production deploy was 15 days old, so no deployment boundary
+coincides with the failure. Promoting a previous READY deployment would roll back documentation and
+cannot restore a withdrawn DNS record.
+
+**Cron state re-measured first-hand** (sessions 103/107: the runtime log is the measurement, and
+`vercel crons ls` structurally cannot answer it). `vercel logs sizzle-chi.vercel.app --json` at hour
+138: `finalize-videos` **200 every minute at 21s**, `publish-scheduled` **200 every minute at 7s**,
+`rollup-hashtag-trends` **500 `TypeError: fetch failed` in 17ms** ⇒ crons still enabled, the
+**TD-34 trap is still armed**, and **§1 step 0 remains required before Resume**.
+
+**Successor detectors run against session 110 — all PASS.**
+
+- Session 99's naming-free aborted-push check (`ls -lTt`, mtime-sorted, `-t` load-bearing per session
+  101): newest `.codex/` artifact is `s110b-ref.json` at `Sep 27 04:55:54` local = `2026-09-27T11:55:54Z`,
+  against origin tip `737907a` committed `2026-09-27T11:55:53Z` — one second later, with
+  `s110b-commit.json` present ⇒ **quiet, correctly**. No orphaned push.
+- Session 96's skip detector on `210c4bc`: the action sheet **is** in session 110's file list — and per
+  session 98 (presence proves nothing about *per-line* checks) I read both sheet locations directly
+  rather than trusting it.
+- Session 71's counter check: sheet line 4 read `137h28m … as of 2026-09-27T11:51:05Z … session 110`
+  against session 110's own logged `137h28m` — **consistent, PASS**.
+- Standing counts at `:57-58`: `re-stamped session 110, measured wc -l = 13862 pre-append` against
+  origin's 14,065 lines today — **stamped, PASS** (both sheet-resident checks executed by session 110).
+- Push gap: 110b at `11:55Z` → this summon at `12:44Z`, ~49 min against an hourly interval ⇒ no
+  session was lost in between (session 98's class).
+- TD register audit (session 45): tops out at **TD-42**, clean. Session 110 shipped its fix rather
+  than parking it, so it correctly needed no new row.
+- **Session 110's own claim verified first-hand rather than inherited** (its own rule): it reported
+  invariants `57 → 66/66`, mutation-verified. `npm run test:invariants` from the repo root — **66/66
+  pass, 0 fail**. And its shipped `dirtyReport` ran live in this session's mandatory first step,
+  correctly naming the three landed ops files plus untracked `origin-drift.mjs` as **phantoms**, so
+  rule 11 was satisfied without preserving anything that was already at origin.
+
+---
+
+### NEW, session 111 — the doc-rot detector is blind along its OTHER axis: the numeral's FORM, not just the unit. One live member, in the highest-traffic block
+
+**Session 106's finding was that a pinned detector inherits its pattern's blind spots**, and it
+widened the sweep from deictic words (`ago`/`today`/`currently`/…) to a duration shape:
+
+```sh
+grep -nE '\b[0-9]+\+? ?(hours|hrs|days|minutes)\b'   # session 106's complementary grep
+```
+
+Both greps ran clean this session: the pinned deictic one returns **25 hits** (24 at session 106 —
+the rise is sessions 106/110's own write-ups quoting the token list, so per session 96 **a rising
+count is not a signal**), all correctly exempt; session 106's duration grep returns **32 hits**, all
+exempt after triage against its own three buckets, with bucket 3 (elapsed-outage duration outside
+the two live counters) still holding **zero** members.
+
+**And a rotting duration sat at `:29` the whole time, matching neither pattern:**
+
+```
+> stays paused. **Do not derive a new countdown from this paragraph** — the next real date is
+> `2026-10-06`, it is two weeks out, and re-arming a ticking banner is what sessions 34/37/46/51/60
+```
+
+`2026-10-06` is **9 days** out at this session's `2026-09-27T12:51:58Z` anchor, not two weeks; it was
+last honestly ~two weeks out on or before `2026-09-22`, and by `2026-10-02` the sentence would claim
+two weeks of slack on a date four days away. Session 93's pattern carries **no duration token at
+all**, so it cannot match; session 106's requires `[0-9]+` **and** one of four units, so `two weeks`
+fails it **twice over** — spelled numeral, unlisted unit.
+
+**Which of the two gaps actually carries rot — measured, so the widening is minimal rather than
+reflexive.** Two complementary greps, bounding each axis separately:
+
+```sh
+grep -nE '\b[0-9]+\+? ?(weeks?|months?|years?)\b'                       # unit axis  → 6 hits
+grep -niE '\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve) (hours?|hrs?|days?|weeks?|months?|years?|minutes?)\b'   # form axis → 5 hits
+```
+
+- **Unit axis: no rot at all.** All 6 are provider/policy constants — §2's `restore window 1 year`
+  (×4, source-audited session 33) and §3's Apple client secret with *"about 3.5 months of headroom"*.
+  Facts about the world; session 106's bucket 1. **Adding `weeks|months|years` to the digit pattern
+  would have caught nothing.**
+- **Form axis: this is where it lives.** 5 hits, and `:29` is the only rot. `:34` / `:201` / `:207`
+  are Stripe's *quoted* policy (*"up to three days"*, live mode) — bucket 1; `:735` (*"the other is
+  inside two days"*) sits inside session 28's dated write-up — bucket 2. **⇒ the defect is the
+  numeral's FORM, not the unit vocabulary.**
+
+**Fixed the way session 106 fixed its own member — duration-free, not re-stamped.** The sentence now
+sends the reader to a calendar instead of carrying a figure nothing re-stamps; a third live counter in
+a document whose §7 is a case study in unenforced conventions is the worse repair, and this paragraph's
+entire purpose is to stop successors re-arming a countdown. The form-axis grep is now **pinned in §7**
+alongside the other two, with the unit axis recorded as measured-and-empty so nobody re-widens it.
+
+**Why this one mattered more than its size.** It sits **four lines under the status line**, in the
+banner that tells the owner what recovering Stripe costs now — and it rots in the **dangerous
+direction**, overstating remaining slack on the one money-recovery path still open (dashboard
+per-event `Resend`, which needs no secret key and is therefore the only money step the owner can
+action without engineering help). Never recorded across 110 prior sessions: `grep -niE 'two weeks
+out|spelled'` on this log returned **1 hit, unrelated** (`:2836`, about a retry stake).
+
+*Generalised, and it is session 106's lesson turned one notch: when you widen a detector after finding
+it blind, widen it along **every axis of its tokenisation** — session 106 audited **what** the pattern
+measured (units) and left **how the value is written** (digits) untouched, and prose composed under
+incident pressure spells small numbers. Then check which axis actually carries defects before
+committing to the wider pattern: here the unit axis was empty and the form axis had the member, so the
+cheap correct fix is one grep, not two. The corollary is unchanged from session 106 — **prefer deleting
+a decaying value over scheduling its upkeep.***
+
+**Still open — unchanged, and only Branden can close it.** §1: on Vercel project `sizzle` click
+**Disable Cron Jobs** (step 0 — there is no per-cron toggle, session 19; the TD-34 trap is armed and
+re-measured above), then Supabase dashboard → project `gsxoaurmsgqascxukony` → read the status and
+search the ops inbox `09-13`→`09-22` for a Supabase warning email (**no ~09-14 warning ⇒ billing/quota
+or deprovision, so do not start with Resume**), then act per §1's branch table. Afterwards:
+`gh workflow enable uptime.yml`, reconnect Remote Control, and the TD-35 RevenueCat dashboard retries
+(manual, per event — restore does not replay them).
+
+**`PushNotification` result, verbatim: *"Mobile push not sent (Remote Control inactive)."*** Called
+before this blob was built, per session 78's ordering fix, and re-tested rather than inherited:
+unchanged, now ~25 days standing. It died *before* the 09-21 outage, so no unattended session has ever
+paged anyone, and none paged him for this incident either. **§7's channel table holds in full:
+`LOG.md` and the action sheet remain PULL channels, and nothing has reached Branden across 111
+sessions.**
+
+**Secret gate on this entry:** value-shaped scan (prefix-plus-entropy, plus the
+`-----BEGIN…KEY-----`-with-body arm rather than the bare marker that false-fires on this log's own
+prose) → **0 hits** across both blobs. Base guards re-applied: refused to push unless the fetched
+`LOG.md` exceeded 1.15 MB and its line count matched the 14,065 the counters claim.

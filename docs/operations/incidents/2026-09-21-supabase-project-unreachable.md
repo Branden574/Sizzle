@@ -1,7 +1,7 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
 **Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
-(11:23 AM PDT Mon 09-21). **137h28m — past 5 days — as of 2026-09-27T11:51:05Z**, re-verified by session 110
+(11:23 AM PDT Mon 09-21). **138h28m — past 5 days — as of 2026-09-27T12:51:58Z**, re-verified by session 111
 (watchdog), which re-derived the DNS withdrawal from scratch on three resolvers.
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
 
@@ -26,8 +26,9 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > dashboard task, not an engineering one. The API path runs to `2026-10-21`. The work is simply
 > manual and per-event now rather than automatic, and the pile grows for every day the project
 > stays paused. **Do not derive a new countdown from this paragraph** — the next real date is
-> `2026-10-06`, it is two weeks out, and re-arming a ticking banner is what sessions 34/37/46/51/60
-> each did before it had to be collapsed.
+> `2026-10-06` — read the remaining slack off a calendar rather than from a figure in this
+> sentence, because re-arming a ticking banner is what sessions 34/37/46/51/60 each did before
+> it had to be collapsed.
 
 > **🍎 NEW, session 23 — the Apple/RevenueCat half does NOT self-heal, and its window has
 > ALREADY CLOSED.** RevenueCat retries a failing webhook **5 times over 155 minutes total**,
@@ -54,9 +55,9 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > without a browser. It changes your *calibration*, not the fix: the app is degrading
 > gracefully, and the misattribution is what is quietly costing you reviews and support mail.
 
-This page exists because **one hundred and ten** unattended sessions — one hundred and nine watchdog summons plus
-the 2026-09-25 daily sweep — have now diagnosed the same outage and appended **13,860+ lines** to
-`LOG.md` (counts re-stamped session 110, measured `wc -l` = 13862 pre-append; session 48 stamped them at "forty-seven"/"5,600+" and nothing re-checked them
+This page exists because **one hundred and eleven** unattended sessions — one hundred and ten watchdog summons plus
+the 2026-09-25 daily sweep — have now diagnosed the same outage and appended **14,060+ lines** to
+`LOG.md` (counts re-stamped session 111, measured `wc -l` = 14065 pre-append; session 48 stamped them at "forty-seven"/"5,600+" and nothing re-checked them
 for the 31 sessions until session 79, so they had understated the burn by a third — session 95 skipped
 this stamp entirely, which is what §7's session-96 entry gives a one-call detector for, and **session 97
 skipped it again while passing that detector**, which is what session 98's correction below fixes).
@@ -964,6 +965,38 @@ only the shapes you happened to have. Sessions 30/74/93/96 each refined how the 
 asked what it could not **match**. When a check has reported clean for many cycles, audit the check
 against the defect class rather than re-running it — and prefer deleting a decaying value over
 scheduling its upkeep.*
+
+**Session 111 (2026-09-27T12:51:58Z) — the detector was blind along its OTHER axis: the numeral's
+FORM. One live member, and it was four lines under the status line.** Session 106 widened the sweep
+from deictic words to a duration shape and audited **what** the pattern measured (units); it left
+**how the value is written** untouched. Both pinned greps ran clean this session — deictic **25
+hits** (24 at session 106; the rise is later sessions quoting the token list, so per session 96 a
+rising count is not a signal), duration **32 hits**, all exempt, bucket 3 still empty — while
+`:29` read *"the next real date is `2026-10-06`, **it is two weeks out**"*. It is **9 days** out at
+this session's anchor, and by `2026-10-02` it would claim two weeks of slack on a date four days
+away. Session 93's pattern has no duration token; session 106's needs `[0-9]+` **and** one of four
+units, so `two weeks` fails it twice over. **Measured which axis actually carries rot, so the
+widening stays minimal:** the unit axis (`grep -nE '\b[0-9]+\+? ?(weeks?|months?|years?)\b'`) returns
+**6 hits and no rot** — all provider/policy constants (§2's `1 year` restore window, §3's
+`3.5 months` of Apple-secret headroom), so adding those units to the digit pattern would catch
+nothing. The rot is in the **form** axis. **Third pinned invocation — run it alongside the other two:**
+
+```sh
+grep -niE '\b(one|two|three|four|five|six|seven|eight|nine|ten|eleven|twelve) (hours?|hrs?|days?|weeks?|months?|years?|minutes?)\b' \
+  docs/operations/incidents/2026-09-21-supabase-project-unreachable.md
+```
+
+It returns **5 hits**; triage against session 106's buckets, because four are exempt: `:34`/`:201`/`:207`
+are Stripe's *quoted* policy (*"up to three days"*, live mode) — bucket 1, facts about the world;
+`:735` (*"the other is inside two days"*) sits inside session 28's dated write-up — bucket 2. Only an
+elapsed or forward-looking figure in **standing** prose is rot. `:29` was fixed **duration-free**
+rather than re-stamped, for the same reason session 106 gave: this paragraph's entire job is to stop
+successors re-arming a countdown, so giving it a figure that needs upkeep defeats it. It also rotted in
+the **dangerous direction** — overstating remaining slack on the one money-recovery path still open
+(dashboard per-event `Resend`, the only money step needing no secret key). *Generalised: when you widen
+a detector after finding it blind, widen it along **every axis of its tokenisation** — prose written
+under incident pressure spells small numbers — and check which axis carries defects before committing to
+the wider pattern.*
 
 ### The one follow-up that makes the next SEV-1 different
 
