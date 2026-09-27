@@ -13145,3 +13145,182 @@ since session ~12.
 
 **Read `docs/operations/incidents/2026-09-21-supabase-project-unreachable.md`, not this log.** It is
 the one-page action sheet; this entry only re-attests it.
+
+## Watchdog session 106 — 2026-09-27 00:36 PDT (`07:38Z` 09-27) — SEV-1 hour 133h15m; no change; one real doc defect found in §7's own heading
+
+**What fired.** `scripts/ops/watchdog.sh` at `2026-09-27 00:36:33` local: API degraded, HTTP 503,
+`problems:["database-unreachable"]`, commit `ef49551`. A structured 503 with a JSON body — **not**
+the HTTP-000 host-blip class that 5 of 6 early summons turned out to be — so it was worked as real
+from the first call, per the calibration note in project memory.
+
+**Root cause — unchanged, and re-derived from scratch rather than inherited.** Supabase project
+`gsxoaurmsgqascxukony` is still DNS-withdrawn. Measured this session on **three** resolvers via
+Node's `dns.Resolver` (`dig` is not allowlisted unattended):
+
+| host | system | 1.1.1.1 | 8.8.8.8 |
+|---|---|---|---|
+| `gsxoaurmsgqascxukony.supabase.co` | ENOTFOUND | ENOTFOUND | ENOTFOUND |
+| `db.gsxoaurmsgqascxukony.supabase.co` | ENOTFOUND | ENOTFOUND | ENOTFOUND |
+| `supabase.co` (calibration) | 76.76.21.21 | 76.76.21.21 | 76.76.21.21 |
+
+The calibration row is the load-bearing half: the apex resolves on all three resolvers in the same
+process that got ENOTFOUND for both per-project records, so the resolver path demonstrably works and
+this is not a local-network or DNS-outage artifact. Parent up + **every** per-project record withdrawn
+= project-level pause/restriction or deprovision. **Level D — owner action is the only fix; no repo
+change, rollback or redeploy can reach a withdrawn DNS name.**
+
+**Three spaced probes confirm persistence, not a blip:** the watchdog's own `07:36:31Z` (503), then
+`07:37:02Z` (503, `t=7.2s` — the connect-timeout shape) and `07:38:35Z` (503), all commit `ef49551`.
+Anti-flap does not apply: nothing recovered between probes and the outage is 5.5 days old.
+
+**Rollback ruled out structurally, not assumed.** `gh api repos/Branden574/Sizzle/commits/main` puts
+origin tip at `ef49551`, committed `2026-09-27T06:38:36Z` — session 105's own docs-only commit,
+landed **one hour before this summon** — and `/health` reports exactly that commit. Deployed code
+therefore equals origin tip, so no bad deploy is in play and there is no earlier-READY deployment
+that would change the DB's DNS. Blast radius on live surfaces this hour: `/health` **503**,
+`/feed/for-you` **500 `db_error`**, `getsizzle.app` **200 in 0.299s** (frontend still serves and,
+per session 50, degrades to an error card rather than a white screen; the TD-38 copy defect still
+misattributes the fault to the user's own phone, still deliberately unshipped).
+
+**Pager state re-measured first-hand.** `gh workflow list --all` → `Uptime` is still
+`disabled_manually`; `gh run list --workflow=uptime.yml` shows last success `2026-09-21T17:54:46Z`
+and first failure `2026-09-21T18:23:07Z`, which is the outage-onset timestamp the whole sheet is
+anchored to. Re-arming it is `.github/workflows/**` ⇒ minimum Level C **and** would override a
+deliberate human mute, so it stays untouched (§7's closing note).
+
+### NEW, session 106 — §7's own heading has understated this outage by ~9x for 94 sessions, and the pinned doc-rot grep is structurally blind to the class
+
+**The defect.** Line 662, a **standing section heading** — not a dated block, not a measurement:
+
+```
+## 7. Why a 2-minute fix has gone 15+ hours — there is no working alert path to you
+```
+
+Session 12 wrote it at hour ~15.5. It is **hour 133h15m**. The single line whose job is to tell an
+owner *how long this has been burning* has been off by an order of magnitude for 94 sessions, and it
+sits in the section §6 itself calls *"not a footnote; it is why this is still open."*
+
+**Why every previous sweep missed it, which is the transferable part.** Sessions 30, 74, 93 and 96
+built the doc-rot convention and session 93 pinned its invocation. Every token in that pinned
+pattern — `ago`, `today`, `yesterday`, `currently`, `this hour`, `right now`, `tonight` — is a
+**deictic word**. There is **no duration pattern**, so a bare elapsed figure (`15+ hours`,
+`18 days`) cannot match no matter how stale it gets. The convention has been running clean and
+*correctly* reporting clean, against a pattern that never covered this shape. Ran the pinned grep
+verbatim this session: **24 hits, flat** against sessions 96 and 104 (105 skipped it at one session
+of age and said so) — all 24 correctly exempt, and the heading is not among them.
+
+**The complementary grep, and its triage — three buckets, only one of which is rot:**
+
+```sh
+grep -nE '\b[0-9]+\+? ?(hours|hrs|days|minutes)\b' \
+  docs/operations/incidents/2026-09-21-supabase-project-unreachable.md
+```
+
+Twenty hits this session. Triage, so a successor does not re-flag the safe ones:
+
+1. **Provider/policy constants — exempt, and they are the bulk.** `155 minutes` / `2h35m`
+   (RevenueCat's retry budget), `3 days` / `15 days` / `30 days` (Stripe's three windows),
+   `7 days idle` (Supabase's pause threshold), `5/10/20/40/80 minutes`, `~2 minutes` (the fix
+   itself), `67 days old` (env-var age at measurement). These are **facts about the world**; they do
+   not decay.
+2. **Dated or attributed history — exempt.** `:670`'s *"Dead — 18 days"* sits in a table whose
+   column header literally reads **"Verified state (session 12)"**; `:566`'s *"15 days old"*
+   describes the pre-outage deploy's age at onset; `:734`'s *"~6.5 hours after this session"* is
+   inside session 74's dated write-up. Session 30's two exemptions already cover all of these.
+3. **Elapsed-outage duration outside the two live counters — THIS IS THE ROT CLASS, and it had
+   exactly one member:** `:662`. Line 4 (the status line) and the Stripe banner are re-stamped by
+   design; **any elapsed-outage figure anywhere else is stale by construction**, because nothing
+   re-stamps it.
+
+**Fixed — and deliberately fixed to be duration-free rather than re-stamped:**
+
+```
+## 7. Why a 2-minute fix has gone unfixed for days — there is no working alert path to you
+```
+
+Re-stamping it would have created a **third** live counter needing maintenance every hour, in a
+document whose entire §7 is a case study in conventions decaying for want of enforcement. Removing
+the number is strictly better: it cannot rot, so it needs no convention at all. *Generalised, and it
+is session 99's lesson pointed at the pattern instead of the artifact: a pinned detector inherits
+the blind spots of its pattern, and a pattern built from the examples in front of you covers the
+shapes you happened to have. Sessions 30/74/93/96 each refined how the grep was **run**; none asked
+what it could not **match**. When a check has reported clean for many cycles, audit the check against
+the defect class rather than re-running it — and prefer deleting a decaying value over scheduling its
+upkeep.*
+
+**Scope, stated honestly: this is a documentation defect, not an incident finding.** It changes
+nothing about the root cause, the branch table, any deadline, or the two clicks. It changes what an
+owner opening §7 believes about elapsed time. Docs-only, `docs/operations/incidents/**` is not on the
+autonomy-policy security-sensitive list (the Level C guardrail-docs class is `CLAUDE.md`, `AGENTS.md`,
+`docs/engineering/**`), so it is in-lane and shipped in this commit.
+
+**Alerting channel re-measured first-hand — `PushNotification` is still dead, now ~23 days.**
+§7's table records *"Dead — 18 days"* as of session 12. Re-tested this session, not inherited:
+`PushNotification` → *"Mobile push not sent (Remote Control inactive)."* That is the same negative
+session 12 got, five days later, so the row's finding stands and the elapsed figure is now ~23 days
+(left as session 12's attributed history per bucket 2 above). **Consequence unchanged and worth
+restating plainly: 106 sessions have now diagnosed this outage and none has been able to page
+anybody.** Reconnecting Remote Control is on the owner's side.
+
+**Periodic checks, each with its session number so a successor can price the call:**
+
+- **Session 98 granularity detector** (patch, not filename) on session 105's commit `ef49551`:
+  **PASS at full granularity** — `gh api …/compare/f8ef2f0...ef49551` shows the sheet patch touching
+  *both* line 4 (the live counter) *and* the `:56-58` standing counts. No partial skip, no repair owed.
+- **Session 99 aborted-push detector** (mtime, naming-free): newest `.codex/` draft artifact is
+  `tree99.json` at `2026-09-26 17:19:01` local (`2026-09-27T00:19:01Z`), which is **older** than
+  origin tip `ef49551`'s commit time `06:38:36Z` ⇒ **quiet, correctly**; no orphaned session sits
+  between them. Note for successors: sessions 100–105 pushed successfully while leaving *no*
+  numbered scratch artifacts at all, which is session 99's point exactly — the mtime key works
+  where the filename key would have paired nothing.
+- **Doc-rot grep** — **ran** (session 105 skipped it at one session of age and recorded the skip, so
+  this was the two-session mark session 93's standard calls due): **24 hits, flat** vs 96 and 104,
+  all 24 correctly exempt. **And see the new section above — the pattern itself had a gap.**
+- **TD-41 mirror guard**: the TD-27 origin mirror materialised `LOG.md` at **1,137,736 bytes /
+  13,147 lines** — non-zero, so TD-41's zero-byte failure mode stays closed and this append is built
+  on origin's full blob, not the stale local copy.
+- **TD-27 drift**: local `HEAD d4c5395` vs `origin/main ef49551`, 8 files differing.
+  `scripts/ops/origin-drift.mjs` ran **first**, before any repo-derived reasoning — which is what
+  kept the doc-rot grep and the §7 heading fix pointed at origin's copy rather than the 25-day-old
+  local one.
+
+**Inherited this session, explicitly flagged as such (session 79's no-carve-out rule):**
+
+- **§1 step 0 cron state.** `vercel crons ls --project sizzle` is not allowlisted in this session's
+  Bash policy, and `/health` carries no substitute because `cronAges` is `null` *precisely because*
+  the DB is unreachable. Session 105 inherited it from 104, which measured all five paths still
+  listed. Per session 64 the toggle is **structurally owner-only**, so this stays recorded as state,
+  **not** an agent-actionable omission. Not restated as my own measurement.
+- **TD-21.** Session 105 exercised **both** surfaces one hour ago — the local tokenless `supabase`
+  MCP server (server-side `Unauthorized`, i.e. the revoked PAT) and the claude.ai connector (an
+  ungrantable permission prompt). One hour is well inside the useful life of that negative, so it is
+  inherited rather than re-burned. Both rotation and the connector grant are Level D.
+
+**What I did.** Diagnosed, re-attested, and shipped **one docs-only fix** (the §7 heading, plus the
+complementary-grep write-up above). **No code, config, migration, native file or production setting
+touched; no security control weakened; no deploy or rollback issued.** Every parked item
+(TD-28/29/34/35/36/38) stays parked for the reason the sheet already gives: each is unverifiable
+against a dead database, and TD-36 sits in `routes/monetize.ts`, which is Level C regardless.
+`.github/workflows/**` untouched, so the deliberate human mute on `uptime.yml` stands. Working tree
+preserved per hard rule 11 — the four dirty paths (`scripts/ops/sweep-prompt.md`,
+`scripts/verify-deploy.mjs`, `tests/invariants/ops-tooling.test.mjs`, `scripts/ops/origin-drift.mjs`)
+were not touched, stashed or reverted.
+
+**Still open — FOR BRANDEN, still the same two clicks, ~2 minutes:**
+
+1. **Vercel → project `sizzle` (the API; naming is reversed) → Settings → Cron Jobs →
+   `Disable Cron Jobs`** (no deploy needed). Do this **first** — it disarms the TD-34 trap where the
+   first `finalize-videos` tick within 60s of Resume mass-flips every outage-stranded video to a
+   terminal `error` the finalizer refuses to re-poll. Re-enable after capturing the stranded list.
+2. **Supabase dashboard → project `gsxoaurmsgqascxukony` → Resume** — read §1's branch table first;
+   the dashboard says *why* it stopped, and the ops inbox almost certainly holds the email.
+3. Then §4's verification block, §4 step 0's stranded-video capture, and §4 step 6's **manual**
+   RevenueCat **Retry** (Apple's 155-minute retry budget expired `2026-09-21T20:58Z`; restore will
+   **not** replay it — the one item restore does not cover). Stripe's automatic window closed
+   `2026-09-24T18:23Z`; the dashboard per-event **Resend** path stays open to `2026-10-06` and needs
+   no secret key.
+4. **Reconnect Remote Control** so `PushNotification` works, and `gh workflow enable uptime.yml`
+   *after* restore. 106 sessions, zero pages delivered.
+
+**Read `docs/operations/incidents/2026-09-21-supabase-project-unreachable.md`, not this log.** It is
+the one-page action sheet; this entry re-attests it and records one correction to its §7.

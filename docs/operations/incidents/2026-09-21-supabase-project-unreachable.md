@@ -1,7 +1,7 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
 **Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
-(11:23 AM PDT Mon 09-21). **132h13m — past 5 days — as of 2026-09-27T06:36:09Z**, re-verified by session 105
+(11:23 AM PDT Mon 09-21). **133h15m — past 5 days — as of 2026-09-27T07:38:35Z**, re-verified by session 106
 (watchdog), which re-derived the DNS withdrawal from scratch on three resolvers.
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
 
@@ -54,9 +54,9 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > without a browser. It changes your *calibration*, not the fix: the app is degrading
 > gracefully, and the misattribution is what is quietly costing you reviews and support mail.
 
-This page exists because **one hundred and five** unattended sessions — one hundred and four watchdog summons plus
-the 2026-09-25 daily sweep — have now diagnosed the same outage and appended **13,030+ lines** to
-`LOG.md` (counts re-stamped session 105, measured `wc -l` = 13036 pre-append; session 48 stamped them at "forty-seven"/"5,600+" and nothing re-checked them
+This page exists because **one hundred and six** unattended sessions — one hundred and five watchdog summons plus
+the 2026-09-25 daily sweep — have now diagnosed the same outage and appended **13,140+ lines** to
+`LOG.md` (counts re-stamped session 106, measured `wc -l` = 13147 pre-append; session 48 stamped them at "forty-seven"/"5,600+" and nothing re-checked them
 for the 31 sessions until session 79, so they had understated the burn by a third — session 95 skipped
 this stamp entirely, which is what §7's session-96 entry gives a one-call detector for, and **session 97
 skipped it again while passing that detector**, which is what session 98's correction below fixes).
@@ -659,7 +659,7 @@ its events only come back if you press Retry.
 
 ---
 
-## 7. Why a 2-minute fix has gone 15+ hours — there is no working alert path to you
+## 7. Why a 2-minute fix has gone unfixed for days — there is no working alert path to you
 
 Session 12 audited every automated channel from production to you. **All of the push
 channels are dead or muted.** This is the finding that actually explains the elapsed time,
@@ -893,6 +893,43 @@ are grepping for**. A detector keyed to a convention inherits that convention's 
 un-enforced naming convention across 99 sessions has none — which is exactly the property §7 has
 already documented twice (session 74 on doc rot, session 93 on pinned greps). Prefer a key the
 filesystem supplies (mtime) over one each session chooses.*
+
+**Session 106 (2026-09-27T07:38:35Z) — the doc-rot grep has been reporting clean against a pattern
+that CANNOT MATCH the worst instance, and that instance was §7's own heading.** Sessions 30, 74, 93
+and 96 built this convention and session 93 pinned its invocation. Every token in the pinned
+pattern — `ago`, `today`, `yesterday`, `currently`, `this hour`, `right now`, `tonight` — is a
+**deictic word**; there is **no duration pattern**. So a bare elapsed figure can never match, however
+stale. This heading read *"Why a 2-minute fix has gone **15+ hours**"* — session 12's figure, written
+at hour ~15.5 — while the status line four hundred lines above it said **133h15m**. Off by ~9x, for
+94 sessions, on the line that tells an owner how long this has been burning.
+
+**Complementary grep — run it alongside the pinned one:**
+
+```sh
+grep -nE '\b[0-9]+\+? ?(hours|hrs|days|minutes)\b' \
+  docs/operations/incidents/2026-09-21-supabase-project-unreachable.md
+```
+
+It returns ~20 hits and **only one bucket is rot**, so triage before flagging:
+
+1. **Provider/policy constants — exempt, and they are the bulk.** `155 minutes`/`2h35m`,
+   `3 days`/`15 days`/`30 days`, `7 days idle`, `5/10/20/40/80 minutes`, `~2 minutes`,
+   `67 days old`. Facts about the world; they do not decay.
+2. **Dated or attributed history — exempt**, covered by session 30's two exemptions: the
+   `PushNotification` row's *"18 days"* sits under a column header reading **"Verified state
+   (session 12)"**; §5's *"15 days old"* is the pre-outage deploy's age at onset.
+3. **Elapsed-outage duration outside the two live counters — THE ROT CLASS.** Line 4 and the Stripe
+   banner are re-stamped by design; **any elapsed-outage figure anywhere else is stale by
+   construction**, because nothing re-stamps it. This heading was its only member, and the fix was
+   to make it **duration-free** rather than to re-stamp it — a third live counter in a document
+   whose §7 is a case study in unenforced conventions would have been the worse repair.
+
+*Generalised — session 99's lesson pointed at the pattern instead of the artifact: a pinned detector
+inherits the blind spots of its pattern, and a pattern built from the examples in front of you covers
+only the shapes you happened to have. Sessions 30/74/93/96 each refined how the grep was **run**; none
+asked what it could not **match**. When a check has reported clean for many cycles, audit the check
+against the defect class rather than re-running it — and prefer deleting a decaying value over
+scheduling its upkeep.*
 
 ### The one follow-up that makes the next SEV-1 different
 
