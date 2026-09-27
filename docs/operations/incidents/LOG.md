@@ -13458,3 +13458,24 @@ reverted.
 
 **Read `docs/operations/incidents/2026-09-21-supabase-project-unreachable.md`, not this log.** It is
 the one-page action sheet; this entry re-attests it and re-stamps its two count lines.
+
+### Session 107 addendum — escalation channel re-tested first-hand
+
+`PushNotification` called at `2026-09-27T08:47Z`, after the checks above and after the log push:
+result verbatim — **"Mobile push not sent (Remote Control inactive)."** The same negative session 12
+first recorded, now **~23 days** standing. Re-tested rather than inherited, per session 77's rule that
+a tool's availability is a per-session fact; unlike `vercel logs` this one did *not* flip.
+
+**So this entry and the action sheet remain PULL channels, not push. Nothing has paged Branden across
+107 sessions**, and no notification was delivered for this incident either. Stated explicitly rather
+than implied, because the §7 channel inventory is exhaustively verified as dead (Remote Control,
+`uptime.yml` `disabled_manually`, the permission-gated claude.ai connectors, `osascript`) and a public
+GitHub Issue is deliberately rejected — the repo is public and filing one would advertise a live
+outage plus an open financial-webhook window on a production money system.
+
+**Ship gate for this session's own push, recorded per the memory's correction:**
+`node scripts/verify-deploy.mjs --api --sha 7f0b23c5efabf11da0eab6cbdb751fc045761cbe` →
+`deployment: READY` / `HTTP 503` / `degraded (database-unreachable) — deployed but unhealthy`,
+**exit 0**, in seconds. `/health` then served **commit `7f0b23c`**, i.e. the deploy genuinely
+promoted. That doubles as the free control noted in §6: the failure reproducing on a **brand-new
+build with freshly injected env vars** kills both "stale artifact" and "env var never picked up".
