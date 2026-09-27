@@ -13787,3 +13787,76 @@ Supabase warning email**: no ~09-14 warning ⇒ this is billing/quota or deprovi
 start with Resume. ③ Then act per §1's branch table. Afterwards: `gh workflow enable uptime.yml`,
 reconnect Remote Control, and the TD-35 RevenueCat dashboard retries (manual, per event — restore
 does not replay them).
+
+### Session 109 addendum — two standing claims in this incident are FALSE, and both were one command away. I asserted the first one myself an hour ago.
+
+Both corrections are post-push measurements that could not have been inside the entry above (one is
+*about* the push), so this is not the dangling-forward-reference pattern session 108b retired — that
+was a session promising a result it already knew how to get. These are facts the push created.
+
+**① "Docs-only ⇒ there is no deploy to verify" is WRONG. Both Vercel projects redeploy production on
+every one of these log pushes, and 109 sessions have never verified one.**
+
+My own ship-gate paragraph above says *"there is no API deploy to verify and `scripts/verify-deploy.mjs`
+has nothing to assert against"*. Sessions 101, 102 and 108b say the same thing in their own words.
+**It is false, and the refutation was already sitting in the evidence I had gathered:** `/health`
+reported `commit: 694c8ef` *before* I pushed — session 108's **docs-only** addendum. A `/health`
+that names a commit can only do so if a production build ran at that SHA.
+
+Measured directly after pushing `5f208f5`, via `node scripts/verify-deploy.mjs --sha 5f208f5…`:
+
+| Project | Deployment | Probe |
+|---|---|---|
+| `sizzle` (the **API**) | **READY** | `/health` **503** `degraded (database-unreachable)` — *deployed but unhealthy*, i.e. the DB is the only fault |
+| `sizzle-api` (the **frontend**) | **READY** | `getsizzle.app` **200**, **serving commit `5f208f5` == HEAD ✓** (version 1.0.101) |
+
+`/health` was serving `5f208f5` within **38 seconds** of the ref update. So every docs push in this
+incident has triggered **two production redeploys**, and the standing claim told each session it had
+nothing to check. The practical exposure is small (a Markdown-only diff is unlikely to break either
+build) but it is **not zero and it is not the point**: this repo's own deploy rule is *never assume a
+push went live*, the verification is **one command**, and for 109 sessions nobody ran it. Had a build
+begun failing — an ignored-build-step change, a quota, a Vercel-side regression — the incident log
+would have kept reporting green while production drifted. **Correction for successors: a docs-only
+commit on `main` is still a production deploy on both projects. Verify it.**
+
+**The affordance to do so already exists and is not a phantom.** `verify-deploy.mjs` run bare fails
+*informatively* on exactly this incident's push path — *"local HEAD `d4c5395` … predates every
+deployment on the page … a commit pushed via the GitHub git-data API does not advance it. Re-run with
+`--sha`"* — which is a prior session's TD-27-aware repair doing precisely its job. The only reason it
+went unused is that the entry template said there was nothing to verify.
+
+**② The four "uncommitted" paths that every recent entry promises to preserve under rule 11 are
+byte-identical to origin. Rule 11 has been firing on a phantom.**
+
+`git status` reports `M scripts/ops/sweep-prompt.md`, `M scripts/verify-deploy.mjs`,
+`M tests/invariants/ops-tooling.test.mjs`, `?? scripts/ops/origin-drift.mjs` — and my entry above, like
+its predecessors, records them as pre-existing local work left untouched. **Byte-compared against the
+origin mirror this session, all four are IDENTICAL** (`Buffer.equals`, not a diff heuristic; the
+untracked one included, since origin *has* it). There is **no unlanded local work in this repo at all.**
+
+The cause is TD-27's own mechanism: pushing through the GitHub git-data API never advances local
+`HEAD` or the index, so files that landed at origin *hours ago* keep presenting as dirty forever,
+and the staleness compounds every session. Both failure directions are live: a session could "rescue"
+work that is already pushed (a no-op commit, or worse a **revert** built from the stale base), or read
+the dirty markers as a reason not to touch a file it legitimately needed to change.
+
+**One-command check, using the mirror `origin-drift.mjs` already materialises** — no new tooling:
+
+```sh
+node -e 'const fs=require("fs");for(const f of process.argv.slice(1))console.log(
+  (fs.existsSync(".codex/origin-<sha>/"+f)&&fs.readFileSync(".codex/origin-<sha>/"+f)
+   .equals(fs.readFileSync(f))?"IDENTICAL":"DIFFERS "),f)' <paths from git status>
+```
+
+Rule 11 stays exactly as written — *preserve* real uncommitted work. What changes is that
+"`git status` is dirty" is **not** evidence of any, on a repo whose only write path is the git-data
+API. Filed as a follow-up to **TD-27**: the drift tool already knows both trees, so it is the natural
+place to print `dirty-but-identical-to-origin` and retire the phantom at source.
+
+*Generalised, and it is this incident's own recurring lesson pointed at the entry template rather than
+at a grep: both of these are **inherited sentences that no longer describe the system**, and both were
+refutable with a command already in front of me — the `/health` commit field I had quoted three times,
+and a mirror the mandatory-first gate had already written to disk. A claim that every session copies
+forward is the least-audited text in the log precisely because it looks settled; §7 has documented
+that shape for greps (session 106), for detectors (98, 99) and for counters (95, 97), and this is the
+same shape in the **ship gate**, the one paragraph every session writes and none re-derives.*
