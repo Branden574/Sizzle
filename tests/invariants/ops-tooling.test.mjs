@@ -257,6 +257,30 @@ test('origin-drift never tells the sweep to run a denied git command', () => {
   assert.match(text, /Do NOT `git pull`/, 'pull/fetch are not allowlisted unattended — the banner must say so');
 });
 
+/* The mirror is a trap you can walk into: measured session 102 of the Supabase SEV-1, the
+   sandbox shell keeps its working directory ACROSS tool calls, and `.codex/origin-<sha>/`
+   carries its own package.json, scripts/verify-deploy.mjs and tests/invariants/. So one `cd`
+   into the mirror silently repoints the session's own verification gates at origin's stale
+   copies — a green test run that proves nothing about the edit in the working tree. The tool
+   used to print `(cd <mirror> && npm audit …)`, which the sandbox degrades to a bare `cd`. */
+
+test('origin-drift never tells the sweep to cd — a leaked cwd runs the mirror\'s stale tools', () => {
+  const text = driftReport({
+    localHead: SYNCED,
+    originHead: AHEAD,
+    files: [{ path: 'package-lock.json', status: 'modified' }],
+    outDir: '.codex/origin-ddddddd',
+  }).lines.join('\n');
+  assert.doesNotMatch(text, /\(cd /, 'the subshell form degrades to a bare `cd` in this sandbox');
+  assert.doesNotMatch(text, /\bcd \.codex/, 'a printed `cd` into the mirror leaks into every later relative path');
+  assert.match(
+    text,
+    /npm audit --package-lock-only --prefix \.codex\/origin-ddddddd/,
+    'the audit command must NAME the mirror rather than move into it',
+  );
+  assert.match(text, /Do NOT `cd`/, 'and it must say why, because the hazard outlives this one command');
+});
+
 test('origin-drift writes only inside the gitignored .codex scratch', async () => {
   const src = await readFile(new URL('../../scripts/ops/origin-drift.mjs', import.meta.url), 'utf8');
   const writeTargets = [...src.matchAll(/(?:writeFileSync|mkdirSync)\(([^,)]+)/g)].map((m) => m[1].trim());

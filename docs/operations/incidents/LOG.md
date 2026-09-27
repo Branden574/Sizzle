@@ -12603,3 +12603,165 @@ silently at 100, in the clean-looking direction.
 around it by hand, the finding is not the workaround — it is that **a successful response can carry no
 payload**, and a convenience layer that cannot tell empty from absent will hand you a corrupt base and call
 it origin's truth. Verify size, not just status.*
+
+---
+
+## 2026-09-26 20:21 PDT / 2026-09-27T03:21Z — SEV-1 watchdog session 102 (Supabase project still unreachable)
+
+**Fired:** `API degraded (503): database-unreachable` — the same signature as the 101 summons before it.
+Raw `/health` body carried `commit 1cc0097` (session 101's own log push), `paymentsKeyMode: live`,
+`cronAges: null`.
+
+**Verdict: the same OPEN SEV-1, at hour 129h01m.** Not a false alarm, and not a new incident. Root cause
+re-attested from scratch per ground rule 4 rather than inherited. **Owner action remains the only fix.**
+
+### Root cause — re-derived this session, not inherited
+
+Triple-resolver probe (`.codex/dns-probe.mjs`, Node's `dns` module — needs no allowlist):
+
+| name | system | 1.1.1.1 | 8.8.8.8 |
+|---|---|---|---|
+| `supabase.co` (parent zone) | `A=76.76.21.21` · `CNAME=ENODATA` | identical | identical |
+| `gsxoaurmsgqascxukony.supabase.co` | `A=ENOTFOUND` · `CNAME=ENOTFOUND` | identical | identical |
+| `db.gsxoaurmsgqascxukony.supabase.co` | `A=ENOTFOUND` · `CNAME=ENOTFOUND` | identical | identical |
+
+The parent zone answers while **both** per-project records are NXDOMAIN, identically on three unrelated
+resolvers ⇒ **project-level pause/deprovision**, not a platform DNS fault and not a sandbox artifact
+(`ENODATA` = name exists with no record of that type; `ENOTFOUND` = the name is gone — the distinction is
+the attestation, per the standing triage rule).
+
+### Evidence at every boundary
+
+- **`/health`** → `503 degraded ["database-unreachable"]`, `time 2026-09-27T03:24:25.242Z`. The elapsed
+  figure below is computed from **that field**, so the counter cannot be advanced without probing.
+- **Real user-facing endpoint** (not just the probe): `GET /feed/for-you?limit=3` → **500
+  `{"error":{"code":"db_error"}}`**. Live users are failing, not merely a health check.
+  *(`/recipes` → 404 `Route not found`; that is the wrong path, not a routing regression.)*
+- **Frontend** `getsizzle.app` → **200** on 3/3 probes (~0.10 s). The web tier is healthy; this is
+  DB-only, which is why rollback cannot help.
+- **Vercel `sizzle` (the API — naming is reversed)** → six most recent production deployments all
+  **● Ready**, newest 56m old, 17–21 s builds. **Rollback is a structural no-op**: there is no bad
+  deployment to roll back to a good one, and the hourly READY churn is prior sessions' own docs-only log
+  pushes — *never* chase it as a bad deploy.
+- **CI** → `gh run list --branch main --limit 6` = **6/6 success**, including session 101's push.
+- **Supabase MCP** → `mcp__supabase__get_advisors` (allowlisted, so no permission prompt) fails
+  **server-side**, byte-identical to session 90: *"Unauthorized. Please provide a valid access token …
+  via the `--access-token` flag or `SUPABASE_ACCESS_TOKEN`."* ⇒ **TD-21 still needs a PAT rotation, not a
+  permission grant**, and Branden has not rotated it. One call, recorded, dropped — paused-vs-deleted
+  stays unanswerable from inside an unattended session.
+- **`npm audit` on the ORIGIN lockfile** (the local one is weeks stale under TD-27) → **3 advisories,
+  0 new**: esbuild = TD-18, hono trio = TD-31. No action; TD-31's hold stands.
+
+### Finding — TD-42, shipped: the drift gate told me to `cd` into the mirror
+
+The one genuinely new thing this session, and I walked into it before I noticed it. `origin-drift.mjs:105`
+printed `Audit the ORIGIN tree with:  (cd .codex/origin-<sha> && npm audit --package-lock-only)`. Three
+facts compose:
+
+1. The sandbox refuses most **compound** commands, so that parenthesised subshell degrades in practice to
+   a **bare `cd`**.
+2. The Bash tool's **working directory persists across tool calls** — measured here: a `cd` issued to read
+   the mirror's `LOG.md` tail was still in effect calls later, and `node .codex/dns-probe.mjs` died
+   `MODULE_NOT_FOUND` on `.codex/origin-1cc0097/.codex/dns-probe.mjs`.
+3. The mirror is **not** a bare docs tree — it materialises its own `package.json`,
+   `scripts/verify-deploy.mjs`, `scripts/ops/` and `tests/invariants/ops-tooling.test.mjs` (confirmed by
+   `ls`, not assumed).
+
+Composed: a session that follows the printed instruction and then runs `npm run test:invariants` or
+`node scripts/verify-deploy.mjs` executes **origin's frozen copies** — so its own edit is unverified while
+the run reports green. Same failure direction as TD-41: **a wrong result that reads exactly like a right
+one**, arriving at the moment the origin-vs-local distinction is hardest to hold. My `MODULE_NOT_FOUND`
+was the *lucky* variant; the silent one is the defect.
+
+Fixed in-lane (**Level B** per `safety:diff`): the banner now prints the cwd-safe
+`npm audit --package-lock-only --prefix ${outDir}` — `npm` already takes the tree as an argument, which
+also sidesteps the compound-command refusal that caused the degradation — plus one line of *why*.
+**Verified three ways:** the replacement was **executed against the real mirror before being recommended**
+(returns the expected 3 advisories, so it is not a plausible-looking string); invariants **57/57** (56 → 57);
+and **mutation-verified** by restoring the exact pre-fix line, which fails **exactly** test 25 and nothing
+else — the live bug as a red test, and proof no other invariant leaned on the old string.
+
+### Still open — unchanged, all owner-blocked
+
+- **Paused vs deleted is unanswerable unattended.** All three routes closed (claude.ai connector
+  permission-gated; local `supabase` MCP tokenless; `api.supabase.com` → 401, PAT revoked — re-tested
+  above). Only the dashboard or the ops inbox answers it.
+- **Crons still not disabled** (§1 step 0) ⇒ the **TD-34 trap stays armed** at hour 129h01m. Structurally
+  owner-only (Vercel exposes only a project-wide dashboard button). Still the cheapest owner action,
+  still undone after 5+ days.
+- **TD-35 Apple/RevenueCat** retries expired `2026-09-21T20:58Z`; restore will **not** replay them.
+- **Stripe** auto-retries expired `2026-09-24T18:23Z`; per-event dashboard **Resend** open to
+  `2026-10-06`. Next real date remains `2026-10-06` — **no new countdown derived.**
+- **TD-28/29/30/31/33/34/36/38/39** all still parked: each is unverifiable against a dead database, and
+  several perturb the very signals being watched for recovery.
+
+### Escalation — called before this sign-off was composed (sessions 38/77/78's trap)
+
+`PushNotification` → verbatim: **`Mobile push not sent (Remote Control inactive).`**
+
+**102 consecutive sessions, nobody paged.** §7's channel table is exhaustive as of session 98's `Make`
+row. `LOG.md` and the action sheet are **pull** channels. No GitHub issue (the repo is **public**; filing
+one would advertise a live outage and an open financial-webhook window on a production money system), and
+no unattended re-enable of `uptime.yml` (`.github/workflows/**` is minimum Level C, over a deliberate
+human mute).
+
+### What Branden must do — unchanged, still ~2 minutes, still the only fix
+
+1. Vercel → project **`sizzle`** (the API; naming is reversed) → Settings → Cron Jobs → **Disable Cron
+   Jobs**. Ten seconds, no deploy. Do this **first** — it prevents the restore from silently destroying
+   the stranded-video backfill (§4 step 0 / TD-34).
+2. Supabase dashboard → project `gsxoaurmsgqascxukony` → **Resume**. Read §1 step 2 and §3 first —
+   **never recreate under a new ref.** If a billing hold exists, clear it or Resume will not stick.
+3. After restore: **RevenueCat** → Retry the Apple refund/chargeback webhooks (§2, §4 step 6); **Stripe**
+   → per-event Resend (dashboard path open to **2026-10-06**); merge Dependabot **PR #8** as the first
+   post-restore deploy (TD-31); then `gh workflow enable uptime.yml` and reconnect Remote Control.
+
+### Lane check — session 102
+
+Shipped **documentation + one Level B ops-tooling fix (TD-42)**. No application code, config, migration,
+native file or production setting touched; no security control weakened to chase green; money code
+untouched. **Resume is Level D** and clicking it without §1 step 0 would arm the TD-34 trap — not
+attempted. Rollback re-derived as a structural no-op rather than assumed. **Working tree preserved**
+(CLAUDE.md rule 11): the two files I edited (`scripts/ops/origin-drift.mjs`,
+`tests/invariants/ops-tooling.test.mjs`) were verified **byte-identical to the origin mirror before
+editing** — they are TD-27 checkout artifacts against the frozen local HEAD `d4c5395`, not Branden's work
+— and the other two dirty paths (`scripts/ops/sweep-prompt.md`, `scripts/verify-deploy.mjs`) were
+re-verified byte-identical and **left untouched**. Nothing stashed or reverted.
+
+**TD-27 honoured.** `origin-drift.mjs` ran **first** (local `d4c5395` vs origin `1cc0097`, 8 files
+drifted), and all three edited documents are built on origin's blobs at `1cc0097`. **`LOG.md` line count
+measured, not inherited: 12605 pre-append** (1,098,979 bytes), i.e. TD-41's raw-fallback fix is holding —
+this mirror would have been 0 bytes a session ago.
+
+**Periodic checks.** §7 counter stamp: **PASS** — session 101's line 4 read `128h01m as of
+2026-09-27T02:24:15Z` and matches its own logged elapsed figure (verified against the previous session's
+recorded number per session 71, not against the line itself); standing counts were also current at "one
+hundred and one"/"12,430+". Both re-stamped this session. Aborted-push detector (session 99's naming-free
+form, **with** session 101's load-bearing `-t`): newest `.codex/` artifact is `s101-ref.json` at
+`2026-09-26 19:28:04` PDT = `2026-09-27T02:28:04Z`, matching origin tip `1cc0097`
+(`2026-09-27T02:28:04Z`), with `s101-commit.json` present ⇒ **quiet, correctly**. Worth recording: session
+101 changed the artifact naming from a numeric **suffix** (`ref100.json`) to an `s101-` **prefix**, and the
+detector survived it **because it greps `blob|tree|commit|ref` anywhere in the name and sorts by mtime** —
+the naming-free design tested by a real convention change and held. Doc-rot grep (session 93's pinned
+invocation): ran at 101 (24 hits, all exempt), **deliberately skipped at 102** — one session of age; the
+skip is stated here because session 90's rule is that a clean run leaves no trace.
+
+### Sign-off — session 102
+
+- **Secret scan, value-shaped (the only real gate on this path, TD-33):**
+  `(sbp_|sk_live_|sk_test_|whsec_|rk_live_)[A-Za-z0-9]{8,}|eyJ[A-Za-z0-9_-]{20,}` across all five changed
+  files → result in the push note below. Bare `-----BEGIN` deliberately kept **out** of the pattern
+  (session 96's trap: with no entropy attached it matches only prior sessions' own prose about the scan).
+- **`PushNotification` called before this sign-off was composed** — verbatim result quoted above.
+- **Escalation status: nobody has been paged.** This log and the action sheet are pull channels.
+- **Verdict: the same open SEV-1 at hour 129h01m**, re-attested from scratch at the DNS layer on three
+  resolvers, with rollback re-derived as a structural no-op and the Vercel fleet all-READY. **Owner action
+  is the only fix.** The session's yield beyond re-attestation is **TD-42** — the drift gate's own printed
+  instruction steered sessions into a cwd leak that runs the mirror's stale copies of their verification
+  gates.
+
+*Generalised lesson for successors: TD-40/41/42 are now three consecutive defects in the **same tool**, and
+all three shared one shape — the gate's **convenience** half quietly corrupting the **verdict** half
+(an aborted fetch, a 0-byte mirror, and now a recommended `cd`). When a tool is mandatory-first, audit what
+it **tells you to do next** with the same suspicion as what it computes: an instruction is part of the
+tool's output, and this one had been wrong since the mirror gained a `tests/` directory.*

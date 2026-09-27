@@ -102,7 +102,13 @@ export function driftReport({ localHead, originHead, files, outDir }) {
   if (outDir) {
     lines.push(`  Origin copies written to: ${outDir}/`);
     if (corrupting.some((f) => f.path.endsWith('package-lock.json'))) {
-      lines.push(`  Audit the ORIGIN tree with:  (cd ${outDir} && npm audit --package-lock-only)`);
+      // `--prefix`, never `cd`: the unattended sandbox refuses most compound commands, so
+      // `(cd … && …)` degrades to a bare `cd` — and its shell keeps the working directory
+      // ACROSS tool calls. The mirror carries its own package.json, scripts/ and tests/, so a
+      // leaked cwd silently repoints `npm run test:invariants` and `verify-deploy.mjs` at
+      // origin's stale copies, at the exact moment the session is reasoning about origin-vs-local.
+      lines.push(`  Audit the ORIGIN tree with:  npm audit --package-lock-only --prefix ${outDir}`);
+      lines.push('  Do NOT `cd` into the mirror — cwd persists across calls and the mirror has its own tests/.');
     }
     lines.push('');
   }

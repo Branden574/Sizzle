@@ -1,7 +1,7 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
 **Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
-(11:23 AM PDT Mon 09-21). **128h01m — past 5 days — as of 2026-09-27T02:24:15Z**, re-verified by session 101
+(11:23 AM PDT Mon 09-21). **129h01m — past 5 days — as of 2026-09-27T03:24:25Z**, re-verified by session 102
 (watchdog), which re-derived the DNS withdrawal from scratch on three resolvers.
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
 
@@ -54,9 +54,9 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > without a browser. It changes your *calibration*, not the fix: the app is degrading
 > gracefully, and the misattribution is what is quietly costing you reviews and support mail.
 
-This page exists because **one hundred and one** unattended sessions — one hundred watchdog summons plus
-the 2026-09-25 daily sweep — have now diagnosed the same outage and appended **12,430+ lines** to
-`LOG.md` (counts re-stamped session 101, measured `wc -l` = 12432 pre-append; session 48 stamped them at "forty-seven"/"5,600+" and nothing re-checked them
+This page exists because **one hundred and two** unattended sessions — one hundred and one watchdog summons plus
+the 2026-09-25 daily sweep — have now diagnosed the same outage and appended **12,600+ lines** to
+`LOG.md` (counts re-stamped session 102, measured `wc -l` = 12605 pre-append; session 48 stamped them at "forty-seven"/"5,600+" and nothing re-checked them
 for the 31 sessions until session 79, so they had understated the burn by a third — session 95 skipped
 this stamp entirely, which is what §7's session-96 entry gives a one-call detector for, and **session 97
 skipped it again while passing that detector**, which is what session 98's correction below fixes).
