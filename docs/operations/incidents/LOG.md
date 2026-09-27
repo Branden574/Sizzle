@@ -12939,3 +12939,98 @@ next session owes one too. It does not. The surfaces are exhausted, the detector
 quiet, and the correct response to "every check passed" is to **record that each check was actually
 run, with its number**, and stop. A logged clean run is what lets session 113 price the call; an
 invented 43rd finding is what makes it stop reading.*
+
+## 2026-09-26 22:27 PDT / 2026-09-27T05:32Z — SEV-1 watchdog session 104 (Supabase project still unreachable)
+
+**What fired.** `scripts/ops/watchdog.sh` summoned an unattended session at 2026-09-26 22:27:13 local
+with `API degraded (503): database-unreachable`. The summon body was
+`{"status":"degraded","problems":["database-unreachable"],…,"commit":"5b2d03b"}`.
+
+**Not the flap class, and that was checked before anything else.** The project memory's calibration rule
+says an HTTP `000` summon is usually a host-side blip (5 of 6) **but a 503 with a JSON body is not that
+class**. This summon carries a structured 503, so it was worked as real. Two spaced probes confirm it is
+persistent, not a blip: `05:27:35Z` and `05:32:21Z`, both `503` / `database-unreachable`, same
+`commit: 5b2d03b`.
+
+**Root cause: unchanged, and re-derived from scratch rather than inherited** (ground rule 4). Resolved
+all three hosts on three independent resolvers in one pass:
+
+| resolver | `gsxoaurmsgqascxukony.supabase.co` | `db.<ref>.supabase.co` | apex `supabase.co` |
+|---|---|---|---|
+| system | `ENOTFOUND` | `ENOTFOUND` | **UP** `76.76.21.21` |
+| `1.1.1.1` | `ENOTFOUND` | `ENOTFOUND` | **UP** `76.76.21.21` |
+| `8.8.8.8` | `ENOTFOUND` | `ENOTFOUND` | **UP** `76.76.21.21` |
+
+Parent zone resolves on every resolver while **both** per-project records are NXDOMAIN on every
+resolver ⇒ project-level DNS withdrawal (pause or deprovision at the account level), not a resolver
+fault, not a platform-wide Supabase outage, not our code. **Owner action is the only fix** — this is
+Level D (§1 of the action sheet). Hour **131h09m**.
+
+**Rollback correctly ruled out — as a structural no-op, not an assumption.** Vercel project `sizzle`
+(the API; naming is reversed) shows the **ten most recent production deployments all `● Ready`**,
+newest 1h old and its commit `5b2d03b` equals origin tip. No deployment artifact carries the withdrawn
+DNS record, so promoting any previous READY deployment changes nothing. `gh run list` → CI `success` on
+the last 8 runs on `main`. Nothing to roll back and nothing bad to roll back from.
+
+**Blast radius re-measured on live surfaces.** `/feed/for-you?limit=3` → **HTTP 500**
+`{"error":{"code":"db_error"}}` (real user path, not just liveness). `getsizzle.app` → **200** — the
+frontend still serves and, per session 50's audit, degrades to an error card rather than a white screen;
+the TD-38 copy defect ("Check your connection") still misattributes the fault to the user's phone, still
+deliberately unshipped.
+
+**§1 step 0 is still required BEFORE Resume — re-measured, not inherited.**
+`vercel crons ls --project sizzle` still lists **all five** paths (`finalize-videos` and
+`publish-scheduled` at `* * * * *`). The TD-34 trap is therefore still armed: the first
+`finalize-videos` tick within 60 seconds of Resume will mass-flip the outage-stranded cohort to terminal
+`error` that the finalizer refuses to re-poll. Per session 64 this step is **structurally owner-only**
+(CLI 57.0.0 exposes only `crons add|list|run` — no `disable`), so it is recorded as state, **not** as an
+agent-actionable omission.
+
+**TD-21 re-confirmed first-hand, and it is the reason the DB half of this entry is thin.**
+`mcp__supabase__execute_sql` returned *"Unauthorized. Please provide a valid access token to the MCP
+server via the `--access-token` flag or `SUPABASE_ACCESS_TOKEN`."* — server-side error, not a permission
+prompt, exactly matching session 25's refinement. The blocker is the revoked PAT, not a connector grant.
+Rotation is Level D.
+
+**Periodic checks, each recorded with its session number so a successor can price the call:**
+
+- **Session 98 granularity detector** (patch, not filename) on session 103's commit `5b2d03b`:
+  **PASS at full granularity** — the patch touches *both* line 4 (the live counter) *and* the `:56-58`
+  standing counts. Not a partial skip; no repair owed.
+- **Session 99 aborted-push detector** (mtime, naming-free): newest `.codex/` draft artifact is
+  `tree99.json` at `2026-09-26 17:19:01` local (`2026-09-27T00:19:01Z`), **older** than origin tip
+  `5b2d03b` (`04:29:15Z`) ⇒ **quiet, correctly**. No orphaned session in the window.
+- **Doc-rot grep** (session 93's pinned invocation, run verbatim): **24 hits**, identical to session
+  96's count — no new relative-time rot. Per the sheet, a rising count here is self-referential growth
+  and not a signal; a flat count is the clean result.
+- **TD-41 mirror guard**: the TD-27 origin mirror materialised `LOG.md` at **1,122,615 bytes /
+  12,941 lines** — non-zero, so TD-41's zero-byte failure mode is still held closed, and the append is
+  based on origin's full blob, not the stale local copy.
+- **TD-27 drift**: local `HEAD d4c5395` vs `origin/main 5b2d03b`, 8 files differing.
+  `scripts/ops/origin-drift.mjs` ran **first**, before any repo-derived reasoning, and this entry is
+  built on the ORIGIN copies.
+
+**What I did.** Diagnosed and re-attested only. **No code, config, migration, native file or production
+setting touched; no security control weakened; no deploy or rollback issued.** Every parked item
+(TD-28/29/34/35/36) stays parked for the reason the sheet already gives: each is unverifiable against a
+dead database, and TD-36 sits in `routes/monetize.ts` which is Level C regardless. `.github/workflows/**`
+was not touched, so the deliberate human mute on `uptime.yml` (`disabled_manually`) stands. Working tree
+preserved per hard rule 11 — the four dirty paths (`scripts/ops/sweep-prompt.md`,
+`scripts/verify-deploy.mjs`, `tests/invariants/ops-tooling.test.mjs`, `scripts/ops/origin-drift.mjs`)
+were not touched, stashed or reverted.
+
+**No new finding manufactured.** Per session 40, the deliverable of a fully-audited incident hour is
+fresh evidence plus the re-stamped counters — not an invented discovery. The diagnosis has been complete
+since session ~12; sessions since exist to keep the evidence current and the action sheet honest.
+
+**Still open — FOR BRANDEN, and it is still the same two clicks, ~2 minutes:**
+
+1. **Vercel → project `sizzle` → Settings → Cron Jobs → `Disable Cron Jobs`** (no deploy needed).
+2. **Supabase dashboard → project `gsxoaurmsgqascxukony` → Resume** (read the §1 branch table first;
+   the dashboard tells you *why* it stopped, and the ops inbox almost certainly holds the email).
+3. Then §4's verification block, §4 step 0's stranded-video capture, and §4 step 6's **manual**
+   RevenueCat Retry (Apple's 155-minute retry budget expired `2026-09-21T20:58Z` and restore will
+   **not** replay it — this is the one item restore does not cover).
+
+**Read `docs/operations/incidents/2026-09-21-supabase-project-unreachable.md`, not this log.** It is the
+one-page action sheet; this entry only re-attests it.
