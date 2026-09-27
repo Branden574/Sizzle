@@ -12765,3 +12765,177 @@ all three shared one shape — the gate's **convenience** half quietly corruptin
 (an aborted fetch, a 0-byte mirror, and now a recommended `cd`). When a tool is mandatory-first, audit what
 it **tells you to do next** with the same suspicion as what it computes: an instruction is part of the
 tool's output, and this one had been wrong since the mirror gained a `tests/` directory.*
+
+## 2026-09-26 21:26 PDT / 2026-09-27T04:26Z — SEV-1 watchdog session 103 (Supabase project still unreachable)
+
+**Fired:** `API degraded (503): database-unreachable` at `2026-09-26 21:23:18` PDT
+(`2026-09-27T04:23:18Z`). Raw `/health` carried `commit: bf0339a` — **session 102's own docs
+push**, the known redeploy artifact, not a rogue deploy.
+
+**Verdict: NO CHANGE. The same open SEV-1 at hour 130h03m** (start `2026-09-21T18:23:07Z`;
+elapsed anchored to the `/health` `time` field `2026-09-27T04:26:28Z` that proves the outage is
+live, per session 72). **Owner action is still the only fix.** No finding manufactured — per
+session 40's rule this is a clean re-verification, and the negative result *is* the deliverable.
+
+### Root cause — re-attested from scratch, not inherited (ground rule 4)
+
+`.codex/dns-probe.mjs`, three independent resolvers (system, `1.1.1.1`, `8.8.8.8`), all agreeing:
+
+| name | A | CNAME |
+|---|---|---|
+| `supabase.co` (parent zone) | `76.76.21.21` | **`ENODATA`** |
+| `gsxoaurmsgqascxukony.supabase.co` | **`ENOTFOUND`** | **`ENOTFOUND`** |
+| `db.gsxoaurmsgqascxukony.supabase.co` | **`ENOTFOUND`** | **`ENOTFOUND`** |
+
+`ENODATA` on the parent (name exists, no record *of that type*) versus `ENOTFOUND` (NXDOMAIN) on
+**both** per-project records is positive proof the records were **withdrawn**, not that a lookup
+failed — and three unrelated resolvers agreeing kills the sandbox/host-side explanation outright.
+Parent zone up + every per-project record gone = **project-level pause or deprovision**. Unchanged
+since session 1.
+
+### Live surfaces this hour
+
+- `/health` → **503** `{"status":"degraded","problems":["database-unreachable"]}`, 7.19s.
+- `/feed/for-you?limit=3` → **500** `{"error":{"code":"db_error"}}` — the user-facing proof, not a
+  probe artifact.
+- `getsizzle.app` → **200** in 0.20s. The frontend is fine; only the DB-backed API is dead.
+- `vercel ls sizzle --prod` → **ten most recent production deployments all `● Ready`**, newest 55m
+  old, durations 17–21s. These are prior sessions' own hourly docs-only log pushes — **never chase
+  that churn as a bad deploy** (standing rule; re-confirmed, not assumed).
+- CI on `main`: **6/6 `success`**, newest being session 102's own push (`36291573716`, 53s).
+
+### Rollback ruling — re-derived, not inherited
+
+**`vercel rollback` is a structural no-op here.** The failure is a DNS record withdrawn *outside*
+our infrastructure; it is not carried in any deployment artifact, so promoting any previous READY
+deployment reaches the same NXDOMAIN. There is also no bad deploy to roll back *to* — all ten most
+recent prod deployments are READY and the newest predates nothing relevant. Not attempted.
+
+### Cron state — measured first-hand at hour 130, not inferred
+
+`vercel logs sizzle-chi.vercel.app --json`, deployment `dpl_5G8JwSnaVMgRCnL5DbGATbfh4AmX`:
+
+- `/internal/finalize-videos` → **200**, every minute, stalling a stable **21s**.
+- `/internal/publish-scheduled` → **200**, every minute, stalling a stable **7s**.
+- `/internal/rollup-hashtag-trends` → **500 `TypeError: fetch failed`** in **12ms**.
+
+The millisecond-fast 500 is DNS/connect failure (a real overloaded DB burns seconds); the 200s are
+TD-28's swallow, which is why three of five crons are signal-blind. **⇒ the crons are still
+enabled, so §1 step 0 is still required and the TD-34 trap is still armed** — now 5+ days after
+session 34 measured it.
+
+### Periodic checks — all run, all recorded
+
+- **§7 counter stamp: PASS (verified per session 71 against session 102's own logged figure, not
+  against the line itself).** Sheet line 4 read `129h01m as of 2026-09-27T03:24:25Z — session 102`;
+  session 102's entry logged `129h01m`. Match. Re-stamped this session to `130h03m` /
+  `2026-09-27T04:26:28Z`.
+- **Session 96's one-call skip detector: PASS**, and — per session 98's correction that *presence
+  proves nothing* about per-line checks — I did not stop there. I read both sheet locations
+  directly, which is stronger than the patch check: line 4 and the standing counts
+  (`one hundred and two` / `12,600+` / `wc -l = 12605`) were **both** current. Session 102 skipped
+  neither. Both re-stamped this session.
+- **Standing counts (session 79's no-carve-out class):** re-stamped to **one hundred and three**
+  sessions / **12,760+** lines, measured `wc -l` = **12767** pre-append (not inherited).
+- **Doc-rot grep (session 93's pinned invocation, verbatim):** ran at 101, skipped 102, **ran at
+  103 — 24 hits, all 24 exempt.** Identical count to session 101. Six sit in dated blocks or
+  describe states (`:172`, `:218`, `:221`, `:343`, `:392`, `:453`, `:510`); the rest are sessions
+  30/74/79/93's own write-ups quoting the token list they fixed — session 40's self-referential
+  class. **Relative-time class clean.**
+- **Aborted-push detector (session 99's naming-free form, with session 101's load-bearing `-t`):**
+  newest `.codex/` artifact is `s102-ref.json` at `2026-09-26 20:29:53` PDT = `2026-09-27T03:29:53Z`,
+  matching origin tip `bf0339a` (`2026-09-27T03:29:53Z`) to the second, with `s102-commit.json`
+  present ⇒ **quiet, correctly.** No orphaned draft; no lost session.
+- **TD-register audit (session 45's rule):** register tops out at **TD-42**, filed by session 102.
+  Nothing this session found lives only in LOG prose. Clean.
+- **TD-27 mirror integrity (TD-41):** mirror materialised **1,110,794 bytes / 12,767 lines** — a
+  real payload, not the 0-byte silent truncation session 101 fixed. The fix is holding two
+  sessions on.
+
+### Angles killed before spending calls (so the successor doesn't re-open them)
+
+1. **The hourly READY prod deploys as a "bad deploy" lead** — killed by the standing rule *and*
+   re-confirmed against the DNS evidence: an external NXDOMAIN cannot be in a build artifact.
+2. **Hunting a new audit surface.** There isn't one. Crons (13/18/19), auth sessions (14), the
+   project's pause clock (15), both money rails (23/35), Apple's review queue (31), OAuth
+   credentials (49), the user-visible surface (50), the monitor itself (85), the Sentry budget
+   (72), host disk (94) — all closed. Per session 40, manufacturing a 43rd finding is noise the
+   next reader must triage.
+
+### Still open — unchanged, all owner-blocked
+
+- **Paused vs deleted remains unanswerable from inside an unattended session.** All three routes
+  closed (claude.ai connector permission-gated; local `supabase` MCP tokenless; `api.supabase.com`
+  → 401, PAT revoked = TD-21). Not re-probed this session — session 90 and session 102 both
+  re-tested it within the last 14 hours and got byte-identical server-side `Unauthorized`; a third
+  identical probe buys nothing. Only the dashboard or the ops inbox answers it.
+- **Crons still not disabled** ⇒ TD-34 trap armed (measured above, first-hand).
+- **TD-35** Apple/RevenueCat retries expired `2026-09-21T20:58Z`; restore will **not** replay them.
+- **Stripe** auto-retries expired `2026-09-24T18:23Z`; per-event dashboard **Resend** open to
+  **`2026-10-06`**. That remains the next real date — **no new countdown derived.**
+- **TD-28/29/30/31/33/34/36/38/39** all still parked: each is unverifiable against a dead database,
+  and several perturb the very signals being watched for recovery.
+
+### Escalation — called BEFORE this sign-off was composed (sessions 38/77/78's ordering trap)
+
+`PushNotification` → verbatim: **`Mobile push not sent (Remote Control inactive).`**
+
+**103 consecutive sessions, nobody paged.** §7's channel table is exhaustive as of session 98's
+`Make` row — every MCP connector is measured as gated, so the escalation class is closed. `LOG.md`
+and the action sheet are **pull** channels. No GitHub issue (the repo is **public**; filing one
+would advertise a live outage and an open financial-webhook window on a production money system),
+and no unattended re-enable of `uptime.yml` (`.github/workflows/**` is minimum Level C, over a
+deliberate human mute).
+
+### What Branden must do — unchanged, still ~2 minutes, still the only fix
+
+1. Vercel → project **`sizzle`** (the API; naming is reversed) → Settings → Cron Jobs → **Disable
+   Cron Jobs**. Ten seconds, no deploy. Do this **first** — it prevents the restore from silently
+   destroying the stranded-video backfill (§4 step 0 / TD-34). Confirmed still necessary by the
+   runtime-log measurement above.
+2. Supabase dashboard → project `gsxoaurmsgqascxukony` → **Resume**. Read §1 step 2 and §3 first —
+   **never recreate under a new ref.** If a billing hold exists, clear it or Resume will not stick.
+3. After restore: **RevenueCat** → Retry the Apple refund/chargeback webhooks (§2, §4 step 6);
+   **Stripe** → per-event Resend (dashboard path open to **2026-10-06**); merge Dependabot **PR #8**
+   as the first post-restore deploy (TD-31); then `gh workflow enable uptime.yml` and reconnect
+   Remote Control.
+
+### Lane check — session 103
+
+Shipped **documentation only** — no code, config, migration, native file or production setting
+touched; no security control weakened to chase green; money code untouched. **Resume is Level D**
+and clicking it without §1 step 0 would arm the TD-34 trap — not attempted. Rollback re-derived as
+a structural no-op rather than assumed.
+
+**Working tree preserved (CLAUDE.md rule 11).** The four dirty paths (`scripts/ops/sweep-prompt.md`,
+`scripts/verify-deploy.mjs`, `tests/invariants/ops-tooling.test.mjs`, `scripts/ops/origin-drift.mjs`)
+were **not touched, stashed or reverted** this session. Note for the successor: the last two now
+differ from origin *legitimately* — they are session 102's shipped TD-42 fix, which landed in
+`bf0339a`, so the local copies are origin's content against a frozen local HEAD of `d4c5395`.
+
+**TD-27 honoured.** `origin-drift.mjs` ran **first** (local `d4c5395` vs origin `bf0339a`, 8 files
+drifted) and was **re-run immediately before composing this append** (session 89's rule — the
+second launchd slot can move origin mid-session). Both documents are built on origin's blobs at
+`bf0339a`. Per **TD-42**, the mirror was read with absolute paths and `--prefix`; **no `cd` into
+the mirror**, so every verification command ran against the working tree, not origin's frozen copy.
+
+### Sign-off — session 103
+
+- **Secret scan, value-shaped (the only real gate on this path, TD-33):**
+  `(sbp_|sk_live_|sk_test_|whsec_|rk_live_)[A-Za-z0-9]{8,}|eyJ[A-Za-z0-9_-]{20,}` across both
+  changed files → result in the push note below. Bare `-----BEGIN` deliberately kept **out** of the
+  pattern (session 96's trap: with no entropy attached it matches only prior sessions' own prose
+  about the scan).
+- **`PushNotification` called before this sign-off was composed** — verbatim result quoted above.
+- **Escalation status: nobody has been paged.** This log and the action sheet are pull channels.
+- **Verdict: the same open SEV-1 at hour 130h03m**, re-attested from scratch at the DNS layer on
+  three resolvers, with the cron state re-measured first-hand, rollback re-derived as a structural
+  no-op and the Vercel fleet all-READY. **Owner action is the only fix.**
+
+*Generalised lesson for successors: this session's only defensible output was a **negative** one,
+and the temptation to improve on that is the trap. Session 102 shipped TD-42 and sessions 100/101
+shipped TD-40/41 — three consecutive sessions with a real find, which sets an expectation that the
+next session owes one too. It does not. The surfaces are exhausted, the detectors all reported
+quiet, and the correct response to "every check passed" is to **record that each check was actually
+run, with its number**, and stop. A logged clean run is what lets session 113 price the call; an
+invented 43rd finding is what makes it stop reading.*
