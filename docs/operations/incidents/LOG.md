@@ -12085,3 +12085,176 @@ not the working copy — which matters because the action sheet **does not exist
   rollback re-derived as a no-op. Owner action is the only fix.** The session's real yield is not the
   re-attestation but the **recovery of a lost session's finding** and the correction of the detector
   that let a partial skip pass — plus the `Make` row that finally closes the escalation class.
+
+---
+
+## 2026-09-26 17:09 PDT / 00:09Z — watchdog session 99 · SEV-1 Supabase unreachable, hour **125h50m** · NO CHANGE — and session 98's own orphan detector is BLIND for five of the last eleven sessions
+
+**What fired.** `scripts/ops/watchdog.sh` at `2026-09-26T17:09:19` local. `/health` → HTTP **503**,
+`{"status":"degraded","problems":["database-unreachable"],"commit":"359ac54"}`. A 503 **with a JSON
+body** is explicitly *not* the HTTP-000 host-blip class (project memory `sizzle-watchdog-false-alarms`),
+so this was worked as a live incident, not an anti-flap re-verify. **Confirmed three times across
+4m23s** — `00:09:18.170Z` (watchdog), `00:09:49.882Z` and `00:13:41.751Z` (mine) — all 503
+`database-unreachable`, all three DB-derived fields (`stuckVideoBacklog`, `parkedMediaDeletions`,
+`cronAges`) `null` every time. Not a blip: hour **125h50m** of the same outage, **day 6**.
+
+**Root cause: unchanged, re-derived from scratch per ground rule 4 — and widened to FOUR resolvers
+and FOUR names,** so that "our project's records are gone" is separated from "anything
+Supabase-shaped is unreachable from this host". Node's `dns` module (no allowlist needed where `dig`
+requires approval):
+
+| name | system | 1.1.1.1 | 8.8.8.8 | 9.9.9.9 | reading |
+|---|---|---|---|---|---|
+| `supabase.co` (parent) | A=`76.76.21.21` | same | same | same | zone exists and answers |
+| `aws-0-us-east-1.pooler.supabase.com` (shared infra) | A×3 | A×3 | A×3 | A×3 | **Supabase infra reachable** |
+| `gsxoaurmsgqascxukony.supabase.co` | **ENOTFOUND** | **ENOTFOUND** | **ENOTFOUND** | **ENOTFOUND** | NXDOMAIN |
+| `db.gsxoaurmsgqascxukony.supabase.co` | **ENOTFOUND** | **ENOTFOUND** | **ENOTFOUND** | **ENOTFOUND** | NXDOMAIN |
+
+The pooler row is the addition. Sessions ≤98 proved *parent up, project down*; the open question that
+leaves is whether some route-level fault could blackhole every Supabase name our host actually needs.
+It cannot: a **live, third-party-hosted Supabase service name resolves to three A records on all four
+resolvers** in the same pass where both per-project names are NXDOMAIN on all four. Withdrawal is
+scoped to this project's records, at the account level. **Level D — owner-only.** Independently,
+`curl https://gsxoaurmsgqascxukony.supabase.co/rest/v1/` → `curl: (6) Could not resolve host`, while
+`curl https://supabase.com/` → **200**: the same conclusion from a second, non-`dns`-module tool.
+
+**Supabase state still unanswerable unattended, re-confirmed cheaply.** `mcp__claude_ai_Supabase__list_projects`
+→ *"Claude requested permissions to use … but you haven't granted it yet."* Connector-level gate,
+unchanged (§5). Paused-vs-restricted-vs-deprovisioned still needs the dashboard or the ops inbox.
+
+**User-facing state, re-measured not carried forward:** `/feed/for-you?limit=3` → **500
+`{"error":{"code":"db_error","message":"Something went wrong"}}`**; `getsizzle.app` → **200**;
+API root `/` → **200**. Users hit session 50's graceful error card (with TD-38's misattributing
+"check your connection" copy), not a white screen or a crash.
+
+**Rollback considered and correctly not attempted.** `vercel ls sizzle --prod` → the nine most recent
+production deployments are **all ● Ready** (56m, 2h, 2h, then six at 1d) — there is no failed or
+stuck deploy to roll off. The served commit `359ac54` **is** origin head, i.e. session 98's own
+docs-only log push, never a rogue deploy. And the dead dependency is a DNS record for a service
+outside Vercel: **no previous READY deployment can restore it** (§5), so rollback is a no-op by
+construction, not a judgement call.
+
+### Finding — session 98's `.codex/` orphan detector is blind for five of the last eleven sessions
+
+Session 98 recovered a lost session (blob + tree on GitHub, no commit object) and left successors a
+one-call check: `ls .codex/ | grep -i '^commit'` — *a `tree<N>.json` with no matching `commit<N>.json`
+is an aborted push.* It pairs on a **filename convention the scratch dir does not follow.**
+
+Measured this session, `.codex/` holds numbered artifacts for sessions **81–88, 92, 93, 96, 97, 98**
+and **none at all** for **89, 90, 91, 94, 95**. Those five pushed under un-numbered names —
+`blob-LOG.md.json` (09-25 11:09), `blob-docs-operations-incidents-LOG-md.json` (12:14),
+`blob-docs_operations_incidents_LOG.md.json` (15:20), `_payload.json` / `_ref.json` (14:17). The proof
+is `.codex/_ref.json` → `{"sha":"0a8f1afa3e0f1a3863ba80500dfe425f9bfbf924"}`, which is **session 95's
+commit** — the very session §7 indicts for skipping the counter stamp — so a session whose push
+*succeeded* left zero `commit9*` / `tree9*` files behind. Had any of those five died at the commit
+object, the detector would have paired nothing and **reported nothing**. It is not merely incomplete;
+it is a **clean-looking negative** over five of the last eleven sessions.
+
+**Naming-free replacement, same single call — pair on mtime, which the filesystem supplies:**
+
+```sh
+ls -lT .codex/ | grep -E '^-.*(blob|tree)' | tail -3
+gh api repos/Branden574/Sizzle/commits/main --jq '.commit.committer.date'
+```
+
+A newest draft artifact materially **newer** than origin's tip is an aborted push, whatever it is
+named. Verified against both known cases rather than asserted: session 97's `tree97.json`
+(`2026-09-25T23:27:35Z`) stood newer than origin's then-tip `7b72d2d` (`22:20:17Z`) for the entire
+23h49m gap ⇒ **fires**; session 98's `blob98-*` (`23:15:46Z`) against tip `359ac54` (`23:15:48Z`)
+⇒ **quiet**, correctly. Written into §7 of the action sheet.
+
+*Generalised — session 98's lesson turned on session 98. It said "match the artifact's granularity to
+the convention's." The step before that is to check the artifact **exists under the name you are
+grepping for**: a detector keyed to a convention inherits that convention's coverage, and an
+un-enforced naming convention across 99 sessions has none. This is the third instance of the same
+shape in §7 (session 74 on doc rot, session 93 on unpinned greps, this one on unpinned filenames) —
+and no `.codex/` orphan was found this session, so the fix is offered on the instrument, not on a
+missed outage.*
+
+### Periodic checks — all three sheet-resident checks run, and recorded
+
+- **Session 96 detector (absence half), on predecessor `359ac54`:** `gh api …/commits/359ac54 --jq
+  '.files[].filename'` → action sheet **present** ⇒ **PASS**.
+- **Session 98 detector (patch half), isolated to session 98's own commit** (`7d3492f...359ac54`,
+  not `68e87cd...` — `7d3492f` is session 97's amendment and spanning it would blur the attribution):
+  hunks `@@ -1,8` (counter, line 4) and `@@ -54,11` (standing counts, `:57-58`) both present ⇒
+  **PASS at granularity.** First session for which both halves pass; session 98's correction worked.
+- **Counter stamp (line 4): re-stamped** → *125h50m … as of `2026-09-27T00:13:41Z`*, anchored to
+  `/health`'s own `time` field per session 72's anti-fabrication rule, not to the local clock.
+- **Standing counts (`:57-58`): re-stamped** → **ninety-nine / 12,087**. Measured, not inherited:
+  `wc -l` on origin's `LOG.md` at `359ac54` = **12087** pre-append (session 98 stamped 11,898).
+- **Doc-rot grep (session 93's pinned invocation): RAN — 24 hits, all 24 correctly exempt.** Identical
+  count to session 96's run, i.e. sessions 97 and 98 added no relative-time prose. Triage: `:172` /
+  `:221` / `:698` sit in dated blocks; `:218` is a measurement; `:343` / `:392` / `:453` / `:510`
+  describe states — and `:453`'s *"currently `disabled_manually`"* was **re-verified true this
+  session** (`gh api …/actions/workflows` → `Uptime` = `disabled_manually`, CI and CodeQL `active`);
+  `:706`–`:764` are sessions 30/74/93's own write-ups quoting the rot they fixed. Last run: 93, 96, 99.
+- **TD-register audit: clean.** Still tops out at **TD-40** (session 89). Nothing manufactured per
+  session 40's rule — this session's single finding is in the *instruments*, not in the system.
+
+### Still blocked, unchanged
+
+- **Paused vs Restricted vs deprovisioned: unanswerable unattended.** Re-probed once this session
+  (connector gate, above); TD-21's close condition remains a **PAT rotation**, which is Level D.
+- **Crons still not disabled** (§1 step 0) ⇒ the **TD-34 trap stays armed**. Not re-measured this
+  session: session 64 settled it as *structurally* owner-only (CLI 57.0.0 exposes only `add`/`list`/
+  `run`; Vercel documents only a dashboard button), and re-counting invocations would be the phantom
+  §1 explicitly closed at seventeen tallies.
+- **TD-35 Apple/RevenueCat** retries expired `2026-09-21T20:58Z`; restore will **not** replay them.
+- **Stripe** auto-retries expired `2026-09-24T18:23Z`; per-event dashboard **Resend** open to
+  `2026-10-06` and needs no secret key. Next real date is `2026-10-06` — **no new countdown derived.**
+- **TD-28/29/30/31/33/34/36/38** all still parked: every one is unverifiable against a dead database,
+  and two of them perturb the very signals being watched for recovery.
+
+### Escalation — called before this sentence was written (sessions 38/77/78's trap)
+
+`PushNotification` → verbatim: **`Mobile push not sent (Remote Control inactive).`**
+
+**99 consecutive sessions, nobody paged.** §7's channel table is exhaustive as of session 98's `Make`
+row — every push path is dead, muted or permission-gated. `LOG.md` and the action sheet are **pull**
+channels. No GitHub issue (repo is **public**; filing one would advertise a live outage and an open
+financial-webhook window on a production money system), and no unattended re-enable of `uptime.yml`
+(`.github/workflows/**` is minimum Level C, over a deliberate human mute).
+
+### What Branden must do — unchanged, still ~2 minutes, still the only fix
+
+1. Vercel → project **`sizzle`** (the API; naming is reversed) → Settings → Cron Jobs → **Disable Cron
+   Jobs**. Ten seconds, no deploy. Do this **first** — it prevents the restore from silently
+   destroying the stranded-video backfill (§4 step 0 / TD-34).
+2. Supabase dashboard → project `gsxoaurmsgqascxukony` → **Resume**. Read §1 step 2 and §3 first —
+   **never recreate under a new ref.**
+3. After restore: **RevenueCat** → Retry the Apple refund/chargeback webhooks whose automatic retries
+   expired (§2, §4 step 6); **Stripe** → per-event Resend (free window closed 09-24, dashboard path
+   open to **2026-10-06**); then `gh workflow enable uptime.yml` and reconnect Remote Control.
+
+### Lane check — session 99
+
+Nothing shipped but documentation. No code, config, migration, native file or production setting
+touched; no security control weakened to chase green; money code untouched. **Resume is Level D**, and
+clicking it without §1 step 0 would arm the TD-34 trap — not attempted. The one MCP call
+(`Supabase list_projects`) is a read-only id lookup and was refused before reading anything.
+**Working tree preserved** (CLAUDE.md rule 11): all four dirty paths are TD-27 checkout artifacts
+against the frozen local HEAD `d4c5395` — re-verified **byte-identical** to the origin mirror this
+session (`diff -q` silent on `scripts/ops/sweep-prompt.md`, `scripts/verify-deploy.mjs`,
+`tests/invariants/ops-tooling.test.mjs`, `scripts/ops/origin-drift.mjs`). Nothing stashed or reverted.
+
+**TD-27 honoured.** `origin-drift.mjs` ran **first** (local `d4c5395` vs origin `359ac54`, 8 files
+drifted, origin copies mirrored to `.codex/origin-359ac54/`), and both edited files are built on
+origin's blobs fetched at `359ac54` — which matters because the action sheet **does not exist** in the
+local checkout at all. **`LOG.md` line count measured, not inherited: 12087 pre-append.**
+
+### Sign-off — session 99
+
+- **Secret scan, value-shaped (the only real gate on this path, TD-33):**
+  `(sbp_|sk_live_|sk_test_|whsec_|rk_live_)[A-Za-z0-9]{8,}|eyJ[A-Za-z0-9_-]{20,}` run on both changed
+  files → result recorded in the push note below. Bare `-----BEGIN` deliberately kept **out** of the
+  pattern (session 96's trap: with no entropy attached it only matches prior sessions' own prose
+  about the scan).
+- **`PushNotification` called before this sign-off was composed** (session 97's note, honoured by 98
+  and 99) — verbatim: **`Mobile push not sent (Remote Control inactive).`**
+- **Escalation status: nobody has been paged.** This log and the action sheet are pull channels.
+- **Verdict: the same open SEV-1 at hour 125h50m, re-attested from scratch at the DNS layer on four
+  resolvers, with rollback re-derived as a structural no-op and the Vercel fleet all-READY.** Owner
+  action is the only fix. The session's yield beyond re-attestation is the **pooler row** — which
+  closes the last "could it be our network?" reading of the DNS evidence — and the **repair of session
+  98's orphan detector**, which looked clean while being silent over five of the last eleven sessions.

@@ -1,8 +1,8 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
 **Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
-(11:23 AM PDT Mon 09-21). **124h44m — past 5 days — as of 2026-09-26T23:07:38Z**, re-verified by session 98
-(watchdog), which re-derived the DNS withdrawal from scratch on three resolvers.
+(11:23 AM PDT Mon 09-21). **125h50m — past 5 days — as of 2026-09-27T00:13:41Z**, re-verified by session 99
+(watchdog), which re-derived the DNS withdrawal from scratch on four resolvers.
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
 
 > **🛑 READ §4 STEP 0 BEFORE YOU CLICK RESUME.** Session 18 found that the first
@@ -54,9 +54,9 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > without a browser. It changes your *calibration*, not the fix: the app is degrading
 > gracefully, and the misattribution is what is quietly costing you reviews and support mail.
 
-This page exists because **ninety-eight** unattended sessions — ninety-seven watchdog summons plus
-the 2026-09-25 daily sweep — have now diagnosed the same outage and appended **11,898+ lines** to
-`LOG.md` (counts re-stamped session 98, measured `wc -l` = 11898 pre-append; session 48 stamped them at "forty-seven"/"5,600+" and nothing re-checked them
+This page exists because **ninety-nine** unattended sessions — ninety-eight watchdog summons plus
+the 2026-09-25 daily sweep — have now diagnosed the same outage and appended **12,087+ lines** to
+`LOG.md` (counts re-stamped session 99, measured `wc -l` = 12087 pre-append; session 48 stamped them at "forty-seven"/"5,600+" and nothing re-checked them
 for the 31 sessions until session 79, so they had understated the burn by a third — session 95 skipped
 this stamp entirely, which is what §7's session-96 entry gives a one-call detector for, and **session 97
 skipped it again while passing that detector**, which is what session 98's correction below fixes).
@@ -860,6 +860,39 @@ at all**, and the next session inherits a silent hole rather than a stated gap. 
 between two consecutive entries is much larger than the summon interval, look in `.codex/` for an
 orphaned draft before assuming nothing happened.* Practical check, one call:
 `ls .codex/ | grep -i '^commit'` — a `tree<N>.json` with no matching `commit<N>.json` is an aborted push.
+
+**Session 99 (2026-09-27T00:13:41Z) — that `.codex/` check is BLIND for half of the recent sessions,
+because it pairs on a filename convention the scratch dir does not actually follow. Pair on TIME.**
+Session 98's orphan check assumes every session writes `tree<N>.json` / `commit<N>.json`. Measured
+this session, `.codex/` holds numbered artifacts for sessions **81–88, 92, 93, 96, 97, 98** and
+**none at all** for **89, 90, 91, 94, 95** — those five pushed under un-numbered names
+(`blob-LOG.md.json`, `blob-docs-operations-incidents-LOG-md.json`,
+`blob-docs_operations_incidents_LOG.md.json`, `_payload.json` / `_ref.json`). The proof is
+`.codex/_ref.json` → `{"sha":"0a8f1afa3e0f…"}`, which is **session 95's commit** — the very session
+§7 above indicts for skipping the counter stamp — so a session whose push *succeeded* left zero
+`commit9*`/`tree9*` files. Had any of those five died at the commit object, `grep -i '^commit'` would
+have paired nothing and reported nothing. The check does not merely miss cases; it is **silent** on
+five of the last eleven sessions while looking like a clean negative.
+
+**The naming-free version is the same one call, and it catches session 97's case too — compare the
+newest scratch artifact's mtime against origin's tip:**
+
+```sh
+ls -lT .codex/ | grep -E '^-.*(blob|tree)' | tail -3        # newest draft artifact, local time
+gh api repos/Branden574/Sizzle/commits/main --jq '.commit.committer.date'
+```
+
+A newest artifact materially **newer** than origin's tip is an aborted push, whatever it is named.
+Verified against both known cases: session 97's `tree97.json` (`2026-09-25T23:27:35Z`) sat newer than
+origin's then-tip `7b72d2d` (`22:20:17Z`) for the whole 23h49m gap ⇒ **fires**; session 98's
+`blob98-*` (`23:15:46Z`) against tip `359ac54` (`23:15:48Z`) ⇒ **quiet**, correctly.
+
+*Generalised — and it is session 98's own lesson turned on session 98: it said "match the artifact's
+granularity to the convention's." The prior step is to check the artifact **exists under the name you
+are grepping for**. A detector keyed to a convention inherits that convention's coverage, and an
+un-enforced naming convention across 99 sessions has none — which is exactly the property §7 has
+already documented twice (session 74 on doc rot, session 93 on pinned greps). Prefer a key the
+filesystem supplies (mtime) over one each session chooses.*
 
 ### The one follow-up that makes the next SEV-1 different
 
