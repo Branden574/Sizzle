@@ -1,7 +1,7 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
 **Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
-(11:23 AM PDT Mon 09-21). **135h19m — past 5 days — as of 2026-09-27T09:42:39Z**, re-verified by session 108
+(11:23 AM PDT Mon 09-21). **136h21m — past 5 days — as of 2026-09-27T10:44:13Z**, re-verified by session 109
 (watchdog), which re-derived the DNS withdrawal from scratch on three resolvers.
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
 
@@ -54,9 +54,9 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > without a browser. It changes your *calibration*, not the fix: the app is degrading
 > gracefully, and the misattribution is what is quietly costing you reviews and support mail.
 
-This page exists because **one hundred and eight** unattended sessions — one hundred and seven watchdog summons plus
-the 2026-09-25 daily sweep — have now diagnosed the same outage and appended **13,480+ lines** to
-`LOG.md` (counts re-stamped session 108, measured `wc -l` = 13481 pre-append; session 48 stamped them at "forty-seven"/"5,600+" and nothing re-checked them
+This page exists because **one hundred and nine** unattended sessions — one hundred and eight watchdog summons plus
+the 2026-09-25 daily sweep — have now diagnosed the same outage and appended **13,630+ lines** to
+`LOG.md` (counts re-stamped session 109, measured `wc -l` = 13630 pre-append; session 48 stamped them at "forty-seven"/"5,600+" and nothing re-checked them
 for the 31 sessions until session 79, so they had understated the burn by a third — session 95 skipped
 this stamp entirely, which is what §7's session-96 entry gives a one-call detector for, and **session 97
 skipped it again while passing that detector**, which is what session 98's correction below fixes).
@@ -144,8 +144,42 @@ app whose **native uploads relay through Supabase Storage**, which burns exactly
 free-tier quota that Fair Use restricts.
 
 > Supabase emails the account owner when it pauses or restricts a project. **The ops inbox
-> almost certainly already holds the answer.** Search it for "Supabase" around
-> 2026-09-21 18:00Z — that email names the reason, which picks your branch above.
+> almost certainly already holds the answer.** Search it for "Supabase" across
+> **2026-09-13 → 2026-09-22** — *not* just around the outage minute — and read the result per the
+> test below. That email names the reason, which picks your branch above.
+>
+> ### Promoted here by session 109 — the inbox picks the branch by what is ABSENT, and the old one-timestamp search could not see it
+>
+> **Automatic pausing sends TWO emails, and the first arrives a week early.**
+> `free-project-pausing.md` (re-fetched `2026-09-27T10:43Z`, `HTTP 200`, raw markdown): Supabase
+> *"sends two emails to the project owner regarding project pausing: 1. A warning email roughly one
+> week before the pause takes effect. 2. A confirmation email once the project has been paused."*
+> So the **Paused (inactivity)** branch necessarily leaves a warning around **2026-09-14** — a week
+> before anything broke. Neither of the other two branches has such a mechanism.
+>
+> **The test runs on ABSENCE.** If there is **no ~09-14 inactivity warning** in the inbox, row 1
+> above is **eliminated** and you are in the billing/quota or the deprovision branch. That changes
+> your *first click*, which is the whole point: row 1 starts with **Resume**, row 2 needs the
+> **payment method fixed first** (Resume inside the same cycle can re-restrict — *"pausing does not
+> remove usage already accumulated"*), and row 3 needs **support contacted before you touch
+> anything**.
+>
+> **The same doc eliminates row 1 on its own numbers, independently.** The documented trigger is
+> *"too few user queries"* over 7 days, where *"a few user requests to the database each day over
+> the previous week is enough to keep the project from being paused"* — and Sizzle ran **five Vercel
+> crons** against this DB, `finalize-videos` alone **every minute** (~1,440 DB-touching
+> invocations/day), continuously up to `18:23:07Z` on 09-21. The inactivity criterion cannot have
+> been met. Row 1 stays in the table only because the dashboard's own wording is ground truth and a
+> project paused for *other* reasons can still present as "Paused".
+>
+> *Why this lands at hour 136 rather than hour 10: the finding is **not** new — it was derived in
+> `LOG.md` twice (early entries, ~lines 1485 and 1890) and never promoted here, while this very
+> blockquote narrowed the search to "around 2026-09-21 18:00Z", a window that structurally excludes
+> the discriminator. Verified before claiming: `grep -ciE 'warning email|two emails|week before'`
+> → **0** on this sheet, **4** in `LOG.md`. That is session 45's rule — "a finding that lives only
+> in LOG prose was never filed" — landing not on a follow-up but on **§1's own recovery
+> instruction**. The class to re-check is therefore not "is it filed somewhere" but **"does the
+> instruction the owner actually executes reflect it"**.*
 
 ---
 

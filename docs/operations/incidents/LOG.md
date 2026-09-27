@@ -13628,3 +13628,162 @@ the arm *precise* rather than delete it: require `-----BEGIN…KEY-----` **plus 
 which is strictly stronger than session 107's pattern (which omitted the marker entirely) while
 staying blind to prose about it. **Do not "fix" a 45-hit result by loosening the gate without
 reading the hits** — and do not re-derive this; it is settled here.
+
+## SEV-1 watchdog summon 2026-09-27T10:38:48Z (session 109) — same Supabase outage, hour 136h21m; still owner-only, and one decision-relevant finding PROMOTED out of this log into §1 of the action sheet
+
+**What fired.** `scripts/ops/watchdog.sh`: `API degraded (503): database-unreachable`, local
+`2026-09-27 03:38:48` PDT. 58 minutes after session 108's `09:42:39Z` anchor — the `COOLDOWN_MIN=60`
+constant re-firing on an unchanged condition, exactly as **TD-39** predicts. **Not** the `HTTP 000`
+host-blip class (TD-23): a 503 carrying a well-formed JSON body that names `database-unreachable` is
+the API answering honestly about a dead dependency, which is the real-incident branch of that
+discrimination, and the branch project memory records as a genuine SEV-1 rather than noise.
+
+**Anti-flap answered explicitly: NOT transient, NOT logged as a false alarm.** Three `/health`
+probes — `10:39:13Z`, `10:42:26Z`, `10:44:13Z` (the write-time anchor) — returned byte-identical
+`503 / degraded / ["database-unreachable"]`, with `stuckVideoBacklog` / `parkedMediaDeletions` /
+`cronAges` all `null` (the three-null signature of a dead DB). The condition is continuous across
+136 hours; nothing had recovered by probe time, so the anti-flap rule's "verify recovery twice"
+branch does not apply.
+
+**Root cause re-derived from scratch, not inherited** (ground rule 4). One `node:dns` run across
+three resolvers — system, `1.1.1.1`, `8.8.8.8` — all nine lookups agree:
+`gsxoaurmsgqascxukony.supabase.co` → **ENOTFOUND**, `db.gsxoaurmsgqascxukony.supabase.co` →
+**ENOTFOUND**, parent zone `supabase.co` → **A 76.76.21.21**. Parent zone up + both per-project
+records gone = pause/restrict/deprovision at the account level, unchanged since
+`2026-09-21T18:23:07Z`. The apex `A` answer still matches session 41's recorded change and is still
+**not** a signal (§5).
+
+**Prescribed verification (§4) run in order — still failing at step 1:**
+
+| Step | Result |
+|---|---|
+| 1. DNS | `ENOTFOUND` on all three resolvers — **still down** |
+| 2. `/health` | **503** `degraded` `["database-unreachable"]`, commit `694c8ef` = origin tip, three-null signature |
+| 3. `/feed/for-you?limit=3` | **HTTP 500** `{"error":{"code":"db_error","message":"Something went wrong"}}` — the real user path, not just liveness |
+| 4. `gh workflow enable uptime.yml` | **NOT run** — re-arming is post-restore by design and `.github/workflows/**` is minimum Level C |
+| 5/6. TD-29/34/35 backfills | Not runnable — all require a live DB or an owner dashboard |
+
+`getsizzle.app` = **200** (static frontend unaffected, as throughout).
+
+**Rollback ruled out — measured this session, not inherited.** `/health.commit` is `694c8ef` and
+origin `main` is `694c8ef` (session 108's addendum), so the API is serving exactly origin tip — no
+rogue or half-promoted deploy. Per §5 the last *pre-outage* production deploy was 15 days old, so no
+deployment boundary coincides with the failure, and every deploy since is these sessions' own
+docs-only log pushes. The incident-response rule "rollback first when rollback is safer" is not
+merely outranked here, it is **inapplicable**: promoting any previous READY deployment would roll
+back documentation and would not touch a withdrawn DNS record.
+
+**All four recovery gates re-tested first-hand, per §5's own lesson that a predecessor's "it's
+gated" is worth one cheap re-test.** None flipped:
+
+- `mcp__supabase__get_advisors` (local, tokenless server) → *"Unauthorized. Please provide a valid
+  access token to the MCP server via the `--access-token` flag or `SUPABASE_ACCESS_TOKEN`."*
+  **TD-21 unchanged.**
+- `curl https://api.supabase.com/v1/projects` → **401** `{"message":"Unauthorized"}` — revoked PAT,
+  independently re-confirmed.
+- `mcp__claude_ai_Supabase__list_projects` → *"requested permissions … but you haven't granted it
+  yet"* — connector still gated (TD-21 option c).
+- `PushNotification` → see below.
+
+Two connector calls, then stopped — §7 says do not re-shop connectors, and this was the
+confirmation pass, not a shopping trip. **Paused-vs-restricted-vs-deleted remains unanswerable from
+inside a session** by *direct* query — but see the finding below, which makes it answerable from the
+inbox.
+
+**Successor-session detectors run against session 108, per §7's stack — both PASS.**
+
+- Session 99's naming-free aborted-push check: newest `.codex/` draft artifact is `tree99.json`
+  (`Sep 26 17:19:01` local = `2026-09-27T00:19:01Z`) against origin tip `694c8ef`
+  (`2026-09-27T09:46:50Z`). Tip materially **newer** ⇒ **quiet, correctly** — no orphaned push.
+- Session 98's patch-granularity detector on `a8879d8...694c8ef`: session 108's sheet patch
+  (`+4/−4`) contains **both** required hunks — line 4 (`134h17m`→`135h19m`, session 107→108) and the
+  standing counts (`one hundred and seven`→`one hundred and eight`, `13,320+`→`13,480+`, `wc -l`
+  13326→13481). **PASS at the granularity that matters** — no two-thirds skip to repair, the second
+  clean pass in a row since session 98 built the check.
+
+**Doc-rot class re-checked with BOTH greps against the origin copy.** Session 93's pinned invocation
+returns **25 hits**, one more than session 96's 24 — the extra is session 106's own write-up quoting
+the token list, the same self-referential growth session 54 recorded for the secret scan, so **a
+rising count here is still not a signal**. Session 106's complementary duration grep returns **28
+hits**, and triaged against its three buckets every one is correctly exempt: provider/policy
+constants (`155 minutes`, `2h35m`, `3 days`/`15 days`/`30 days`, `7 days idle`, `5/10/20/40/80
+minutes`, `~2 minutes`, `67 days old`), dated/attributed measurements (`21 minutes` cron windows,
+`~39 hours ago`, `15 days old`, the `PushNotification` row's `18 days` under its session-12 column
+header), and sessions 30/74/93/96/106's own write-ups quoting the rot they fixed. **Zero
+elapsed-outage duration figures outside the two live counters** — session 106's duration-free
+heading repair is holding, which is the repair standing rather than a check passing by luck.
+
+---
+
+### New this session — §1's inbox instruction could not see the one signal that picks the branch, and the fix is a PROMOTION, not a discovery
+
+**The finding itself is not new. Its absence from the action sheet is, and that absence was
+load-bearing.** Two early `LOG.md` entries (~lines 1485 and 1890) derived, from Supabase's own
+`free-project-pausing.md`, that automatic pausing sends **two** emails — *"a warning email roughly
+one week before the pause takes effect"* and *"a confirmation email once the project has been
+paused"* — and drew the right conclusion: the inactivity branch would have left a warning in the ops
+inbox around **2026-09-14**, and **its absence is itself the confirmation** that row 1 of §1's
+branch table is not our branch.
+
+**It never reached the sheet, and §1 pointed the owner away from it.** §1's instruction read
+*"Search it for 'Supabase' around 2026-09-21 18:00Z"* — a one-timestamp window that **structurally
+excludes** a discriminator sitting a week earlier. Checked before claiming, not asserted:
+`grep -ciE 'warning email|two emails|week before'` → **0** on the action sheet, **4** in `LOG.md`.
+Re-fetched the source this session rather than trusting the quote (`HTTP 200`, raw markdown,
+`2026-09-27T10:43Z`); both sentences are present as quoted.
+
+**Why it matters, in owner terms.** The three branches do not share a first action: row 1 starts
+with **Resume**, row 2 requires **fixing the payment method first** (Resume inside the same cycle
+can re-restrict, since *"pausing does not remove usage already accumulated"*), and row 3 requires
+**contacting support about PITR before touching anything**. So a test that cheaply eliminates row 1
+is not trivia — it moves the owner's *first click*. And the same doc rules row 1 out on its own
+numbers independently: the documented trigger is *"too few user queries"* over 7 days where *"a few
+user requests to the database each day … is enough to keep the project from being paused"*, while
+Sizzle ran five Vercel crons against this DB with `finalize-videos` alone firing **every minute**
+(~1,440 DB-touching invocations/day) continuously up to `18:23:07Z` on 09-21.
+
+**Shipped to §1** (this session's only content edit): the search window widens to
+**2026-09-13 → 2026-09-22**, the two-email mechanism is quoted with its source, and the
+absence-of-a-09-14-warning test is written as an explicit branch eliminator — with the honest caveat
+that row 1 stays in the table because the dashboard's wording is ground truth and a project paused
+for *other* reasons can still present as "Paused".
+
+*Generalised, and this is the reason it is worth the space: session 45's rule was "a predecessor's
+finding that lives only in LOG prose was never filed," and §7 has since applied that rule to
+follow-ups and to gitignored scratch (session 98). This is the same rule landing on **§1's own
+recovery instruction** — the highest-traffic actionable block on a page whose header tells the owner
+to read this and not the log. The class to check is therefore not just "is the finding filed
+somewhere" but **"does the instruction the owner actually executes reflect it"** — 136 hours of
+sessions re-derived the DNS evidence every hour while the sheet kept sending the owner to the wrong
+inbox window.*
+
+---
+
+**`PushNotification` result, verbatim: *"Mobile push not sent (Remote Control inactive)."*** Called
+`2026-09-27T10:45Z` — **before** building the blob, adopting session 108b's process fix, so this
+entry carries the result rather than promising it and forcing a second repair commit. Re-tested, not
+inherited: unchanged, now ~25 days standing. §7's table holds — **nothing has paged Branden across
+109 sessions, and nothing paged him for this incident either.** The log and the action sheet remain
+**pull** channels.
+
+**Ship gate.** Docs-only commit: `LOG.md` append plus the action sheet's two live counters and the
+§1 promotion. No code, config, migration, native file or production setting touched, so there is no
+API deploy to verify and `scripts/verify-deploy.mjs` has nothing to assert against — the same ship
+rule sessions 101/102 applied to their in-lane tooling fixes, inverted (their change was verifiable
+without the DB; this one is docs). Value-shaped secret scan over both pushed blobs: **0 hits**, using
+session 108b's precise `-----BEGIN…KEY-----`-plus-body arm rather than the bare marker that
+false-fires 45× on this log's own prose. Base guard: refused to push unless the fetched `LOG.md`
+base exceeded 1.15 MB, so a truncated mirror cannot silently delete the record (TD-41's failure
+mode). Built on the **origin** mirror at `694c8ef` per TD-27, not the stale working copy (local HEAD
+`d4c5395`, 8 files behind); the four pre-existing uncommitted local edits
+(`scripts/ops/sweep-prompt.md`, `scripts/verify-deploy.mjs`, `tests/invariants/ops-tooling.test.mjs`,
+untracked `scripts/ops/origin-drift.mjs`) were **left untouched** per rule 11.
+
+**For Branden — unchanged and still ~2 minutes, now with a sharper first step.** ① Vercel → project
+**`sizzle`** (the API; naming is reversed) → Settings → Cron Jobs → **Disable Cron Jobs** (§4 step 0
+— avoids the 60-second trap that would silently void TD-29's backfill). ② Supabase dashboard →
+project `gsxoaurmsgqascxukony` → read the status, **and search the ops inbox 09-13 → 09-22 for a
+Supabase warning email**: no ~09-14 warning ⇒ this is billing/quota or deprovision, so do **not**
+start with Resume. ③ Then act per §1's branch table. Afterwards: `gh workflow enable uptime.yml`,
+reconnect Remote Control, and the TD-35 RevenueCat dashboard retries (manual, per event — restore
+does not replay them).
