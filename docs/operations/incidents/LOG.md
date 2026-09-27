@@ -12258,3 +12258,175 @@ local checkout at all. **`LOG.md` line count measured, not inherited: 12087 pre-
   action is the only fix. The session's yield beyond re-attestation is the **pooler row** — which
   closes the last "could it be our network?" reading of the DNS evidence — and the **repair of session
   98's orphan detector**, which looked clean while being silent over five of the last eleven sessions.
+
+---
+
+## 2026-09-26 18:12 PDT / 2026-09-27 01:12Z — watchdog session 100 · SEV-1 Supabase unreachable, hour **126h53m** · NO CHANGE — and the INDEX still prescribed the orphan detector session 99 had already retired
+
+**What fired.** `scripts/ops/watchdog.sh` at `2026-09-26T18:12:49` local. `/health` → HTTP **503**,
+`{"status":"degraded","problems":["database-unreachable"],"commit":"a2acf86"}`. A 503 **with a JSON
+body** is explicitly *not* the HTTP-000 host-blip class (project memory `sizzle-watchdog-false-alarms`),
+so this was worked as a live incident, not an anti-flap re-verify. **Confirmed three times across
+3m23s** — `01:12:48.090Z` (watchdog), `01:13:07.214Z` and `01:16:11.293Z` (mine) — all 503
+`database-unreachable`, all three DB-derived fields (`stuckVideoBacklog`, `parkedMediaDeletions`,
+`cronAges`) `null` every time. Not a blip: hour **126h53m** of the same outage, **day 6**.
+
+**Root cause: unchanged, re-derived from scratch per ground rule 4.** Ran the standing repo probe
+`.codex/dns-probe.mjs` (Node's `dns` module — no allowlist needed where `dig` requires approval),
+**three resolvers × three names**:
+
+| name | system | 1.1.1.1 | 8.8.8.8 | reading |
+|---|---|---|---|---|
+| `supabase.co` (parent) | A=`76.76.21.21`, CNAME=**ENODATA** | same | same | zone exists and answers |
+| `gsxoaurmsgqascxukony.supabase.co` | **ENOTFOUND** | **ENOTFOUND** | **ENOTFOUND** | NXDOMAIN |
+| `db.gsxoaurmsgqascxukony.supabase.co` | **ENOTFOUND** | **ENOTFOUND** | **ENOTFOUND** | NXDOMAIN |
+
+`ENODATA` on the parent (name exists, no record of that type) against `ENOTFOUND` on both
+per-project names is *positive* proof the records were withdrawn rather than "something failed" —
+and three unrelated resolvers agreeing kills the sandbox/host explanation. **Level D — owner-only.**
+*Stated precisely so it is not over-read: this is the three-resolver form. Session 99's widened
+attestation — a fourth resolver (`9.9.9.9`) plus the `aws-0-us-east-1.pooler.supabase.com` row that
+proves live third-party Supabase infra still resolves from this host — was **not** re-run this
+session. It is one session old and recorded above; the narrower probe re-confirms the same
+withdrawal, it does not re-close the "could it be our network?" reading. Session 99's row stands.*
+
+**User-facing state, re-measured not carried forward:** `/feed/for-you?limit=3` → **500
+`{"error":{"code":"db_error","message":"Something went wrong"}}`**; `getsizzle.app` → **200**. Users
+hit session 50's graceful error card (with TD-38's misattributing "check your connection" copy), not
+a white screen or a crash.
+
+**Rollback considered and correctly not attempted.** `vercel ls sizzle --prod` → the fourteen most
+recent production deployments are **all ● Ready** (56m, 2h, 3h, 3h, then ten at 1d); there is no
+failed or stuck deploy to roll off. The served commit `a2acf86` **is** origin head, i.e. session 99's
+own docs-only log push — **never chase that churn as a bad deploy**. And the dead dependency is a DNS
+record for a service outside Vercel: **no previous READY deployment can restore it**, so rollback is a
+no-op by construction, not a judgement call.
+
+### Finding — the memory index still prescribed session 98's orphan detector, which session 99 had already proved blind
+
+Session 99's yield was retiring session 98's one-call orphan check (`ls .codex/ | grep -i '^commit'`,
+pair `tree<N>.json` with `commit<N>.json`) after measuring it blind for **five of the last eleven
+sessions** — `.codex/` never enforced the numbered naming, so sessions **89, 90, 91, 94, 95** pushed
+under un-numbered names and the grep pairs nothing and **reports nothing**. Session 99 wrote the
+naming-free replacement into §7 of the action sheet.
+
+**It did not back-propagate to the project-memory index, which is the higher-traffic document**
+(session 39's rule: when this file and the sheet disagree, the sheet wins — *and* repair the index in
+the same session). Verified this session: `sizzle-watchdog-false-alarms.md:821` still carried the
+retired detector as the recommended one-call check, inside its own *"Don't re-derive"* region. That is
+the precise trap session 39 named — a broken instrument sitting in the document a successor reads
+*first*, reading as settled. A session inheriting it would have run a check that **cannot fail**,
+recorded a clean negative, and never looked for an orphaned draft. Repaired in place (detector marked
+retired, replacement inlined with the local-vs-`Z` conversion caveat), and the region heading
+re-stamped **98 → 100** per session 80's rule that an understated count in the index does the most
+damage.
+
+**Also exercised session 99's replacement for the first time, and recorded the pass** (session 78's
+rule: record a passing check, or the next session cannot tell a working convention from an unexercised
+one). `ls -lT .codex/ | grep -E '^-.*(blob|tree)' | tail -3` → newest is `tree99.json`, mtime
+`Sep 26 17:19:01` **local** = `2026-09-27T00:19:01Z`; `gh api …/commits/main` → tip `a2acf86` at
+`2026-09-27T00:19:01Z`. Equal, not newer ⇒ **quiet, correctly** — session 99's push landed, no orphan.
+Independently corroborated before the detector ran: origin's `LOG.md` at `a2acf86` is **1,072,263
+bytes**, byte-for-byte session 99's composed `.codex/LOG-new-s99.md`. Note the detector's one sharp
+edge, inherited from session 98's own trap: **`ls -lT` prints local time**, so the comparison is wrong
+by the UTC offset unless you convert — a 7-hour error in the direction that *manufactures* an orphan.
+Now stated in both the sheet and the index.
+
+*Generalised: session 99 found a detector keyed to an unenforced naming convention; the sibling
+failure one layer up is a **retirement that only lands in one of the two documents**. The record is
+append-only and stays right; the index is hand-maintained and silently keeps serving the dead tool.
+When you retire an instrument, grep the index for it in the same session — otherwise the retirement
+itself becomes the next rot.*
+
+### Periodic checks — run and recorded
+
+- **Session 96 detector (absence half), on predecessor `a2acf86`:** `gh api …/commits/a2acf86 --jq
+  '.files[].filename'` → action sheet **present** ⇒ **PASS**.
+- **Session 98 detector (patch half),** `359ac54...a2acf86`: hunks `@@ -1,8` (counter, line 4) and
+  `@@ -54,9` (standing counts, `:57-58`) both present ⇒ **PASS at granularity.**
+- **Counter stamp (line 4), verified session 71's way** — against session 99's *own recorded elapsed
+  figure*, not against the line itself: sheet read *"125h50m … as of `2026-09-27T00:13:41Z` …
+  session 99"*, which matches session 99's logged `125h50m` exactly ⇒ **PASS**. *No streak claimed:
+  consecutive passes are 98 and 99 only — sessions 95 (total skip) and 97 (partial, while passing the
+  then-current detector) are the recorded misses, so a longer streak would be false.*
+- **Re-stamped** → *126h53m … as of `2026-09-27T01:16:11Z`*, anchored to `/health`'s own `time` field
+  per session 72's anti-fabrication rule, not to the local clock.
+- **Standing counts (`:57-58`): re-stamped** → **one hundred / 12,260**. Measured, not inherited:
+  `wc -l` on origin's `LOG.md` at `a2acf86` = **12260** pre-append (session 99 stamped 12,087).
+- **Doc-rot grep (session 93's pinned invocation): deliberately SKIPPED** — ran at 93, 96, **99**, so
+  one session of age. Skip stated per session 94's rule, because a clean run leaves no trace and
+  session N+10 cannot price the call otherwise. **Last run: 99.**
+- **TD-register audit: clean.** Still tops out at **TD-40** (session 89). Nothing manufactured per
+  session 40's rule — this session's finding is in the *index*, not in the system.
+
+### Still blocked, unchanged
+
+- **Paused vs Restricted vs deprovisioned: unanswerable unattended.** Not re-probed this session —
+  session 99 spent that call one hour ago (connector gate, §5) and TD-21's close condition remains a
+  **PAT rotation**, Level D. Only the dashboard or the ops inbox answers it.
+- **Crons still not disabled** (§1 step 0) ⇒ the **TD-34 trap stays armed**. Structurally owner-only
+  (session 64: CLI 57.0.0 exposes only `add`/`list`/`run`; Vercel documents only a project-wide
+  dashboard button). Not re-measured — the phantom §1 closed that at seventeen tallies.
+- **TD-35 Apple/RevenueCat** retries expired `2026-09-21T20:58Z`; restore will **not** replay them.
+- **Stripe** auto-retries expired `2026-09-24T18:23Z`; per-event dashboard **Resend** open to
+  `2026-10-06` and needs no secret key. Next real date is `2026-10-06` — **no new countdown derived.**
+- **TD-28/29/30/31/33/34/36/38** all still parked: every one is unverifiable against a dead database,
+  and two of them perturb the very signals being watched for recovery.
+
+### Escalation — called before this sign-off was composed (sessions 38/77/78's trap)
+
+`PushNotification` → verbatim: **`Mobile push not sent (Remote Control inactive).`**
+
+**100 consecutive sessions, nobody paged.** §7's channel table is exhaustive as of session 98's
+`Make` row — every push path is dead, muted or permission-gated. `LOG.md` and the action sheet are
+**pull** channels. No GitHub issue (repo is **public**; filing one would advertise a live outage and
+an open financial-webhook window on a production money system), and no unattended re-enable of
+`uptime.yml` (`.github/workflows/**` is minimum Level C, over a deliberate human mute).
+
+### What Branden must do — unchanged, still ~2 minutes, still the only fix
+
+1. Vercel → project **`sizzle`** (the API; naming is reversed) → Settings → Cron Jobs → **Disable Cron
+   Jobs**. Ten seconds, no deploy. Do this **first** — it prevents the restore from silently
+   destroying the stranded-video backfill (§4 step 0 / TD-34).
+2. Supabase dashboard → project `gsxoaurmsgqascxukony` → **Resume**. Read §1 step 2 and §3 first —
+   **never recreate under a new ref.**
+3. After restore: **RevenueCat** → Retry the Apple refund/chargeback webhooks whose automatic retries
+   expired (§2, §4 step 6); **Stripe** → per-event Resend (free window closed 09-24, dashboard path
+   open to **2026-10-06**); then `gh workflow enable uptime.yml` and reconnect Remote Control.
+
+### Lane check — session 100
+
+Nothing shipped but documentation. No code, config, migration, native file or production setting
+touched; no security control weakened to chase green; money code untouched. **Resume is Level D**, and
+clicking it without §1 step 0 would arm the TD-34 trap — not attempted. Rollback re-derived as a
+structural no-op rather than assumed. **Working tree preserved** (CLAUDE.md rule 11): all four dirty
+paths are TD-27 checkout artifacts against the frozen local HEAD `d4c5395` — re-verified
+**byte-identical** to the origin mirror this session (`diff -q` silent on `scripts/ops/sweep-prompt.md`,
+`scripts/verify-deploy.mjs`, `tests/invariants/ops-tooling.test.mjs`, `scripts/ops/origin-drift.mjs`).
+Nothing stashed or reverted.
+
+**TD-27 honoured.** `origin-drift.mjs` ran **first** (local `d4c5395` vs origin `a2acf86`, 8 files
+drifted), and both edited files are built on origin's blobs fetched at `a2acf86` — which matters
+because the action sheet **does not exist** in the local checkout at all. One note for the successor:
+the mirror's `docs/operations/incidents/LOG.md` materialised **0 bytes** this session (the file is now
+~1.05 MB across a `contents` API call), so the base was taken via session 89's fallback —
+`curl -sL https://raw.githubusercontent.com/Branden574/Sizzle/<sha>/<path>` → **HTTP 200, 1,072,263
+bytes**. TD-40 added retry to that fetch but an empty-yet-successful mirror is a *different* branch
+from the aborted one it fixed; **check the mirrored size before diffing against it**, or a stale base
+silently truncates prior entries. **`LOG.md` line count measured, not inherited: 12260 pre-append.**
+
+### Sign-off — session 100
+
+- **Secret scan, value-shaped (the only real gate on this path, TD-33):**
+  `(sbp_|sk_live_|sk_test_|whsec_|rk_live_)[A-Za-z0-9]{8,}|eyJ[A-Za-z0-9_-]{20,}` run on both changed
+  files → result recorded in the push note below. Bare `-----BEGIN` deliberately kept **out** of the
+  pattern (session 96's trap: with no entropy attached it only matches prior sessions' own prose
+  about the scan and manufactures ~37 false positives).
+- **`PushNotification` called before this sign-off was composed** (sessions 97/98/99's honoured note)
+  — verbatim: **`Mobile push not sent (Remote Control inactive).`**
+- **Escalation status: nobody has been paged.** This log and the action sheet are pull channels.
+- **Verdict: the same open SEV-1 at hour 126h53m, re-attested from scratch at the DNS layer on three
+  resolvers, with rollback re-derived as a structural no-op and the Vercel fleet all-READY.** Owner
+  action is the only fix. The session's yield beyond re-attestation is **closing the gap session 99
+  opened in the index** — its retired orphan detector was still the one the project memory
+  prescribed — plus the **first live exercise** of the replacement, which ran quiet and correctly.
