@@ -14211,3 +14211,114 @@ sessions.**
 `-----BEGIN…KEY-----`-with-body arm rather than the bare marker that false-fires on this log's own
 prose) → **0 hits** across both blobs. Base guards re-applied: refused to push unless the fetched
 `LOG.md` exceeded 1.15 MB and its line count matched the 14,065 the counters claim.
+
+## SEV-1 watchdog summon 2026-09-27T13:45:31Z (session 112) — same Supabase outage, hour 139h23m; still owner-only, and §7's orphan detector was reporting clean by SORT ORDER, not by evidence
+
+**What fired.** `scripts/ops/watchdog.sh` at 06:45:31 PDT on `/health` → **HTTP 503**,
+`{"status":"degraded","problems":["database-unreachable"]}`, commit `aca0d6d`. Per the watchdog-calibration
+memo a **503 with a JSON body is not the host-blip class** (that class is HTTP `000`), so this was worked
+as real from the first probe rather than triaged as noise — correctly, as it turned out.
+
+**Root cause — unchanged, and re-derived from scratch rather than inherited (ground rule 4).**
+Project-level DNS withdrawal for Supabase project `gsxoaurmsgqascxukony`. All three resolvers agree:
+
+| name | system | 1.1.1.1 | 8.8.8.8 |
+|---|---|---|---|
+| `gsxoaurmsgqascxukony.supabase.co` | ENOTFOUND | ENOTFOUND | ENOTFOUND |
+| `db.gsxoaurmsgqascxukony.supabase.co` | ENOTFOUND | ENOTFOUND | ENOTFOUND |
+| `supabase.co` (apex) | A 76.76.21.21 | A 76.76.21.21 | A 76.76.21.21 |
+
+Parent zone up + every per-project record gone = pause/restrict/deprovision **at the account level**.
+Identical to §5's settled finding, including session 41's refreshed apex answer (`A 76.76.21.21`, not the
+pre-session-41 `ENODATA`) — restated so this is not re-read as a new signal. **Onset `2026-09-21T18:23:07Z`
+⇒ 139h23m at `13:46:10Z`.** Sheet line 4 re-stamped from session 111's `138h28m`.
+
+**Ruled out this session, not assumed.**
+- **Not a bad deploy, nothing to roll back.** `vercel ls sizzle --prod` → the six most recent production
+  deployments are **all ● Ready** (newest 50m old, 18s build). Rollback would promote a READY build that
+  talks to the same absent DNS record. §5's "last pre-outage deploy was 15 days old" still holds; every
+  deploy since is these sessions' own docs-only log pushes.
+- **Web surface is not the fault.** `getsizzle.app` → **HTTP 200 in 0.12s**. Consistent with session 50:
+  boot completes, the feed renders its error card (the TD-38 copy problem, deliberately unshipped).
+- **No agent DB path opened.** Cheap re-test rather than inherited (session 33's lesson): the local
+  `supabase` MCP `execute_sql` → *"Unauthorized. Please provide a valid access token … via the
+  `--access-token` flag or `SUPABASE_ACCESS_TOKEN`."* Same tokenless failure session 25 recorded.
+  **TD-21 unchanged: the PAT is revoked, and rotation is Level D.** Paused-vs-restricted-vs-deleted
+  therefore remains unanswerable from inside a session; only the dashboard or the ops inbox answers it.
+
+**Lane check — nothing here is agent-actionable, and that is a finding, not an excuse.** The fault is
+entirely on the far side of a credential and a dashboard: the database is gone at DNS, restoring it is
+**Level D** (owner-only), and §1 step 0's `Disable Cron Jobs` toggle was settled **structurally
+owner-only** by session 64 (CLI 57.0.0 exposes `crons add|list|run` and no `disable`). Per ground rule 2
+I diagnosed and stopped. No code shipped: TD-28/29/30/31/33/34/35/36 all stay parked because every one of
+them is unverifiable against a dead DB, and shipping unverifiable fixes into a SEV-1 is the opposite of
+the rule.
+
+### The one new thing — §7's orphan detector has been quiet by accident for three sessions
+
+Session 99 built the naming-free aborted-push detector *specifically* to stop keying on a convention the
+scratch dir does not follow, moving the key to **mtime** so the filesystem supplies it. The invocation it
+pinned undoes that: `ls -lT .codex/ | grep -E '^-.*(blob|tree)' | tail -3`. **`ls -lT` sorts
+alphabetically** — `-T` only widens the *printed* timestamp — so the pipeline emits the last three
+*names* and the reader takes that row's timestamp as the newest. Run both ways this session:
+
+```
+ls -lT  .codex/ | grep -E '^-.*(blob|tree)' | tail -3
+  →  tree97.json  tree98.json  tree99.json          "newest": Sep 26 17:19 local = 2026-09-27T00:19Z
+ls -lTt .codex/ | grep -E '^-.*(blob|tree)' | head -3
+  →  s111-tree.json  s111-blob-sheet.json  s111-blob-log.json    actual: Sep 27 05:57 = 12:57:12Z
+```
+
+**12h38m of skew, and `s111-tree.json` matches the grep** — it just sorts before `tree9*`. So this is not
+a pattern-coverage gap like sessions 99/106/111 found; the pattern matched fine and the *pipeline* threw
+the answer away.
+
+**Why it is a false negative in the dangerous direction.** Had session 111's push aborted at the commit
+object, the detector would have compared session 99's Sep-26 artifact against an origin tip that sessions
+100–110 had already pushed well past, evaluated *"artifact older than tip ⇒ quiet"*, and reported a clean
+negative while a live orphan sat in `.codex/` — precisely the case session 99 wrote it for, and precisely
+how session 97's whole write-up was lost. Sessions 100–111 each ran it and each got a true negative *by
+luck of the data*, not by the check working.
+
+**Shipped:** the pinned invocation in §7 is now `ls -lTt … | head -3`, plus the two independent reasons
+name order was never time order — sessions choose their own prefixes (session 99 catalogued five variants:
+`s111-*`, `blob-LOG.md.json`, `_ref.json`, …), **and** `tree<N>.json` breaks at N=100 anyway because
+`tree100.json` sorts before `tree99.json`. The second reason would have bitten this month even under
+perfect naming compliance.
+
+**Verified this session's own push record with the corrected check:** `s111-ref.json` mtime
+`12:57:13.182Z` vs origin tip `aca0d6d` committed `12:57:13Z` ⇒ **quiet, correctly.** Session 111 landed;
+no lost session in the window before this summon.
+
+*Generalised — sessions 99, 106 and 111 each widened the detector's **pattern**; the axis nobody audited is
+the **invocation**. A detector is pattern + pipeline, and the pipeline can silently discard the exact
+property the pattern was rewritten to key on. When a check has reported clean for many cycles, don't
+re-run it — **feed it the failure it exists to catch** and confirm it can still report dirty.*
+
+**Still open — unchanged, and only Branden can close it.** ① Vercel project `sizzle` → Settings → Cron
+Jobs → **Disable Cron Jobs** (§1 step 0; no per-cron toggle, no non-interactive surface; the TD-34 trap
+that mass-flips outage-stranded videos to terminal `error` within 60s of restore is still armed).
+② Supabase dashboard → project `gsxoaurmsgqascxukony` → read the status, and search the ops inbox
+`09-13`→`09-22` for a Supabase warning email — **no ~09-14 warning ⇒ billing/quota or deprovision, so do
+not open with Resume** — then act per §1's branch table. ③ Re-enable the crons once the stranded-video
+list is captured. Afterwards: `gh workflow enable uptime.yml`, reconnect Remote Control, and work the
+TD-35 RevenueCat dashboard **Retry** queue (manual, per event — restore does not replay those, and their
+155-minute retry budget expired `2026-09-21T20:58Z`). Stripe's automatic window is gone too; per-event
+dashboard **Resend** stays open until `2026-10-06` and needs no secret key.
+
+**`PushNotification` result, verbatim: *"Mobile push not sent (Remote Control inactive)."*** Called
+before this blob was built (session 78's ordering fix) and re-tested rather than inherited: unchanged,
+now **~26 days standing**. It died *before* the 09-21 outage, so no unattended session has ever paged
+anyone, and none paged him for this incident either. **§7's channel table holds in full: `LOG.md` and
+the action sheet remain PULL channels, and nothing has reached Branden across 112 sessions.**
+
+**Liveness re-confirmed three times across the session, so this is not the anti-flap case:** `/health`
+→ 503 `database-unreachable` at `13:45:29Z` (watchdog), `13:46:10Z` and `13:50:20Z` (this session), each
+taking **~7.2s** — the DB-connect stall §5 identifies as the source of the `responseStatusCode: 0` cron
+noise. Byte-identical bodies, same commit `aca0d6d`. Nothing recovered and nothing degraded further.
+
+**Secret gate on this entry:** `npm run secrets:check` (clean; 0 staged files — this push goes through
+the git-data API, so the value-shaped scan is the load-bearing gate) plus a prefix-plus-entropy scan
+across both blobs, using the `-----BEGIN…KEY-----`-with-body arm rather than the bare marker that
+false-fires on this log's own prose → **0 hits**. Base guards re-applied: the push refuses unless the
+fetched `LOG.md` exceeds 1.15 MB and its line count equals the 14,213 measured this session.

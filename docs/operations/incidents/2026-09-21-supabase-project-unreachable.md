@@ -1,7 +1,7 @@
 # SEV-1 — Supabase project `gsxoaurmsgqascxukony` unreachable (ongoing)
 
 **Status: OPEN. Production is down for all users.** Started `2026-09-21T18:23:07Z`
-(11:23 AM PDT Mon 09-21). **138h28m — past 5 days — as of 2026-09-27T12:51:58Z**, re-verified by session 111
+(11:23 AM PDT Mon 09-21). **139h23m — past 5 days — as of 2026-09-27T13:46:10Z**, re-verified by session 112
 (watchdog), which re-derived the DNS withdrawal from scratch on three resolvers.
 Owner action is the ONLY fix — no repo change, rollback or redeploy can touch it.
 
@@ -55,9 +55,9 @@ Owner action is the ONLY fix — no repo change, rollback or redeploy can touch 
 > without a browser. It changes your *calibration*, not the fix: the app is degrading
 > gracefully, and the misattribution is what is quietly costing you reviews and support mail.
 
-This page exists because **one hundred and eleven** unattended sessions — one hundred and ten watchdog summons plus
-the 2026-09-25 daily sweep — have now diagnosed the same outage and appended **14,060+ lines** to
-`LOG.md` (counts re-stamped session 111, measured `wc -l` = 14065 pre-append; session 48 stamped them at "forty-seven"/"5,600+" and nothing re-checked them
+This page exists because **one hundred and twelve** unattended sessions — one hundred and eleven watchdog summons plus
+the 2026-09-25 daily sweep — have now diagnosed the same outage and appended **14,210+ lines** to
+`LOG.md` (counts re-stamped session 112, measured `wc -l` = 14213 pre-append; session 48 stamped them at "forty-seven"/"5,600+" and nothing re-checked them
 for the 31 sessions until session 79, so they had understated the burn by a third — session 95 skipped
 this stamp entirely, which is what §7's session-96 entry gives a one-call detector for, and **session 97
 skipped it again while passing that detector**, which is what session 98's correction below fixes).
@@ -913,7 +913,7 @@ five of the last eleven sessions while looking like a clean negative.
 newest scratch artifact's mtime against origin's tip:**
 
 ```sh
-ls -lT .codex/ | grep -E '^-.*(blob|tree)' | tail -3        # newest draft artifact, local time
+ls -lTt .codex/ | grep -E '^-.*(blob|tree)' | head -3       # newest draft artifact by MTIME (-t sorts; -T only widens the stamp)
 gh api repos/Branden574/Sizzle/commits/main --jq '.commit.committer.date'
 ```
 
@@ -997,6 +997,43 @@ the **dangerous direction** — overstating remaining slack on the one money-rec
 a detector after finding it blind, widen it along **every axis of its tokenisation** — prose written
 under incident pressure spells small numbers — and check which axis carries defects before committing to
 the wider pattern.*
+
+**Session 112 (2026-09-27T13:46:10Z) — §7's own orphan detector has been reporting clean by
+ACCIDENT: its pinned invocation sorts by NAME and calls the result "newest". Reproduced both ways this
+session.** Session 99 replaced the filename-convention check with an mtime one precisely so the key
+would come from the filesystem rather than from each session's naming choice. But the command it pinned
+is `ls -lT … | tail -3`, and **`ls -lT` orders alphabetically** — `-T` only widens the timestamp it
+*prints*, it does not sort. So the line emits the last three *names* and the reader takes the timestamp
+in that row as the newest. Measured:
+
+```
+ls -lT  … | tail -3   →  tree97 / tree98 / tree99.json        newest shown:   2026-09-27T00:19Z
+ls -lTt … | head -3   →  s111-tree / s111-blob-sheet.json     newest actual:  2026-09-27T12:57Z
+```
+
+Session 111's artifacts are **12h38m newer** than what the pinned command called newest, and they are
+not exotic: `s111-tree.json` **matches the `(blob|tree)` grep** — it simply sorts before `tree9*`.
+**The failure is a false negative, in the one direction that matters.** Had session 111's push died at
+the commit object, the detector would have compared session 99's stale artifact against an origin tip
+that sessions 100–110 had already advanced well past, concluded *"artifact older than tip ⇒ quiet"*, and
+returned a clean negative over a live orphan — the exact outcome session 99 built it to catch, and
+exactly how session 97's entire write-up was lost. It is quiet *correctly* right now (`s111-ref.json` at
+`12:57:13.182Z` vs tip `aca0d6d` at `12:57:13Z` ⇒ session 111 landed), but that is the data's doing,
+not the check's: sessions 100–111 each ran it and each got a true negative by luck of the sort order.
+
+**The fix is one character, and the corrected invocation is now pinned above.** `-t` sorts by mtime, so
+the newest row moves to the top and `tail -3` becomes `head -3`. Two independent reasons name order was
+never time order: sessions pick their own prefixes (`s111-*`, `blob-LOG.md.json`, `_ref.json` — session
+99 itself catalogued five variants), **and** the original `tree<N>.json` convention breaks at N=100
+regardless, because `tree100.json` sorts before `tree99.json`. The second would have bitten this month
+even under perfect naming compliance.
+
+*Generalised — sessions 99, 106 and 111 each widened the detector's **pattern**; the axis nobody audited
+is the **invocation**. A detector is pattern + pipeline, and the pipeline can silently discard the very
+property the pattern was rewritten to key on: session 99 moved the key to mtime, then read it out of a
+name-ordered list, so three sessions' worth of "the check is quiet" was evidence about sort order. When a
+check has reported clean for many cycles, don't re-run it — **feed it the failure it exists to catch** and
+confirm it can still report dirty.*
 
 ### The one follow-up that makes the next SEV-1 different
 
